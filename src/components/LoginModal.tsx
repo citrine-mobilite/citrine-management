@@ -168,28 +168,9 @@ export default function LoginModal({
 
             {/* Champ Mot de Passe avec bouton Afficher/Masquer */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">
-                  Mot de Passe
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="text-[11px] text-stone-500 hover:text-emerald-700 flex items-center gap-1 cursor-pointer font-medium"
-                >
-                  {showPassword ? (
-                    <>
-                      <EyeOff className="h-3.5 w-3.5" />
-                      <span>Masquer</span>
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-3.5 w-3.5" />
-                      <span>Afficher</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">
+                Mot de Passe
+              </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400">
                   <Lock className="h-4 w-4" />

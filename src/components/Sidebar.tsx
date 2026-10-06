@@ -355,13 +355,6 @@ export default function Sidebar({
           {/* Mobile-only Logo and Brand */}
           <div className="flex md:hidden items-center gap-2.5 overflow-hidden cursor-pointer" onClick={() => onSelectTab(currentUser?.role === 'employé' ? 'employee_portal' : 'dashboard') }>
             <CMLogo variant="icon" className="h-8 w-8 drop-shadow-2xs shrink-0" />
-            <div className="leading-none whitespace-nowrap overflow-hidden">
-              <div className="flex items-center gap-1">
-                <h1 className="text-sm font-serif font-bold text-stone-900 tracking-tight">
-                  Citrine <span className="text-emerald-700 italic font-medium">Management</span>
-                </h1>
-              </div>
-            </div>
           </div>
 
           {/* Desktop minimal title or indicator */}

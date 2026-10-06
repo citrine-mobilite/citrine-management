@@ -4,13 +4,39 @@ interface HeroLogoProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   showSubtitle?: boolean;
+  variant?: 'icon' | 'full';
 }
+
+export const HeroIconLogo: React.FC<{ className?: string; size?: number }> = ({ className = '', size = 36 }) => {
+  return (
+    <svg
+      viewBox="0 0 60 60"
+      className={className}
+      width={size}
+      height={size}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle cx="30" cy="30" r="24" stroke="#2A7B76" strokeWidth="4.5" fill="none" />
+      <circle cx="30" cy="30" r="19" stroke="#2A7B76" strokeWidth="1.5" fill="none" />
+      <line x1="11" y1="30" x2="49" y2="30" stroke="#D4A82F" strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="30" y1="11" x2="30" y2="49" stroke="#D4A82F" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="30" cy="30" r="4.5" fill="#2A7B76" stroke="#D4A82F" strokeWidth="1.5" />
+      <circle cx="30" cy="30" r="2" fill="#D4A82F" />
+    </svg>
+  );
+};
 
 export const HeroLogo: React.FC<HeroLogoProps> = ({
   className = '',
   size = 'md',
-  showSubtitle = true
+  showSubtitle = true,
+  variant = 'full'
 }) => {
+  if (variant === 'icon') {
+    return <HeroIconLogo className={className} />;
+  }
+
   const sizeClasses = {
     sm: 'h-6',
     md: 'h-8',
