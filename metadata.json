@@ -1,0 +1,6 @@
+{
+  "name": "Citrine Management",
+  "description": "Portail d'administration et de coordination des présences, des tâches, des alertes de rappel, des rapports automatisés et des appels audio/vidéo gratuits entre collègues.",
+  "requestFramePermissions": ["geolocation", "camera", "microphone", "notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

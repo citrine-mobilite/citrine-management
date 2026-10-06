@@ -1,0 +1,10 @@
+{
+  "projectId": "citrine-management",
+  "appId": "1:108932943568:web:912a3a1e550b8fe05ad8d5",
+  "apiKey": "AIzaSyAAdEyI-XRtdZraWm062cPHjohzLNSXhP4",
+  "authDomain": "citrine-management.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "citrine-management.firebasestorage.app",
+  "messagingSenderId": "108932943568",
+  "measurementId": "G-CTS05FKJT3"
+}

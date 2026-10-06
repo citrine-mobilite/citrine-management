@@ -1,0 +1,280 @@
+{
+  "entities": {
+    "users": {
+      "title": "User",
+      "description": "System application users with authentication roles and permissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["administrateur", "responsable", "employé"] },
+        "status": { "type": "string", "enum": ["actif", "inactif", "suspendu"] },
+        "authMethod": { "type": "string", "enum": ["google", "password"] },
+        "passwordHash": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "department": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastLoginAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "status"]
+    },
+    "employees": {
+      "title": "Employee",
+      "description": "Collaborators directory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "roleType": { "type": "string" },
+        "status": { "type": "string" },
+        "hireDate": { "type": "string" },
+        "departureDate": { "type": "string" },
+        "departureReason": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "salary": { "type": "number" }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "presences": {
+      "title": "Presence",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "tasks": {
+      "title": "Task",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "priority": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "reminders": {
+      "title": "Reminder",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "documents": {
+      "title": "GeneratedDocument",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    },
+    "salary_settings": {
+      "title": "SalarySetting",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "baseSalary": { "type": "number" }
+      }
+    },
+    "salary_payments": {
+      "title": "SalaryPayment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" }
+      }
+    },
+    "financial_transactions": {
+      "title": "FinancialTransaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "amount": { "type": "number" }
+      }
+    },
+    "inventory_items": {
+      "title": "InventoryItem",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "designation": { "type": "string" },
+        "quantity": { "type": "number" },
+        "status": { "type": "string" },
+        "location": { "type": "string" }
+      },
+      "required": ["id", "designation"]
+    },
+    "partners": {
+      "title": "Partner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "lastName": { "type": "string" },
+        "firstName": { "type": "string" },
+        "phone": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "lastName"]
+    },
+    "departments": {
+      "title": "Department",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "disciplinary_incidents": {
+      "title": "DisciplinaryIncident",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "title"]
+    },
+    "pricing_records": {
+      "title": "PricingRecord",
+      "description": "Transport route and pricing comparator record between points A and B",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "period": { "type": "string", "enum": ["matin", "midi", "soirée"] },
+        "pointA": { "type": "string" },
+        "pointB": { "type": "string" },
+        "distance": { "type": "number" },
+        "durationMin": { "type": "number" },
+        "etaMin": { "type": "number" },
+        "weather": { "type": "string", "enum": ["beau-temps", "pluvieux", "nuageux", "ensoleillée"] },
+        "localTaxiPrice": { "type": "number" },
+        "yangoEco": { "type": "number" },
+        "yangoConfort": { "type": "number" },
+        "gozemEco": { "type": "number" },
+        "gozemConfort": { "type": "number" },
+        "tripMaster": { "type": "number" },
+        "heroKlandoo": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "period", "pointA", "pointB", "distance", "durationMin", "etaMin", "weather", "localTaxiPrice"]
+    },
+    "pricing_settings": {
+      "title": "PricingSettings",
+      "description": "Global settings for pricing calculations and VTC base/kilometer tariffs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "yangoBaseEco": { "type": "number" },
+        "yangoPerKmEco": { "type": "number" },
+        "yangoPerMinEco": { "type": "number" },
+        "yangoBaseConfort": { "type": "number" },
+        "yangoPerKmConfort": { "type": "number" },
+        "yangoPerMinConfort": { "type": "number" },
+        "gozemBaseEco": { "type": "number" },
+        "gozemPerKmEco": { "type": "number" },
+        "gozemPerMinEco": { "type": "number" },
+        "gozemBaseConfort": { "type": "number" },
+        "gozemPerKmConfort": { "type": "number" },
+        "gozemPerMinConfort": { "type": "number" },
+        "taxiBase": { "type": "number" },
+        "minPriceFloor": { "type": "number" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "Application user records"
+    },
+    "/employees/{employeeId}": {
+      "schema": "employees",
+      "description": "Collaborator registry profiles"
+    },
+    "/presences/{presenceId}": {
+      "schema": "presences",
+      "description": "Presence logs and clockings"
+    },
+    "/tasks/{taskId}": {
+      "schema": "tasks",
+      "description": "Collaborator work items and milestones"
+    },
+    "/reminders/{reminderId}": {
+      "schema": "reminders",
+      "description": "Task reminders and system alerts"
+    },
+    "/documents/{documentId}": {
+      "schema": "documents",
+      "description": "Generated corporate PDFs and official slips"
+    },
+    "/inventory_items/{itemId}": {
+      "schema": "inventory_items",
+      "description": "Physical items and hardware allocations"
+    },
+    "/partners/{partnerId}": {
+      "schema": "partners",
+      "description": "External transport and technical partners"
+    },
+    "/departments/{departmentId}": {
+      "schema": "departments",
+      "description": "Organizational departments"
+    },
+    "/disciplinary_incidents/{incidentId}": {
+      "schema": "disciplinary_incidents",
+      "description": "Disciplinary records and infractions"
+    },
+    "/pricing_records/{recordId}": {
+      "schema": "pricing_records",
+      "description": "Urban route pricing data for real-time comparison"
+    },
+    "/pricing_settings/{settingsId}": {
+      "schema": "pricing_settings",
+      "description": "Base pricing configuration metrics for taxi and VTC services"
+    },
+    "/processflow_salary_debts/{debtId}": {
+      "schema": "salary_settings",
+      "description": "Employee salary tracking and advance debts"
+    },
+    "/salary_payments/{paymentId}": {
+      "schema": "salary_payments",
+      "description": "Executed employee salary disbursements"
+    },
+    "/financial_transactions/{transactionId}": {
+      "schema": "financial_transactions",
+      "description": "Company cash inflows and outflows"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "reminders",
+      "description": "System event audit trail and dispatched alerts"
+    },
+    "/company_settings/{settingsId}": {
+      "schema": "pricing_settings",
+      "description": "Corporate parameters and headquarters geofencing"
+    },
+    "/badge_codes_16/{badgeId}": {
+      "schema": "presences",
+      "description": "Physical RFID badge and QR code bindings"
+    },
+    "/calls/{callId}": {
+      "schema": "tasks",
+      "description": "WebRTC VoIP audio calling signaling channels"
+    },
+    "/user_presences/{presenceId}": {
+      "schema": "presences",
+      "description": "Real-time online/offline collaborator indicators"
+    }
+  }
+}
