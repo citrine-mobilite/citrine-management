@@ -143,6 +143,15 @@ export default function App() {
     return null;
   });
 
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
   const currentUserRef = useRef<AppUser | null>(currentUser);
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -1593,6 +1602,28 @@ export default function App() {
     });
     return count;
   }, [presences, currentRole]);
+
+  if (isInitialLoading) {
+    return (
+      <div className="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-6 space-y-6">
+        <div className="flex flex-col items-center justify-center">
+          <CMLogo className="w-20 h-20 drop-shadow-md animate-pulse" />
+          <h1 className="text-2xl font-serif font-bold text-stone-900 tracking-tight mt-4">
+            Citrine <span className="text-emerald-600 font-serif italic font-medium">Management</span>
+          </h1>
+          <p className="text-[11px] text-stone-400 font-bold uppercase tracking-widest mt-1.5">
+            Initialisation sécurisée du portail...
+          </p>
+        </div>
+        
+        {/* Animated custom micro-spinner */}
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100 shadow-2xs">
+          <div className="w-4 h-4 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin" />
+          <span className="text-[10px] font-bold">Synchronisation en temps réel...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (

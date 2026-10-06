@@ -59,6 +59,7 @@ export default function PresenceRequestsView({
   const [decisionAction, setDecisionAction] = useState<'approved' | 'rejected' | null>(null);
   const [decisionMotif, setDecisionMotif] = useState('');
   const [selectedDetailRequest, setSelectedDetailRequest] = useState<RequestItem | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Convert all presence requests (emergencies, corrections, departures) into a flat list of RequestItems
   const allRequests = useMemo(() => {
@@ -169,7 +170,7 @@ export default function PresenceRequestsView({
     setDecisionMotif('');
   };
 
-  const handleConfirmDecision = () => {
+  const handleConfirmDecision = async () => {
     if (!decisionModalItem || !decisionAction) return;
     if (!decisionMotif.trim()) {
       if (showToast) {
@@ -178,96 +179,105 @@ export default function PresenceRequestsView({
       return;
     }
 
-    const req = decisionModalItem;
-    const decision = decisionAction;
-    const motif = decisionMotif.trim();
+    setIsSubmitting(true);
+    try {
+      const req = decisionModalItem;
+      const decision = decisionAction;
+      const motif = decisionMotif.trim();
 
-    // 1. Find the actual presence record to update (by ID or fallback by employeeId & date)
-    let targetPresenceIndex = presences.findIndex(p => p.id === req.presenceId);
-    if (targetPresenceIndex === -1) {
-      targetPresenceIndex = presences.findIndex(p => p.employeeId === req.employeeId && p.date === req.date);
-    }
-
-    const updatedPresences = [...presences];
-    let targetPresence: Presence;
-
-    if (targetPresenceIndex === -1) {
-      targetPresence = {
-        id: req.presenceId || `pres-${req.employeeId}-${req.date}`,
-        employeeId: req.employeeId,
-        date: req.date,
-        arrivalTime: null,
-        pauseStart: null,
-        pauseEnd: null,
-        departureTime: null,
-        status: 'present',
-        emergencies: req.rawEmergency ? [{ ...req.rawEmergency, status: decision, reviewReason: motif }] : [],
-        updatedAt: new Date().toISOString()
-      };
-      updatedPresences.push(targetPresence);
-      targetPresenceIndex = updatedPresences.length - 1;
-    } else {
-      targetPresence = { ...updatedPresences[targetPresenceIndex] };
-    }
-
-    if (req.type === 'emergency') {
-      if (targetPresence.emergencies && targetPresence.emergencies.length > 0) {
-        targetPresence.emergencies = targetPresence.emergencies.map(e => {
-          if (
-            (req.rawEmergency?.id && e.id === req.rawEmergency.id) ||
-            (e.type === req.subType && e.reason === req.reason) ||
-            (e.reason === req.reason)
-          ) {
-            return { ...e, status: decision, reviewReason: motif };
-          }
-          return e;
-        });
-      } else if (req.rawEmergency) {
-        targetPresence.emergencies = [{ ...req.rawEmergency, status: decision, reviewReason: motif }];
+      // 1. Find the actual presence record to update (by ID or fallback by employeeId & date)
+      let targetPresenceIndex = presences.findIndex(p => p.id === req.presenceId);
+      if (targetPresenceIndex === -1) {
+        targetPresenceIndex = presences.findIndex(p => p.employeeId === req.employeeId && p.date === req.date);
       }
 
-      if (req.subType === 'retard' || req.subType === 'pause_anticipee' || req.subType === 'rallonge_pause') {
+      const updatedPresences = [...presences];
+      let targetPresence: Presence;
+
+      if (targetPresenceIndex === -1) {
+        targetPresence = {
+          id: req.presenceId || `pres-${req.employeeId}-${req.date}`,
+          employeeId: req.employeeId,
+          date: req.date,
+          arrivalTime: null,
+          pauseStart: null,
+          pauseEnd: null,
+          departureTime: null,
+          status: 'present',
+          emergencies: req.rawEmergency ? [{ ...req.rawEmergency, status: decision, reviewReason: motif }] : [],
+          updatedAt: new Date().toISOString()
+        };
+        updatedPresences.push(targetPresence);
+        targetPresenceIndex = updatedPresences.length - 1;
+      } else {
+        targetPresence = { ...updatedPresences[targetPresenceIndex] };
+      }
+
+      if (req.type === 'emergency') {
+        if (targetPresence.emergencies && targetPresence.emergencies.length > 0) {
+          targetPresence.emergencies = targetPresence.emergencies.map(e => {
+            if (
+              (req.rawEmergency?.id && e.id === req.rawEmergency.id) ||
+              (e.type === req.subType && e.reason === req.reason) ||
+              (e.reason === req.reason)
+            ) {
+              return { ...e, status: decision, reviewReason: motif };
+            }
+            return e;
+          });
+        } else if (req.rawEmergency) {
+          targetPresence.emergencies = [{ ...req.rawEmergency, status: decision, reviewReason: motif }];
+        }
+
+        if (req.subType === 'retard' || req.subType === 'pause_anticipee' || req.subType === 'rallonge_pause') {
+          targetPresence.correctionReasonStatus = decision;
+        } else if (req.subType === 'depart_anticipe') {
+          targetPresence.departureReasonStatus = decision;
+        }
+      } else if (req.type === 'correction') {
         targetPresence.correctionReasonStatus = decision;
-      } else if (req.subType === 'depart_anticipe') {
+        if (targetPresence.emergencies) {
+          targetPresence.emergencies = targetPresence.emergencies.map(e => {
+            if (e.type === 'retard' || e.type === 'pause_anticipee' || e.type === 'rallonge_pause') {
+              return { ...e, status: decision, reviewReason: motif };
+            }
+            return e;
+          });
+        }
+      } else if (req.type === 'departure') {
         targetPresence.departureReasonStatus = decision;
+        if (targetPresence.emergencies) {
+          targetPresence.emergencies = targetPresence.emergencies.map(e => {
+            if (e.type === 'depart_anticipe') {
+              return { ...e, status: decision, reviewReason: motif };
+            }
+            return e;
+          });
+        }
       }
-    } else if (req.type === 'correction') {
-      targetPresence.correctionReasonStatus = decision;
-      if (targetPresence.emergencies) {
-        targetPresence.emergencies = targetPresence.emergencies.map(e => {
-          if (e.type === 'retard' || e.type === 'pause_anticipee' || e.type === 'rallonge_pause') {
-            return { ...e, status: decision, reviewReason: motif };
-          }
-          return e;
-        });
+
+      targetPresence.updatedAt = new Date().toISOString();
+      updatedPresences[targetPresenceIndex] = targetPresence;
+      
+      onUpdatePresences(updatedPresences);
+      await saveDocument(COLLECTIONS.PRESENCES, targetPresence);
+
+      const label = decision === 'approved' ? 'approuvée' : 'rejetée';
+      const typeLabel = req.type === 'emergency' ? 'L\'urgence' : req.type === 'correction' ? 'La correction' : 'La justification';
+      if (showToast) {
+        showToast(`${typeLabel} de ${req.employee?.name || 'l\'employé'} a été ${label} (Motif : ${motif}).`, decision === 'approved' ? 'success' : 'info');
       }
-    } else if (req.type === 'departure') {
-      targetPresence.departureReasonStatus = decision;
-      if (targetPresence.emergencies) {
-        targetPresence.emergencies = targetPresence.emergencies.map(e => {
-          if (e.type === 'depart_anticipe') {
-            return { ...e, status: decision, reviewReason: motif };
-          }
-          return e;
-        });
+    } catch (err) {
+      console.error(err);
+      if (showToast) {
+        showToast("Une erreur est survenue lors de l'enregistrement de la décision.", "error");
       }
+    } finally {
+      setIsSubmitting(false);
+      setDecisionModalItem(null);
+      setDecisionAction(null);
+      setDecisionMotif('');
     }
-
-    targetPresence.updatedAt = new Date().toISOString();
-    updatedPresences[targetPresenceIndex] = targetPresence;
-    
-    onUpdatePresences(updatedPresences);
-    saveDocument(COLLECTIONS.PRESENCES, targetPresence);
-
-    const label = decision === 'approved' ? 'approuvée' : 'rejetée';
-    const typeLabel = req.type === 'emergency' ? 'L\'urgence' : req.type === 'correction' ? 'La correction' : 'La justification';
-    if (showToast) {
-      showToast(`${typeLabel} de ${req.employee?.name || 'l\'employé'} a été ${label} (Motif : ${motif}).`, decision === 'approved' ? 'success' : 'info');
-    }
-
-    setDecisionModalItem(null);
-    setDecisionAction(null);
-    setDecisionMotif('');
   };
 
   // Export handlers
@@ -704,12 +714,22 @@ export default function PresenceRequestsView({
               </button>
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleConfirmDecision}
-                className={`px-5 py-2.5 text-white rounded-xl text-xs font-bold shadow-md transition cursor-pointer ${
+                className={`px-5 py-2.5 text-white rounded-xl text-xs font-bold shadow-md transition cursor-pointer flex items-center gap-2 ${
+                  isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
+                } ${
                   decisionAction === 'approved' ? 'bg-green-600 hover:bg-green-700 shadow-green-600/20' : 'bg-red-600 hover:bg-red-700 shadow-red-600/20'
                 }`}
               >
-                Confirmer la décision
+                {isSubmitting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Enregistrement...</span>
+                  </>
+                ) : (
+                  <span>Confirmer la décision</span>
+                )}
               </button>
             </div>
           </div>

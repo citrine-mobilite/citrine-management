@@ -125,7 +125,7 @@ export default function Sidebar({
       items: empPresenceItems
     });
 
-    // 2. Tâches et alertes avec Comparateur de tarifs directement en bas
+    // 2. Tâches et alertes
     const empTaskItems: SidebarItem[] = [
       {
         id: 'tasks' as TabType,
@@ -208,7 +208,7 @@ export default function Sidebar({
       items: mgrPresenceItems
     });
 
-    // 2. Tâches et alertes avec Comparateur de tarifs directement en bas
+    // 2. Tâches et alertes
     const mgrTaskItems: SidebarItem[] = [
       {
         id: 'tasks' as TabType,

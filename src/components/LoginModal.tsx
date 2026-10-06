@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Shield, AlertCircle, ArrowRight, UserCheck, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Mail, Lock, AlertCircle, ArrowRight, UserCheck, Eye, EyeOff, Shield, KeyRound } from 'lucide-react';
 import { AppUser } from '../types';
 import { findUserByEmail, saveUser, INITIAL_DEFAULT_USERS } from '../services/userService';
 import { recordConnectionLog } from '../services/connectionLogService';
 import { verifyPassword } from '../utils/cryptoUtils';
+import { HeroCabLogo } from './CMLogo';
 
 interface LoginModalProps {
   users: AppUser[];
@@ -127,11 +128,9 @@ export default function LoginModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto" id="login-modal-overlay">
       <div className="bg-white rounded-3xl shadow-2xl border border-stone-200 w-full max-w-md overflow-hidden" id="login-card">
         
-        {/* Header - Titre uniquement */}
-        <div className="p-6 text-center border-b border-stone-100">
-          <div className="mx-auto w-12 h-12 bg-emerald-50 text-emerald-700 rounded-2xl flex items-center justify-center mb-3 border border-emerald-200 shadow-2xs">
-            <Shield className="h-6 w-6 text-emerald-600" />
-          </div>
+        {/* Header - Logo Hero uniquement */}
+        <div className="p-6 text-center border-b border-stone-100 flex flex-col items-center justify-center">
+          <HeroCabLogo size="xl" showSubtitle={true} className="mb-2" />
           <h1 className="text-xl font-bold tracking-tight text-stone-900">Citrine Management</h1>
         </div>
 
@@ -231,60 +230,6 @@ export default function LoginModal({
               )}
             </button>
           </form>
-
-          {/* Sélecteur rapide d'identifiants pré-configurés */}
-          <div className="pt-3 border-t border-stone-100 space-y-2">
-            <div className="flex items-center gap-1.5 text-stone-500 text-[11px] font-medium">
-              <KeyRound className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-              <span>Comptes disponibles (mot de passe : <strong className="text-stone-800">admin123</strong>)</span>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleSelectAccount('citrinemobilite@gmail.com')}
-                className={`px-2.5 py-1.5 text-left rounded-lg text-[11px] border transition cursor-pointer ${
-                  email === 'citrinemobilite@gmail.com'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold'
-                    : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                }`}
-              >
-                Citrine Mobilité
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectAccount('landrymouns@gmail.com')}
-                className={`px-2.5 py-1.5 text-left rounded-lg text-[11px] border transition cursor-pointer ${
-                  email === 'landrymouns@gmail.com'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold'
-                    : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                }`}
-              >
-                Landry Moutongo
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectAccount('admin@citrine.cm')}
-                className={`px-2.5 py-1.5 text-left rounded-lg text-[11px] border transition cursor-pointer ${
-                  email === 'admin@citrine.cm'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold'
-                    : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                }`}
-              >
-                Admin Citrine
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectAccount('responsable@citrine.cm')}
-                className={`px-2.5 py-1.5 text-left rounded-lg text-[11px] border transition cursor-pointer ${
-                  email === 'responsable@citrine.cm'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold'
-                    : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                }`}
-              >
-                Responsable Opé.
-              </button>
-            </div>
-          </div>
 
         </div>
 
