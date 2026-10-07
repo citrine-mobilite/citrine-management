@@ -74,6 +74,7 @@ import {
   CompanyModuleConfig,
   ClockingMethod
 } from '../types';
+import { SearchableSelect } from './common/SearchableSelect';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface EmployeePortalProps {
@@ -986,47 +987,48 @@ export default function EmployeePortal({
   return (
     <div className="space-y-6 pb-12">
       
-      {/* 1. Header & Profile Banner */}
-      <div className="bg-gradient-to-r from-stone-900 via-green-950 to-stone-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-stone-800 relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-green-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* 1. Header & Profile Banner with Hero Colors */}
+      <div className="bg-gradient-to-br from-[#2A7B76] via-[#236864] to-[#1B524E] text-white rounded-3xl p-5 sm:p-7 shadow-lg border border-[#2A7B76]/40 relative overflow-hidden">
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 -ml-10 -mb-10 w-48 h-48 bg-[#D4A82F]/15 rounded-full blur-2xl pointer-events-none" />
         
-        <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6 relative z-10">
+        <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-5 relative z-10">
           
           {/* Left Avatar & Info */}
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
-            <div className="relative group">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 text-center sm:text-left w-full sm:w-auto">
+            <div className="relative group shrink-0">
               <img
                 src={employeeProfile.avatarUrl || undefined}
                 alt={employeeProfile.name}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover ring-4 ring-green-500/30 shadow-md"
+                className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover ring-4 ring-white/30 shadow-md bg-white/10"
               />
-              <span className="absolute -bottom-1 -right-1 bg-emerald-500 border-2 border-stone-900 w-4 h-4 rounded-full" title="Compte Actif" />
+              <span className="absolute -bottom-1 -right-1 bg-emerald-400 border-2 border-[#1B524E] w-4 h-4 rounded-full" title="Compte Actif" />
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 w-full sm:w-auto">
               <h1 className="text-2xl sm:text-3xl font-serif font-bold text-white tracking-tight">
                 {employeeProfile.name}
               </h1>
 
-              <p className="text-xs text-green-200/80 font-medium flex items-center justify-center sm:justify-start gap-1.5">
-                <Briefcase className="h-3.5 w-3.5 text-green-400" />
+              <p className="text-xs text-white/90 font-medium flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
+                <Briefcase className="h-3.5 w-3.5 text-[#F3D079]" />
                 <span className="capitalize">{employeeProfile.roleType}</span>
-                <span className="text-stone-500">•</span>
-                <Mail className="h-3.5 w-3.5 text-green-400 ml-1" />
-                <span>{employeeProfile.email}</span>
+                <span className="text-white/40">•</span>
+                <Mail className="h-3.5 w-3.5 text-[#F3D079] ml-1" />
+                <span className="truncate max-w-[220px] sm:max-w-none">{employeeProfile.email}</span>
               </p>
 
-              <div className="pt-2 flex flex-wrap items-center justify-center sm:justify-start gap-4 text-[11px] text-stone-300">
-                <div className="flex items-center gap-1.5 bg-stone-800/80 px-3 py-1 rounded-xl border border-stone-700/60">
-                  <Phone className="h-3.5 w-3.5 text-green-400" />
+              <div className="pt-2 flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-3 text-xs text-white">
+                <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-white/20">
+                  <Phone className="h-3.5 w-3.5 text-[#F3D079]" />
                   <span>{employeeProfile.phone || 'Non renseigné'}</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-stone-800/80 px-3 py-1 rounded-xl border border-stone-700/60">
-                  <Calendar className="h-3.5 w-3.5 text-amber-400" />
+                <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-white/20">
+                  <Calendar className="h-3.5 w-3.5 text-[#F3D079]" />
                   <span>Prise de poste : {employeeProfile.hireDate || '2023-01-15'}</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-green-900/40 px-3 py-1 rounded-xl border border-green-700/40 text-green-200 font-semibold">
-                  <Award className="h-3.5 w-3.5 text-green-400" />
+                <div className="flex items-center gap-1.5 bg-[#D4A82F]/25 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-[#D4A82F]/40 text-[#FFF5D6] font-semibold">
+                  <Award className="h-3.5 w-3.5 text-[#F3D079]" />
                   <span>Ancienneté : {calculateTenure(employeeProfile.hireDate)}</span>
                 </div>
               </div>
@@ -1037,9 +1039,9 @@ export default function EmployeePortal({
           {onOpenProfileModal && (
             <button
               onClick={onOpenProfileModal}
-              className="bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 font-semibold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition cursor-pointer shrink-0 shadow-sm"
+              className="bg-white/15 hover:bg-white/25 text-white border border-white/30 font-semibold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shrink-0 shadow-xs w-full sm:w-auto"
             >
-              <Pencil className="h-3.5 w-3.5 text-green-400" />
+              <Pencil className="h-3.5 w-3.5 text-[#F3D079]" />
               Profil & Mot de passe
             </button>
           )}
@@ -1515,7 +1517,7 @@ export default function EmployeePortal({
             className={`w-full py-3 px-4 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition shadow-sm ${
               todayPresence?.departureTime
                 ? 'bg-stone-200 text-stone-500 border border-stone-300 cursor-not-allowed shadow-none'
-                : 'bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white cursor-pointer hover:shadow-md'
+                : 'bg-[#2A7B76] hover:bg-[#20635F] disabled:opacity-50 text-white cursor-pointer hover:shadow-md'
             }`}
           >
             {todayPresence?.departureTime ? (
@@ -1600,14 +1602,14 @@ export default function EmployeePortal({
 
       </div>
 
-      {/* 3. Navigation Tabs for Personal Breakdown (Descending Layout) */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-green-100/80">
+      {/* 3. Navigation Tabs for Personal Breakdown (Hero Colors) */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-stone-200/80 scrollbar-none">
         <button
           onClick={() => setActiveTab('clocking')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
             activeTab === 'clocking' || (moduleConfig?.enableFinances === false && (activeTab === 'salaries' || activeTab === 'loans'))
-              ? 'bg-green-950 text-white shadow-xs'
-              : 'bg-white text-stone-600 hover:bg-green-50 border border-stone-200/80'
+              ? 'bg-[#2A7B76] text-white shadow-xs'
+              : 'bg-white text-stone-600 hover:bg-[#2A7B76]/10 border border-stone-200/80'
           }`}
         >
           <Clock className="h-4 w-4" />
@@ -1620,8 +1622,8 @@ export default function EmployeePortal({
               onClick={() => setActiveTab('salaries')}
               className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
                 activeTab === 'salaries'
-                  ? 'bg-green-950 text-white shadow-xs'
-                  : 'bg-white text-stone-600 hover:bg-green-50 border border-stone-200/80'
+                  ? 'bg-[#2A7B76] text-white shadow-xs'
+                  : 'bg-white text-stone-600 hover:bg-[#2A7B76]/10 border border-stone-200/80'
               }`}
             >
               <DollarSign className="h-4 w-4" />
@@ -1632,8 +1634,8 @@ export default function EmployeePortal({
               onClick={() => setActiveTab('loans')}
               className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
                 activeTab === 'loans'
-                  ? 'bg-green-950 text-white shadow-xs'
-                  : 'bg-white text-stone-600 hover:bg-green-50 border border-stone-200/80'
+                  ? 'bg-[#2A7B76] text-white shadow-xs'
+                  : 'bg-white text-stone-600 hover:bg-[#2A7B76]/10 border border-stone-200/80'
               }`}
             >
               <CreditCard className="h-4 w-4" />
@@ -1646,8 +1648,8 @@ export default function EmployeePortal({
           onClick={() => setActiveTab('tasks')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
             activeTab === 'tasks'
-              ? 'bg-green-950 text-white shadow-xs'
-              : 'bg-white text-stone-600 hover:bg-green-50 border border-stone-200/80'
+              ? 'bg-[#2A7B76] text-white shadow-xs'
+              : 'bg-white text-stone-600 hover:bg-[#2A7B76]/10 border border-stone-200/80'
           }`}
         >
           <Briefcase className="h-4 w-4" />
@@ -1742,23 +1744,99 @@ export default function EmployeePortal({
                 </div>
 
                 {paginationMode === 'pages' && (
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setPresencePage(1);
-                    }}
-                    className="bg-white border border-stone-200 text-[10px] font-bold rounded-xl px-2 py-1 outline-none text-stone-700 cursor-pointer"
-                  >
-                    <option value={12}>12 par page</option>
-                    <option value={24}>24 par page</option>
-                    <option value={36}>36 par page</option>
-                  </select>
+                  <div className="w-32">
+                    <SearchableSelect
+                      value={String(pageSize)}
+                      onChange={(val) => {
+                        setPageSize(Number(val));
+                        setPresencePage(1);
+                      }}
+                      options={[
+                        { value: '12', label: '12 par page' },
+                        { value: '24', label: '24 par page' },
+                        { value: '36', label: '36 par page' }
+                      ]}
+                      size="sm"
+                      placeholder="Lignes"
+                      searchPlaceholder="Taille..."
+                    />
+                  </div>
                 )}
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Card View (block sm:hidden) */}
+            <div className="block sm:hidden p-3 space-y-3">
+              {myPresences.length === 0 ? (
+                <div className="p-8 text-center text-stone-400 italic text-xs bg-stone-50 rounded-2xl border border-stone-200 border-dashed">
+                  Aucun pointage antérieur enregistré.
+                </div>
+              ) : (
+                displayedPresences.map((p) => (
+                  <div key={p.id} className="p-3.5 bg-stone-50/70 rounded-2xl border border-stone-200/80 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-serif font-bold text-stone-900 text-xs">
+                        {new Date(p.date).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                          isCameroonHoliday(p.date) ? 'bg-amber-100 text-amber-800 border border-amber-200/55' :
+                          p.status === 'present' ? 'bg-emerald-100 text-emerald-800' :
+                          p.status === 'late' ? 'bg-amber-100 text-amber-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {isCameroonHoliday(p.date) 
+                            ? (p.status === 'present' || p.status === 'late' ? 'Présent (Férié)' : 'Repos (Férié)')
+                            : (p.status === 'present' ? 'Présent' : p.status === 'late' ? 'En retard' : 'Absent')
+                          }
+                        </span>
+                        {isCameroonHoliday(p.date) && (
+                          <span className="text-[8px] font-semibold text-amber-700 whitespace-nowrap leading-none mt-0.5">
+                            🇨🇲 {getHolidayInfo(p.date)?.name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 4 Time Slots Mini Grid */}
+                    <div className="grid grid-cols-4 gap-1 p-2 bg-white rounded-xl border border-stone-200/80 text-center font-mono">
+                      <div>
+                        <div className="text-[9px] uppercase font-sans font-bold text-stone-400">Arrivée</div>
+                        <div className="text-xs font-bold text-emerald-700">{p.arrivalTime || '--:--'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase font-sans font-bold text-stone-400">Pause</div>
+                        <div className="text-xs font-bold text-amber-700">{p.pauseStart || '--:--'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase font-sans font-bold text-stone-400">Reprise</div>
+                        <div className="text-xs font-bold text-blue-700">{p.pauseEnd || '--:--'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase font-sans font-bold text-stone-400">Départ</div>
+                        <div className="text-xs font-bold text-[#2A7B76]">{p.departureTime || '--:--'}</div>
+                      </div>
+                    </div>
+
+                    {/* Location Info */}
+                    <div className="flex items-center justify-between text-[10px] text-stone-500 pt-1 border-t border-stone-200/60 font-sans">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-[#2A7B76]" />
+                        {p.location || 'Douala, Japoma'}
+                      </span>
+                      {p.latitude && p.longitude && (
+                        <span className="font-mono text-[9px] text-stone-400">
+                          {p.latitude.toFixed(2)}°, {p.longitude.toFixed(2)}°
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop Table View (hidden sm:block) */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-stone-100/70 text-stone-600 uppercase text-[9px] font-bold tracking-wider border-b border-stone-200">
@@ -2031,23 +2109,25 @@ export default function EmployeePortal({
                 <label className="text-[10px] uppercase font-bold text-stone-500">
                   Événement à consigner :
                 </label>
-                <select
+                <SearchableSelect
                   value={clockFieldToEdit}
-                  onChange={(e) => {
-                    const val = e.target.value as any;
-                    setClockFieldToEdit(val);
-                    if (val === 'arrival') setCustomTimeValue(moduleConfig?.workStartTime || '08:00');
-                    else if (val === 'pauseStart') setCustomTimeValue('13:00');
-                    else if (val === 'pauseEnd') setCustomTimeValue('14:00');
+                  onChange={(val) => {
+                    const typedVal = val as any;
+                    setClockFieldToEdit(typedVal);
+                    if (typedVal === 'arrival') setCustomTimeValue(moduleConfig?.workStartTime || '08:00');
+                    else if (typedVal === 'pauseStart') setCustomTimeValue('13:00');
+                    else if (typedVal === 'pauseEnd') setCustomTimeValue('14:00');
                     else setCustomTimeValue('17:00');
                   }}
-                  className="w-full p-2.5 border border-stone-200 rounded-xl bg-stone-50 font-bold"
-                >
-                  <option value="arrival">1. Arrivée au bureau (Défaut 08h00)</option>
-                  <option value="pauseStart">2. Départ en pause (Défaut 13h00)</option>
-                  <option value="pauseEnd">3. Retour de pause (Défaut 14h00)</option>
-                  <option value="departure">4. Départ / Rentrer (Défaut 17h00)</option>
-                </select>
+                  options={[
+                    { value: 'arrival', label: '1. Arrivée au bureau (Défaut 08h00)' },
+                    { value: 'pauseStart', label: '2. Départ en pause (Défaut 13h00)' },
+                    { value: 'pauseEnd', label: '3. Retour de pause (Défaut 14h00)' },
+                    { value: 'departure', label: '4. Départ / Rentrer (Défaut 17h00)' }
+                  ]}
+                  placeholder="Sélectionner l'événement..."
+                  searchPlaceholder="Rechercher étape..."
+                />
               </div>
 
               <div className="space-y-1">
@@ -2500,42 +2580,42 @@ export default function EmployeePortal({
                 </div>
 
                 {/* Camera Scanner Reticle Viewfinder */}
-                <div className="bg-stone-900 rounded-2xl p-4 text-white relative overflow-hidden flex flex-col items-center justify-center min-h-[170px] border border-stone-800 shadow-inner">
+                <div className="bg-[#184844] rounded-2xl p-4 text-white relative overflow-hidden flex flex-col items-center justify-center min-h-[170px] border border-[#2A7B76]/50 shadow-inner">
                   {isCameraActive ? (
                     <div className="relative w-full h-48 flex items-center justify-center bg-black rounded-xl overflow-hidden">
                       <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                       
                       {/* Laser scanning line */}
-                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-green-500 to-transparent animate-bounce opacity-90 shadow-[0_0_15px_#f43f5e]" />
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#D4A82F] to-transparent animate-bounce opacity-90 shadow-[0_0_15px_#2A7B76]" />
 
                       {/* Scanning reticle box */}
-                      <div className="absolute inset-4 border-2 border-dashed border-green-400/80 rounded-2xl pointer-events-none flex flex-col items-center justify-between p-3">
-                        <div className="bg-green-950/80 border border-green-500/40 text-green-200 text-[10px] font-mono px-3 py-1 rounded-full backdrop-blur-md">
+                      <div className="absolute inset-4 border-2 border-dashed border-[#2A7B76] rounded-2xl pointer-events-none flex flex-col items-center justify-between p-3">
+                        <div className="bg-[#184844]/90 border border-[#2A7B76]/60 text-emerald-200 text-[10px] font-mono px-3 py-1 rounded-full backdrop-blur-md">
                           📷 Viseur Caméra Actif
                         </div>
-                        <div className="text-[10px] text-stone-300 font-mono bg-black/70 px-2 py-0.5 rounded backdrop-blur-xs">
-                          Cadrez le QR Code "CITRINE-HQ-8829"
+                        <div className="text-[10px] text-white/90 font-mono bg-black/70 px-2 py-0.5 rounded backdrop-blur-xs">
+                          Cadrez le QR Code Officiel
                         </div>
                       </div>
 
                       {cameraError && (
-                        <div className="absolute inset-0 bg-stone-900/95 flex flex-col items-center justify-center p-4 text-center space-y-2 z-10">
-                          <AlertCircle className="h-6 w-6 text-green-400 mx-auto" />
-                          <p className="text-xs text-green-200 font-bold">Caméra indisponible ou accès refusé</p>
-                          <p className="text-[11px] text-stone-300 max-w-xs">{cameraError}</p>
+                        <div className="absolute inset-0 bg-[#184844]/95 flex flex-col items-center justify-center p-4 text-center space-y-2 z-10">
+                          <AlertCircle className="h-6 w-6 text-amber-400 mx-auto" />
+                          <p className="text-xs text-white font-bold">Caméra indisponible ou accès refusé</p>
+                          <p className="text-[11px] text-stone-200 max-w-xs">{cameraError}</p>
                         </div>
                       )}
                     </div>
                   ) : (
                     <div className="text-center space-y-2 py-4">
-                      <div className="w-12 h-12 bg-green-950 text-green-400 rounded-2xl flex items-center justify-center mx-auto border border-green-800/60 shadow-md">
+                      <div className="w-12 h-12 bg-[#236864] text-white rounded-2xl flex items-center justify-center mx-auto border border-emerald-400/40 shadow-md">
                         <Camera className="h-6 w-6" />
                       </div>
-                      <p className="text-xs font-semibold text-stone-300">Activez votre caméra pour scanner le QR Code du bureau</p>
+                      <p className="text-xs font-semibold text-stone-200">Activez votre caméra pour scanner le QR Code du bureau</p>
                       <button
                         type="button"
                         onClick={startCameraScan}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs inline-flex items-center gap-2 transition cursor-pointer shadow-sm"
+                        className="px-4 py-2 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold rounded-xl text-xs inline-flex items-center gap-2 transition cursor-pointer shadow-sm"
                       >
                         <Video className="h-4 w-4" /> Activer la Caméra
                       </button>
@@ -2547,14 +2627,14 @@ export default function EmployeePortal({
                       <button
                         type="button"
                         onClick={() => triggerQrPointageAutoConfirm()}
-                        className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                        className="flex-1 py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                       >
                         <Scan className="h-4 w-4" /> Valider le Pointage par QR Code
                       </button>
                       <button
                         type="button"
                         onClick={stopCameraScan}
-                        className="px-3 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-bold rounded-xl cursor-pointer"
+                        className="px-3 py-2.5 bg-[#236864] hover:bg-[#1E5753] text-white text-xs font-bold rounded-xl cursor-pointer"
                       >
                         Fermer Caméra
                       </button>
@@ -2761,7 +2841,7 @@ export default function EmployeePortal({
                   ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-900/40'
                   : t.type === 'error'
                   ? 'bg-red-600 text-white border-red-500 shadow-red-900/40'
-                  : 'bg-stone-900 text-white border-stone-700 shadow-stone-950/40'
+                  : 'bg-[#2A7B76] text-white border-[#226763] shadow-[#1E5753]/30'
               }`}
             >
               <div className="flex items-start gap-2.5">

@@ -17,6 +17,7 @@ import { Reminder, ReminderTrigger, Employee } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import SwipeableListItem from './SwipeableListItem';
 import { soundService } from '../services/soundService';
+import { SearchableSelect } from './common/SearchableSelect';
 
 interface ReminderPanelProps {
   reminders: Reminder[];
@@ -831,17 +832,16 @@ export default function ReminderPanel({
                     </div>
 
                     {assignmentType === 'single' && (
-                      <select
+                      <SearchableSelect
                         value={assignedEmployeeId}
-                        onChange={(e) => setAssignedEmployeeId(e.target.value)}
-                        className="w-full border border-green-100 rounded-xl p-2.5 bg-green-50/20 focus:bg-white focus:outline-green-500 cursor-pointer"
-                      >
-                        {employees.map((emp) => (
-                          <option key={emp.id} value={emp.id}>
-                            {emp.name} ({emp.roleType})
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(val) => setAssignedEmployeeId(val)}
+                        options={employees.map((emp) => ({
+                          value: emp.id,
+                          label: `${emp.name} (${emp.roleType})`
+                        }))}
+                        placeholder="Sélectionner collaborateur..."
+                        searchPlaceholder="Rechercher..."
+                      />
                     )}
 
                     {assignmentType === 'multiple' && (

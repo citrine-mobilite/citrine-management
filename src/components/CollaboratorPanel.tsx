@@ -63,10 +63,10 @@ import {
 import { saveUser } from '../services/userService';
 import { hashPassword, generateStrongPassword } from '../utils/cryptoUtils';
 import { exportTableToExcel, exportTableToPDF } from '../utils/tableExportUtils';
+import { SearchableSelect } from './common/SearchableSelect';
 import { CollaboratorPresenceMap } from './CollaboratorPresenceMap';
 import RhReportModal from './RhReportModal';
 import { buildMonthlyAttendanceReport, AttendanceMonthlyReport } from '../services/rhReportService';
-import { SearchableSelect } from './common/SearchableSelect';
 
 interface CollaboratorPanelProps {
   employees: Employee[];
@@ -1157,18 +1157,23 @@ export default function CollaboratorPanel({
             <div className="bg-stone-50 border-t border-stone-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-3">
                 <span className="text-stone-500">Afficher</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 font-bold text-stone-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                >
-                  <option value={25}>25 par page</option>
-                  <option value={50}>50 par page</option>
-                  <option value={10}>10 par page</option>
-                </select>
+                <div className="w-32">
+                  <SearchableSelect
+                    value={String(pageSize)}
+                    onChange={(val) => {
+                      setPageSize(Number(val));
+                      setCurrentPage(1);
+                    }}
+                    options={[
+                      { value: '25', label: '25 par page' },
+                      { value: '50', label: '50 par page' },
+                      { value: '10', label: '10 par page' }
+                    ]}
+                    size="sm"
+                    placeholder="Taille"
+                    searchPlaceholder="Lignes..."
+                  />
+                </div>
                 <span className="text-stone-300">|</span>
                 <span className="text-stone-500">
                   Lignes <strong className="text-stone-800">{totalItems > 0 ? indexOfFirstItem + 1 : 0}</strong> à <strong className="text-stone-800">{Math.min(indexOfLastItem, totalItems)}</strong> sur <strong className="text-stone-800">{totalItems}</strong>
@@ -1815,37 +1820,41 @@ export default function CollaboratorPanel({
 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-stone-500 uppercase block">Nature du Rôle / Métier</label>
-                <select
+                <SearchableSelect
                   value={editRoleType}
-                  onChange={(e) => setEditRoleType(e.target.value as EmployeeRoleType)}
-                  className="w-full text-xs p-2.5 border border-stone-200 rounded-xl bg-white focus:outline-emerald-500 cursor-pointer"
-                >
-                  <option value="employé">Employé</option>
-                  <option value="stagiaire">Stagiaire</option>
-                  <option value="informaticien">Informaticien / IT</option>
-                  <option value="comptable">Comptable</option>
-                  <option value="rh">Ressources Humaines (RH)</option>
-                  <option value="finance">Finance</option>
-                  <option value="gestionnaire de projet assistant">Gestionnaire Assistant (Responsable)</option>
-                  <option value="gestionnaire de projet">Gestionnaire de Projet (Responsable)</option>
-                  <option value="sponsor">Sponsor</option>
-                </select>
+                  onChange={(val) => setEditRoleType(val as EmployeeRoleType)}
+                  options={[
+                    { value: 'employé', label: 'Employé' },
+                    { value: 'stagiaire', label: 'Stagiaire' },
+                    { value: 'informaticien', label: 'Informaticien / IT' },
+                    { value: 'comptable', label: 'Comptable' },
+                    { value: 'rh', label: 'Ressources Humaines (RH)' },
+                    { value: 'finance', label: 'Finance' },
+                    { value: 'gestionnaire de projet assistant', label: 'Gestionnaire Assistant (Responsable)' },
+                    { value: 'gestionnaire de projet', label: 'Gestionnaire de Projet (Responsable)' },
+                    { value: 'sponsor', label: 'Sponsor' }
+                  ]}
+                  placeholder="Sélectionner rôle..."
+                  searchPlaceholder="Rechercher rôle..."
+                />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-stone-500 uppercase block">Statut Actuel</label>
-                <select
+                <SearchableSelect
                   value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as EmployeeStatus)}
-                  className="w-full text-xs p-2.5 border border-green-100 rounded-xl bg-white focus:outline-green-500 cursor-pointer"
-                >
-                  <option value="en_poste">🟢 En poste (Actif)</option>
-                  <option value="en_conge">🟡 En congé</option>
-                  <option value="maladie">🟣 Arrêt maladie</option>
-                  <option value="suspendu">🟠 Suspendu</option>
-                  <option value="parti">⚪ Parti (Démission / Départ)</option>
-                  <option value="renvoye">🔴 Renvoyé / Licencié</option>
-                </select>
+                  onChange={(val) => setEditStatus(val as EmployeeStatus)}
+                  options={[
+                    { value: 'en_poste', label: '🟢 En poste (Actif)' },
+                    { value: 'en_conge', label: '🟡 En congé' },
+                    { value: 'maladie', label: '🟣 Arrêt maladie' },
+                    { value: 'suspendu', label: '🟠 Suspendu' },
+                    { value: 'parti', label: '⚪ Parti (Démission / Départ)' },
+                    { value: 'renvoye', label: '🔴 Renvoyé / Licencié' }
+                  ]}
+                  placeholder="Sélectionner statut..."
+                  searchPlaceholder="Rechercher statut..."
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -2005,14 +2014,16 @@ export default function CollaboratorPanel({
             <form onSubmit={handleConfirmDeparture} className="space-y-3">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-stone-500 uppercase block">Type de Départ / Statut</label>
-                <select
+                <SearchableSelect
                   value={departStatus}
-                  onChange={(e) => setDepartStatus(e.target.value as 'parti' | 'renvoye')}
-                  className="w-full text-xs p-2.5 border border-green-100 rounded-xl bg-white focus:outline-green-500 cursor-pointer"
-                >
-                  <option value="parti">Départ Volontaire / Démission / Fin de contrat</option>
-                  <option value="renvoye">Licenciement / Renvoyé</option>
-                </select>
+                  onChange={(val) => setDepartStatus(val as 'parti' | 'renvoye')}
+                  options={[
+                    { value: 'parti', label: 'Départ Volontaire / Démission / Fin de contrat' },
+                    { value: 'renvoye', label: 'Licenciement / Renvoyé' }
+                  ]}
+                  placeholder="Sélectionner type..."
+                  searchPlaceholder="Rechercher type..."
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -2021,25 +2032,27 @@ export default function CollaboratorPanel({
                   type="date"
                   value={departDate}
                   onChange={(e) => setDepartDate(e.target.value)}
-                  className="w-full text-xs p-2.5 border border-green-100 rounded-xl bg-white focus:outline-green-500 cursor-pointer"
+                  className="w-full text-xs p-2.5 border border-stone-200 rounded-xl bg-white focus:outline-emerald-500 cursor-pointer"
                   required
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-stone-500 uppercase block">Motif du départ</label>
-                <select
+                <SearchableSelect
                   value={departReason}
-                  onChange={(e) => setDepartReason(e.target.value)}
-                  className="w-full text-xs p-2.5 border border-green-100 rounded-xl bg-white focus:outline-green-500 cursor-pointer"
-                >
-                  <option value="Démission">Démission</option>
-                  <option value="Fin de contrat (CDD / Stage)">Fin de contrat (CDD / Stage)</option>
-                  <option value="Rupture conventionnelle">Rupture conventionnelle</option>
-                  <option value="Licenciement pour motif personnel">Licenciement pour motif personnel</option>
-                  <option value="Licenciement économique">Licenciement économique</option>
-                  <option value="Autre">Autre motif</option>
-                </select>
+                  onChange={(val) => setDepartReason(val)}
+                  options={[
+                    { value: 'Démission', label: 'Démission' },
+                    { value: 'Fin de contrat (CDD / Stage)', label: 'Fin de contrat (CDD / Stage)' },
+                    { value: 'Rupture conventionnelle', label: 'Rupture conventionnelle' },
+                    { value: 'Licenciement pour motif personnel', label: 'Licenciement pour motif personnel' },
+                    { value: 'Licenciement économique', label: 'Licenciement économique' },
+                    { value: 'Autre', label: 'Autre motif' }
+                  ]}
+                  placeholder="Sélectionner motif..."
+                  searchPlaceholder="Rechercher motif..."
+                />
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-green-50">

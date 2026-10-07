@@ -19,6 +19,7 @@ import {
 import { Presence, Employee, EmergencyDeclaration, EmergencyType } from '../types';
 import { saveDocument, COLLECTIONS } from '../services/firestoreService';
 import { exportTableToExcel, exportTableToPDF } from '../utils/tableExportUtils';
+import { SearchableSelect } from './common/SearchableSelect';
 
 interface PresenceRequestsViewProps {
   presences: Presence[];
@@ -386,16 +387,21 @@ export default function PresenceRequestsView({
           </button>
 
           {/* Filter Type */}
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as any)}
-            className="text-xs bg-stone-50 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-bold focus:outline-none focus:ring-1 focus:ring-green-500"
-          >
-            <option value="all">Tous types</option>
-            <option value="emergency">🚨 Urgences uniquement</option>
-            <option value="correction">📋 Corrections heures</option>
-            <option value="departure">🚪 Départs motifs</option>
-          </select>
+          <div className="w-48">
+            <SearchableSelect
+              value={filterType}
+              onChange={(val) => setFilterType(val as any)}
+              options={[
+                { value: 'all', label: 'Tous types' },
+                { value: 'emergency', label: '🚨 Urgences uniquement', badge: 'Urgences', badgeColor: 'bg-red-100 text-red-800' },
+                { value: 'correction', label: '📋 Corrections heures', badge: 'Horaires', badgeColor: 'bg-blue-100 text-blue-800' },
+                { value: 'departure', label: '🚪 Départs motifs', badge: 'Départ', badgeColor: 'bg-amber-100 text-amber-800' }
+              ]}
+              size="sm"
+              placeholder="Filtrer type..."
+              searchPlaceholder="Rechercher type..."
+            />
+          </div>
 
           {/* Search text */}
           <div className="relative">
@@ -510,10 +516,10 @@ export default function PresenceRequestsView({
                         {/* Detail Button */}
                         <button
                           onClick={() => setSelectedDetailRequest(req)}
-                          className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer border border-stone-200"
+                          className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border border-stone-200"
                           title="Afficher les détails"
                         >
-                          <FileText className="h-3 w-3 text-stone-500" />
+                          <FileText className="h-3.5 w-3.5 text-stone-500" />
                           <span>Détails</span>
                         </button>
 
@@ -521,28 +527,28 @@ export default function PresenceRequestsView({
                           <>
                             <button
                               onClick={() => handleInitiateDecision(req, 'rejected')}
-                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition cursor-pointer border border-red-200"
+                              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border border-red-200"
                               title="Rejeter"
                             >
-                              <X className="h-3 w-3" />
+                              <X className="h-3.5 w-3.5" />
                               <span>Rejeter</span>
                             </button>
                             <button
                               onClick={() => handleInitiateDecision(req, 'approved')}
-                              className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition cursor-pointer shadow-xs"
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
                               title="Approuver"
                             >
-                              <Check className="h-3 w-3" />
+                              <Check className="h-3.5 w-3.5" />
                               <span>Approuver</span>
                             </button>
                           </>
                         ) : (
                           <button
                             onClick={() => handleInitiateDecision(req, req.status === 'approved' ? 'rejected' : 'approved')}
-                            className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer border border-stone-200"
+                            className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-stone-200"
                             title={req.status === 'approved' ? 'Changer pour Rejeter' : 'Changer pour Approuver'}
                           >
-                            <RotateCcw className="h-3 w-3" />
+                            <RotateCcw className="h-3.5 w-3.5" />
                             <span>{req.status === 'approved' ? 'Rejeter' : 'Approuver'}</span>
                           </button>
                         )}

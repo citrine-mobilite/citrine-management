@@ -314,80 +314,80 @@ export function PresenceStatisticsView({ employees, presences, onSelectEmployee 
       {/* 1. 4 Cards Summary Grid at the very top */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Card 1: Assiduité Globale */}
-        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-1">
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+            <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
               Taux d'Assiduité Global
             </span>
             <div className="p-1.5 bg-emerald-50 rounded-lg text-emerald-700 border border-emerald-100">
-              <TrendingUp className="h-3.5 w-3.5" />
+              <TrendingUp className="h-4 w-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-xl font-serif font-black text-stone-900">
+            <span className="text-2xl font-serif font-black text-stone-900">
               {globalKpis.avgAssiduite}%
             </span>
-            <span className="text-[10px] text-emerald-700 font-semibold">
+            <span className="text-xs text-emerald-700 font-semibold">
               présence / {globalKpis.totalWorkingDays} j. ouvrés
             </span>
           </div>
         </div>
 
         {/* Card 2: Ponctualité Globale */}
-        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-1">
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+            <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
               Taux de Ponctualité
             </span>
             <div className="p-1.5 bg-emerald-50 rounded-lg text-emerald-700 border border-emerald-100">
-              <Award className="h-3.5 w-3.5" />
+              <Award className="h-4 w-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-xl font-serif font-black text-stone-900">
+            <span className="text-2xl font-serif font-black text-stone-900">
               {globalKpis.avgPonctualite}%
             </span>
-            <span className="text-[10px] text-emerald-700 font-semibold">
+            <span className="text-xs text-emerald-700 font-semibold">
               arrivées à l'heure (≤ 08h15)
             </span>
           </div>
         </div>
 
         {/* Card 3: Urgences & Justifications */}
-        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-1">
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">
+            <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
               Urgences & Motifs
             </span>
             <div className="p-1.5 bg-amber-50 rounded-lg text-amber-700 border border-amber-100">
-              <AlertTriangle className="h-3.5 w-3.5" />
+              <AlertTriangle className="h-4 w-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-xl font-serif font-black text-stone-900">
+            <span className="text-2xl font-serif font-black text-stone-900">
               {globalKpis.totalUrgences}
             </span>
-            <span className="text-[10px] text-amber-700 font-semibold">
+            <span className="text-xs text-amber-700 font-semibold">
               déclarations enregistrées
             </span>
           </div>
         </div>
 
         {/* Card 4: Anomalies Non Justifiées */}
-        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-1">
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">
+            <span className="text-xs font-bold text-rose-800 uppercase tracking-wider">
               Anomalies Non Justifiées
             </span>
             <div className="p-1.5 bg-rose-50 rounded-lg text-rose-700 border border-rose-100">
-              <Clock className="h-3.5 w-3.5" />
+              <Clock className="h-4 w-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-xl font-serif font-black text-stone-900">
+            <span className="text-2xl font-serif font-black text-stone-900">
               {globalKpis.totalAnomalies}
             </span>
-            <span className="text-[10px] text-rose-700 font-semibold">
+            <span className="text-xs text-rose-700 font-semibold">
               retards / sorties sans motif
             </span>
           </div>
@@ -405,7 +405,7 @@ export function PresenceStatisticsView({ employees, presences, onSelectEmployee 
               <h3 className="font-serif font-bold text-stone-900 text-sm sm:text-base">
                 Analyse Détaillée d'Assiduité & Comportement
               </h3>
-              <p className="text-[10px] text-stone-500">
+              <p className="text-xs text-stone-500">
                 Période active : {dateStartStr} au {dateEndStr} ({globalKpis.totalWorkingDays} jours ouvrés)
               </p>
             </div>
@@ -413,7 +413,7 @@ export function PresenceStatisticsView({ employees, presences, onSelectEmployee 
 
           <div className="flex items-center gap-2 flex-wrap">
             {/* Period Filter Buttons */}
-            <div className="inline-flex bg-stone-100 p-1 rounded-xl text-xs font-semibold">
+            <div className="inline-flex bg-stone-100 p-1.5 rounded-xl text-xs sm:text-sm font-semibold">
               <button
                 onClick={() => setPeriod('this_month')}
                 className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
@@ -450,13 +450,13 @@ export function PresenceStatisticsView({ employees, presences, onSelectEmployee 
 
             {/* Search Box */}
             <div className="relative">
-              <Search className="h-3.5 w-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="h-4 w-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Rechercher un collaborateur..."
-                className="pl-8 pr-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-48"
+                className="pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-52 font-medium"
               />
             </div>
           </div>
@@ -466,41 +466,41 @@ export function PresenceStatisticsView({ employees, presences, onSelectEmployee 
         <div className="bg-stone-50/50 p-4 rounded-2xl border border-stone-100 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-200/60 pb-3">
             <div>
-              <h4 className="font-serif font-bold text-stone-900 text-xs sm:text-sm flex items-center gap-2">
+              <h4 className="font-serif font-bold text-stone-900 text-sm sm:text-base flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-emerald-600" />
                 Comparatif Graphique par Collaborateur
               </h4>
             </div>
 
-            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-stone-200 text-xs">
+            <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-stone-200 text-xs">
               <button
                 onClick={() => setActiveMetric('assiduite')}
-                className={`px-2.5 py-1 rounded-lg transition cursor-pointer text-[11px] ${
-                  activeMetric === 'assiduite' ? 'bg-emerald-600 text-white font-bold shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer text-xs font-bold ${
+                  activeMetric === 'assiduite' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 Assiduité (%)
               </button>
               <button
                 onClick={() => setActiveMetric('ponctualite')}
-                className={`px-2.5 py-1 rounded-lg transition cursor-pointer text-[11px] ${
-                  activeMetric === 'ponctualite' ? 'bg-emerald-600 text-white font-bold shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer text-xs font-bold ${
+                  activeMetric === 'ponctualite' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 Ponctualité (%)
               </button>
               <button
                 onClick={() => setActiveMetric('urgences')}
-                className={`px-2.5 py-1 rounded-lg transition cursor-pointer text-[11px] ${
-                  activeMetric === 'urgences' ? 'bg-emerald-600 text-white font-bold shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer text-xs font-bold ${
+                  activeMetric === 'urgences' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 Urgences
               </button>
               <button
                 onClick={() => setActiveMetric('anomalies')}
-                className={`px-2.5 py-1 rounded-lg transition cursor-pointer text-[11px] ${
-                  activeMetric === 'anomalies' ? 'bg-emerald-600 text-white font-bold shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer text-xs font-bold ${
+                  activeMetric === 'anomalies' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 Anomalies
@@ -577,26 +577,26 @@ export function PresenceStatisticsView({ employees, presences, onSelectEmployee 
         {/* Detailed Table Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="font-serif font-bold text-stone-900 text-xs sm:text-sm">
+            <h4 className="font-serif font-bold text-stone-900 text-sm sm:text-base">
               Registre Récapitulatif par Collaborateur ({filteredEmployeeStats.length})
             </h4>
-            <span className="text-[10px] font-mono text-stone-400">
+            <span className="text-xs font-mono text-stone-500">
               Base de calcul : {globalKpis.totalWorkingDays} jours ouvrés
             </span>
           </div>
 
           <div className="border border-stone-200/80 rounded-2xl overflow-x-auto shadow-2xs bg-white">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full text-left border-collapse text-xs sm:text-sm">
               <thead>
-                <tr className="bg-stone-50 border-b border-stone-200/80 text-[10px] font-bold text-stone-500 uppercase tracking-wider">
-                  <th className="py-3 px-3">Collaborateur</th>
-                  <th className="py-3 px-3 text-center">Jours Pointés</th>
-                  <th className="py-3 px-3 text-center">Assiduité</th>
-                  <th className="py-3 px-3 text-center">Ponctualité</th>
-                  <th className="py-3 px-3 text-center">Retards</th>
-                  <th className="py-3 px-3 text-center">Urgences</th>
-                  <th className="py-3 px-3 text-center">Pauses (&lt;12h/&gt;1h)</th>
-                  <th className="py-3 px-3 text-center">Départs (&lt;17h/&gt;17h30)</th>
+                <tr className="bg-stone-50 border-b border-stone-200/80 text-xs font-bold text-stone-700 uppercase tracking-wider">
+                  <th className="py-3.5 px-3">Collaborateur</th>
+                  <th className="py-3.5 px-3 text-center">Jours Pointés</th>
+                  <th className="py-3.5 px-3 text-center">Assiduité</th>
+                  <th className="py-3.5 px-3 text-center">Ponctualité</th>
+                  <th className="py-3.5 px-3 text-center">Retards</th>
+                  <th className="py-3.5 px-3 text-center">Urgences</th>
+                  <th className="py-3.5 px-3 text-center">Pauses (&lt;12h/&gt;1h)</th>
+                  <th className="py-3.5 px-3 text-center">Départs (&lt;17h/&gt;17h30)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 font-sans">
@@ -630,8 +630,8 @@ export function PresenceStatisticsView({ employees, presences, onSelectEmployee 
                             </div>
                           )}
                           <div>
-                            <div className="font-bold text-stone-900">{stat.name}</div>
-                            <div className="text-[10px] text-stone-500">{stat.position}</div>
+                            <div className="font-bold text-stone-900 text-xs sm:text-sm">{stat.name}</div>
+                            <div className="text-xs text-stone-500">{stat.position}</div>
                           </div>
                         </div>
                       </td>

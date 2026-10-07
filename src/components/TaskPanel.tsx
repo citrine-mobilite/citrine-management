@@ -1440,18 +1440,23 @@ export default function TaskPanel({
                   <div className="bg-stone-50 border-t border-stone-200 px-3 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs rounded-b-xl">
                     <div className="flex items-center gap-3">
                       <span className="text-stone-500">Afficher</span>
-                      <select
-                        value={taskListPageSize}
-                        onChange={(e) => {
-                          setTaskListPageSize(Number(e.target.value));
-                          setTaskListPage(1);
-                        }}
-                        className="bg-white border border-stone-200 rounded-lg px-2 py-1 font-bold text-stone-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                      >
-                        <option value={25}>25 par page</option>
-                        <option value={50}>50 par page</option>
-                        <option value={10}>10 par page</option>
-                      </select>
+                      <div className="w-32">
+                        <SearchableSelect
+                          value={String(taskListPageSize)}
+                          onChange={(val) => {
+                            setTaskListPageSize(Number(val));
+                            setTaskListPage(1);
+                          }}
+                          options={[
+                            { value: '25', label: '25 par page' },
+                            { value: '50', label: '50 par page' },
+                            { value: '10', label: '10 par page' }
+                          ]}
+                          size="sm"
+                          placeholder="Taille"
+                          searchPlaceholder="Lignes..."
+                        />
+                      </div>
                       <span className="text-stone-300">|</span>
                       <span className="text-stone-500">
                         Lignes <strong className="text-stone-800">{totalItems > 0 ? indexOfFirstItem + 1 : 0}</strong> à <strong className="text-stone-800">{Math.min(indexOfLastItem, totalItems)}</strong> sur <strong className="text-stone-800">{totalItems}</strong>
@@ -1948,15 +1953,17 @@ export default function TaskPanel({
 
                 <div className="space-y-1">
                   <label className="text-stone-600 font-bold">Gravité de l'incident :</label>
-                  <select
+                  <SearchableSelect
                     value={incidentSeverity}
-                    onChange={(e) => setIncidentSeverity(e.target.value as any)}
-                    className="w-full border border-stone-200 rounded-xl p-2.5 focus:outline-red-500 bg-white"
-                  >
-                    <option value="low">Basse (Simple retard de consultation)</option>
-                    <option value="medium">Moyenne (Besoin d'arbitrage)</option>
-                    <option value="high">Haute (Bloquant pour la semaine)</option>
-                  </select>
+                    onChange={(val) => setIncidentSeverity(val as any)}
+                    options={[
+                      { value: 'low', label: 'Basse (Simple retard de consultation)', badge: 'Faible', badgeColor: 'bg-emerald-100 text-emerald-800' },
+                      { value: 'medium', label: 'Moyenne (Besoin d\'arbitrage)', badge: 'Moyen', badgeColor: 'bg-amber-100 text-amber-800' },
+                      { value: 'high', label: 'Haute (Bloquant pour la semaine)', badge: 'Urgent', badgeColor: 'bg-red-100 text-red-800' }
+                    ]}
+                    placeholder="Gravité..."
+                    searchPlaceholder="Rechercher sévérité..."
+                  />
                 </div>
 
                 <div className="space-y-1">

@@ -30,6 +30,7 @@ import { PresenceStatisticsView } from './PresenceStatisticsView';
 import PresenceRequestsView from './PresenceRequestsView';
 import { haptic } from '../services/hapticService';
 import { SearchableSelect } from './common/SearchableSelect';
+import { exportTableToExcel, exportTableToPDF } from '../utils/tableExportUtils';
 
 export function formatFrenchPointageTitle(dateStr: string): string {
   if (!dateStr) return "Pointage du jour";
@@ -1354,57 +1355,115 @@ export default function PresencePanel({
     document.body.removeChild(link);
   };
 
+  const handleExportPDF = () => {
+    const headers = ['Collaborateur', 'Date', 'Statut', 'Arrivée', 'Pause', 'Reprise', 'Départ', 'Lieu'];
+    const rows = filteredPresences.map(r => {
+      const emp = employees.find(e => e.id === r.employeeId);
+      const isHoliday = isCameroonHoliday(r.date);
+      const statusLabel = isHoliday 
+        ? (r.status === 'present' || r.status === 'late' ? 'Présent (Férié)' : 'Repos (Férié)')
+        : (r.status === 'present' ? 'Présent' :
+           r.status === 'late' ? 'En retard' :
+           r.status === 'absent' ? 'Absent' : 'Non pointé');
+      return [
+        emp ? emp.name : 'Inconnu',
+        r.date,
+        statusLabel,
+        r.arrivalTime || '--:--',
+        r.pauseStart || '--:--',
+        r.pauseEnd || '--:--',
+        r.departureTime || '--:--',
+        r.location || 'Douala, Japoma'
+      ];
+    });
+
+    const selectedEmp = employees.find(e => e.id === selectedEmployeeId);
+    const empNamePartClean = selectedEmp ? selectedEmp.name.toLowerCase().replace(/\s+/g, "_") : "tous_collaborateurs";
+    exportTableToPDF('Registre de Suivi des Présences', headers, rows, `registre_presences_${empNamePartClean}_${filterPeriod}`);
+  };
+
+  // Executive summary metrics for the current filtered period
+  const filteredSummaryMetrics = React.useMemo(() => {
+    let presentCount = 0;
+    let lateCount = 0;
+    let absentCount = 0;
+
+    filteredPresences.forEach(p => {
+      if (p.status === 'present') presentCount++;
+      else if (p.status === 'late') lateCount++;
+      else if (p.status === 'absent') absentCount++;
+    });
+
+    const totalTracked = filteredPresences.length;
+    const punctualityRate = (presentCount + lateCount) > 0 
+      ? Math.round((presentCount / (presentCount + lateCount)) * 100)
+      : 100;
+
+    return {
+      totalTracked,
+      presentCount,
+      lateCount,
+      absentCount,
+      punctualityRate
+    };
+  }, [filteredPresences]);
+
+  const overviewStats = filteredSummaryMetrics;
+
   return (
     <div className="space-y-6" id="presence-module">
       {/* Module Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200/80 pb-5">
         <div>
-          <h2 className="text-xl font-serif font-semibold text-stone-900 tracking-tight flex items-center gap-2">
-            <UserCheck className="h-5 w-5 text-emerald-600" />
+          <h2 className="text-2xl font-serif font-bold text-stone-900 tracking-tight flex items-center gap-2.5">
+            <UserCheck className="h-6 w-6 text-emerald-600" />
             Suivi des Présences & Fiches de Pointage
           </h2>
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">
+            Contrôle en direct des arrivées, pauses, départs et régularisations administratives
+          </p>
         </div>
 
         {/* Navigation Tabs & Proxy Clock Button */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 bg-stone-100 p-1.5 rounded-2xl">
+          <div className="flex items-center gap-2 bg-stone-100 p-1.5 rounded-2xl border border-stone-200/60 shadow-3xs">
             <button
               onClick={() => setActiveSubTab('register')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeSubTab === 'register'
                   ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900'
+                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/50'
               }`}
             >
-              <Clock className="h-3.5 w-3.5" />
+              <Clock className="h-4 w-4" />
               <span>📋 Registre & Pointages</span>
             </button>
 
             <button
               onClick={() => setActiveSubTab('statistics')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeSubTab === 'statistics'
                   ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900'
+                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/50'
               }`}
             >
-              <BarChart3 className="h-3.5 w-3.5 text-emerald-200" />
+              <BarChart3 className="h-4 w-4 text-emerald-200" />
               <span>📊 Statistiques & Assiduité</span>
             </button>
 
             {(currentRole === 'Responsable' || currentRole === 'Administrateur') && (
               <button
                 onClick={() => setActiveSubTab('requests')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer relative ${
+                className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer relative ${
                   activeSubTab === 'requests'
                     ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-stone-600 hover:text-stone-900'
+                    : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/50'
                 }`}
               >
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
                 <span>🚨 Demandes & Urgences</span>
                 {pendingRequestsCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-extrabold animate-bounce shadow-md">
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-extrabold animate-bounce shadow-md">
                     {pendingRequestsCount}
                   </span>
                 )}
@@ -1459,20 +1518,20 @@ export default function PresencePanel({
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         
         {/* Left column: Quick Clock-In Widget & Stats */}
-        <div className="lg:w-[380px] lg:order-1 shrink-0 sticky top-6 bg-white p-5 rounded-2xl border border-green-100 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-green-100 pb-3">
-            <h3 className="text-xs font-bold tracking-wider uppercase text-green-800 flex items-center gap-1.5">
-              <Clock className="h-4 w-4 text-green-500" />
-              Espace Pointage Collaborateur
+        <div className="w-full lg:w-[390px] lg:order-1 shrink-0 static lg:sticky lg:top-6 bg-white p-5 rounded-2xl border border-stone-200/90 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+            <h3 className="text-sm font-bold tracking-wider uppercase text-emerald-900 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-emerald-600" />
+              Fiche & Pointage Direct
             </h3>
-            <span className="bg-green-50/60 border border-green-100 text-green-800 text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold">
+            <span className="bg-emerald-50 border border-emerald-200/70 text-emerald-800 text-xs font-mono px-3 py-1 rounded-full font-bold">
               {currentTime}
             </span>
           </div>
 
           {/* Employee selector */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-stone-600">
+            <label className="text-xs sm:text-sm font-semibold text-stone-700">
               {currentRole === 'Employé' ? "Simuler en tant que :" : "Sélectionner la fiche collaborateur :"}
             </label>
             <SearchableSelect
@@ -1497,51 +1556,51 @@ export default function PresencePanel({
 
             {/* Shortcut to Collaborateurs tab for managing employees */}
             {(currentRole === 'Responsable' || currentRole === 'Administrateur') && onSelectTab && (
-              <div className="text-[10px] text-stone-500 flex justify-between items-center pt-0.5 px-1 leading-normal">
-                <span>Un nouveau collaborateur ?</span>
+              <div className="text-xs text-stone-500 flex justify-between items-center pt-1 px-1 leading-normal">
+                <span>Nouveau collaborateur ?</span>
                 <button
                   type="button"
                   onClick={() => onSelectTab('collaborators')}
-                  className="text-green-600 hover:text-green-700 font-bold underline flex items-center gap-0.5 cursor-pointer bg-transparent border-0 p-0"
+                  className="text-emerald-700 hover:text-emerald-800 font-bold underline flex items-center gap-0.5 cursor-pointer bg-transparent border-0 p-0"
                 >
-                  Créer un collaborateur &rarr;
+                  Ajouter un collaborateur &rarr;
                 </button>
               </div>
             )}
           </div>
 
           {activeEmployee ? (
-            <div className="space-y-5 pt-1">
-              <div className="flex items-center gap-3 bg-green-50/40 p-3 rounded-xl border border-green-100/50">
+            <div className="space-y-4 pt-1">
+              <div className="flex items-center gap-3 bg-stone-50/80 p-3.5 rounded-xl border border-stone-200/70">
                 <img
                   src={activeEmployee.avatarUrl || undefined}
                   alt={activeEmployee.name}
                   referrerPolicy="no-referrer"
-                  className="w-10 h-10 rounded-full object-cover border border-green-200 shadow-xs"
+                  className="w-11 h-11 rounded-xl object-cover border border-stone-200 shadow-2xs shrink-0"
                 />
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-bold text-green-950 truncate">{activeEmployee.name}</h4>
-                  <p className="text-[10px] text-stone-500 truncate">{activeEmployee.email}</p>
+                  <h4 className="text-sm font-bold text-stone-900 truncate">{activeEmployee.name}</h4>
+                  <p className="text-xs text-stone-500 truncate">{activeEmployee.email}</p>
                 </div>
               </div>
 
               {/* Pointage du Jour */}
               <div className="space-y-3">
-                <div className="flex flex-col gap-1.5 border-b border-green-100 pb-2">
+                <div className="flex flex-col gap-2 border-b border-stone-100 pb-3">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-[11px] font-bold font-serif uppercase tracking-wider text-green-950">
+                    <span className="text-xs sm:text-sm font-bold font-serif uppercase tracking-wider text-stone-900">
                       {formatFrenchPointageTitle(selectedPointageDate)}
                     </span>
                     {getHolidayInfo(selectedPointageDate) && (
-                      <span className="bg-amber-100 border border-amber-200 text-amber-900 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 shadow-3xs animate-pulse">
+                      <span className="bg-amber-100 border border-amber-200 text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 shadow-3xs animate-pulse">
                         🇨🇲 Férié : {getHolidayInfo(selectedPointageDate)!.name}
                       </span>
                     )}
                     {activeEmployeePresence ? (
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                        activeEmployeePresence.status === 'present' ? 'bg-green-100 text-green-800' :
-                        activeEmployeePresence.status === 'late' ? 'bg-amber-100 text-amber-800' :
-                        activeEmployeePresence.status === 'absent' ? 'bg-stone-200 text-stone-800' :
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                        activeEmployeePresence.status === 'present' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200/60' :
+                        activeEmployeePresence.status === 'late' ? 'bg-amber-100 text-amber-800 border border-amber-200/60' :
+                        activeEmployeePresence.status === 'absent' ? 'bg-stone-200 text-stone-800 border border-stone-300/60' :
                         'bg-stone-100 text-stone-500'
                       }`}>
                         {activeEmployeePresence.status === 'present' ? 'Présent' :
@@ -1549,11 +1608,11 @@ export default function PresencePanel({
                          activeEmployeePresence.status === 'absent' ? 'Absent' : 'Non pointé'}
                       </span>
                     ) : (
-                      <span className="text-stone-400 italic text-[10px]">Aucun enregistrement</span>
+                      <span className="text-stone-400 italic text-xs">Aucun enregistrement</span>
                     )}
                   </div>
-                  <div className="flex items-center justify-between text-[10px] bg-green-50/40 px-2.5 py-1 rounded-xl border border-green-100/60">
-                    <span className="text-stone-600 font-medium">Changer la date :</span>
+                  <div className="flex items-center justify-between text-xs bg-stone-50 px-3 py-1.5 rounded-xl border border-stone-200/70">
+                    <span className="text-stone-600 font-semibold">Changer la date :</span>
                     <input
                       type="date"
                       value={selectedPointageDate}
@@ -1563,34 +1622,46 @@ export default function PresencePanel({
                           setSpecificDate(e.target.value);
                         }
                       }}
-                      className="text-xs font-bold text-stone-800 bg-white border border-green-200 rounded-lg px-2 py-0.5 focus:outline-green-500 font-mono cursor-pointer"
+                      className="text-xs sm:text-sm font-bold text-stone-800 bg-white border border-stone-200 rounded-lg px-2.5 py-1 focus:outline-emerald-500 font-mono cursor-pointer"
                     />
                   </div>
                 </div>
 
-                {/* Milestones status */}
-                <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                  <div className="p-2 border border-green-100/50 rounded-xl bg-green-50/20">
-                    <span className="text-[9px] text-green-800 uppercase block font-semibold mb-0.5">Arrivée</span>
-                    <span className="font-semibold text-stone-700 font-mono text-xs">
+                {/* Milestones status - Re-designed Cards with Better Contrast */}
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
+                  <div className="p-3 border border-stone-200/80 rounded-xl bg-stone-50/70 hover:bg-white transition flex flex-col justify-between">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-stone-600 uppercase font-bold tracking-wider">Arrivée</span>
+                      <Sun className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <span className="font-bold text-stone-900 font-mono text-sm sm:text-base mt-1">
                       {activeEmployeePresence?.arrivalTime || '--:--'}
                     </span>
                   </div>
-                  <div className="p-2 border border-green-100/50 rounded-xl bg-green-50/20">
-                    <span className="text-[9px] text-green-800 uppercase block font-semibold mb-0.5">Pause Midi</span>
-                    <span className="font-semibold text-stone-700 font-mono text-xs">
+                  <div className="p-3 border border-stone-200/80 rounded-xl bg-stone-50/70 hover:bg-white transition flex flex-col justify-between">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-stone-600 uppercase font-bold tracking-wider">Pause</span>
+                      <Coffee className="h-4 w-4 text-emerald-600" />
+                    </div>
+                    <span className="font-bold text-stone-900 font-mono text-sm sm:text-base mt-1">
                       {activeEmployeePresence?.pauseStart || '--:--'}
                     </span>
                   </div>
-                  <div className="p-2 border border-green-100/50 rounded-xl bg-green-50/20">
-                    <span className="text-[9px] text-green-800 uppercase block font-semibold mb-0.5">Retour Pause</span>
-                    <span className="font-semibold text-stone-700 font-mono text-xs">
+                  <div className="p-3 border border-stone-200/80 rounded-xl bg-stone-50/70 hover:bg-white transition flex flex-col justify-between">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-stone-600 uppercase font-bold tracking-wider">Reprise</span>
+                      <Clock className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <span className="font-bold text-stone-900 font-mono text-sm sm:text-base mt-1">
                       {activeEmployeePresence?.pauseEnd || '--:--'}
                     </span>
                   </div>
-                  <div className="p-2 border border-green-100/50 rounded-xl bg-green-50/20">
-                    <span className="text-[9px] text-green-800 uppercase block font-semibold mb-0.5">Départ</span>
-                    <span className="font-semibold text-stone-700 font-mono text-xs">
+                  <div className="p-3 border border-stone-200/80 rounded-xl bg-stone-50/70 hover:bg-white transition flex flex-col justify-between">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-stone-600 uppercase font-bold tracking-wider">Départ</span>
+                      <CheckCircle className="h-4 w-4 text-indigo-600" />
+                    </div>
+                    <span className="font-bold text-stone-900 font-mono text-sm sm:text-base mt-1">
                       {activeEmployeePresence?.departureTime || '--:--'}
                     </span>
                   </div>
@@ -1603,8 +1674,8 @@ export default function PresencePanel({
                       <div className="flex items-start gap-2.5">
                         <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                         <div>
-                          <p className="font-bold text-xs text-stone-900">Mode Pointage Personnel (Responsable)</p>
-                          <p className="text-[11px] text-stone-600 leading-relaxed mt-0.5">
+                          <p className="font-bold text-sm text-stone-900">Mode Pointage Personnel (Responsable)</p>
+                          <p className="text-xs text-stone-600 leading-relaxed mt-0.5">
                             Vous pointez pour votre propre compte. Vous bénéficiez ici de toutes les options de pointage employé (QR Code, Wi-Fi Bureau, GPS, Code 16 Caractères, PIN Borne) via votre Espace Collaborateur.
                           </p>
                         </div>
@@ -1616,7 +1687,7 @@ export default function PresencePanel({
                             haptic.light();
                             onSelectTab('employee_portal');
                           }}
-                          className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs cursor-pointer transition"
+                          className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs cursor-pointer transition"
                         >
                           <Clock className="h-4 w-4" />
                           <span>Ouvrir mon Espace Collaborateur & Toutes Options</span>
@@ -1624,8 +1695,8 @@ export default function PresencePanel({
                       )}
                     </div>
                   ) : (
-                    <div className="bg-green-50/30 border border-green-100 p-3.5 rounded-xl space-y-2">
-                      <p className="text-[10px] text-stone-500 font-semibold tracking-wide uppercase">Prochaine étape réglementaire :</p>
+                    <div className="bg-stone-50/90 border border-stone-200/80 p-3.5 rounded-xl space-y-2">
+                      <p className="text-xs text-stone-600 font-bold tracking-wide uppercase">Prochaine étape réglementaire :</p>
                       <button
                         onClick={() => {
                           if (nextStep.type !== 'completed' && nextStep.type !== 'waiting_pause') {
@@ -1634,14 +1705,14 @@ export default function PresencePanel({
                         }}
                         disabled={nextStep.disabled}
                         id="btn-clock-dynamic"
-                        className="w-full inline-flex items-center justify-center gap-2 text-xs font-bold px-4 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 disabled:bg-stone-100 disabled:text-stone-400 cursor-pointer transition shadow-xs hover:shadow-md"
+                        className="w-full inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-bold px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40 disabled:bg-stone-100 disabled:text-stone-400 cursor-pointer transition shadow-xs hover:shadow-md"
                         title={nextStep.tooltip}
                       >
                         {nextStep.icon}
                         <span>{nextStep.label}</span>
                       </button>
                       {nextStep.tooltip && (
-                        <p className="text-[10px] text-stone-500 italic leading-relaxed text-center">
+                        <p className="text-xs text-stone-500 italic leading-relaxed text-center">
                           {nextStep.tooltip}
                         </p>
                       )}
@@ -1649,16 +1720,16 @@ export default function PresencePanel({
                   )}
 
                   {/* Contextual Daily Schedule/Pause Indicators */}
-                  <div className="space-y-1.5 text-[10px] leading-relaxed">
+                  <div className="space-y-1.5 text-xs leading-relaxed">
                     {activeEmployeePresence?.arrivalTime && !activeEmployeePresence?.pauseStart && (
-                      <div className="text-amber-700 bg-amber-50/50 border border-amber-100 rounded-lg p-2 flex items-center gap-1.5">
-                        <Coffee className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                      <div className="text-amber-800 bg-amber-50/70 border border-amber-200/70 rounded-lg p-2.5 flex items-center gap-2">
+                        <Coffee className="h-4 w-4 text-amber-600 shrink-0" />
                         <span>La pause déjeuner est disponible de 11:00 à 15:00.</span>
                       </div>
                     )}
                     {activeEmployeePresence?.pauseStart && !activeEmployeePresence?.pauseEnd && (
-                      <div className="text-emerald-700 bg-emerald-50/50 border border-emerald-100 rounded-lg p-2 flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                      <div className="text-emerald-800 bg-emerald-50/70 border border-emerald-200/70 rounded-lg p-2.5 flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-emerald-600 shrink-0" />
                         <span>
                           Pause débutée à <strong>{activeEmployeePresence.pauseStart}</strong>. La reprise doit être pointée au retour.
                         </span>
@@ -1668,32 +1739,32 @@ export default function PresencePanel({
                 </div>
 
                 {Number(currentTime.split(':')[0]) >= 9 && (
-                  <div className="bg-green-50/50 border border-green-100 rounded-xl p-2.5 flex items-start gap-2">
-                    <AlertCircle className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-green-950 leading-relaxed">
+                  <div className="bg-amber-50/70 border border-amber-200/70 rounded-xl p-3 flex items-start gap-2.5">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-950 leading-relaxed">
                       <strong>Alerte de Retard :</strong> À partir de 09h01, tout enregistrement déclenche une alerte WhatsApp d'activité.
                     </p>
                   </div>
                 )}
               </div>
 
-              {/* Statistiques Globales */}
-              <div className="pt-3 border-t border-green-100 space-y-3">
+              {/* Statistiques Globales Collaborateur */}
+              <div className="pt-3 border-t border-stone-200 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-green-800">Statistiques Globales</span>
-                  <span className="text-[9px] text-stone-400 italic">({activeEmployeeStats?.total} j. d'activité)</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-stone-700">Statistiques Collaborateur</span>
+                  <span className="text-xs text-stone-500 italic">({activeEmployeeStats?.total} j. d'activité)</span>
                 </div>
 
-                <div className="p-3 bg-stone-50 border border-stone-100 rounded-xl space-y-2.5 text-xs">
+                <div className="p-3.5 bg-stone-50 border border-stone-200/80 rounded-xl space-y-3 text-xs sm:text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-stone-700 flex items-center gap-1">
-                      <Award className="h-3.5 w-3.5 text-green-500" />
+                    <span className="font-semibold text-stone-700 flex items-center gap-1.5">
+                      <Award className="h-4 w-4 text-emerald-600" />
                       Ponctualité :
                     </span>
-                    <span className="font-bold text-green-900 font-mono">{activeEmployeeStats?.onTimeRate}%</span>
+                    <span className="font-bold text-emerald-900 font-mono text-sm">{activeEmployeeStats?.onTimeRate}%</span>
                   </div>
                   {/* Progress Bar */}
-                  <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-stone-200 h-2 rounded-full overflow-hidden">
                     <div 
                       className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
                       style={{ width: `${activeEmployeeStats?.onTimeRate}%` }}
@@ -1701,38 +1772,38 @@ export default function PresencePanel({
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-stone-700 flex items-center gap-1">
-                      <TrendingUp className="h-3.5 w-3.5 text-green-500" />
+                    <span className="font-semibold text-stone-700 flex items-center gap-1.5">
+                      <TrendingUp className="h-4 w-4 text-emerald-600" />
                       Assiduité :
                     </span>
-                    <span className="font-bold text-green-900 font-mono">{activeEmployeeStats?.attendanceRate}%</span>
+                    <span className="font-bold text-emerald-900 font-mono text-sm">{activeEmployeeStats?.attendanceRate}%</span>
                   </div>
                   {/* Progress Bar */}
-                  <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-stone-200 h-2 rounded-full overflow-hidden">
                     <div 
-                      className="bg-green-500 h-full rounded-full transition-all duration-500" 
+                      className="bg-emerald-600 h-full rounded-full transition-all duration-500" 
                       style={{ width: `${activeEmployeeStats?.attendanceRate}%` }}
                     />
                   </div>
                 </div>
 
                 {/* Quantitative Stats Matrix */}
-                <div className="grid grid-cols-3 gap-1.5 text-center text-[10px]">
-                  <div className="py-1.5 border border-emerald-100 rounded-xl bg-emerald-50/20">
-                    <span className="text-[9px] text-emerald-800 block font-semibold">Présent</span>
-                    <span className="font-mono font-bold text-emerald-700 text-xs">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="py-2 border border-emerald-100 rounded-xl bg-emerald-50/30">
+                    <span className="text-xs text-emerald-800 block font-semibold">Présent</span>
+                    <span className="font-mono font-bold text-emerald-800 text-sm">
                       {activeEmployeeStats?.present}
                     </span>
                   </div>
-                  <div className="py-1.5 border border-amber-100 rounded-xl bg-amber-50/20">
-                    <span className="text-[9px] text-amber-800 block font-semibold">Retard</span>
-                    <span className="font-mono font-bold text-amber-700 text-xs">
+                  <div className="py-2 border border-amber-100 rounded-xl bg-amber-50/30">
+                    <span className="text-xs text-amber-800 block font-semibold">Retard</span>
+                    <span className="font-mono font-bold text-amber-800 text-sm">
                       {activeEmployeeStats?.late}
                     </span>
                   </div>
-                  <div className="py-1.5 border border-green-100 rounded-xl bg-green-50/20">
-                    <span className="text-[9px] text-green-800 block font-semibold">Absent</span>
-                    <span className="font-mono font-bold text-green-700 text-xs">
+                  <div className="py-2 border border-stone-200 rounded-xl bg-stone-50">
+                    <span className="text-xs text-stone-700 block font-semibold">Absent</span>
+                    <span className="font-mono font-bold text-stone-800 text-sm">
                       {activeEmployeeStats?.absent}
                     </span>
                   </div>
@@ -1740,24 +1811,59 @@ export default function PresencePanel({
               </div>
             </div>
           ) : (
-            <div className="py-8 text-center text-stone-400 text-xs italic">
+            <div className="py-10 text-center text-stone-400 text-sm italic">
               Veuillez sélectionner un collaborateur pour ouvrir sa fiche.
             </div>
           )}
         </div>
 
-        {/* Right column: Filterable Attendance History with Excel Export */}
-        <div className="lg:flex-1 lg:order-2 bg-white p-5 rounded-2xl border border-green-100 shadow-sm flex flex-col space-y-4">
+        {/* Right column: Filterable Attendance History with Excel Export & KPI Strip */}
+        <div className="lg:flex-1 lg:order-2 bg-white p-5 rounded-2xl border border-stone-200/90 shadow-sm flex flex-col space-y-4">
           
+          {/* Executive Overview KPI Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
+            <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200/80 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">Ponctualité</span>
+                <span className="text-xl font-bold font-mono text-emerald-950">{overviewStats.punctualityRate}%</span>
+              </div>
+              <Award className="h-6 w-6 text-emerald-600 shrink-0" />
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200/80 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-600 block">Présents</span>
+                <span className="text-xl font-bold font-mono text-stone-900">{overviewStats.presentCount}</span>
+              </div>
+              <UserCheck className="h-6 w-6 text-emerald-600 shrink-0" />
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 block">Retards</span>
+                <span className="text-xl font-bold font-mono text-amber-950">{overviewStats.lateCount}</span>
+              </div>
+              <AlertCircle className="h-6 w-6 text-amber-600 shrink-0" />
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200/80 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-600 block">Non pointés</span>
+                <span className="text-xl font-bold font-mono text-stone-900">{overviewStats.absentCount}</span>
+              </div>
+              <UserX className="h-6 w-6 text-stone-400 shrink-0" />
+            </div>
+          </div>
+
           {/* List Toolbar / Filters */}
-          <div className="bg-stone-50/50 p-4 rounded-xl border border-green-50 space-y-3 shrink-0">
+          <div className="bg-stone-50/60 p-4 rounded-xl border border-stone-200/80 space-y-3 shrink-0">
             <div className="flex flex-col md:flex-row gap-3 items-end justify-between">
               
               {/* Employee filter */}
               <div className="space-y-1 w-full md:w-1/4">
-                <label className="text-[10px] uppercase tracking-wider font-bold text-green-900 block">Collaborateur :</label>
+                <label className="text-xs uppercase tracking-wider font-bold text-stone-700 block">Collaborateur :</label>
                 {currentRole === 'Employé' ? (
-                  <div className="w-full text-xs border border-green-100 rounded-lg p-2 bg-green-50/50 text-green-900 font-bold truncate">
+                  <div className="w-full text-xs sm:text-sm border border-stone-200 rounded-lg p-2.5 bg-stone-50 text-stone-900 font-bold truncate">
                     👤 {employees.find(e => e.id === selectedEmployeeId)?.name || 'Non sélectionné'}
                   </div>
                 ) : (
@@ -1784,7 +1890,7 @@ export default function PresencePanel({
 
               {/* Period filter */}
               <div className="space-y-1 w-full md:w-1/4">
-                <label className="text-[10px] uppercase tracking-wider font-bold text-green-900 block">Période :</label>
+                <label className="text-xs uppercase tracking-wider font-bold text-stone-700 block">Période :</label>
                 <SearchableSelect
                   value={filterPeriod}
                   onChange={(val) => setFilterPeriod(val as any)}
@@ -1805,12 +1911,12 @@ export default function PresencePanel({
               {/* Dynamic Specific Date Picker */}
               {filterPeriod === 'specific_date' && (
                 <div className="space-y-1 w-full md:w-1/4 animate-fadeIn">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-green-900 block">Date :</label>
+                  <label className="text-xs uppercase tracking-wider font-bold text-stone-700 block">Date :</label>
                   <input
                     type="date"
                     value={specificDate}
                     onChange={(e) => setSpecificDate(e.target.value)}
-                    className="w-full text-xs border border-green-100 rounded-lg p-2 bg-white focus:outline-green-500 font-mono cursor-pointer"
+                    className="w-full text-xs sm:text-sm border border-stone-200 rounded-lg p-2 bg-white focus:outline-emerald-500 font-mono cursor-pointer"
                   />
                 </div>
               )}
@@ -1819,21 +1925,21 @@ export default function PresencePanel({
               {filterPeriod === 'custom_range' && (
                 <>
                   <div className="space-y-1 w-full md:w-1/5 animate-fadeIn">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-green-900 block">Date Début :</label>
+                    <label className="text-xs uppercase tracking-wider font-bold text-stone-700 block">Date Début :</label>
                     <input
                       type="date"
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full text-xs border border-green-100 rounded-lg p-2 bg-white focus:outline-green-500 font-mono cursor-pointer"
+                      className="w-full text-xs sm:text-sm border border-stone-200 rounded-lg p-2 bg-white focus:outline-emerald-500 font-mono cursor-pointer"
                     />
                   </div>
                   <div className="space-y-1 w-full md:w-1/5 animate-fadeIn">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-green-900 block">Date Fin :</label>
+                    <label className="text-xs uppercase tracking-wider font-bold text-stone-700 block">Date Fin :</label>
                     <input
                       type="date"
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full text-xs border border-green-100 rounded-lg p-2 bg-white focus:outline-green-500 font-mono cursor-pointer"
+                      className="w-full text-xs sm:text-sm border border-stone-200 rounded-lg p-2 bg-white focus:outline-emerald-500 font-mono cursor-pointer"
                     />
                   </div>
                 </>
@@ -1842,19 +1948,19 @@ export default function PresencePanel({
               {/* Export Button & Stats indicators */}
               <button
                 onClick={handleExportExcel}
-                className="w-full md:w-auto inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer shadow-2xs whitespace-nowrap"
+                className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer shadow-xs whitespace-nowrap"
                 title="Exporter le registre de présence directement vers Microsoft Excel"
               >
                 <FileSpreadsheet className="h-4 w-4" />
-                Exporter vers Excel (.xls)
+                Exporter Excel (.xls)
               </button>
 
             </div>
           </div>
 
           {/* Heading with result count */}
-          <div className="flex items-center justify-between border-b border-green-100 pb-2">
-            <h4 className="text-xs font-bold text-green-950 uppercase tracking-wider">
+          <div className="flex items-center justify-between border-b border-stone-200/80 pb-2.5">
+            <h4 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider">
               {filterPeriod === 'today' && formatFrenchPointageTitle(todayStr)}
               {filterPeriod === 'week' && "Fichier de présence — Semaine en cours"}
               {filterPeriod === 'month' && "Fichier de présence — Mois en cours"}
@@ -1869,33 +1975,33 @@ export default function PresencePanel({
                     setFilterEmployeeId('');
                     onSelectEmployee('');
                   }}
-                  className="bg-green-100 hover:bg-green-200 text-green-800 text-[9px] font-bold px-2 py-0.5 rounded-full border border-green-200 transition flex items-center gap-1 cursor-pointer"
+                  className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-200 transition flex items-center gap-1 cursor-pointer"
                   title="Effacer le filtre et afficher tous les collaborateurs"
                 >
                   Filtré : {employees.find(e => e.id === filterEmployeeId)?.name} ✕
                 </button>
               )}
-              <span className="bg-green-50/80 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-green-100">
-                {filteredPresences.length} fiches trouvées
+              <span className="bg-stone-100 text-stone-700 text-xs font-bold px-3 py-1 rounded-full border border-stone-200/80">
+                {filteredPresences.length} fiches
               </span>
             </div>
           </div>
 
           {/* Main Table View */}
-          <div className="flex-1 overflow-y-auto max-h-[380px] custom-scrollbar">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead className="sticky top-0 bg-white z-10 border-b border-green-100">
-                <tr className="text-stone-400 uppercase text-[9px] font-bold tracking-wider">
-                  <th className="py-2.5 font-semibold">Employé</th>
-                  <th className="py-2.5 font-semibold text-center">Statut</th>
-                  <th className="py-2.5 font-semibold text-center">Arrivée</th>
-                  <th className="py-2.5 font-semibold text-center">Pause</th>
-                  <th className="py-2.5 font-semibold text-center">Reprise</th>
-                  <th className="py-2.5 font-semibold text-center">Départ</th>
-                  <th className="py-2.5 font-semibold text-right">Actions</th>
+          <div className="flex-1 overflow-y-auto max-h-[460px] custom-scrollbar border border-stone-200/70 rounded-xl overflow-hidden">
+            <table className="w-full text-left border-collapse text-xs sm:text-sm">
+              <thead className="sticky top-0 bg-stone-100/95 backdrop-blur-xs z-10 border-b-2 border-stone-200">
+                <tr className="text-stone-700 uppercase text-xs font-bold tracking-wider">
+                  <th className="py-3 px-3 font-bold">Collaborateur</th>
+                  <th className="py-3 px-2 font-bold text-center">Statut</th>
+                  <th className="py-3 px-2 font-bold text-center">Arrivée</th>
+                  <th className="py-3 px-2 font-bold text-center">Pause</th>
+                  <th className="py-3 px-2 font-bold text-center">Reprise</th>
+                  <th className="py-3 px-2 font-bold text-center">Départ</th>
+                  <th className="py-3 px-3 font-bold text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-green-50/50">
+              <tbody className="divide-y divide-stone-100">
                 {filteredPresences
                   .slice((presencePage - 1) * presencePageSize, presencePage * presencePageSize)
                   .map((presence) => {
@@ -1909,18 +2015,18 @@ export default function PresencePanel({
                       key={presence.id} 
                       className={`transition ${
                         isSelected 
-                          ? 'bg-green-100/40 font-medium' 
-                          : 'hover:bg-green-50/20'
+                          ? 'bg-emerald-50/60 font-medium' 
+                          : 'hover:bg-stone-50/80'
                       }`}
                     >
-                      <td className={`py-2.5 pl-2 transition-all ${isSelected ? 'border-l-4 border-y-2 border-red-500 bg-green-100/50' : ''}`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <td className={`py-3 pl-3 transition-all ${isSelected ? 'border-l-4 border-emerald-600' : ''}`}>
+                        <div className="flex items-center justify-between gap-2.5">
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
                             <input
                               type="checkbox"
                               checked={isSelected}
                               onChange={(e) => {
-                                e.stopPropagation(); // Prevent any event bubbling
+                                e.stopPropagation();
                                 const checked = e.target.checked;
                                 if (checked) {
                                   onSelectEmployee(presence.employeeId);
@@ -1928,36 +2034,36 @@ export default function PresencePanel({
                                   onSelectEmployee('');
                                 }
                               }}
-                              className="h-3.5 w-3.5 text-green-600 border-green-300 rounded focus:ring-green-500 cursor-pointer shrink-0"
-                              title="Cocher pour afficher ses détails à gauche sans vider le tableau"
+                              className="h-4 w-4 text-emerald-600 border-stone-300 rounded focus:ring-emerald-500 cursor-pointer shrink-0"
+                              title="Cocher pour ouvrir la fiche à gauche sans vider le tableau"
                             />
                             <div 
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onSelectEmployee(presence.employeeId);
                               }}
-                              className="flex items-center gap-2 cursor-pointer group/user flex-1 min-w-0"
-                              title="Cliquer pour afficher les détails de ce collaborateur à gauche sans filtrer le tableau"
+                              className="flex items-center gap-2.5 cursor-pointer group/user flex-1 min-w-0"
+                              title="Cliquer pour afficher la fiche de ce collaborateur"
                             >
                               <img
                                 src={emp.avatarUrl || undefined}
                                 alt={emp.name}
                                 referrerPolicy="no-referrer"
-                                className="w-7 h-7 rounded-full object-cover border border-green-100 shadow-2xs shrink-0 group-hover/user:scale-105 transition-transform"
+                                className="w-8 h-8 rounded-full object-cover border border-stone-200 shadow-2xs shrink-0 group-hover/user:scale-105 transition-transform"
                               />
                               <div className="min-w-0">
-                                <span className="font-bold text-stone-800 block leading-tight group-hover/user:text-green-600 transition-colors truncate">
+                                <span className="font-bold text-stone-900 block leading-tight group-hover/user:text-emerald-700 transition-colors truncate text-xs sm:text-sm">
                                   {emp.name}
                                 </span>
-                                <span className="text-[9px] text-stone-400 block truncate">{emp.email}</span>
+                                <span className="text-xs text-stone-500 block truncate">{emp.email}</span>
                                 {presence.location ? (
-                                  <span className="text-[9px] font-bold text-green-800 bg-green-50 border border-green-200/60 px-1.5 py-0.2 rounded-md inline-flex items-center gap-0.5 mt-0.5" title={`Coordonnées GPS: ${presence.latitude || '4.0185'}, ${presence.longitude || '9.8324'}`}>
-                                    <MapPin className="h-2.5 w-2.5 text-green-500 shrink-0" />
+                                  <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded-md inline-flex items-center gap-1 mt-0.5" title={`Coordonnées GPS: ${presence.latitude || '4.0185'}, ${presence.longitude || '9.8324'}`}>
+                                    <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
                                     {presence.location}
                                   </span>
                                 ) : (
-                                  <span className="text-[9px] font-medium text-stone-400 bg-stone-50 border border-stone-200/60 px-1.5 py-0.2 rounded-md inline-flex items-center gap-0.5 mt-0.5">
-                                    <MapPin className="h-2.5 w-2.5 text-stone-400 shrink-0" />
+                                  <span className="text-[11px] font-medium text-stone-500 bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 mt-0.5">
+                                    <MapPin className="h-3 w-3 text-stone-400 shrink-0" />
                                     Douala, Japoma
                                   </span>
                                 )}
@@ -1972,21 +2078,21 @@ export default function PresencePanel({
                               onSelectEmployee(presence.employeeId);
                               setFilterEmployeeId(presence.employeeId);
                             }}
-                            className="p-1 hover:bg-green-100 text-stone-400 hover:text-green-600 rounded-md transition cursor-pointer flex items-center justify-center shrink-0"
-                            title="Cliquer sur l'œil pour filtrer le tableau et n'afficher que cet employé seul"
+                            className="p-1.5 hover:bg-emerald-100 text-stone-400 hover:text-emerald-700 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0"
+                            title="Filtrer uniquement ce collaborateur"
                           >
                             <Eye className="h-4 w-4" />
                           </button>
                         </div>
                       </td>
-                      <td className={`py-2.5 text-center transition-all ${isSelected ? 'border-y-2 border-red-500 bg-green-100/50' : ''}`}>
+                      <td className="py-3 text-center">
                         <div className="flex flex-col items-center justify-center gap-0.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                            isCameroonHoliday(presence.date) ? 'bg-amber-100 text-amber-800 border border-amber-200/50' :
-                            presence.status === 'present' ? 'bg-green-200/80 text-green-800' :
-                            presence.status === 'late' ? 'bg-amber-100 text-amber-800' :
-                            presence.status === 'absent' ? 'bg-stone-200 text-stone-800' :
-                            'bg-stone-100 text-stone-400'
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                            isCameroonHoliday(presence.date) ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                            presence.status === 'present' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                            presence.status === 'late' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                            presence.status === 'absent' ? 'bg-stone-200 text-stone-800 border border-stone-300' :
+                            'bg-stone-100 text-stone-500'
                           }`}>
                             {isCameroonHoliday(presence.date)
                               ? (presence.status === 'present' || presence.status === 'late' ? 'Présent (Férié)' : 'Repos (Férié)')
@@ -1996,7 +2102,7 @@ export default function PresencePanel({
                             }
                           </span>
                           {isCameroonHoliday(presence.date) && (
-                            <span className="text-[8px] font-bold text-amber-700 block truncate max-w-[100px]" title={getHolidayInfo(presence.date)?.name}>
+                            <span className="text-[10px] font-bold text-amber-700 block truncate max-w-[120px]" title={getHolidayInfo(presence.date)?.name}>
                               🇨🇲 {getHolidayInfo(presence.date)?.name}
                             </span>
                           )}
@@ -2004,9 +2110,9 @@ export default function PresencePanel({
                       </td>
 
                       {/* Arrivée cell */}
-                      <td className={`py-2 text-center font-mono text-stone-600 font-bold transition-all ${isSelected ? 'border-y-2 border-red-500 bg-green-100/50' : ''}`}>
+                      <td className="py-3 text-center font-mono text-stone-700 font-bold">
                         {editingCell?.presenceId === presence.id && editingCell?.field === 'arrivalTime' ? (
-                          <div className="flex flex-col items-center gap-1.5 p-1 bg-white border border-green-100 rounded-lg shadow-xs min-w-[140px] mx-auto" onClick={e => e.stopPropagation()}>
+                          <div className="flex flex-col items-center gap-1.5 p-1.5 bg-white border border-emerald-200 rounded-lg shadow-sm min-w-[150px] mx-auto" onClick={e => e.stopPropagation()}>
                             <FrenchTimePicker
                               value={inlineTimeValue}
                               onChange={(val) => setInlineTimeValue(val)}
@@ -2018,21 +2124,21 @@ export default function PresencePanel({
                                 placeholder="Motif obligatoire..."
                                 value={inlineReason}
                                 onChange={(e) => setInlineReason(e.target.value)}
-                                className="text-[9px] p-1 border border-green-200 rounded w-full text-center focus:outline-green-500"
+                                className="text-xs p-1.5 border border-emerald-200 rounded w-full text-center focus:outline-emerald-500"
                               />
                             )}
                             <div className="flex gap-1 w-full justify-center">
                               <button
                                 onClick={() => handleSaveInlineCell(presence, 'arrivalTime', inlineTimeValue, inlineReason)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1 rounded text-[9px] w-full cursor-pointer"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1 rounded text-xs w-full cursor-pointer"
                               >
                                 OK
                               </button>
                               <button
                                 onClick={() => setEditingCell(null)}
-                                className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold p-1 rounded text-[9px] w-full cursor-pointer"
+                                className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold p-1 rounded text-xs w-full cursor-pointer"
                               >
-                                X
+                                Annuler
                               </button>
                             </div>
                           </div>
@@ -2046,13 +2152,15 @@ export default function PresencePanel({
                                 setInlineReason('');
                               }
                             }}
-                            className={`hover:text-green-600 hover:underline w-full py-2.5 text-center font-bold ${(currentRole === 'Responsable' || currentRole === 'Administrateur') ? 'cursor-pointer text-green-700' : 'cursor-default'}`}
+                            className={`w-full py-2 text-center font-bold ${(currentRole === 'Responsable' || currentRole === 'Administrateur') ? 'cursor-pointer hover:text-emerald-700' : 'cursor-default'}`}
                             disabled={!(currentRole === 'Responsable' || currentRole === 'Administrateur')}
                           >
-                            <div>{presence.arrivalTime || '--:--'}</div>
+                            <span className="text-xs sm:text-sm font-mono font-bold text-stone-900 bg-stone-50 hover:bg-emerald-50/70 border border-stone-200/90 rounded-lg px-2.5 py-1 inline-block">
+                              {presence.arrivalTime || '--:--'}
+                            </span>
                             {presence.arrivalTime && (
-                              <div className="text-[9px] font-sans font-normal text-stone-500 flex items-center justify-center gap-0.5 mt-0.5">
-                                <MapPin className="h-2.5 w-2.5 text-green-500 shrink-0" />
+                              <div className="text-[11px] font-sans font-normal text-stone-500 flex items-center justify-center gap-0.5 mt-0.5">
+                                <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
                                 <span>({presence.clockLocations?.arrival?.zoneName || presence.location || 'Douala, Japoma'})</span>
                               </div>
                             )}
@@ -2061,9 +2169,9 @@ export default function PresencePanel({
                       </td>
 
                       {/* Pause Start cell */}
-                      <td className={`py-2 text-center font-mono text-stone-500 transition-all ${isSelected ? 'border-y-2 border-red-500 bg-green-100/50' : ''}`}>
+                      <td className="py-3 text-center font-mono text-stone-600">
                         {editingCell?.presenceId === presence.id && editingCell?.field === 'pauseStart' ? (
-                          <div className="flex flex-col items-center gap-1.5 p-1 bg-white border border-green-100 rounded-lg shadow-xs min-w-[140px] mx-auto" onClick={e => e.stopPropagation()}>
+                          <div className="flex flex-col items-center gap-1.5 p-1.5 bg-white border border-emerald-200 rounded-lg shadow-sm min-w-[150px] mx-auto" onClick={e => e.stopPropagation()}>
                             <FrenchTimePicker
                               value={inlineTimeValue}
                               onChange={(val) => setInlineTimeValue(val)}
@@ -2075,21 +2183,21 @@ export default function PresencePanel({
                                 placeholder="Motif obligatoire..."
                                 value={inlineReason}
                                 onChange={(e) => setInlineReason(e.target.value)}
-                                className="text-[9px] p-1 border border-green-200 rounded w-full text-center focus:outline-green-500"
+                                className="text-xs p-1.5 border border-emerald-200 rounded w-full text-center focus:outline-emerald-500"
                               />
                             )}
                             <div className="flex gap-1 w-full justify-center">
                               <button
                                 onClick={() => handleSaveInlineCell(presence, 'pauseStart', inlineTimeValue, inlineReason)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1 rounded text-[9px] w-full cursor-pointer"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1 rounded text-xs w-full cursor-pointer"
                               >
                                 OK
                               </button>
                               <button
                                 onClick={() => setEditingCell(null)}
-                                className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold p-1 rounded text-[9px] w-full cursor-pointer"
+                                className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold p-1 rounded text-xs w-full cursor-pointer"
                               >
-                                X
+                                Annuler
                               </button>
                             </div>
                           </div>
@@ -2103,13 +2211,15 @@ export default function PresencePanel({
                                 setInlineReason('');
                               }
                             }}
-                            className={`hover:text-green-600 hover:underline w-full py-2.5 text-center ${(currentRole === 'Responsable' || currentRole === 'Administrateur') ? 'cursor-pointer text-green-700' : 'cursor-default'}`}
+                            className={`w-full py-2 text-center ${(currentRole === 'Responsable' || currentRole === 'Administrateur') ? 'cursor-pointer hover:text-emerald-700' : 'cursor-default'}`}
                             disabled={!(currentRole === 'Responsable' || currentRole === 'Administrateur')}
                           >
-                            <div>{presence.pauseStart || '--:--'}</div>
+                            <span className="text-xs sm:text-sm font-mono font-bold text-stone-900 bg-stone-50 hover:bg-emerald-50/70 border border-stone-200/90 rounded-lg px-2.5 py-1 inline-block">
+                              {presence.pauseStart || '--:--'}
+                            </span>
                             {presence.pauseStart && (
-                              <div className="text-[9px] font-sans font-normal text-stone-500 flex items-center justify-center gap-0.5 mt-0.5">
-                                <MapPin className="h-2.5 w-2.5 text-green-500 shrink-0" />
+                              <div className="text-[11px] font-sans font-normal text-stone-500 flex items-center justify-center gap-0.5 mt-0.5">
+                                <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
                                 <span>({presence.clockLocations?.pauseStart?.zoneName || presence.location || 'Douala, Japoma'})</span>
                               </div>
                             )}
@@ -2118,9 +2228,9 @@ export default function PresencePanel({
                       </td>
 
                       {/* Pause End cell */}
-                      <td className={`py-2 text-center font-mono text-stone-500 transition-all ${isSelected ? 'border-y-2 border-red-500 bg-green-100/50' : ''}`}>
+                      <td className="py-3 text-center font-mono text-stone-600">
                         {editingCell?.presenceId === presence.id && editingCell?.field === 'pauseEnd' ? (
-                          <div className="flex flex-col items-center gap-1.5 p-1 bg-white border border-green-100 rounded-lg shadow-xs min-w-[140px] mx-auto" onClick={e => e.stopPropagation()}>
+                          <div className="flex flex-col items-center gap-1.5 p-1.5 bg-white border border-emerald-200 rounded-lg shadow-sm min-w-[150px] mx-auto" onClick={e => e.stopPropagation()}>
                             <FrenchTimePicker
                               value={inlineTimeValue}
                               onChange={(val) => setInlineTimeValue(val)}
@@ -2132,21 +2242,21 @@ export default function PresencePanel({
                                 placeholder="Motif obligatoire..."
                                 value={inlineReason}
                                 onChange={(e) => setInlineReason(e.target.value)}
-                                className="text-[9px] p-1 border border-green-200 rounded w-full text-center focus:outline-green-500"
+                                className="text-xs p-1.5 border border-emerald-200 rounded w-full text-center focus:outline-emerald-500"
                               />
                             )}
                             <div className="flex gap-1 w-full justify-center">
                               <button
                                 onClick={() => handleSaveInlineCell(presence, 'pauseEnd', inlineTimeValue, inlineReason)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1 rounded text-[9px] w-full cursor-pointer"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1 rounded text-xs w-full cursor-pointer"
                               >
                                 OK
                               </button>
                               <button
                                 onClick={() => setEditingCell(null)}
-                                className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold p-1 rounded text-[9px] w-full cursor-pointer"
+                                className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold p-1 rounded text-xs w-full cursor-pointer"
                               >
-                                X
+                                Annuler
                               </button>
                             </div>
                           </div>
@@ -2160,13 +2270,15 @@ export default function PresencePanel({
                                 setInlineReason('');
                               }
                             }}
-                            className={`hover:text-green-600 hover:underline w-full py-2.5 text-center ${(currentRole === 'Responsable' || currentRole === 'Administrateur') ? 'cursor-pointer text-green-700' : 'cursor-default'}`}
+                            className={`w-full py-2 text-center ${(currentRole === 'Responsable' || currentRole === 'Administrateur') ? 'cursor-pointer hover:text-emerald-700' : 'cursor-default'}`}
                             disabled={!(currentRole === 'Responsable' || currentRole === 'Administrateur')}
                           >
-                            <div>{presence.pauseEnd || '--:--'}</div>
+                            <span className="text-xs sm:text-sm font-mono font-bold text-stone-900 bg-stone-50 hover:bg-emerald-50/70 border border-stone-200/90 rounded-lg px-2.5 py-1 inline-block">
+                              {presence.pauseEnd || '--:--'}
+                            </span>
                             {presence.pauseEnd && (
-                              <div className="text-[9px] font-sans font-normal text-stone-500 flex items-center justify-center gap-0.5 mt-0.5">
-                                <MapPin className="h-2.5 w-2.5 text-green-500 shrink-0" />
+                              <div className="text-[11px] font-sans font-normal text-stone-500 flex items-center justify-center gap-0.5 mt-0.5">
+                                <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
                                 <span>({presence.clockLocations?.pauseEnd?.zoneName || presence.location || 'Douala, Japoma'})</span>
                               </div>
                             )}
@@ -2175,9 +2287,9 @@ export default function PresencePanel({
                       </td>
 
                       {/* Departure Time cell */}
-                      <td className={`py-2 text-center font-mono text-stone-600 font-bold transition-all ${isSelected ? 'border-y-2 border-red-500 bg-green-100/50' : ''}`}>
+                      <td className="py-3 text-center font-mono text-stone-700 font-bold">
                         {editingCell?.presenceId === presence.id && editingCell?.field === 'departureTime' ? (
-                          <div className="flex flex-col items-center gap-1.5 p-1 bg-white border border-green-100 rounded-lg shadow-xs min-w-[140px] mx-auto" onClick={e => e.stopPropagation()}>
+                          <div className="flex flex-col items-center gap-1.5 p-1.5 bg-white border border-emerald-200 rounded-lg shadow-sm min-w-[150px] mx-auto" onClick={e => e.stopPropagation()}>
                             <FrenchTimePicker
                               value={inlineTimeValue}
                               onChange={(val) => setInlineTimeValue(val)}
@@ -2189,21 +2301,21 @@ export default function PresencePanel({
                                 placeholder="Motif obligatoire..."
                                 value={inlineReason}
                                 onChange={(e) => setInlineReason(e.target.value)}
-                                className="text-[9px] p-1 border border-green-200 rounded w-full text-center focus:outline-green-500"
+                                className="text-xs p-1.5 border border-emerald-200 rounded w-full text-center focus:outline-emerald-500"
                               />
                             )}
                             <div className="flex gap-1 w-full justify-center">
                               <button
                                 onClick={() => handleSaveInlineCell(presence, 'departureTime', inlineTimeValue, inlineReason)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1 rounded text-[9px] w-full cursor-pointer"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1 rounded text-xs w-full cursor-pointer"
                               >
                                 OK
                               </button>
                               <button
                                 onClick={() => setEditingCell(null)}
-                                className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold p-1 rounded text-[9px] w-full cursor-pointer"
+                                className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold p-1 rounded text-xs w-full cursor-pointer"
                               >
-                                X
+                                Annuler
                               </button>
                             </div>
                           </div>
@@ -2217,18 +2329,20 @@ export default function PresencePanel({
                                 setInlineReason('');
                               }
                             }}
-                            className={`hover:text-green-600 hover:underline w-full py-2.5 text-center font-bold ${(currentRole === 'Responsable' || currentRole === 'Administrateur') ? 'cursor-pointer text-green-700' : 'cursor-default'}`}
+                            className={`w-full py-2 text-center font-bold ${(currentRole === 'Responsable' || currentRole === 'Administrateur') ? 'cursor-pointer hover:text-emerald-700' : 'cursor-default'}`}
                             disabled={!(currentRole === 'Responsable' || currentRole === 'Administrateur')}
                           >
-                            <div>{presence.departureTime || '--:--'}</div>
+                            <span className="text-xs sm:text-sm font-mono font-bold text-stone-900 bg-stone-50 hover:bg-emerald-50/70 border border-stone-200/90 rounded-lg px-2.5 py-1 inline-block">
+                              {presence.departureTime || '--:--'}
+                            </span>
                             {presence.departureTime && (
                               <div className="space-y-0.5 mt-0.5">
-                                <div className="text-[9px] font-sans font-normal text-stone-500 flex items-center justify-center gap-0.5">
-                                  <MapPin className="h-2.5 w-2.5 text-green-500 shrink-0" />
+                                <div className="text-[11px] font-sans font-normal text-stone-500 flex items-center justify-center gap-0.5">
+                                  <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
                                   <span>({presence.clockLocations?.departure?.zoneName || presence.location || 'Douala, Japoma'})</span>
                                 </div>
                                 {presence.departureReason && (
-                                  <div className="text-[8px] font-medium text-amber-900 bg-amber-100/90 border border-amber-300/80 rounded px-1 py-0.5 max-w-[120px] mx-auto truncate font-sans" title={`Motif sortie tardive : ${presence.departureReason}`}>
+                                  <div className="text-[10px] font-medium text-amber-900 bg-amber-100/90 border border-amber-300/80 rounded px-1.5 py-0.5 max-w-[130px] mx-auto truncate font-sans" title={`Motif sortie tardive : ${presence.departureReason}`}>
                                     💬 {presence.departureReason}
                                   </div>
                                 )}
@@ -2237,28 +2351,28 @@ export default function PresencePanel({
                           </button>
                         )}
                       </td>
-                      <td className={`py-2.5 text-right pr-2 transition-all ${isSelected ? 'border-r-2 border-y-2 border-red-500 bg-green-100/50' : ''}`}>
+                      <td className="py-3 text-right pr-3">
                         {isWeekFinishedForDate(presence.date, todayStr, currentTime) ? (
                           <span 
-                            className="inline-flex items-center gap-1 text-[9px] text-stone-400 font-medium bg-stone-100 border border-stone-200/50 px-1.5 py-0.5 rounded-md cursor-not-allowed"
+                            className="inline-flex items-center gap-1 text-xs text-stone-400 font-medium bg-stone-100 border border-stone-200/50 px-2 py-0.5 rounded-md cursor-not-allowed"
                             title="Semaine terminée. Fiche verrouillée (limite vendredi 17h00)."
                           >
-                            <ShieldAlert className="h-3 w-3 text-stone-400" />
+                            <ShieldAlert className="h-3.5 w-3.5 text-stone-400" />
                             Fermé
                           </span>
                         ) : (currentRole === 'Responsable' || currentRole === 'Administrateur') ? (
                           <button
                             onClick={(e) => {
-                              e.stopPropagation(); // Prevent selecting the row when editing
+                              e.stopPropagation();
                               openEditModal(presence);
                             }}
-                            className="p-1 hover:bg-green-50 hover:text-green-700 rounded-lg text-stone-400 transition cursor-pointer"
+                            className="p-1.5 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg text-stone-400 transition cursor-pointer"
                             title="Modifier cette fiche de présence"
                           >
-                            <Edit2 className="h-3.5 w-3.5" />
+                            <Edit2 className="h-4 w-4" />
                           </button>
                         ) : (
-                          <span className="text-[9px] text-stone-400 italic">Lecture</span>
+                          <span className="text-xs text-stone-400 italic">Lecture</span>
                         )}
                       </td>
                     </tr>
@@ -2267,7 +2381,7 @@ export default function PresencePanel({
 
                 {filteredPresences.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-stone-400 italic">
+                    <td colSpan={8} className="py-12 text-center text-stone-400 italic text-sm">
                       Aucune fiche de présence n'a été trouvée pour les critères sélectionnés.
                     </td>
                   </tr>
@@ -2287,18 +2401,23 @@ export default function PresencePanel({
               <div className="bg-stone-50 border-t border-stone-200 px-3 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs rounded-b-xl">
                 <div className="flex items-center gap-3">
                   <span className="text-stone-500">Afficher</span>
-                  <select
-                    value={presencePageSize}
-                    onChange={(e) => {
-                      setPresencePageSize(Number(e.target.value));
-                      setPresencePage(1);
-                    }}
-                    className="bg-white border border-stone-200 rounded-lg px-2 py-1 font-bold text-stone-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                  >
-                    <option value={25}>25 par page</option>
-                    <option value={50}>50 par page</option>
-                    <option value={10}>10 par page</option>
-                  </select>
+                  <div className="w-32">
+                    <SearchableSelect
+                      value={String(presencePageSize)}
+                      onChange={(val) => {
+                        setPresencePageSize(Number(val));
+                        setPresencePage(1);
+                      }}
+                      options={[
+                        { value: '25', label: '25 par page' },
+                        { value: '50', label: '50 par page' },
+                        { value: '10', label: '10 par page' }
+                      ]}
+                      size="sm"
+                      placeholder="Taille"
+                      searchPlaceholder="Lignes..."
+                    />
+                  </div>
                   <span className="text-stone-300">|</span>
                   <span className="text-stone-500">
                     Lignes <strong className="text-stone-800">{totalItems > 0 ? indexOfFirstItem + 1 : 0}</strong> à <strong className="text-stone-800">{Math.min(indexOfLastItem, totalItems)}</strong> sur <strong className="text-stone-800">{totalItems}</strong>
@@ -2415,16 +2534,18 @@ export default function PresencePanel({
                 {/* Status selector */}
                 <div className="space-y-1">
                   <label className="text-stone-600 font-semibold">Statut de la présence :</label>
-                  <select
+                  <SearchableSelect
                     value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value as PresenceStatus)}
-                    className="w-full border border-green-100 rounded-xl p-2.5 bg-green-50/20 focus:bg-white focus:outline-green-500"
-                  >
-                    <option value="present">Présent</option>
-                    <option value="late">En retard</option>
-                    <option value="absent">Absent</option>
-                    <option value="not_tracked">Non pointé</option>
-                  </select>
+                    onChange={(val) => setNewStatus(val as PresenceStatus)}
+                    options={[
+                      { value: 'present', label: 'Présent', badge: 'Actif', badgeColor: 'bg-emerald-100 text-emerald-800' },
+                      { value: 'late', label: 'En retard', badge: 'Retard', badgeColor: 'bg-amber-100 text-amber-800' },
+                      { value: 'absent', label: 'Absent', badge: 'Absence', badgeColor: 'bg-red-100 text-red-800' },
+                      { value: 'not_tracked', label: 'Non pointé', badge: 'Attente', badgeColor: 'bg-stone-100 text-stone-700' }
+                    ]}
+                    placeholder="Sélectionner le statut..."
+                    searchPlaceholder="Rechercher statut..."
+                  />
                 </div>
 
                 {/* Times grid */}

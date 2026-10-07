@@ -79,60 +79,108 @@ export default function EmployeeLoansTab({
             Vous n'avez aucun prêt ou avance de salaire enregistré.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="bg-stone-50 border-b border-stone-200/80 text-[10px] font-bold text-stone-500 uppercase tracking-wider">
-                  <th className="p-3">Motif & Référence</th>
-                  <th className="p-3 text-center">Échéance</th>
-                  <th className="p-3 text-right">Mensualité</th>
-                  <th className="p-3 text-right">Montant Global</th>
-                  <th className="p-3 text-center">Statut</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100 font-sans">
-                {myDebts.map((debt) => {
-                  const isPaid = debt.status === 'paid';
-                  return (
-                    <tr key={debt.id} className="hover:bg-stone-50/50 transition">
-                      <td className="p-3">
-                        <div className="font-bold text-stone-800">{debt.reason || 'Prêt personnel'}</div>
-                        <div className="text-[9px] text-stone-400 font-mono">ID: {debt.id}</div>
-                      </td>
-                      <td className="p-3 text-center font-mono font-medium text-stone-600 text-[11px]">
-                        {debt.dueDate} ({debt.installmentNumber}/{debt.totalMonths})
-                      </td>
-                      <td className="p-3 text-right font-mono font-bold text-emerald-950">
-                        {formatXAF(debt.monthlyInstallment)}
-                      </td>
-                      <td className="p-3 text-right font-mono text-stone-500 text-[11px]">
-                        {formatXAF(debt.totalLoanAmount)}
-                      </td>
-                      <td className="p-3 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${
-                          isPaid 
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-                            : 'bg-amber-50 text-amber-800 border-amber-200'
-                        }`}>
-                          {isPaid ? (
-                            <>
-                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                              {debt.paymentMethod === 'manual_cash' ? 'Payé en caisse' : 'Déduit du salaire'}
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="h-3 w-3 text-amber-600" />
-                              En attente
-                            </>
-                          )}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile Card List (sm:hidden) */}
+            <div className="block sm:hidden divide-y divide-stone-100 p-2 space-y-2.5">
+              {myDebts.map((debt) => {
+                const isPaid = debt.status === 'paid';
+                return (
+                  <div key={debt.id} className="p-3.5 bg-stone-50/60 rounded-2xl border border-stone-200/80 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-bold text-stone-900 text-xs">{debt.reason || 'Prêt personnel'}</div>
+                        <div className="text-[10px] text-stone-400 font-mono">ID: {debt.id} · {debt.dueDate}</div>
+                      </div>
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${
+                        isPaid 
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}>
+                        {isPaid ? (
+                          <>
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            {debt.paymentMethod === 'manual_cash' ? 'En caisse' : 'Déduit'}
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="h-3 w-3 text-amber-600" />
+                            En cours
+                          </>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-stone-200/60 font-mono">
+                      <div>
+                        <span className="text-[10px] text-stone-500 font-sans block">Mensualité</span>
+                        <span className="font-bold text-emerald-800">{formatXAF(debt.monthlyInstallment)}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-stone-500 font-sans block">Total accordé ({debt.installmentNumber}/{debt.totalMonths})</span>
+                        <span className="font-semibold text-stone-700">{formatXAF(debt.totalLoanAmount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table (hidden sm:block) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-stone-50 border-b border-stone-200/80 text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                    <th className="p-3">Motif & Référence</th>
+                    <th className="p-3 text-center">Échéance</th>
+                    <th className="p-3 text-right">Mensualité</th>
+                    <th className="p-3 text-right">Montant Global</th>
+                    <th className="p-3 text-center">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100 font-sans">
+                  {myDebts.map((debt) => {
+                    const isPaid = debt.status === 'paid';
+                    return (
+                      <tr key={debt.id} className="hover:bg-stone-50/50 transition">
+                        <td className="p-3">
+                          <div className="font-bold text-stone-800">{debt.reason || 'Prêt personnel'}</div>
+                          <div className="text-[9px] text-stone-400 font-mono">ID: {debt.id}</div>
+                        </td>
+                        <td className="p-3 text-center font-mono font-medium text-stone-600 text-[11px]">
+                          {debt.dueDate} ({debt.installmentNumber}/{debt.totalMonths})
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-emerald-950">
+                          {formatXAF(debt.monthlyInstallment)}
+                        </td>
+                        <td className="p-3 text-right font-mono text-stone-500 text-[11px]">
+                          {formatXAF(debt.totalLoanAmount)}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                            isPaid 
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                              : 'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}>
+                            {isPaid ? (
+                              <>
+                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                {debt.paymentMethod === 'manual_cash' ? 'Payé en caisse' : 'Déduit du salaire'}
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="h-3 w-3 text-amber-600" />
+                                En attente
+                              </>
+                            )}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

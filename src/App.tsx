@@ -1719,7 +1719,7 @@ export default function App() {
                 <CMLogo variant="icon" className="w-8 h-8 sm:w-11 sm:h-11 drop-shadow-sm shrink-0" />
                 <div>
                   <h1 className="text-base sm:text-xl font-serif font-semibold text-stone-900 tracking-tight flex items-center gap-1">
-                    Citrine <span className="text-emerald-600 font-serif italic font-medium">Management</span>
+                    Hero <span className="text-[#2A7B76] font-serif italic font-medium">Management</span>
                   </h1>
                 </div>
               </div>
@@ -1766,15 +1766,15 @@ export default function App() {
                       className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl object-cover border border-stone-200 shrink-0"
                     />
                   ) : (
-                    <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-emerald-700 text-white font-bold flex items-center justify-center text-xs shrink-0">
+                    <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-[#2A7B76] text-white font-bold flex items-center justify-center text-xs shrink-0">
                       {syncCurrentUser.name.slice(0, 2).toUpperCase()}
                     </div>
                   )}
-                  <div className="text-left hidden sm:block">
-                    <div className="font-bold text-xs text-stone-900 flex items-center gap-1">
+                  <div className="text-left">
+                    <div className="font-bold text-xs text-stone-900 flex items-center gap-1 truncate max-w-[100px] sm:max-w-none">
                       {syncCurrentUser.name}
                     </div>
-                    <div className="text-[10px] text-stone-500 uppercase font-semibold">
+                    <div className="text-[10px] text-[#2A7B76] uppercase font-semibold hidden sm:block">
                       {syncCurrentUser.role}
                     </div>
                   </div>
@@ -1866,8 +1866,8 @@ export default function App() {
 
         {/* Tab Content Panel Container */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
-          {/* Mobile Active Tab Header Banner */}
-          <div className="md:hidden bg-gradient-to-r from-emerald-600 to-emerald-700 text-white p-3 rounded-2xl shadow-xs border border-emerald-500 flex items-center justify-between mb-2">
+          {/* Mobile Active Tab Header Banner (Hero Colors) */}
+          <div className="md:hidden bg-gradient-to-r from-[#2A7B76] via-[#236864] to-[#1E5753] text-white p-3 rounded-2xl shadow-sm border border-[#246B67] flex items-center justify-between mb-3">
             <div className="flex items-center gap-2.5">
               <span className="text-xl bg-white/10 p-1.5 rounded-xl border border-white/10">
                 {activeTab === 'dashboard' ? '📊' :
@@ -1937,7 +1937,7 @@ export default function App() {
                 transition={{ duration: 0.18, ease: "easeInOut" }}
                 className="w-full"
               >
-                <Suspense fallback={<ModuleSkeletonLoader title="Chargement du module Citrine..." />}>
+                <Suspense fallback={<ModuleSkeletonLoader title="Chargement en cours..." />}>
                   {activeTab === 'dashboard' && (
                     <AdminDashboardOverview
                       currentUser={currentUser}
@@ -2160,15 +2160,15 @@ export default function App() {
 
       </div>
 
-      {/* Mobile Bottom Navigation Bar (App Experience) */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-emerald-100 px-2 py-1.5 flex items-center justify-around shadow-xl sm:hidden">
+      {/* Mobile Bottom Navigation Bar (Hero Mobile Experience) */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-[#2A7B76]/20 px-2 py-1.5 flex items-center justify-around shadow-xl sm:hidden">
         <button
           onClick={() => {
             haptic.light();
             setActiveTab(currentRole === 'Employé' ? 'employee_portal' : 'dashboard');
             if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition ${activeTab === 'dashboard' || activeTab === 'employee_portal' ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200/80 scale-105 shadow-2xs' : 'text-stone-500 hover:text-stone-800'}`}
+          className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition ${activeTab === 'dashboard' || activeTab === 'employee_portal' ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 scale-105 shadow-2xs' : 'text-stone-500 hover:text-stone-800'}`}
         >
           <LayoutDashboard className="h-4 w-4" />
           <span className="text-[9px]">Vue d'ens.</span>
@@ -2180,7 +2180,7 @@ export default function App() {
             setActiveTab('presences');
             if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition ${activeTab === 'presences' ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200/80 scale-105 shadow-2xs' : 'text-stone-500 hover:text-stone-800'}`}
+          className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition ${activeTab === 'presences' ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 scale-105 shadow-2xs' : 'text-stone-500 hover:text-stone-800'}`}
         >
           <Clock className="h-4 w-4" />
           <span className="text-[9px]">Présences</span>
@@ -2192,7 +2192,7 @@ export default function App() {
             setActiveTab('statistics');
             if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition ${activeTab === 'statistics' ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200/80 scale-105 shadow-2xs' : 'text-stone-500 hover:text-stone-800'}`}
+          className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition ${activeTab === 'statistics' ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 scale-105 shadow-2xs' : 'text-stone-500 hover:text-stone-800'}`}
         >
           <BarChart3 className="h-4 w-4" />
           <span className="text-[9px]">Assiduité</span>
@@ -2204,7 +2204,7 @@ export default function App() {
             setActiveTab('tasks');
             if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition ${activeTab === 'tasks' ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200/80 scale-105 shadow-2xs' : 'text-stone-500 hover:text-stone-800'}`}
+          className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition ${activeTab === 'tasks' ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 scale-105 shadow-2xs' : 'text-stone-500 hover:text-stone-800'}`}
         >
           <Calendar className="h-4 w-4" />
           <span className="text-[9px]">Tâches</span>

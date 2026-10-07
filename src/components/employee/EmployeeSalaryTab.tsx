@@ -89,36 +89,40 @@ export default function EmployeeSalaryTab({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xs font-mono font-bold text-emerald-700">
-                    {formatXAF(slip.netAmount)}
-                  </span>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                    slip.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {slip.status === 'paid' ? 'Payé' : 'En attente'}
-                  </span>
+                <div className="flex items-center justify-between sm:justify-end gap-2.5 flex-wrap sm:flex-nowrap w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-stone-100">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold text-emerald-700">
+                      {formatXAF(slip.netAmount)}
+                    </span>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      slip.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {slip.status === 'paid' ? 'Payé' : 'En attente'}
+                    </span>
+                  </div>
                   
-                  <button
-                    onClick={(e) => handleQuickDownload(slip, e)}
-                    disabled={downloadingId === slip.id}
-                    className="p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-lg transition cursor-pointer border border-emerald-200/60 bg-emerald-50/50"
-                    title="Télécharger le bulletin PDF"
-                  >
-                    {downloadingId === slip.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
-                    ) : (
-                      <Download className="h-4 w-4" />
-                    )}
-                  </button>
+                  <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+                    <button
+                      onClick={(e) => handleQuickDownload(slip, e)}
+                      disabled={downloadingId === slip.id}
+                      className="p-2 sm:p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-lg transition cursor-pointer border border-emerald-200/60 bg-emerald-50/50"
+                      title="Télécharger le bulletin PDF"
+                    >
+                      {downloadingId === slip.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                    </button>
 
-                  <button
-                    onClick={() => onSelectPayslip(slip)}
-                    className="p-1.5 text-stone-600 hover:text-green-700 hover:bg-green-100 rounded-lg transition cursor-pointer"
-                    title="Consulter ma fiche"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </button>
+                    <button
+                      onClick={() => onSelectPayslip(slip)}
+                      className="p-2 sm:p-1.5 text-[#2A7B76] hover:text-[#1E5753] hover:bg-emerald-50 rounded-lg transition cursor-pointer border border-stone-200"
+                      title="Consulter ma fiche"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))

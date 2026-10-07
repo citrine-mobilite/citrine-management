@@ -33,6 +33,14 @@
 
 body {
   font-family: "Times New Roman", Times, Georgia, serif !important;
+  font-size: 16.5px;
+  line-height: 1.6;
+}
+
+html {
+  font-size: 17.5px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Custom gorgeous scrollbar for lists */
