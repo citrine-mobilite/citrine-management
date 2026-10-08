@@ -39,20 +39,26 @@ export class BadgeCodeService {
   public async createBadgeCode(
     generatedBy: string,
     notes?: string,
+    validityMinutes: number = 3,
     targetMonthOverride?: string
   ): Promise<BadgeSecurityCode16> {
     const { raw, formatted } = generate16CharCode();
     const currentMonth = targetMonthOverride || new Date().toISOString().slice(0, 7); // e.g. "2026-08"
+    const now = new Date();
+    const expiresAt = validityMinutes > 0 
+      ? new Date(now.getTime() + validityMinutes * 60 * 1000).toISOString()
+      : undefined;
 
     const newCode: BadgeSecurityCode16 = {
       id: `code16-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       code: raw,
       formattedCode: formatted,
       generatedBy: generatedBy || 'Responsable',
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
+      expiresAt,
       targetMonth: currentMonth,
       isUsed: false,
-      notes: notes || 'Code de pointage entreprise 16 caractères'
+      notes: notes || 'Clé de pointage temporaire 16 caractères (3 min)'
     };
 
     await saveDocument(COLLECTIONS.BADGE_CODES_16, newCode);
@@ -63,7 +69,9 @@ export class BadgeCodeService {
   public async validateAndConsumeCode(
     inputCode: string,
     employeeId: string,
-    employeeName: string
+    employeeName: string,
+    latitude?: number,
+    longitude?: number
   ): Promise<{ success: boolean; error?: string; codeItem?: BadgeSecurityCode16 }> {
     // Clean input code (remove non-alphanumeric, convert to uppercase)
     const cleanedInput = inputCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -72,6 +80,14 @@ export class BadgeCodeService {
       return {
         success: false,
         error: `Le code doit comporter exactement 16 caractères (vous avez saisi ${cleanedInput.length} caractère${cleanedInput.length > 1 ? 's' : ''}).`
+      };
+    }
+
+    // GPS is mandatory for the 16-character code as per business specifications
+    if (latitude === undefined || longitude === undefined || latitude === 0) {
+      return {
+        success: false,
+        error: "Pointage bloqué : Votre position GPS est obligatoire pour valider ce code temporaire à 16 caractères."
       };
     }
 
@@ -91,32 +107,34 @@ export class BadgeCodeService {
       };
     }
 
-    const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
-
-    // RÈGLE MÉTIER ABSOLUE : "un code ne peut pas etre utilisé deux fois le meme mois"
-    if (match.isUsed && match.usedMonth === currentMonth) {
+    // Check expiration (3 minutes rule)
+    if (match.expiresAt && new Date(match.expiresAt).getTime() < Date.now()) {
       return {
         success: false,
-        error: `❌ Ce code de 16 caractères a déjà été utilisé ce mois-ci (${match.usedMonth}) par ${match.usedByEmployeeName || 'un collaborateur'} le ${new Date(match.usedAt || '').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Un code ne peut pas être réutilisé deux fois le même mois.`
+        error: "❌ Ce code temporaire à 16 caractères a expiré (validité de 3 minutes dépassée). Veuillez demander à votre responsable de générer un nouveau code."
       };
     }
 
-    // If code was already used in a previous month, check if it's reusable or already consumed
+    const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+
+    // Single-use rule: code cannot be used twice
     if (match.isUsed) {
       return {
         success: false,
-        error: `❌ Ce code de 16 caractères a déjà été utilisé le ${new Date(match.usedAt || '').toLocaleDateString('fr-FR')}. Veuillez demander un nouveau code généré pour ce mois-ci.`
+        error: `❌ Ce code de 16 caractères a déjà été utilisé par ${match.usedByEmployeeName || 'un collaborateur'} le ${new Date(match.usedAt || '').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Ce code est à usage unique.`
       };
     }
 
-    // Mark as consumed
+    // Mark as consumed with GPS position
     const updatedCode: BadgeSecurityCode16 = {
       ...match,
       isUsed: true,
       usedByEmployeeId: employeeId,
       usedByEmployeeName: employeeName,
       usedAt: new Date().toISOString(),
-      usedMonth: currentMonth
+      usedMonth: currentMonth,
+      usedLatitude: latitude,
+      usedLongitude: longitude
     };
 
     await saveDocument(COLLECTIONS.BADGE_CODES_16, updatedCode);

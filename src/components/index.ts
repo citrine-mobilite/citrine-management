@@ -23,6 +23,8 @@ export { default as PresenceRequestsView } from './PresenceRequestsView';
 export { default as KioskClockingModal } from './KioskClockingModal';
 export { default as OfficeQRCodeModal } from './OfficeQRCodeModal';
 export { default as Badge16CodeManager } from './Badge16CodeManager';
+export { default as DynamicQrManagerModal } from './presence/DynamicQrManagerModal';
+export { default as AdminOnBehalfClockModal } from './presence/AdminOnBehalfClockModal';
 
 // 📋 Operations, Tasks & Inventory
 export { default as TaskPanel } from './TaskPanel';

@@ -47,11 +47,33 @@ export const COLLECTIONS = {
   PRICING_SETTINGS: 'pricing_settings',
   COMPANY_SETTINGS: 'company_settings',
   BADGE_CODES_16: 'badge_codes_16',
+  DYNAMIC_QR_SESSIONS: 'dynamic_qr_sessions',
   CALLS: 'calls',
   USER_PRESENCES: 'user_presences',
   DISCIPLINARY_INCIDENTS: 'disciplinary_incidents',
-  DEPARTMENTS: 'departments'
+  ATTENDANCE_INCIDENTS: 'attendance_incidents',
+  DEPARTMENTS: 'departments',
+  PARTNERS: 'partners',
+  RH_DOCUMENT_TEMPLATES: 'rh_document_templates'
 } as const;
+
+// Helper to subscribe to a single document in real-time
+export function subscribeToDocument<T>(
+  collectionName: string,
+  docId: string,
+  callback: (data: T | null) => void
+) {
+  const docRef = doc(db, collectionName, docId);
+  return onSnapshot(docRef, (snap) => {
+    if (snap.exists()) {
+      callback(snap.data() as T);
+    } else {
+      callback(null);
+    }
+  }, (err) => {
+    console.warn(`Firestore subscription error on ${collectionName}/${docId}:`, err);
+  });
+}
 
 // Seed database with mock data if employees collection is empty (DISABLED - real DB data only)
 export async function seedFirestoreIfEmpty() {

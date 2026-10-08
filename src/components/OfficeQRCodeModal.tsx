@@ -1,5 +1,7 @@
-import React from 'react';
-import { QrCode, Printer, X, ShieldCheck, Building, Copy, Check, Tablet, AlertTriangle, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { QrCode, X, Copy, Check, Download, ShieldCheck, Key, RefreshCw } from 'lucide-react';
+import { generateAndDownloadQrPoster } from '../utils/qrPosterGenerator';
+import { badgeCodeService } from '../services/badgeCodeService';
 
 interface OfficeQRCodeModalProps {
   isOpen: boolean;
@@ -7,403 +9,204 @@ interface OfficeQRCodeModalProps {
   qrSecret?: string;
   companyName?: string;
   onLaunchKiosk?: () => void;
+  managerName?: string;
 }
 
 export default function OfficeQRCodeModal({
   isOpen,
   onClose,
-  qrSecret = "",
-  companyName = "Citrine Management",
-  onLaunchKiosk
+  qrSecret = 'CITRINE-HQ-SECRET-KEY-2026',
+  companyName = 'Citrine Management',
+  managerName = 'Responsable',
 }: OfficeQRCodeModalProps) {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+
+  // Rotating QR code state (30 seconds)
+  const [qrToken, setQrToken] = useState('');
+  const [qrSecondsLeft, setQrSecondsLeft] = useState(30);
+
+  // Windows-style 16-character temporary activation key (3 minutes)
+  const [activationKey, setActivationKey] = useState('');
+  const [keySecondsLeft, setKeySecondsLeft] = useState(0);
+
+  // Generate Windows-style key: XXXX-XXXX-XXXX-XXXX and register in DB (3 min validity)
+  const handleGenerateActivationKey = async () => {
+    try {
+      const codeItem = await badgeCodeService.createBadgeCode(
+        managerName,
+        'Clé temporaire 16 caractères générée sur place (3 min)',
+        3
+      );
+      setActivationKey(codeItem.formattedCode);
+      setKeySecondsLeft(180); // 3 minutes = 180 seconds
+    } catch (e) {
+      console.error('Erreur génération clé 16 car:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Set initial token
+    const updateToken = () => {
+      const timestampToken = Math.floor(Date.now() / 30000);
+      setQrToken(`${qrSecret}-${timestampToken}`);
+      setQrSecondsLeft(30);
+    };
+    updateToken();
+
+    // Timers
+    const interval = setInterval(() => {
+      // QR countdown
+      setQrSecondsLeft((prev) => {
+        if (prev <= 1) {
+          updateToken();
+          return 30;
+        }
+        return prev - 1;
+      });
+
+      // Key activation countdown
+      setKeySecondsLeft((prev) => {
+        if (prev > 0) return prev - 1;
+        return 0;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isOpen, qrSecret]);
 
   if (!isOpen) return null;
 
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(qrSecret)}`;
+  const currentQrSecret = qrToken || qrSecret;
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(currentQrSecret)}`;
 
   const handleCopySecret = () => {
-    navigator.clipboard.writeText(qrSecret);
+    navigator.clipboard.writeText(currentQrSecret);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownloadAffiche = () => {
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 1000;
-      canvas.height = 1350;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, 1000, 1350);
-
-      // Borders
-      ctx.strokeStyle = '#881337';
-      ctx.lineWidth = 10;
-      ctx.strokeRect(30, 30, 940, 1290);
-
-      ctx.strokeStyle = '#f43f5e';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(45, 45, 910, 1260);
-
-      // Header Badge
-      ctx.fillStyle = '#ffe4e6';
-      ctx.beginPath();
-      ctx.roundRect(300, 80, 400, 50, 25);
-      ctx.fill();
-
-      ctx.fillStyle = '#881337';
-      ctx.font = 'bold 20px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(companyName.toUpperCase(), 500, 112);
-
-      // Title
-      ctx.fillStyle = '#4c0519';
-      ctx.font = 'bold 30px Georgia, serif';
-      ctx.fillText('AFFICHE OFFICIELLE DE POINTAGE SUR SITE', 500, 190);
-
-      ctx.fillStyle = '#57534e';
-      ctx.font = '18px sans-serif';
-      ctx.fillText("Scannez ce QR Code avec votre smartphone à l'arrivée et au départ", 500, 230);
-
-      // QR Image
-      const img = new Image();
-      img.crossOrigin = 'Anonymous';
-      img.onload = () => {
-        // QR Container Box
-        ctx.fillStyle = '#fff1f2';
-        ctx.strokeStyle = '#f43f5e';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.roundRect(260, 270, 480, 480, 30);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.drawImage(img, 320, 330, 360, 360);
-
-        // Secret Box
-        ctx.fillStyle = '#1c1917';
-        ctx.beginPath();
-        ctx.roundRect(280, 780, 440, 60, 16);
-        ctx.fill();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 22px monospace';
-        ctx.fillText(`CODE CERTIFIÉ : ${qrSecret}`, 500, 818);
-
-        // Anti Fraud Rule Box
-        ctx.fillStyle = '#fafaf9';
-        ctx.strokeStyle = '#e7e5e4';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(100, 880, 800, 240, 20);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#881337';
-        ctx.font = 'bold 20px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText('🔒 SÉCURITÉ TRAÇABILITÉ IP & EMPREINTE APPAREIL :', 130, 930);
-
-        ctx.fillStyle = '#44403c';
-        ctx.font = '16px sans-serif';
-        ctx.fillText('• 1 Smartphone / IP = 1 Seul Collaborateur par jour.', 140, 975);
-        ctx.fillText("• L'adresse IP et l'identifiant du téléphone sont enregistrés lors du scan.", 140, 1015);
-        ctx.fillText('• Le pointage par procuration déclenche une alerte de sécurité instantanée.', 140, 1055);
-
-        // Footer
-        ctx.fillStyle = '#78716c';
-        ctx.font = 'bold 15px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('CITRINE MANAGEMENT - SYSTÈME DE GESTION RH & POINTAGE D\'ENTREPRISE', 500, 1200);
-        ctx.font = '13px sans-serif';
-        ctx.fillText(`Document Officiel Généré le ${new Date().toLocaleDateString('fr-FR')}`, 500, 1225);
-
-        // Trigger Direct Download
-        const dataUrl = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.download = `Affiche_QR_Pointage_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      };
-
-      // Fallback if image CORS fails
-      img.onerror = () => {
-        const link = document.createElement('a');
-        link.download = `Affiche_QR_Pointage_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
-        link.href = qrImageUrl;
-        link.target = '_blank';
-        link.click();
-      };
-
-      img.src = qrImageUrl;
-    } catch (e) {
-      window.print();
-    }
-  };
-
-  const handlePrint = () => {
-    try {
-      const printWindow = window.open('', '_blank', 'width=800,height=900');
-      if (printWindow) {
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Affiche QR Code Pointage - ${companyName}</title>
-              <style>
-                body { 
-                  font-family: system-ui, -apple-system, sans-serif; 
-                  text-align: center; 
-                  padding: 40px; 
-                  margin: 0; 
-                  background: #fff; 
-                  color: #1c1917; 
-                }
-                .container {
-                  max-width: 650px;
-                  margin: 0 auto;
-                  border: 4px double #881337;
-                  border-radius: 24px;
-                  padding: 40px 30px;
-                  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-                }
-                .badge { 
-                  display: inline-block; 
-                  padding: 8px 20px; 
-                  background: #ffe4e6; 
-                  color: #881337; 
-                  border-radius: 9999px; 
-                  font-weight: bold; 
-                  font-size: 14px; 
-                  margin-bottom: 20px; 
-                  text-transform: uppercase;
-                  letter-spacing: 1px;
-                }
-                h1 { 
-                  font-size: 26px; 
-                  margin: 0 0 10px 0; 
-                  color: #4c0519; 
-                  font-family: Georgia, serif;
-                }
-                p { 
-                  font-size: 13px; 
-                  color: #57534e; 
-                  margin-bottom: 30px; 
-                  line-height: 1.5;
-                }
-                .qr-box { 
-                  display: inline-block; 
-                  padding: 24px; 
-                  border: 3px dashed #f43f5e; 
-                  border-radius: 24px; 
-                  background: #fff1f2; 
-                  margin-bottom: 25px; 
-                }
-                .qr-box img { 
-                  width: 260px; 
-                  height: 260px; 
-                  border-radius: 16px; 
-                  border: 2px solid #000;
-                  background: #fff;
-                  padding: 10px;
-                }
-                .secret-box { 
-                  display: inline-block; 
-                  margin-top: 15px; 
-                  padding: 10px 24px; 
-                  background: #1c1917; 
-                  color: #fff; 
-                  border-radius: 12px; 
-                  font-family: monospace; 
-                  font-size: 15px; 
-                  font-weight: bold; 
-                  letter-spacing: 1px;
-                }
-                .rules {
-                  text-align: left;
-                  background: #fafaf9;
-                  border: 1px solid #e7e5e4;
-                  padding: 15px 20px;
-                  border-radius: 16px;
-                  font-size: 12px;
-                  color: #44403c;
-                  margin-top: 20px;
-                }
-                .rules h4 { margin: 0 0 5px 0; color: #881337; }
-                .footer-note { 
-                  font-size: 11px; 
-                  color: #78716c; 
-                  border-top: 1px solid #e7e5e4; 
-                  padding-top: 20px; 
-                  margin-top: 30px; 
-                }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="badge">📍 ${companyName}</div>
-                <h1>QR CODE OFFICIEL DE POINTAGE SUR SITE</h1>
-                <p>Scannez ce QR Code avec votre smartphone à l'arrivée et au départ du bureau</p>
-                <div class="qr-box">
-                  <img src="${qrImageUrl}" alt="QR Code" />
-                  <br/>
-                  <div class="secret-box">CODE CERTIFIÉ : ${qrSecret}</div>
-                </div>
-                <div class="rules">
-                  <h4>🔒 RÈGLE STRICTE ANTI-FRAUDE IP & APPAREIL :</h4>
-                  <ul style="margin: 5px 0 0 0; padding-left: 20px;">
-                    <li>Un téléphone portable / IP ne peut enregistrer qu'UN SEUL collaborateur par jour.</li>
-                    <li>Toute tentative de badgeage pour un collègue est automatiquement bloquée par le système.</li>
-                  </ul>
-                </div>
-                <div class="footer-note">
-                  <strong>CITRINE MANAGEMENT - SYSTÈME DE GESTION DES PRÉSENCES RH & POINTAGE D'ENTREPRISE</strong><br/>
-                  Imprimé le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
-                </div>
-              </div>
-              <script>
-                window.onload = function() {
-                  window.print();
-                  setTimeout(function() { window.close(); }, 500);
-                };
-              </script>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      } else {
-        window.print();
-      }
-    } catch (err) {
-      window.print();
-    }
+  const handleCopyKey = () => {
+    if (!activationKey) return;
+    navigator.clipboard.writeText(activationKey);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-fade-in print:p-0 print:bg-white overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative border border-green-100 print:shadow-none print:border-none print:max-w-none print:w-full">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-5 right-5 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full transition cursor-pointer print:hidden"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        {/* Modal Header */}
-        <div className="flex items-center gap-3 border-b border-stone-100 pb-4 print:hidden">
-          <div className="p-2.5 bg-green-100 rounded-2xl text-green-700">
-            <QrCode className="h-6 w-6" />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 p-4 text-white flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <QrCode className="h-5 w-5 text-emerald-200 animate-pulse" />
+            <h3 className="font-serif font-bold text-sm">Générateur de Code & Clé d'Activation</h3>
           </div>
-          <div>
-            <h2 className="text-lg font-serif font-bold text-green-950">
-              Affiche QR Code Officiel de Pointage
-            </h2>
-            <p className="text-xs text-stone-500">
-              Collez cette affiche à l'entrée ou la réception. Chaque employé scannera le code avec son propre téléphone.
-            </p>
-          </div>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-white/20 rounded-full transition cursor-pointer text-white/80 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        {/* 2-Column Wide Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-          {/* Left Column: QR Code Printable Card Preview */}
-          <div className="md:col-span-5 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-green-50/70 to-stone-50 rounded-3xl border-2 border-dashed border-green-200 space-y-4 print:border-none print:p-0">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-100 text-green-950 text-xs font-bold">
-              <Building className="h-3.5 w-3.5 text-green-600" />
-              <span>{companyName}</span>
-            </div>
+        {/* Content */}
+        <div className="p-6 space-y-5 text-center">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-[#2A7B76] tracking-wider block">
+              {companyName}
+            </span>
+            <h4 className="text-base font-serif font-bold text-stone-900 mt-0.5">
+              Pointage Sécurisé & Rotatif
+            </h4>
+            <p className="text-xs text-stone-500 mt-1">
+              Sécurisez vos pointages en agence avec un QR Code actualisé toutes les 30 secondes ou une clé temporaire.
+            </p>
+          </div>
 
-            <div className="bg-white p-4 rounded-2xl shadow-md border border-green-100 print:shadow-none print:border-2 print:border-black">
-              <img 
-                src={qrImageUrl} 
-                alt="QR Code de Pointage Bureau"
-                className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-stone-800 font-mono bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-2xs">
-              <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-              <span className="font-bold">{qrSecret}</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+            {/* Left: QR Code rotatif */}
+            <div className="bg-stone-50 p-4 rounded-3xl border border-stone-200/80 space-y-3">
+              <span className="text-[10px] font-bold text-[#2A7B76] uppercase tracking-wider flex items-center justify-center gap-1.5">
+                <RefreshCw className="h-3 w-3 animate-spin text-[#2A7B76]" />
+                Expire dans {qrSecondsLeft}s
+              </span>
+              <div className="inline-block p-2.5 bg-white rounded-2xl border border-stone-200 shadow-xs">
+                <img
+                  src={qrImageUrl}
+                  alt="QR Code de Présence"
+                  className="w-40 h-40 mx-auto object-contain rounded-lg"
+                />
+              </div>
               <button
                 onClick={handleCopySecret}
-                className="p-1 hover:bg-stone-100 rounded text-stone-400 hover:text-stone-700 transition cursor-pointer print:hidden"
-                title="Copier le code"
+                className="w-full py-1.5 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-xl font-bold text-[10px] flex items-center justify-center gap-1.5 transition cursor-pointer"
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{copied ? 'Copié !' : 'Copier Token QR'}</span>
               </button>
+            </div>
+
+            {/* Right: Windows-style 16 chars activation key */}
+            <div className="bg-stone-50 p-4 rounded-3xl border border-stone-200/80 space-y-3 flex flex-col justify-between h-full">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-wider inline-flex items-center gap-1.5">
+                  <Key className="h-3 w-3" /> Clé de Sécurité
+                </span>
+                <p className="text-[11px] text-stone-500">
+                  Générez un code temporaire de 16 caractères de type clé d'activation Windows, valable 3 minutes.
+                </p>
+              </div>
+
+              {activationKey ? (
+                <div className="space-y-2">
+                  <div className="p-2.5 bg-white rounded-xl border border-emerald-200 shadow-3xs text-center font-mono font-bold text-sm tracking-wider text-stone-900 animate-pulse">
+                    {activationKey}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-stone-500 font-bold px-1">
+                    <span>Usage unique</span>
+                    <span className={keySecondsLeft < 30 ? 'text-rose-600 animate-pulse' : 'text-emerald-600'}>
+                      {Math.floor(keySecondsLeft / 60)}m {keySecondsLeft % 60}s restantes
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-4 text-center text-stone-400 italic text-[11px]">
+                  Aucune clé active
+                </div>
+              )}
+
+              <div className="flex gap-1.5">
+                <button
+                  onClick={handleGenerateActivationKey}
+                  className="flex-1 py-2 bg-[#2A7B76] hover:bg-[#20635F] text-white rounded-xl font-bold text-[10px] transition cursor-pointer"
+                >
+                  Générer une clé
+                </button>
+                {activationKey && (
+                  <button
+                    onClick={handleCopyKey}
+                    className="p-2 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-xl transition cursor-pointer"
+                    title="Copier la clé"
+                  >
+                    {copiedKey ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Right Column: Instructions, Anti-Fraud & Action Buttons */}
-          <div className="md:col-span-7 space-y-4 print:hidden">
-            {/* Anti-Fraud Logic Banner */}
-            <div className="p-4 bg-stone-900 text-white rounded-2xl space-y-2 shadow-sm border border-stone-800">
-              <div className="flex items-center gap-2 text-green-400 font-bold text-xs uppercase tracking-wider">
-                <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                <span>Sécurité Anti-Fraude par IP & Appareil</span>
-              </div>
-              <p className="text-stone-300 text-xs leading-relaxed">
-                Lors du scan, la plateforme associe automatiquement l'adresse IP et l'identifiant du téléphone à l'employé.
-              </p>
-              <div className="p-2.5 bg-green-950/80 border border-green-900 rounded-xl text-[11px] text-green-200 flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-green-400 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Règle Strictement Appliquée :</strong> 1 Téléphone / IP = 1 Seul Collaborateur par jour. Si un employé essaie de flasher le QR code pour un collègue le même jour, le pointage est immédiatement bloqué.
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Operating Steps */}
-            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 text-xs text-stone-600 space-y-2">
-              <div className="font-bold text-stone-800 flex items-center gap-1.5">
-                <QrCode className="h-4 w-4 text-green-600" />
-                <span>Instructions de Mise en Service :</span>
-              </div>
-              <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-stone-600 font-medium">
-                <li>Téléchargez l'affiche au format PNG ou imprimez-la directement.</li>
-                <li>Collez l'affiche à la porte d'entrée ou à la réception du bureau.</li>
-                <li>Chaque collaborateur scanne le code avec son propre téléphone pour valider ses présences.</li>
-              </ol>
-            </div>
-
-            {/* Actions */}
-            <div className="pt-2 space-y-2.5">
-              <button
-                onClick={handlePrint}
-                className="w-full py-3.5 bg-green-900 hover:bg-green-950 text-white rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-md cursor-pointer"
-              >
-                <Printer className="h-4.5 w-4.5 text-green-300" />
-                <span>🖨️ Générer Affiche PDF / Imprimer en A4 (Économie d'Encre)</span>
-              </button>
-
-              <button
-                onClick={handleDownloadAffiche}
-                className="w-full py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 border border-stone-300 cursor-pointer"
-              >
-                <Download className="h-4 w-4 text-stone-600" />
-                <span>📥 Télécharger l'Affiche sous forme d'Image PNG</span>
-              </button>
-
-              {onLaunchKiosk && (
-                <button
-                  onClick={() => {
-                    onClose();
-                    onLaunchKiosk();
-                  }}
-                  className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-                >
-                  <Tablet className="h-4 w-4 text-emerald-200" />
-                  <span>🖥️ Mode Borne Interactive (Sur Tablette Fixe de Réception)</span>
-                </button>
-              )}
-            </div>
+          {/* Action buttons */}
+          <div className="pt-2">
+            <button
+              onClick={() => generateAndDownloadQrPoster(currentQrSecret, companyName)}
+              className="w-full py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Download className="h-4 w-4" />
+              <span>Télécharger l'Affiche de Pointage (HD)</span>
+            </button>
           </div>
         </div>
       </div>

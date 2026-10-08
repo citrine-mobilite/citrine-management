@@ -1,10 +1,6 @@
 @import "tailwindcss";
 
 @theme {
-  --font-serif: "Times New Roman", Times, Georgia, serif;
-  --font-sans: "Times New Roman", Times, Georgia, serif;
-  --font-mono: "Times New Roman", Times, Georgia, serif;
-  
   /* Corporate Soft Green (vert doux) theme overrides */
   --color-green-50: #f2fbf6;
   --color-green-100: #e1f7eb;
@@ -32,13 +28,13 @@
 }
 
 body {
-  font-family: "Times New Roman", Times, Georgia, serif !important;
-  font-size: 16.5px;
-  line-height: 1.6;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 html {
-  font-size: 17.5px;
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -57,4 +53,47 @@ html {
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #86efac;
+}
+
+/* 🗺️ Leaflet Stacking Context & Modal Protection
+   Empêche les tuiles, panes et contrôles Leaflet de dépasser au-dessus des modales,
+   backdrops ou menus déroulants de l'application. */
+.leaflet-container {
+  z-index: 0 !important;
+  isolation: isolate;
+  position: relative;
+}
+
+.leaflet-pane {
+  z-index: 1 !important;
+}
+
+.leaflet-tile-pane {
+  z-index: 1 !important;
+}
+
+.leaflet-overlay-pane {
+  z-index: 2 !important;
+}
+
+.leaflet-shadow-pane {
+  z-index: 2 !important;
+}
+
+.leaflet-marker-pane {
+  z-index: 3 !important;
+}
+
+.leaflet-tooltip-pane {
+  z-index: 4 !important;
+}
+
+.leaflet-popup-pane {
+  z-index: 5 !important;
+}
+
+.leaflet-control,
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 6 !important;
 }

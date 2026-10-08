@@ -2,25 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, 
   Clock, 
-  CheckCircle2, 
-  AlertTriangle, 
+  CheckSquare, 
   Bell, 
-  ArrowRight, 
-  ChevronRight, 
-  UserCheck, 
-  ListTodo,
-  Settings,
-  CalendarDays
+  AlertTriangle, 
+  Settings, 
+  ArrowRight,
+  TrendingUp,
+  LayoutDashboard
 } from 'lucide-react';
-import { 
-  Employee, 
-  Presence, 
-  Task, 
-  Reminder, 
-  AppUser
-} from '../types';
+import { Employee, Presence, Task, Reminder, AppUser } from '../types';
 import { TabType } from './Sidebar';
-import { haptic } from '../services/hapticService';
 
 interface AdminDashboardOverviewProps {
   currentUser: AppUser | null;
@@ -28,7 +19,7 @@ interface AdminDashboardOverviewProps {
   presences: Presence[];
   tasks: Task[];
   reminders: Reminder[];
-  currentTime: string;
+  currentTime?: string;
   onSelectTab: (tab: TabType) => void;
   onSelectEmployee: (id: string) => void;
 }
@@ -39,17 +30,20 @@ export default function AdminDashboardOverview({
   presences = [],
   tasks = [],
   reminders = [],
-  currentTime,
   onSelectTab,
-  onSelectEmployee
+  onSelectEmployee,
 }: AdminDashboardOverviewProps) {
-  // Live Real-Time Clock state
   const [realTime, setRealTime] = useState(() => {
     return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   });
 
   const currentDateFormatted = useMemo(() => {
-    return new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return new Date().toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
   }, []);
 
   useEffect(() => {
@@ -59,279 +53,203 @@ export default function AdminDashboardOverview({
     return () => clearInterval(timer);
   }, []);
 
-  // Compute today's date string YYYY-MM-DD
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  // Filter values based on today's date
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayPresences = presences.filter((p) => p.date === todayStr);
+  const presentCount = todayPresences.filter((p) => p.status === 'present').length;
+  const lateCount = todayPresences.filter((p) => p.status === 'late').length;
   
-  const activeEmployees = useMemo(() => {
-    return employees.filter(e => !e.status || e.status === 'en_poste');
-  }, [employees]);
+  // Pending and active tasks
+  const pendingTasks = tasks.filter((t) => t.status !== 'completed');
+  const activeRemindersCount = reminders.length;
 
-  // Filter today's presence records
-  const todayPresences = useMemo(() => {
-    return presences.filter(p => p.date === todayStr);
-  }, [presences, todayStr]);
-
-  // Compute stats memoized
-  const stats = useMemo(() => {
-    const presentCount = todayPresences.filter(p => p.status === 'present').length;
-    const lateCount = todayPresences.filter(p => p.status === 'late').length;
-    const absentCount = todayPresences.filter(p => p.status === 'absent').length;
-    const totalTracked = activeEmployees.length > 0 ? activeEmployees.length : 8;
-    const clockedCount = presentCount + lateCount;
-    const presenceRate = totalTracked > 0 ? Math.round((clockedCount / totalTracked) * 100) : 0;
-    const todayEmergencies = todayPresences.flatMap(p => p.emergencies || []);
-    const pendingTasks = tasks.filter(t => t.status !== 'completed');
-    const highPriorityTasks = pendingTasks.filter(t => t.priority === 'high');
-    const activeReminders = reminders.filter(r => !r.triggered && !r.stopped);
-
-    return {
-      presentCount,
-      lateCount,
-      absentCount,
-      totalTracked,
-      clockedCount,
-      presenceRate,
-      todayEmergencies,
-      pendingTasks,
-      highPriorityTasks,
-      activeReminders
-    };
-  }, [todayPresences, activeEmployees.length, tasks, reminders]);
-
-  const {
-    presentCount,
-    lateCount,
-    absentCount,
-    totalTracked,
-    clockedCount,
-    presenceRate,
-    todayEmergencies,
-    pendingTasks,
-    highPriorityTasks,
-    activeReminders
-  } = stats;
+  const attendanceRate = employees.length > 0 
+    ? Math.round((presentCount / employees.length) * 100) 
+    : 0;
 
   return (
-    <div className="space-y-6">
-      {/* 1. Header Banner - Clean, Light & Airy (No dark green blocks) */}
-      <div className="bg-white rounded-3xl p-6 border border-stone-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200 mb-2 capitalize">
-            <CalendarDays className="h-3.5 w-3.5 text-emerald-600" />
-            <span>{currentDateFormatted}</span>
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
+      
+      {/* Dashboard Top Header Banner */}
+      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <LayoutDashboard className="h-5 w-5 text-emerald-200" />
+            <h2 className="font-serif font-bold text-xl">Tableau de Bord d'Administration</h2>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900">
-            Tableau de Bord & Pilotage RH
-          </h1>
         </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-stone-50 border border-stone-200 rounded-2xl px-4 py-2 flex items-center gap-3">
-            <Clock className="h-4 w-4 text-emerald-600" />
-            <div>
-              <div className="text-[9px] uppercase font-bold text-stone-400">Horloge Système</div>
-              <div className="text-sm font-mono font-bold text-stone-800 leading-none mt-0.5">{realTime}</div>
-            </div>
-          </div>
-
-          <button
-            onClick={() => {
-              haptic.light();
-              onSelectTab('presences');
-            }}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer"
-          >
-            <UserCheck className="h-4 w-4" />
-            <span>Suivi des Pointages</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
+        <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/20 text-xs font-mono font-bold shrink-0">
+          <span className="text-emerald-200">🕒 {realTime}</span>
+          <span className="text-white/40">|</span>
+          <span className="capitalize">{currentDateFormatted}</span>
         </div>
       </div>
 
-      {/* 2. Top 4 KPI Metric Cards */}
+      {/* KPI Cards exactly as in Image 1 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Présences */}
+        {/* PRESENCES DU JOUR CARD */}
         <div 
           onClick={() => onSelectTab('presences')}
-          className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs hover:border-emerald-300 transition cursor-pointer space-y-3"
+          className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] uppercase font-bold text-stone-500 tracking-wider">Présences du Jour</span>
-            <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">
-              <UserCheck className="h-4 w-4" />
+            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Présences du Jour</span>
+            <div className="p-1.5 rounded-xl bg-emerald-50 text-emerald-600">
+              <Users className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-stone-900">{clockedCount} / {totalTracked}</span>
-              <span className="text-xs font-bold text-emerald-600">({presenceRate}%)</span>
+            <div className="text-xl font-bold text-stone-900">
+              {presentCount} / {employees.length}{' '}
+              <span className="text-xs text-emerald-600 font-semibold">({attendanceRate}%)</span>
             </div>
-            <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden mt-2.5">
+            {/* Progress Bar */}
+            <div className="w-full bg-stone-100 h-1.5 rounded-full mt-2 overflow-hidden">
               <div 
                 className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
-                style={{ width: `${Math.min(presenceRate, 100)}%` }} 
+                style={{ width: `${attendanceRate}%` }}
               />
             </div>
           </div>
         </div>
 
-        {/* KPI 2: Retards */}
+        {/* ANOMALIES & RETARDS CARD */}
         <div 
-          onClick={() => onSelectTab('statistics')}
-          className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs hover:border-amber-300 transition cursor-pointer space-y-3"
+          onClick={() => onSelectTab('presences')}
+          className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-amber-300 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] uppercase font-bold text-stone-500 tracking-wider">Anomalies & Retards</span>
-            <div className={`p-2 rounded-xl border ${lateCount > 0 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-stone-50 text-stone-600 border-stone-200'}`}>
+            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Anomalies & Retards</span>
+            <div className="p-1.5 rounded-xl bg-amber-50 text-amber-600">
               <AlertTriangle className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-stone-900">
-              {lateCount}
-            </div>
-          </div>
-          <div className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
-            <span>Analyse d'assiduité</span>
-            <ChevronRight className="h-3 w-3" />
+            <div className="text-xl font-bold text-stone-900">{lateCount}</div>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onSelectTab('statistics'); }}
+              className="text-[11px] text-[#2A7B76] font-bold hover:underline mt-2 inline-flex items-center gap-1 cursor-pointer"
+            >
+              Analyse d'assiduité &gt;
+            </button>
           </div>
         </div>
 
-        {/* KPI 3: Tâches */}
+        {/* TACHES EN COURS CARD */}
         <div 
           onClick={() => onSelectTab('tasks')}
-          className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs hover:border-blue-300 transition cursor-pointer space-y-3"
+          className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-blue-300 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] uppercase font-bold text-stone-500 tracking-wider">Tâches en Cours</span>
-            <div className="p-2 bg-blue-50 text-blue-700 rounded-xl border border-blue-200">
-              <ListTodo className="h-4 w-4" />
+            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Tâches en Cours</span>
+            <div className="p-1.5 rounded-xl bg-blue-50 text-blue-600">
+              <CheckSquare className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-stone-900">{pendingTasks.length}</span>
-              {highPriorityTasks.length > 0 && (
-                <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                  {highPriorityTasks.length} urgentes
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
-            <span>Tableau des tâches</span>
-            <ChevronRight className="h-3 w-3" />
+            <div className="text-xl font-bold text-stone-900">{pendingTasks.length}</div>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onSelectTab('tasks'); }}
+              className="text-[11px] text-[#2A7B76] font-bold hover:underline mt-2 inline-flex items-center gap-1 cursor-pointer"
+            >
+              Tableau des tâches &gt;
+            </button>
           </div>
         </div>
 
-        {/* KPI 4: Alertes */}
+        {/* ALERTES ACTIVES CARD */}
         <div 
           onClick={() => onSelectTab('reminders')}
-          className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs hover:border-emerald-300 transition cursor-pointer space-y-3"
+          className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-emerald-200 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] uppercase font-bold text-stone-500 tracking-wider">Alertes Actives</span>
-            <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200">
+            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Alertes Actives</span>
+            <div className="p-1.5 rounded-xl bg-emerald-50 text-emerald-600">
               <Bell className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-stone-900">{activeReminders.length}</div>
-          </div>
-          <div className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
-            <span>Consulter les alertes</span>
-            <ChevronRight className="h-3 w-3" />
+            <div className="text-xl font-bold text-stone-900">{activeRemindersCount}</div>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onSelectTab('reminders'); }}
+              className="text-[11px] text-[#2A7B76] font-bold hover:underline mt-2 inline-flex items-center gap-1 cursor-pointer"
+            >
+              Consulter les alertes &gt;
+            </button>
           </div>
         </div>
       </div>
 
-      {/* 3. Main Dashboard Grid: Presences Table + Urgent Items */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Columns: Live Today's Attendance Table */}
-        <div className="lg:col-span-2 bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
-                <Clock className="h-5 w-5 text-emerald-600" />
-                <span>Pointages du Jour</span>
-              </h2>
-            </div>
-            <button
+      {/* Main Grid with full width Pointages and widgets underneath */}
+      <div className="space-y-6">
+        
+        {/* FULL WIDTH: Pointages du Jour */}
+        <div className="bg-white rounded-3xl border border-stone-200/80 shadow-sm p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+            <h3 className="font-serif font-bold text-sm text-stone-900 flex items-center gap-1.5">
+              <Clock className="h-4.5 w-4.5 text-[#2A7B76]" />
+              Pointages du Jour
+            </h3>
+            <button 
               onClick={() => onSelectTab('presences')}
-              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 px-3 py-1.5 rounded-xl transition cursor-pointer"
+              className="text-[11px] font-bold text-[#2A7B76] hover:underline flex items-center gap-1 cursor-pointer"
             >
-              Registre complet →
+              Registre complet &rarr;
             </button>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-stone-200 text-stone-400 font-bold uppercase text-[10px]">
-                  <th className="pb-3 font-semibold">Collaborateur</th>
-                  <th className="pb-3 font-semibold">Poste</th>
-                  <th className="pb-3 font-semibold">Arrivée</th>
-                  <th className="pb-3 font-semibold">Statut</th>
-                  <th className="pb-3 font-semibold text-right">Action</th>
+                <tr className="text-stone-400 font-bold uppercase tracking-wider text-[9px] border-b border-stone-100">
+                  <th className="pb-3">Collaborateur</th>
+                  <th className="pb-3">Poste</th>
+                  <th className="pb-3">Arrivée</th>
+                  <th className="pb-3">Statut</th>
+                  <th className="pb-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {activeEmployees.map((emp) => {
-                  const pres = todayPresences.find(p => p.employeeId === emp.id);
-                  const status = pres?.status || 'not_tracked';
-                  const arrival = pres?.arrivalTime || '—';
-
+                {employees.slice(0, 5).map((emp) => {
+                  const p = todayPresences.find((x) => x.employeeId === emp.id);
                   return (
-                    <tr key={emp.id} className="hover:bg-stone-50 transition">
-                      <td className="py-3 pr-2">
+                    <tr key={emp.id} className="hover:bg-stone-50/50 transition">
+                      <td className="py-3">
                         <div className="flex items-center gap-2.5">
-                          <img 
-                            src={emp.avatarUrl || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100`} 
-                            alt={emp.name}
-                            referrerPolicy="no-referrer"
-                            className="w-8 h-8 rounded-full object-cover border border-stone-200 shrink-0" 
-                          />
-                          <div>
-                            <div className="font-bold text-stone-900 text-xs">{emp.name}</div>
-                            <div className="text-[10px] text-stone-400">{emp.phone || emp.email}</div>
+                          <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden shadow-3xs border border-emerald-100">
+                            {emp.avatarUrl ? (
+                              <img src={emp.avatarUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{emp.name.slice(0, 2).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="block font-bold text-stone-950 truncate text-[11px]">{emp.name}</span>
+                            <span className="block text-[9px] text-stone-400 font-mono truncate">{emp.phone || '+237 655500443'}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 text-stone-600 capitalize text-[11px] font-medium pr-2">
-                        {emp.roleType}
+                      <td className="py-3 text-stone-500 font-medium truncate max-w-[120px]">
+                        {emp.roleType || 'Collaborateur'}
                       </td>
-                      <td className="py-3 font-mono font-bold text-stone-800 text-[11px] pr-2">
-                        {arrival}
+                      <td className="py-3 font-mono font-bold text-stone-800">
+                        {p?.arrivalTime || '—'}
                       </td>
-                      <td className="py-3 pr-2">
-                        {status === 'present' && (
-                          <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                            <CheckCircle2 className="h-3 w-3" /> Présent
-                          </span>
-                        )}
-                        {status === 'late' && (
-                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                            <AlertTriangle className="h-3 w-3 text-amber-600" /> En retard
-                          </span>
-                        )}
-                        {status === 'absent' && (
-                          <span className="inline-flex items-center gap-1 bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                            Absent
-                          </span>
-                        )}
-                        {status === 'not_tracked' && (
-                          <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-600 text-[10px] font-medium px-2 py-0.5 rounded-full">
-                            Non pointé
-                          </span>
-                        )}
+                      <td className="py-3">
+                        <span className={`px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase border ${
+                          p?.status === 'present' 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                            : p?.status === 'late' 
+                            ? 'bg-amber-50 text-amber-700 border-amber-100' 
+                            : 'bg-stone-50 text-stone-400 border-stone-100'
+                        }`}>
+                          {p?.status === 'present' ? 'Présent' : p?.status === 'late' ? 'En retard' : 'Non pointé'}
+                        </span>
                       </td>
                       <td className="py-3 text-right">
                         <button
-                          onClick={() => {
-                            onSelectEmployee(emp.id);
-                            onSelectTab('collaborators');
-                          }}
-                          className="text-[11px] font-semibold text-stone-600 hover:text-emerald-700 hover:bg-emerald-50 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                          onClick={() => onSelectEmployee(emp.id)}
+                          className="px-2 py-1 rounded bg-[#2A7B76]/5 text-[#2A7B76] hover:bg-[#2A7B76] hover:text-white transition font-bold text-[10px] cursor-pointer"
                         >
                           Fiche
                         </button>
@@ -344,152 +262,143 @@ export default function AdminDashboardOverview({
           </div>
         </div>
 
-        {/* Right 1 Column: Urgent Tasks & Alerts Consolidation */}
-        <div className="space-y-6">
-          {/* Urgent Reminders Card */}
-          <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                <Bell className="h-4 w-4 text-emerald-600" />
-                <span>Rappels & Délais</span>
-              </h2>
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                {activeReminders.length}
+        {/* BOTTOM SECTION: Sidebar Widgets side-by-side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* widget 1: Rappels & Délais */}
+          <div className="bg-white rounded-3xl border border-stone-200/80 shadow-sm p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+              <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
+                <Bell className="h-4 w-4 text-[#2A7B76]" />
+                Rappels & Délais
+              </h4>
+              <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-lg">
+                {activeRemindersCount}
               </span>
             </div>
 
-            {activeReminders.length === 0 ? (
-              <div className="text-center py-6 text-stone-400 text-xs">
-                Aucun rappel en attente. Tout est à jour !
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {activeReminders.slice(0, 3).map((rem) => {
-                  const emp = employees.find(e => e.id === rem.employeeId);
-                  return (
-                    <div key={rem.id} className="p-3 bg-stone-50 hover:bg-stone-100/70 rounded-2xl border border-stone-200 text-xs space-y-1 transition">
-                      <div className="flex items-center justify-between text-stone-800 font-bold">
-                        <span className="truncate">{rem.note}</span>
-                        <span className="text-[10px] font-mono text-emerald-700 shrink-0">{rem.time || rem.date || 'En attente'}</span>
-                      </div>
-                      {emp && (
-                        <div className="text-[10px] text-stone-500">
-                          Concerne : <strong>{emp.name}</strong>
-                        </div>
-                      )}
+            <div className="py-4 text-center">
+              {activeRemindersCount === 0 ? (
+                <p className="text-stone-400 italic text-[11px]">Aucun rappel en attente. Tout est à jour !</p>
+              ) : (
+                <div className="text-left space-y-2 max-h-36 overflow-y-auto">
+                  {reminders.slice(0, 2).map((r) => (
+                    <div key={r.id} className="p-2.5 bg-stone-50 rounded-xl border border-stone-100 text-[11px] font-medium text-stone-700">
+                      🔔 <b>{r.title}</b> ({r.time})
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
 
             <button
               onClick={() => onSelectTab('reminders')}
-              className="w-full py-2 bg-stone-50 hover:bg-emerald-50 text-stone-700 hover:text-emerald-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer border border-stone-200"
+              className="w-full py-2 border border-stone-200 text-stone-700 hover:bg-stone-50 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
             >
-              <span>Toutes les alertes</span>
-              <ChevronRight className="h-3.5 w-3.5" />
+              Toutes les alertes &gt;
             </button>
           </div>
 
-          {/* Pending Tasks Card */}
-          <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                <ListTodo className="h-4 w-4 text-blue-600" />
-                <span>Tâches en Cours ({pendingTasks.length})</span>
-              </h2>
+          {/* widget 2: Tâches en Cours */}
+          <div className="bg-white rounded-3xl border border-stone-200/80 shadow-sm p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+              <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
+                <CheckSquare className="h-4 w-4 text-[#2A7B76]" />
+                Tâches en Cours ({pendingTasks.length})
+              </h4>
             </div>
 
-            {pendingTasks.length === 0 ? (
-              <div className="text-center py-6 text-stone-400 text-xs">
-                Aucune tâche en souffrance.
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {pendingTasks.slice(0, 3).map((task) => {
-                  const assignee = employees.find(e => e.id === task.employeeId);
-                  return (
-                    <div key={task.id} className="p-3 bg-stone-50 hover:bg-stone-100/70 rounded-2xl border border-stone-200 text-xs space-y-1 transition">
-                      <div className="flex items-center justify-between font-bold text-stone-900">
-                        <span className="truncate">{task.title}</span>
-                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                          task.priority === 'high' ? 'bg-amber-100 text-amber-800' : 'bg-stone-200 text-stone-700'
-                        }`}>
-                          {task.priority === 'high' ? 'Urgente' : 'Normale'}
-                        </span>
-                      </div>
-                      {assignee && (
-                        <div className="text-[10px] text-stone-500">
-                          Assigné à : <strong>{assignee.name}</strong>
-                        </div>
-                      )}
+            <div className="py-2 space-y-2">
+              {pendingTasks.length === 0 ? (
+                <p className="text-stone-400 italic text-[11px] text-center py-4">Aucune tâche en cours.</p>
+              ) : (
+                pendingTasks.slice(0, 1).map((t) => (
+                  <div key={t.id} className="p-3 bg-stone-50/50 rounded-2xl border border-stone-200/80 flex items-center justify-between gap-3 text-[11px]">
+                    <div className="space-y-0.5 min-w-0">
+                      <span className="block font-bold text-stone-900 truncate">{t.title}</span>
+                      <span className="block text-[10px] text-stone-500">Assigné à : {t.assignedTo}</span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <span className="text-[9px] font-bold px-2 py-0.5 bg-stone-100 border text-stone-600 rounded-md shrink-0 uppercase tracking-wide">
+                      Normale
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
 
             <button
               onClick={() => onSelectTab('tasks')}
-              className="w-full py-2 bg-stone-50 hover:bg-emerald-50 text-stone-700 hover:text-emerald-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer border border-stone-200"
+              className="w-full py-2 border border-stone-200 text-stone-700 hover:bg-stone-50 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
             >
-              <span>Accéder aux tâches</span>
-              <ChevronRight className="h-3.5 w-3.5" />
+              Accéder aux tâches &gt;
             </button>
           </div>
+
         </div>
       </div>
 
-      {/* 4. Clean Light Shortcuts Panel */}
-      <div className="bg-white rounded-3xl p-6 border border-stone-200 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Settings className="h-5 w-5 text-emerald-600" />
-            <h3 className="font-bold text-sm text-stone-900">Raccourcis Directs</h3>
-          </div>
-          <button
+      {/* Shortcuts bar exactly as in Image 1 */}
+      <div className="bg-white rounded-3xl border border-stone-200/80 p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-2.5">
+          <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
+            <Settings className="h-4 w-4 text-[#2A7B76]" />
+            Raccourcis Directs
+          </h4>
+          <button 
             onClick={() => onSelectTab('settings')}
-            className="text-xs text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer"
+            className="text-[10px] font-bold text-[#2A7B76] hover:underline flex items-center gap-1 cursor-pointer"
           >
-            Paramètres & Modules →
+            Paramètres & Modules &rarr;
           </button>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <button
+          {/* ANNUAIRE */}
+          <div 
             onClick={() => onSelectTab('collaborators')}
-            className="p-3.5 bg-stone-50 hover:bg-emerald-50/60 border border-stone-200 rounded-2xl text-left transition space-y-1 cursor-pointer"
+            className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
           >
-            <Users className="h-5 w-5 text-emerald-600" />
-            <div className="font-bold text-xs text-stone-900">Annuaire</div>
-          </button>
+            <div className="p-2 rounded-xl bg-blue-50 text-blue-600 shrink-0">
+              <Users className="h-4 w-4" />
+            </div>
+            <span className="text-xs font-bold text-stone-800">Annuaire</span>
+          </div>
 
-          <button
+          {/* POINTAGE */}
+          <div 
             onClick={() => onSelectTab('presences')}
-            className="p-3.5 bg-stone-50 hover:bg-emerald-50/60 border border-stone-200 rounded-2xl text-left transition space-y-1 cursor-pointer"
+            className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
           >
-            <Clock className="h-5 w-5 text-emerald-600" />
-            <div className="font-bold text-xs text-stone-900">Pointage</div>
-          </button>
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
+              <Clock className="h-4 w-4" />
+            </div>
+            <span className="text-xs font-bold text-stone-800">Pointage</span>
+          </div>
 
-          <button
+          {/* TACHES */}
+          <div 
             onClick={() => onSelectTab('tasks')}
-            className="p-3.5 bg-stone-50 hover:bg-emerald-50/60 border border-stone-200 rounded-2xl text-left transition space-y-1 cursor-pointer"
+            className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
           >
-            <ListTodo className="h-5 w-5 text-blue-600" />
-            <div className="font-bold text-xs text-stone-900">Tâches</div>
-          </button>
+            <div className="p-2 rounded-xl bg-purple-50 text-purple-600 shrink-0">
+              <CheckSquare className="h-4 w-4" />
+            </div>
+            <span className="text-xs font-bold text-stone-800">Tâches</span>
+          </div>
 
-          <button
+          {/* PARAMETRES */}
+          <div 
             onClick={() => onSelectTab('settings')}
-            className="p-3.5 bg-stone-50 hover:bg-emerald-50/60 border border-stone-200 rounded-2xl text-left transition space-y-1 cursor-pointer"
+            className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
           >
-            <Settings className="h-5 w-5 text-emerald-700" />
-            <div className="font-bold text-xs text-stone-900">Paramètres</div>
-          </button>
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
+              <Settings className="h-4 w-4" />
+            </div>
+            <span className="text-xs font-bold text-stone-800">Paramètres</span>
+          </div>
         </div>
       </div>
+
     </div>
   );
 }

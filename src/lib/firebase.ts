@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { initializeFirestore, getFirestore, setLogLevel } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, setLogLevel, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import config from '../../firebase-applet-config.json';
 
@@ -37,6 +37,21 @@ try {
   firestoreDb = isCustomDb
     ? getFirestore(app, config.firestoreDatabaseId)
     : getFirestore(app);
+}
+
+// Enable offline persistence
+try {
+  enableIndexedDbPersistence(firestoreDb).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      // Multiple tabs open, persistence can only be enabled in one tab at a time.
+      console.warn('Persistence failed: Multiple tabs open.');
+    } else if (err.code === 'unimplemented') {
+      // The current browser does not support all of the features required to enable persistence
+      console.warn('Persistence failed: Browser not supported.');
+    }
+  });
+} catch (e) {
+  console.error('Error enabling persistence:', e);
 }
 
 export const db = firestoreDb;
