@@ -34,7 +34,8 @@ export default function App() {
     const validTabs: TabType[] = [
       'dashboard', 'employee_portal', 'calls', 'presences', 'statistics', 'tasks',
       'reminders', 'logs', 'collaborators', 'discipline', 'documents', 'communications',
-      'finances', 'inventory', 'partners', 'users', 'settings', 'profile', ''
+      'finances', 'inventory', 'partners', 'recruitment', 'expense_claims', 'hse',
+      'visitors', 'ideas_surveys', 'users', 'settings', 'profile', ''
     ];
     if (validTabs.includes(hash as TabType)) return hash as TabType;
     return 'dashboard';

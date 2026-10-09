@@ -13,10 +13,16 @@ export const SecuritySettingsSection: React.FC<SecuritySettingsSectionProps> = (
   onUpdateModuleConfig,
   showToast,
 }) => {
+  const safeIpsString = Array.isArray(moduleConfig?.allowedOfficeIPs)
+    ? moduleConfig.allowedOfficeIPs.join(', ')
+    : typeof moduleConfig?.allowedOfficeIPs === 'string'
+    ? moduleConfig.allowedOfficeIPs
+    : '192.168.1.1, 10.0.0.1';
+
   const [formData, setFormData] = useState({
-    qrCodeSecret: moduleConfig.qrCodeSecret || 'CITRINE_SECRET_2026',
-    officeWifiSsid: moduleConfig.officeWifiSsid || 'Citrine_Enterprise_5G',
-    allowedOfficeIPs: (moduleConfig.allowedOfficeIPs || ['192.168.1.1', '10.0.0.1']).join(', '),
+    qrCodeSecret: moduleConfig?.qrCodeSecret || 'CITRINE_SECRET_2026',
+    officeWifiSsid: moduleConfig?.officeWifiSsid || 'Citrine_Enterprise_5G',
+    allowedOfficeIPs: safeIpsString,
   });
 
   const handleGenerateSecret = () => {
@@ -26,11 +32,12 @@ export const SecuritySettingsSection: React.FC<SecuritySettingsSectionProps> = (
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const rawIps = typeof formData.allowedOfficeIPs === 'string' ? formData.allowedOfficeIPs : '';
     const updated: CompanyModuleConfig = {
-      ...moduleConfig,
-      qrCodeSecret: formData.qrCodeSecret.trim(),
-      officeWifiSsid: formData.officeWifiSsid.trim(),
-      allowedOfficeIPs: formData.allowedOfficeIPs
+      ...(moduleConfig || {}),
+      qrCodeSecret: (formData.qrCodeSecret || 'CITRINE_SECRET_2026').trim(),
+      officeWifiSsid: (formData.officeWifiSsid || '').trim(),
+      allowedOfficeIPs: rawIps
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean),

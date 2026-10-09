@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   Sparkles
 } from 'lucide-react';
-import { CompanyModuleConfig, Employee, Presence, NotificationLog } from '../types';
+import { CompanyModuleConfig, DEFAULT_MODULE_CONFIG, Employee, Presence, NotificationLog } from '../types';
 import { CompanyIdentitySettings } from './settings/CompanyIdentitySettings';
 import { CompanyScheduleSettings } from './settings/CompanyScheduleSettings';
 import { CompanyModulesToggle } from './settings/CompanyModulesToggle';
@@ -100,7 +100,16 @@ export default function CompanySettingsPanel({
 }: CompanySettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
 
-  const currentTabInfo = SETTINGS_TABS.find((t) => t.id === activeTab) || SETTINGS_TABS[0];
+  const safeConfig: CompanyModuleConfig = {
+    ...DEFAULT_MODULE_CONFIG,
+    ...(moduleConfig || {}),
+  };
+
+  const handleUpdate = (updated: CompanyModuleConfig) => {
+    if (typeof onUpdateModuleConfig === 'function') {
+      onUpdateModuleConfig(updated);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
@@ -169,24 +178,24 @@ export default function CompanySettingsPanel({
       <div className="transition-all duration-200">
         {activeTab === 'identity' && (
           <CompanyIdentitySettings
-            moduleConfig={moduleConfig}
-            onUpdateModuleConfig={onUpdateModuleConfig}
+            moduleConfig={safeConfig}
+            onUpdateModuleConfig={handleUpdate}
             showToast={showToast}
           />
         )}
 
         {activeTab === 'schedules' && (
           <CompanyScheduleSettings
-            moduleConfig={moduleConfig}
-            onUpdateModuleConfig={onUpdateModuleConfig}
+            moduleConfig={safeConfig}
+            onUpdateModuleConfig={handleUpdate}
             showToast={showToast}
           />
         )}
 
         {activeTab === 'modules' && (
           <CompanyModulesToggle
-            moduleConfig={moduleConfig}
-            onUpdateModuleConfig={onUpdateModuleConfig}
+            moduleConfig={safeConfig}
+            onUpdateModuleConfig={handleUpdate}
             showToast={showToast}
           />
         )}
@@ -197,8 +206,8 @@ export default function CompanySettingsPanel({
 
         {activeTab === 'security' && (
           <SecuritySettingsSection
-            moduleConfig={moduleConfig}
-            onUpdateModuleConfig={onUpdateModuleConfig}
+            moduleConfig={safeConfig}
+            onUpdateModuleConfig={handleUpdate}
             showToast={showToast}
           />
         )}

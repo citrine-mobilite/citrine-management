@@ -15,7 +15,8 @@ import {
   AttendanceIncident,
   InventoryItem, 
   Partner, 
-  CompanyModuleConfig 
+  CompanyModuleConfig,
+  DEFAULT_MODULE_CONFIG
 } from '../../types';
 import ModuleSkeletonLoader from '../ModuleSkeletonLoader';
 
@@ -236,7 +237,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
         <UserManagementPanel users={users} onAddNotification={onAddNotification} currentUser={currentUser!} onUpdateUsers={onUpdateUsers} showToast={showToast} />
       )}
       {activeTab === 'settings' && (
-        <CompanySettingsPanel moduleConfig={moduleConfig} onUpdateModuleConfig={onUpdateModuleConfig} onAddNotification={onAddNotification} showToast={showToast} />
+        <CompanySettingsPanel moduleConfig={moduleConfig || DEFAULT_MODULE_CONFIG} onUpdateModuleConfig={onUpdateModuleConfig} onAddNotification={onAddNotification} showToast={showToast} />
       )}
       {activeTab === 'calls' && (
         <TeamCallsPanel
