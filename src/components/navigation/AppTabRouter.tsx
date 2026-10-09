@@ -38,6 +38,11 @@ const PartnersPanel = lazy(() => import('../PartnersPanel'));
 const UserManagementPanel = lazy(() => import('../UserManagementPanel'));
 const CompanySettingsPanel = lazy(() => import('../CompanySettingsPanel'));
 const TeamCallsPanel = lazy(() => import('../TeamCallsPanel').then((m) => ({ default: m.TeamCallsPanel })));
+const RecruitmentPanel = lazy(() => import('../recruitment/RecruitmentPanel'));
+const ExpenseClaimsPanel = lazy(() => import('../expenses/ExpenseClaimsPanel'));
+const HsePanel = lazy(() => import('../hse/HsePanel'));
+const VisitorsPanel = lazy(() => import('../visitors/VisitorsPanel'));
+const IdeasSurveysPanel = lazy(() => import('../ideas/IdeasSurveysPanel'));
 
 export interface AppTabRouterProps {
   activeTab: TabType;
@@ -234,7 +239,53 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
         <CompanySettingsPanel moduleConfig={moduleConfig} onUpdateModuleConfig={onUpdateModuleConfig} onAddNotification={onAddNotification} showToast={showToast} />
       )}
       {activeTab === 'calls' && (
-        <TeamCallsPanel employees={employees} currentUser={currentUser} onStartCall={() => {}} />
+        <TeamCallsPanel
+          employees={employees}
+          users={users}
+          currentUser={currentUser}
+          showToast={showToast}
+        />
+      )}
+      {activeTab === 'recruitment' && (
+        <RecruitmentPanel
+          currentUser={currentUser}
+          employees={employees}
+          onAddNotification={onAddNotification}
+          showToast={showToast}
+          onUpdateEmployees={onUpdateEmployees}
+        />
+      )}
+      {activeTab === 'expense_claims' && (
+        <ExpenseClaimsPanel
+          currentUser={currentUser}
+          employees={employees}
+          onAddNotification={onAddNotification}
+          showToast={showToast}
+        />
+      )}
+      {activeTab === 'hse' && (
+        <HsePanel
+          currentUser={currentUser}
+          employees={employees}
+          onAddNotification={onAddNotification}
+          showToast={showToast}
+        />
+      )}
+      {activeTab === 'visitors' && (
+        <VisitorsPanel
+          currentUser={currentUser}
+          employees={employees}
+          onAddNotification={onAddNotification}
+          showToast={showToast}
+        />
+      )}
+      {activeTab === 'ideas_surveys' && (
+        <IdeasSurveysPanel
+          currentUser={currentUser}
+          employees={employees}
+          onAddNotification={onAddNotification}
+          showToast={showToast}
+        />
       )}
       {activeTab === 'profile' && currentUser && (
         <ProfilePage

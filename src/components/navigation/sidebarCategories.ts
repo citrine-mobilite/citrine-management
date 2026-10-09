@@ -17,7 +17,12 @@ import {
   PhoneCall, 
   Scale, 
   Network,
-  ShieldCheck
+  ShieldCheck,
+  UserPlus,
+  Receipt,
+  ShieldAlert,
+  Contact2,
+  Lightbulb
 } from 'lucide-react';
 import { TabType } from '../Sidebar';
 import { CompanyModuleConfig } from '../../types';
@@ -60,6 +65,42 @@ export function getSidebarCategories({
         icon: UserCheck,
       },
     ];
+
+    if (moduleConfig.enableExpenseClaims !== false) {
+      empPresenceItems.push({
+        id: 'expense_claims',
+        label: 'Notes de Frais & Missions',
+        description: 'Soumettre et suivre mes remboursements de frais',
+        icon: Receipt,
+      });
+    }
+
+    if (moduleConfig.enableHse !== false) {
+      empPresenceItems.push({
+        id: 'hse',
+        label: 'Sécurité & Signalement HSE',
+        description: 'Signaler un incident ou une situation dangereuse',
+        icon: ShieldAlert,
+      });
+    }
+
+    if (moduleConfig.enableIdeasSurveys !== false) {
+      empPresenceItems.push({
+        id: 'ideas_surveys',
+        label: 'Boîte à Idées & Sondages',
+        description: 'Partager des idées et voter aux sondages internes',
+        icon: Lightbulb,
+      });
+    }
+
+    if (moduleConfig.enableVisitors !== false) {
+      empPresenceItems.push({
+        id: 'visitors',
+        label: 'Accueil & Visiteurs Siège',
+        description: 'Consulter les arrivées de visiteurs et rendez-vous',
+        icon: Contact2,
+      });
+    }
 
     categories.push({ name: 'Mon Espace Collaborateur', items: empPresenceItems });
   } else {
@@ -109,6 +150,14 @@ export function getSidebarCategories({
         icon: Users,
       });
     }
+    if (moduleConfig.enableRecruitment !== false) {
+      opItems.push({
+        id: 'recruitment',
+        label: 'Recrutement & Vivier (ATS)',
+        description: 'Offres, candidatures et entretiens de recrutement',
+        icon: UserPlus,
+      });
+    }
     if (moduleConfig.enableTasks !== false) {
       opItems.push({
         id: 'tasks',
@@ -146,6 +195,14 @@ export function getSidebarCategories({
         label: 'Finances & Paie',
         description: '',
         icon: DollarSign,
+      });
+    }
+    if (moduleConfig.enableExpenseClaims !== false) {
+      businessItems.push({
+        id: 'expense_claims',
+        label: 'Notes de Frais & Missions',
+        description: 'Gestion et remboursement des dépenses professionnelles',
+        icon: Receipt,
       });
     }
     if (moduleConfig.enableDocuments !== false) {
@@ -191,6 +248,37 @@ export function getSidebarCategories({
 
     if (businessItems.length > 0) {
       categories.push({ name: 'Gestion & Métier', items: businessItems });
+    }
+
+    // Sécurité, Accueil & Vie d'Entreprise
+    const securityItems: SidebarItem[] = [];
+    if (moduleConfig.enableHse !== false) {
+      securityItems.push({
+        id: 'hse',
+        label: 'Registre HSE & Incidents',
+        description: 'Hygiène, sécurité, environnement et actions correctives',
+        icon: ShieldAlert,
+      });
+    }
+    if (moduleConfig.enableVisitors !== false) {
+      securityItems.push({
+        id: 'visitors',
+        label: 'Accueil & Visiteurs Siège',
+        description: 'Registre d\'accueil Japoma / Akwa et badges',
+        icon: Contact2,
+      });
+    }
+    if (moduleConfig.enableIdeasSurveys !== false) {
+      securityItems.push({
+        id: 'ideas_surveys',
+        label: 'Boîte à Idées & Sondages',
+        description: 'Suggestions, amélioration continue et consultations',
+        icon: Lightbulb,
+      });
+    }
+
+    if (securityItems.length > 0) {
+      categories.push({ name: 'Sécurité & Vie Entreprise', items: securityItems });
     }
 
     // Administration : Utilisateurs & Rôles, Journaux & Audit, et Configuration Entreprise

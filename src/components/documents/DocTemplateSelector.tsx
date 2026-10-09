@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { Plus, Sparkles, Database, FileText, Briefcase, Award, ShieldAlert } from 'lucide-react';
+import { Plus, Sparkles, Database, FileText, Briefcase, Award, ShieldAlert, FolderPlus } from 'lucide-react';
 import { DOC_TEMPLATES, DocTemplate } from '../DocTemplates';
 
 interface DocTemplateSelectorProps {
   onSelectTemplate: (template: DocTemplate) => void;
   templates?: DocTemplate[];
+  onCreateNewTemplate?: () => void;
 }
 
 export const DocTemplateSelector: React.FC<DocTemplateSelectorProps> = ({ 
   onSelectTemplate,
-  templates 
+  templates,
+  onCreateNewTemplate
 }) => {
   const currentTemplates = templates && templates.length > 0 ? templates : DOC_TEMPLATES;
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'contracts' | 'attestations' | 'discipline' | 'operations'>('all');
@@ -36,60 +38,74 @@ export const DocTemplateSelector: React.FC<DocTemplateSelectorProps> = ({
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-[#2A7B76]" />
           <h3 className="font-serif font-bold text-sm text-stone-900">
-            Modèles de Documents RH ({currentTemplates.length} modèles synchronisés en BD)
+            Modèles de Documents RH ({currentTemplates.length} types stockés en BD)
           </h3>
         </div>
 
-        {/* Filtres par domaine RH */}
-        <div className="flex items-center gap-1.5 bg-stone-100 p-1 rounded-2xl text-xs font-semibold overflow-x-auto self-start sm:self-auto max-w-full">
-          <button
-            type="button"
-            onClick={() => setCategoryFilter('all')}
-            className={`px-2.5 py-1 rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              categoryFilter === 'all'
-                ? 'bg-white text-stone-900 shadow-xs'
-                : 'text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <FileText className="h-3 w-3" />
-            <span>Tous ({currentTemplates.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setCategoryFilter('contracts')}
-            className={`px-2.5 py-1 rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              categoryFilter === 'contracts'
-                ? 'bg-white text-[#2A7B76] shadow-xs'
-                : 'text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <Briefcase className="h-3 w-3" />
-            <span>Contrats & Avenants</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setCategoryFilter('attestations')}
-            className={`px-2.5 py-1 rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              categoryFilter === 'attestations'
-                ? 'bg-white text-emerald-700 shadow-xs'
-                : 'text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <Award className="h-3 w-3" />
-            <span>Attestations</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setCategoryFilter('discipline')}
-            className={`px-2.5 py-1 rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              categoryFilter === 'discipline'
-                ? 'bg-white text-rose-700 shadow-xs'
-                : 'text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <ShieldAlert className="h-3 w-3" />
-            <span>Discipline & Directives</span>
-          </button>
+        {/* Bouton Créer un modèle & Filtres par domaine */}
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {onCreateNewTemplate && (
+            <button
+              type="button"
+              onClick={onCreateNewTemplate}
+              className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#2A7B76] border border-emerald-200/80 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Ajouter un nouveau type de document personnalisé en base Firestore"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+              <span>+ Nouveau Modèle BD</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-2xl text-xs font-semibold overflow-x-auto max-w-full">
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('all')}
+              className={`px-2.5 py-1 rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                categoryFilter === 'all'
+                  ? 'bg-white text-stone-900 shadow-xs'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <FileText className="h-3 w-3" />
+              <span>Tous ({currentTemplates.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('contracts')}
+              className={`px-2.5 py-1 rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                categoryFilter === 'contracts'
+                  ? 'bg-white text-[#2A7B76] shadow-xs'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Briefcase className="h-3 w-3" />
+              <span>Contrats</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('attestations')}
+              className={`px-2.5 py-1 rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                categoryFilter === 'attestations'
+                  ? 'bg-white text-emerald-700 shadow-xs'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Award className="h-3 w-3" />
+              <span>Attestations</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('discipline')}
+              className={`px-2.5 py-1 rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                categoryFilter === 'discipline'
+                  ? 'bg-white text-rose-700 shadow-xs'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <ShieldAlert className="h-3 w-3" />
+              <span>Discipline</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -109,7 +125,7 @@ export const DocTemplateSelector: React.FC<DocTemplateSelectorProps> = ({
 
                 <span className="text-[9px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80 flex items-center gap-1">
                   <Database className="h-2.5 w-2.5 text-[#2A7B76]" />
-                  Modèle en BD
+                  {tpl.isCustom ? 'Personnalisé BD' : 'Modèle en BD'}
                 </span>
               </div>
 
@@ -125,6 +141,27 @@ export const DocTemplateSelector: React.FC<DocTemplateSelectorProps> = ({
             </div>
           </button>
         ))}
+
+        {/* Tuile interactive pour ajouter un modèle directement depuis la grille */}
+        {onCreateNewTemplate && (
+          <button
+            type="button"
+            onClick={onCreateNewTemplate}
+            className="p-4 rounded-2xl border-2 border-dashed border-[#2A7B76]/30 hover:border-[#2A7B76] hover:bg-emerald-50/20 transition text-left group cursor-pointer flex flex-col justify-center items-center text-center space-y-2 min-h-[120px]"
+          >
+            <div className="p-2.5 rounded-xl bg-emerald-100/60 text-[#2A7B76] group-hover:scale-110 transition">
+              <Plus className="h-5 w-5" />
+            </div>
+            <div>
+              <h4 className="font-bold text-xs text-stone-800 group-hover:text-[#2A7B76] transition">
+                Créer un Nouveau Type de Document
+              </h4>
+              <p className="text-[10px] text-stone-400 mt-0.5">
+                Sans modifier le code · Stocké en base Firestore
+              </p>
+            </div>
+          </button>
+        )}
       </div>
     </div>
   );

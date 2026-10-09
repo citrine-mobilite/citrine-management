@@ -54,7 +54,14 @@ export const COLLECTIONS = {
   ATTENDANCE_INCIDENTS: 'attendance_incidents',
   DEPARTMENTS: 'departments',
   PARTNERS: 'partners',
-  RH_DOCUMENT_TEMPLATES: 'rh_document_templates'
+  RH_DOCUMENT_TEMPLATES: 'rh_document_templates',
+  JOB_OFFERS: 'job_offers',
+  JOB_APPLICATIONS: 'job_applications',
+  EXPENSE_CLAIMS: 'expense_claims',
+  HSE_INCIDENTS: 'hse_incidents',
+  VISITOR_LOGS: 'visitor_logs',
+  IDEA_SUGGESTIONS: 'idea_suggestions',
+  ENTERPRISE_SURVEYS: 'enterprise_surveys'
 } as const;
 
 // Helper to subscribe to a single document in real-time
@@ -189,6 +196,18 @@ function removeUndefined<T>(obj: T): T {
     }
   }
   return cleaned;
+}
+
+// Helper to fetch an entire collection once
+export async function getCollection<T>(collectionName: string): Promise<T[]> {
+  try {
+    const colRef = collection(db, collectionName);
+    const snap = await getDocs(colRef);
+    return snap.docs.map((docSnap) => docSnap.data() as T);
+  } catch (err) {
+    console.warn(`Error getting collection ${collectionName}:`, err);
+    return [];
+  }
 }
 
 // Helper to save or update item with offline support

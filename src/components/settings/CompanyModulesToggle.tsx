@@ -19,7 +19,11 @@ import {
   CheckCircle2, 
   Info,
   ShieldCheck,
-  Settings
+  Settings,
+  UserPlus,
+  Receipt,
+  Contact2,
+  Lightbulb
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
 
@@ -113,6 +117,41 @@ const MODULES_LIST: ModuleDefinition[] = [
     title: 'Partenaires & Clients',
     description: 'Annuaire des partenaires d\'affaires, prestataires et conventions externes.',
     icon: Network,
+    category: 'metier',
+  },
+  {
+    key: 'enableRecruitment',
+    title: 'Recrutement & Vivier (ATS)',
+    description: 'Offres de postes, suivi des candidatures, entretiens RH & techniques et vivier de talents.',
+    icon: UserPlus,
+    category: 'operations',
+  },
+  {
+    key: 'enableExpenseClaims',
+    title: 'Notes de Frais & Missions',
+    description: 'Déclaration des frais de déplacement, carburant, justificatifs et remboursements comptables.',
+    icon: Receipt,
+    category: 'metier',
+  },
+  {
+    key: 'enableHse',
+    title: 'Registre HSE & Incidents',
+    description: 'Signalement des risques, presque-accidents, sécurité des sites et plans d\'actions CAPA.',
+    icon: ShieldAlert,
+    category: 'operations',
+  },
+  {
+    key: 'enableVisitors',
+    title: 'Accueil & Visiteurs Siège (Japoma / Akwa)',
+    description: 'Registre d\'accueil numérique, émargement des arrivées/départs et attribution des badges.',
+    icon: Contact2,
+    category: 'metier',
+  },
+  {
+    key: 'enableIdeasSurveys',
+    title: 'Boîte à Idées & Sondages',
+    description: 'Suggestions d\'amélioration continue, votes collaboratifs et sondages d\'entreprise.',
+    icon: Lightbulb,
     category: 'metier',
   },
   {

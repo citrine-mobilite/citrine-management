@@ -96,6 +96,7 @@ export function useAppInitialData() {
       subscribeToDocument<CompanyModuleConfig>(COLLECTIONS.COMPANY_SETTINGS, 'main_config', (data) => {
         if (data) {
           const configWithLogo = {
+            ...DEFAULT_MODULE_CONFIG,
             ...data,
             companyLogoBase64: data.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
           };

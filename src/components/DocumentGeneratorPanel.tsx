@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Search, Plus, Database, RotateCcw, Sparkles } from 'lucide-react';
+import { 
+  FileText, 
+  Search, 
+  Plus, 
+  Database, 
+  RotateCcw, 
+  Sparkles, 
+  LayoutGrid, 
+  Table as TableIcon,
+  FolderPlus
+} from 'lucide-react';
 import { GeneratedDocument, Role, Employee, AppUser, CompanyModuleConfig } from '../types';
 import { DocTemplateSelector } from './documents/DocTemplateSelector';
 import { DocumentGrid } from './documents/DocumentGrid';
+import { DocumentTableView } from './documents/DocumentTableView';
 import { 
   DocTemplate, 
   DOC_TEMPLATES, 
@@ -12,6 +23,7 @@ import {
 } from './DocTemplates';
 import { OfficialDocumentModal } from './documents/OfficialDocumentModal';
 import { CreateDocumentModal } from './documents/CreateDocumentModal';
+import { CreateDocTemplateModal } from './documents/CreateDocTemplateModal';
 
 interface DocumentGeneratorPanelProps {
   documents: GeneratedDocument[];
@@ -37,7 +49,24 @@ export default function DocumentGeneratorPanel({
   const [previewDoc, setPreviewDoc] = useState<GeneratedDocument | null>(null);
   const [selectedTemplateForModal, setSelectedTemplateForModal] = useState<DocTemplate | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateTemplateModalOpen, setIsCreateTemplateModalOpen] = useState(false);
   const [isResettingTemplates, setIsResettingTemplates] = useState(false);
+
+  // Commutateur de vue : Cards (Grille) vs DataTable (Tableau)
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
+    try {
+      const saved = localStorage.getItem('citrine_documents_view_mode');
+      if (saved === 'grid' || saved === 'table') return saved;
+    } catch {}
+    return 'table'; // Vue DataTable par défaut pour une ergonomie optimale
+  });
+
+  const handleToggleViewMode = (mode: 'grid' | 'table') => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('citrine_documents_view_mode', mode);
+    } catch {}
+  };
 
   // Synchronisation des modèles de documents RH depuis la base Firestore
   const [dbTemplates, setDbTemplates] = useState<DocTemplate[]>(DOC_TEMPLATES);
@@ -84,7 +113,7 @@ export default function DocumentGeneratorPanel({
 
   // Réinitialisation des modèles par défaut en base de données
   const handleResetTemplates = async () => {
-    if (!window.confirm("Voulez-vous synchroniser et actualiser l'ensemble des modèles RH en base de données ?")) {
+    if (!window.confirm("Voulez-vous synchroniser et actualiser l'ensemble des modèles RH en base de données Firestore ?")) {
       return;
     }
     setIsResettingTemplates(true);
@@ -108,19 +137,30 @@ export default function DocumentGeneratorPanel({
             <h2 className="font-serif font-bold text-xl">Générateur de Documents RH & Contrats</h2>
           </div>
           <p className="text-xs text-emerald-100/90 mt-1">
-            Papier officiel CITRINE SARL · Modèles & Données 100% conservés en base Firestore · Signature opt-in.
+            Papier officiel CITRINE SARL · Modèles & Données 100% conservés en base Firestore · Affichage Cards ou DataTable.
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Bouton pour ajouter un type de modèle sans modifier le code */}
+          <button
+            type="button"
+            onClick={() => setIsCreateTemplateModalOpen(true)}
+            className="px-3.5 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-xs text-white text-xs font-bold rounded-2xl transition flex items-center gap-1.5 border border-white/20 cursor-pointer shadow-xs"
+            title="Créer un nouveau type de document RH stocké en base de données Firestore"
+          >
+            <FolderPlus className="h-4 w-4 text-emerald-200" />
+            <span>+ Nouveau Type de Modèle</span>
+          </button>
+
           <button
             type="button"
             disabled={isResettingTemplates}
             onClick={handleResetTemplates}
-            className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-xs text-white text-xs font-semibold rounded-2xl transition flex items-center gap-1.5 border border-white/15 cursor-pointer disabled:opacity-50"
+            className="px-3 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-xs text-white text-xs font-semibold rounded-2xl transition flex items-center gap-1.5 border border-white/15 cursor-pointer disabled:opacity-50"
             title="Synchroniser les modèles RH en base Firestore"
           >
             <RotateCcw className={`h-3.5 w-3.5 ${isResettingTemplates ? 'animate-spin' : ''}`} />
-            <span className="hidden md:inline">Synchroniser Modèles BD</span>
+            <span className="hidden lg:inline">Restaurer Modèles</span>
           </button>
 
           <button
@@ -128,21 +168,22 @@ export default function DocumentGeneratorPanel({
               setSelectedTemplateForModal(null);
               setIsCreateModalOpen(true);
             }}
-            className="px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-xs text-white text-xs font-bold rounded-2xl transition flex items-center gap-2 shrink-0 border border-white/20 cursor-pointer shadow-xs"
+            className="px-4 py-2.5 bg-[#D4A82F] hover:bg-[#b88f24] text-stone-900 text-xs font-bold rounded-2xl transition flex items-center gap-2 shrink-0 cursor-pointer shadow-xs"
           >
             <Plus className="h-4 w-4" />
-            <span>Nouveau Document Officiel</span>
+            <span>Générer un Document</span>
           </button>
         </div>
       </div>
 
-      {/* Templates Selector (alimenté par la base de données Firestore) */}
+      {/* Templates Selector (alimenté en temps réel par Firestore) */}
       <DocTemplateSelector 
         templates={dbTemplates}
-        onSelectTemplate={handleSelectTemplate} 
+        onSelectTemplate={handleSelectTemplate}
+        onCreateNewTemplate={() => setIsCreateTemplateModalOpen(true)}
       />
 
-      {/* Barre de recherche & Statistiques BD */}
+      {/* Barre de recherche, Commutateur Cards vs DataTable, Statistiques BD */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
         <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
@@ -155,25 +196,60 @@ export default function DocumentGeneratorPanel({
           />
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-stone-500 font-medium self-end sm:self-auto">
-          <div className="flex items-center gap-1.5 bg-emerald-50 text-[#2A7B76] px-3 py-1 rounded-xl border border-emerald-200/60 font-semibold">
-            <Database className="h-3.5 w-3.5" />
-            <span>{documents.length} document(s) en BD</span>
+        <div className="flex items-center gap-3 justify-between sm:justify-end">
+          {/* Commutateur de mode d'affichage : Cards vs DataTable */}
+          <div className="flex items-center bg-stone-100 p-1 rounded-xl border border-stone-200/80">
+            <button
+              type="button"
+              onClick={() => handleToggleViewMode('table')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-white text-[#2A7B76] shadow-xs'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+              title="Affichage en tableau (DataTable)"
+            >
+              <TableIcon className="h-3.5 w-3.5" />
+              <span>Tableau</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleViewMode('grid')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                viewMode === 'grid'
+                  ? 'bg-white text-[#2A7B76] shadow-xs'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+              title="Affichage en fiches (Cards)"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span>Cards</span>
+            </button>
           </div>
-          <div className="hidden sm:flex items-center gap-1 text-stone-400">
-            <Sparkles className="h-3 w-3 text-amber-500" />
-            <span>{dbTemplates.length} modèles actifs</span>
+
+          <div className="flex items-center gap-1.5 bg-emerald-50 text-[#2A7B76] px-3 py-1.5 rounded-xl border border-emerald-200/60 font-semibold text-xs shrink-0">
+            <Database className="h-3.5 w-3.5" />
+            <span>{documents.length} document(s)</span>
           </div>
         </div>
       </div>
 
-      {/* Grid des documents archivés */}
-      <DocumentGrid
-        documents={documents}
-        searchTerm={searchTerm}
-        onPreview={(doc) => setPreviewDoc(doc)}
-        onDelete={handleDeleteDoc}
-      />
+      {/* Affichage conditionnel : Cards (Grille) ou DataTable (Tableau) */}
+      {viewMode === 'grid' ? (
+        <DocumentGrid
+          documents={documents}
+          searchTerm={searchTerm}
+          onPreview={(doc) => setPreviewDoc(doc)}
+          onDelete={handleDeleteDoc}
+        />
+      ) : (
+        <DocumentTableView
+          documents={documents}
+          searchTerm={searchTerm}
+          onPreview={(doc) => setPreviewDoc(doc)}
+          onDelete={handleDeleteDoc}
+        />
+      )}
 
       {/* Modal de Création / Paramétrage du Document */}
       <CreateDocumentModal
@@ -183,6 +259,13 @@ export default function DocumentGeneratorPanel({
         initialTemplate={selectedTemplateForModal}
         templates={dbTemplates}
         onSaveDocument={handleSaveDocument}
+        showToast={showToast}
+      />
+
+      {/* Modal d'Ajout d'un Nouveau Type de Modèle RH (Zéro code / 100% Firestore) */}
+      <CreateDocTemplateModal
+        isOpen={isCreateTemplateModalOpen}
+        onClose={() => setIsCreateTemplateModalOpen(false)}
         showToast={showToast}
       />
 

@@ -53,6 +53,7 @@ export interface VoIPCall {
   createdAt: string;
   startedAt?: string;
   endedAt?: string;
+  endReason?: string;
   durationSeconds?: number;
   offer?: {
     type: 'offer';
