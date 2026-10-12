@@ -56,7 +56,8 @@ export function useClockingActions({
           longitude = loc.longitude;
         } catch {
           // If GPS fails and method strictly requires GPS, throw error
-          if (method === 'qr_code_door' || method === 'badge_code_16') {
+          const requireDoorGps = moduleConfig?.doorQrRequireGps === true;
+          if ((method === 'qr_code_door' && requireDoorGps) || method === 'badge_code_16') {
             showToast('Pointage Bloqué', 'Votre position GPS est obligatoire pour cette méthode.', 'warning');
             return;
           }

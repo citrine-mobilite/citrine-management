@@ -6,6 +6,7 @@ import { CMLogo } from '../CMLogo';
 import { PWAInstallButton } from '../pwa/PWAInstallButton';
 import { haptic } from '../../services/hapticService';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { isEmployeeUser } from '../../utils/roleUtils';
 
 interface AppTopNavbarProps {
   currentUser: AppUser | null;
@@ -27,7 +28,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
   unreadNotificationsCount,
   liveTimeString,
 }) => {
-  const isEmployee = currentUser?.role === 'employé';
+  const isEmployee = isEmployeeUser(currentUser);
   const isOnline = useOnlineStatus();
 
   return (

@@ -16,6 +16,7 @@ import { loadSecureSession, storeSecureSession, clearSecureSession } from './ser
 import { soundService } from './services/soundService';
 import { haptic } from './services/hapticService';
 import { extractPresenceRequests } from './components/presence/requests/presenceRequestsUtils';
+import { isEmployeeUser, getDefaultPortalForUser } from './utils/roleUtils';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
@@ -81,9 +82,8 @@ export default function App() {
     loadSecureSession().then((user) => {
       if (user) {
         setCurrentUser(user);
-        if (user.role === 'employé') {
-          setActiveTab('employee_portal');
-        }
+        const targetTab = getDefaultPortalForUser(user) as TabType;
+        setActiveTab(targetTab);
       }
     });
   }, []);
@@ -92,11 +92,8 @@ export default function App() {
     setCurrentUser(user);
     if (user) {
       storeSecureSession(user);
-      if (user.role === 'employé') {
-        setActiveTab('employee_portal');
-      } else {
-        setActiveTab('dashboard');
-      }
+      const targetTab = getDefaultPortalForUser(user) as TabType;
+      setActiveTab(targetTab);
     } else {
       clearSecureSession();
     }
@@ -111,7 +108,7 @@ export default function App() {
     return data.reminders.filter((r) => r.status === 'pending').length;
   }, [data.reminders]);
 
-  const isEmployee = currentUser?.role === 'employé';
+  const isEmployee = isEmployeeUser(currentUser);
 
   // Force l'employé à ne voir que son Espace Personnel et son Profil
   useEffect(() => {

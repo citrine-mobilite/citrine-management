@@ -176,35 +176,44 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
 
     // 2. CAS QR CODE DE PORTE / ENTRÉE FIXE
     setIsCapturingGps(true);
-    let capturedLat = moduleConfig?.companyLatitude || moduleConfig?.hqLatitude || 4.051056;
-    let capturedLng = moduleConfig?.companyLongitude || moduleConfig?.hqLongitude || 9.7678687;
+    let capturedLat: number | undefined = undefined;
+    let capturedLng: number | undefined = undefined;
     let locationLabel = officialSiteName;
 
     try {
-      // Tentative rapide de géolocalisation sans blocage si non strict
+      // Acquisition de la VRAIE position GPS de l'appareil (smartphone/ordinateur)
       const locPromise = getCurrentUserLocation();
-      const timeoutPromise = new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
-        setTimeout(() => resolve(null), 2500); // 2.5s max pour ne pas faire attendre le salarié
+      const timeoutPromise = new Promise<{ latitude: number; longitude: number; zoneName?: string } | null>((resolve) => {
+        setTimeout(() => resolve(null), 6000); // 6s pour laisser le temps au capteur GPS de fixer
       });
 
       const locResult = await Promise.race([locPromise, timeoutPromise]);
-      if (locResult && locResult.latitude && locResult.longitude) {
+      if (locResult && typeof locResult.latitude === 'number' && typeof locResult.longitude === 'number') {
+        // VRAIES coordonnées captées en direct
         capturedLat = locResult.latitude;
         capturedLng = locResult.longitude;
-        locationLabel = `${officialSiteName} (Certifié GPS)`;
+        locationLabel = locResult.zoneName 
+          ? `${officialSiteName} • ${locResult.zoneName}` 
+          : `${officialSiteName} (GPS certifié)`;
       } else if (requireGpsStrict) {
         setIsCapturingGps(false);
         setIsProcessingDetection(false);
-        setActionError("⛔ La configuration de l'entreprise exige un signal GPS pour ce QR code. Veuillez autoriser la localisation sur votre smartphone.");
+        setActionError("⛔ La configuration de l'entreprise exige un signal GPS réel. Veuillez activer la localisation sur votre appareil.");
         return;
+      } else {
+        // GPS non disponible sur cet appareil : on ne met pas de fausse coordonnée
+        locationLabel = `${officialSiteName} (Pointage Borne Entrée)`;
       }
     } catch (gpsErr) {
       if (requireGpsStrict) {
         setIsCapturingGps(false);
         setIsProcessingDetection(false);
-        setActionError("⛔ Impossible d'acquérir votre position GPS. Veuillez autoriser la localisation.");
+        setActionError("⛔ Impossible d'acquérir votre position GPS réelle. Veuillez autoriser la localisation.");
         return;
       }
+      locationLabel = `${officialSiteName} (Pointage Borne Entrée)`;
+    } finally {
+      setIsCapturingGps(false);
     }
 
     // Validation du badgeage
@@ -218,7 +227,11 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
     });
 
     if (showToast) {
-      showToast('Badgeage Validé !', `Votre présence a été enregistrée à la borne : ${officialSiteName}.`, 'success');
+      showToast(
+        'Badgeage Validé !',
+        capturedLat ? `Position GPS réelle enregistrée (${capturedLat.toFixed(4)}°, ${capturedLng?.toFixed(4)}°).` : `Présence enregistrée à la borne : ${officialSiteName}.`,
+        'success'
+      );
     }
     setShowClockingModal(false);
   }, [

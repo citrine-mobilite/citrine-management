@@ -177,6 +177,38 @@ export async function deleteUser(userId: string): Promise<void> {
 export function findUserByEmail(users: AppUser[], email?: string | null): AppUser | undefined {
   if (!email) return undefined;
   const normalized = email.trim().toLowerCase();
-  const pool = users && users.length > 0 ? users : INITIAL_DEFAULT_USERS;
-  return pool.find((u) => (u?.email || '').trim().toLowerCase() === normalized);
+
+  // 1. Chercher dans la liste Firestore/State
+  let found = users?.find((u) => (u?.email || '').trim().toLowerCase() === normalized);
+  if (found) return found;
+
+  // 2. Chercher dans INITIAL_DEFAULT_USERS (export initial)
+  found = INITIAL_DEFAULT_USERS.find((u) => (u?.email || '').trim().toLowerCase() === normalized);
+  if (found) return found;
+
+  // 3. Chercher dans les collaborateurs (employees) enregistrés
+  try {
+    const savedEmployees = localStorage.getItem('citrine_employees');
+    if (savedEmployees) {
+      const parsedEmployees = JSON.parse(savedEmployees);
+      if (Array.isArray(parsedEmployees)) {
+        const emp = parsedEmployees.find((e: any) => (e?.email || '').trim().toLowerCase() === normalized);
+        if (emp) {
+          return {
+            id: emp.id || `user-emp-${Date.now()}`,
+            name: emp.name || 'Collaborateur',
+            email: emp.email,
+            role: 'employé',
+            status: 'actif',
+            phone: emp.phone || '',
+            department: emp.department || 'Opérations',
+            authMethod: 'password',
+            createdAt: emp.hireDate || new Date().toISOString(),
+          };
+        }
+      }
+    }
+  } catch {}
+
+  return undefined;
 }

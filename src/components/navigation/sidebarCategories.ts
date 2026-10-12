@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { TabType } from '../Sidebar';
 import { CompanyModuleConfig } from '../../types';
+import { normalizeRoleString } from '../../utils/roleUtils';
 
 export interface SidebarItem {
   id: TabType;
@@ -54,8 +55,9 @@ export function getSidebarCategories({
   pendingPresencesRequestsCount,
 }: GetSidebarCategoriesOptions): SidebarCategory[] {
   const categories: SidebarCategory[] = [];
+  const normalizedRole = normalizeRoleString(userRole);
 
-  if (userRole === 'employé') {
+  if (normalizedRole === 'employe' || normalizedRole === 'employee') {
     // Espace Personnel unique pour les collaborateurs / employés IT
     const empPresenceItems: SidebarItem[] = [
       {

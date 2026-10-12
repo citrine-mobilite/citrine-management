@@ -3,6 +3,7 @@ import { LayoutDashboard, UserCheck, Clock, Calendar, Menu, User } from 'lucide-
 import { TabType } from '../Sidebar';
 import { AppUser } from '../../types';
 import { haptic } from '../../services/hapticService';
+import { isEmployeeUser } from '../../utils/roleUtils';
 
 interface AppMobileBottomNavProps {
   activeTab: TabType;
@@ -17,7 +18,7 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
   currentUser,
   setMobileMenuOpen,
 }) => {
-  const isEmployee = currentUser?.role === 'employé';
+  const isEmployee = isEmployeeUser(currentUser);
 
   const scrollToTop = () => {
     if (typeof window !== 'undefined') {
