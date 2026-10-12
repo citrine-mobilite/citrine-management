@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Clock, 
   Search, 
@@ -20,7 +20,8 @@ import {
   DoorClosed,
   ShieldCheck,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  FileText
 } from 'lucide-react';
 import { Employee, Presence, NotificationLog, CompanyModuleConfig, AppUser, AttendanceIncident } from '../types';
 import { PointageMap } from './PointageMap';
@@ -31,6 +32,8 @@ import DynamicQrManagerModal from './presence/DynamicQrManagerModal';
 import AdminOnBehalfClockModal from './presence/AdminOnBehalfClockModal';
 import { PersonalAccessKeyModal } from './presence/PersonalAccessKeyModal';
 import { PresenceIncidentsAdminView } from './presence/PresenceIncidentsAdminView';
+import PresenceRequestsView from './PresenceRequestsView';
+import { extractPresenceRequests } from './presence/requests/presenceRequestsUtils';
 import { incidentService } from '../services/incidentService';
 
 interface PresencePanelProps {
@@ -85,8 +88,12 @@ export default function PresencePanel({
   const [isDynamicQrModalOpen, setIsDynamicQrModalOpen] = useState(false);
   const [isAdminClockModalOpen, setIsAdminClockModalOpen] = useState(false);
   const [isOfficeQrModalOpen, setIsOfficeQrModalOpen] = useState(false);
-  const [activePresenceTab, setActivePresenceTab] = useState<'presences' | 'incidents'>('presences');
+  const [activePresenceTab, setActivePresenceTab] = useState<'presences' | 'requests' | 'incidents'>('presences');
   const [mapLayer, setMapLayer] = useState<MapLayerType>('standard');
+
+  const pendingRequestsCount = useMemo(() => {
+    return extractPresenceRequests(presences, employees).filter((r) => r.status === 'pending').length;
+  }, [presences, employees]);
 
   const [editForm, setEditForm] = useState({
     arrivalTime: '08:00',
@@ -358,8 +365,8 @@ export default function PresencePanel({
         </div>
       </div>
 
-      {/* Subtab Switcher: Pointages du Jour VS Registre des Incidents */}
-      <div className="flex items-center gap-2 p-1.5 bg-stone-100/90 rounded-2xl border border-stone-200/80 w-fit">
+      {/* Subtab Switcher: Pointages du Jour VS Demandes & Justificatifs VS Registre des Incidents */}
+      <div className="flex items-center gap-2 p-1.5 bg-stone-100/90 rounded-2xl border border-stone-200/80 w-fit flex-wrap">
         <button
           onClick={() => setActivePresenceTab('presences')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
@@ -370,6 +377,22 @@ export default function PresencePanel({
         >
           <Clock className="h-4 w-4 text-[#2A7B76]" />
           <span>Feuille des Pointages du Jour</span>
+        </button>
+        <button
+          onClick={() => setActivePresenceTab('requests')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+            activePresenceTab === 'requests'
+              ? 'bg-white text-stone-900 shadow-xs'
+              : 'text-stone-600 hover:text-stone-900'
+          }`}
+        >
+          <FileText className="h-4 w-4 text-emerald-600" />
+          <span>Demandes & Justificatifs</span>
+          {pendingRequestsCount > 0 && (
+            <span className="bg-[#D4A82F] text-stone-900 font-extrabold text-[10px] px-2 py-0.5 rounded-full shadow-3xs animate-pulse">
+              {pendingRequestsCount} en attente
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActivePresenceTab('incidents')}
@@ -384,7 +407,14 @@ export default function PresencePanel({
         </button>
       </div>
 
-      {activePresenceTab === 'incidents' ? (
+      {activePresenceTab === 'requests' ? (
+        <PresenceRequestsView
+          presences={presences}
+          employees={employees}
+          onUpdatePresences={onUpdatePresences}
+          showToast={showToast}
+        />
+      ) : activePresenceTab === 'incidents' ? (
         <PresenceIncidentsAdminView
           attendanceIncidents={attendanceIncidents}
           employees={employees}

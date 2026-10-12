@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, UserCheck, Clock, Calendar, Menu } from 'lucide-react';
+import { LayoutDashboard, UserCheck, Clock, Calendar, Menu, User } from 'lucide-react';
 import { TabType } from '../Sidebar';
 import { AppUser } from '../../types';
 import { haptic } from '../../services/hapticService';
@@ -25,28 +25,70 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
     }
   };
 
-  return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#2A7B76]/20 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-xl sm:hidden">
-      {/* Dashboard / Accueil */}
-      {!isEmployee ? (
+  // Pour un employé : uniquement Mon Espace et Mon Profil (avec déconnexion)
+  if (isEmployee) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#2A7B76]/20 px-4 py-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-xl sm:hidden">
+        {/* Espace Personnel / Pointage */}
         <button
           onClick={() => {
             haptic.light();
-            setActiveTab('dashboard');
+            setActiveTab('employee_portal');
             scrollToTop();
           }}
-          className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition cursor-pointer ${
-            activeTab === 'dashboard'
+          className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition cursor-pointer ${
+            activeTab === 'employee_portal'
               ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
               : 'text-stone-500 hover:text-stone-800'
           }`}
         >
-          <LayoutDashboard className="h-4 w-4" />
-          <span className="text-[9px]">Tableau</span>
+          <UserCheck className="h-5 w-5" />
+          <span className="text-[11px] font-bold">Mon Espace</span>
         </button>
-      ) : null}
 
-      {/* Espace Employé / Pointage (Always accessible even if admin!) */}
+        {/* Mon Profil & Déconnexion */}
+        <button
+          onClick={() => {
+            haptic.light();
+            setActiveTab('profile');
+            scrollToTop();
+          }}
+          className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition cursor-pointer ${
+            activeTab === 'profile'
+              ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
+              : 'text-stone-500 hover:text-stone-800'
+          }`}
+        >
+          <div className="relative">
+            <User className="h-5 w-5" />
+          </div>
+          <span className="text-[11px] font-bold">Mon Profil</span>
+        </button>
+      </div>
+    );
+  }
+
+  // Pour les administrateurs et responsables
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#2A7B76]/20 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-xl sm:hidden">
+      {/* Dashboard / Accueil */}
+      <button
+        onClick={() => {
+          haptic.light();
+          setActiveTab('dashboard');
+          scrollToTop();
+        }}
+        className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition cursor-pointer ${
+          activeTab === 'dashboard'
+            ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
+            : 'text-stone-500 hover:text-stone-800'
+        }`}
+      >
+        <LayoutDashboard className="h-4 w-4" />
+        <span className="text-[9px]">Tableau</span>
+      </button>
+
+      {/* Espace Employé / Pointage */}
       <button
         onClick={() => {
           haptic.light();
@@ -95,6 +137,23 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
       >
         <Calendar className="h-4 w-4" />
         <span className="text-[9px]">Tâches</span>
+      </button>
+
+      {/* Profil & Déconnexion */}
+      <button
+        onClick={() => {
+          haptic.light();
+          setActiveTab('profile');
+          scrollToTop();
+        }}
+        className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition cursor-pointer ${
+          activeTab === 'profile'
+            ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
+            : 'text-stone-500 hover:text-stone-800'
+        }`}
+      >
+        <User className="h-4 w-4" />
+        <span className="text-[9px]">Profil</span>
       </button>
 
       {/* Plus Menu */}

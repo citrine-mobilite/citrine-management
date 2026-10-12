@@ -22,6 +22,49 @@ import { subscribeToUsers } from '../services/userService';
 import { safeStorage } from '../utils/safeStorage';
 import { CITRINE_DEFAULT_LOGO_BASE64 } from '../assets/citrineLogoBase64';
 
+interface CachedModuleConfig {
+  config: CompanyModuleConfig;
+  timestamp: number;
+}
+const MODULE_CACHE_KEY = 'citrine_module_config';
+const MODULE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes max
+
+function getCachedModuleConfig(): CompanyModuleConfig | null {
+  try {
+    const raw = safeStorage.getItem(MODULE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      if ('timestamp' in parsed && 'config' in parsed) {
+        const age = Date.now() - (parsed.timestamp || 0);
+        if (age < MODULE_CACHE_TTL_MS) {
+          return parsed.config;
+        } else {
+          // Cache expiré (> 5 minutes)
+          safeStorage.removeItem(MODULE_CACHE_KEY);
+          return null;
+        }
+      }
+      // Ancien format sans timestamp : invalider pour respecter la règle des 5 minutes
+      safeStorage.removeItem(MODULE_CACHE_KEY);
+      return null;
+    }
+  } catch {
+    safeStorage.removeItem(MODULE_CACHE_KEY);
+  }
+  return null;
+}
+
+function setCachedModuleConfig(config: CompanyModuleConfig): void {
+  try {
+    const payload: CachedModuleConfig = {
+      config,
+      timestamp: Date.now(),
+    };
+    safeStorage.setItem(MODULE_CACHE_KEY, JSON.stringify(payload));
+  } catch {}
+}
+
 export function useAppInitialData() {
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try {
@@ -59,10 +102,8 @@ export function useAppInitialData() {
   const [users, setUsers] = useState<AppUser[]>([]);
 
   const [moduleConfig, setModuleConfig] = useState<CompanyModuleConfig>(() => {
-    try {
-      const saved = safeStorage.getItem('citrine_module_config');
-      if (saved) return JSON.parse(saved);
-    } catch {}
+    const cached = getCachedModuleConfig();
+    if (cached) return cached;
     return DEFAULT_MODULE_CONFIG;
   });
 
@@ -101,7 +142,7 @@ export function useAppInitialData() {
             companyLogoBase64: data.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
           };
           setModuleConfig(configWithLogo);
-          safeStorage.setItem('citrine_module_config', JSON.stringify(configWithLogo));
+          setCachedModuleConfig(configWithLogo);
         } else {
           // Premier démarrage : initialisation de l'image de marque officielle en BD
           const initialConfig: CompanyModuleConfig = {
@@ -342,7 +383,7 @@ export function useAppInitialData() {
 
   const handleUpdateModuleConfig = (newConfig: CompanyModuleConfig) => {
     setModuleConfig(newConfig);
-    safeStorage.setItem('citrine_module_config', JSON.stringify(newConfig));
+    setCachedModuleConfig(newConfig);
     saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...newConfig, id: 'main_config' });
   };
 

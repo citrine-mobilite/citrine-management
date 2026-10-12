@@ -19,6 +19,7 @@ import {
   DEFAULT_MODULE_CONFIG
 } from '../../types';
 import ModuleSkeletonLoader from '../ModuleSkeletonLoader';
+import ErrorBoundary from '../ErrorBoundary';
 
 import AdminDashboardOverview from '../AdminDashboardOverview';
 import EmployeePortal from '../EmployeePortal';
@@ -237,7 +238,9 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
         <UserManagementPanel users={users} onAddNotification={onAddNotification} currentUser={currentUser!} onUpdateUsers={onUpdateUsers} showToast={showToast} />
       )}
       {activeTab === 'settings' && (
-        <CompanySettingsPanel moduleConfig={moduleConfig || DEFAULT_MODULE_CONFIG} onUpdateModuleConfig={onUpdateModuleConfig} onAddNotification={onAddNotification} showToast={showToast} />
+        <ErrorBoundary>
+          <CompanySettingsPanel moduleConfig={moduleConfig || DEFAULT_MODULE_CONFIG} onUpdateModuleConfig={onUpdateModuleConfig} onAddNotification={onAddNotification} showToast={showToast} />
+        </ErrorBoundary>
       )}
       {activeTab === 'calls' && (
         <TeamCallsPanel
@@ -294,6 +297,33 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onBackToDashboard={() => setActiveTab(currentUser.role === 'employé' ? 'employee_portal' : 'dashboard')}
           onLogout={() => handleSetCurrentUser(null)} onAddNotification={onAddNotification} showToast={showToast}
         />
+      )}
+
+      {/* Fallback universel sécurisé : garantit qu'aucun onglet vide ou inconnu ne produise un écran blanc */}
+      {(!activeTab || ![
+        'dashboard', 'employee_portal', 'presences', 'statistics', 'tasks',
+        'reminders', 'logs', 'collaborators', 'discipline', 'documents',
+        'communications', 'finances', 'inventory', 'partners', 'users',
+        'settings', 'calls', 'recruitment', 'expense_claims', 'hse',
+        'visitors', 'ideas_surveys', 'profile'
+      ].includes(activeTab)) && (
+        currentUser?.role === 'employé' ? (
+          <EmployeePortal
+            currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}
+            salaryPayments={salaryPayments} financialTransactions={financialTransactions}
+            salaryDebts={salaryDebts} onUpdatePresences={onUpdatePresences} onUpdateTasks={onUpdateTasks}
+            onAddNotification={onAddNotification} currentTime={currentTime}
+            onOpenProfileModal={onOpenProfileModal} moduleConfig={moduleConfig}
+            attendanceIncidents={attendanceIncidents}
+            onAddAttendanceIncident={onAddAttendanceIncident}
+          />
+        ) : (
+          <AdminDashboardOverview
+            currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}
+            reminders={reminders} currentTime={currentTime} onSelectTab={setActiveTab}
+            onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
+          />
+        )
       )}
     </Suspense>
   );

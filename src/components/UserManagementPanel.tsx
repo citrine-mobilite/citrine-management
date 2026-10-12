@@ -134,6 +134,7 @@ export default function UserManagementPanel({
         'success'
       );
       setIsModalOpen(false);
+      setEditingUser(null);
     } catch {
       showToast?.('Erreur lors de l’enregistrement de l’utilisateur', 'error');
     }
@@ -251,12 +252,18 @@ export default function UserManagementPanel({
         </div>
       </div>
 
-      <UserFormModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        editingUser={editingUser}
-        onSave={handleSaveUser}
-      />
+      {isModalOpen && (
+        <UserFormModal
+          key={editingUser ? `edit-${editingUser.id}` : 'new-user'}
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingUser(null);
+          }}
+          editingUser={editingUser}
+          onSave={handleSaveUser}
+        />
+      )}
 
       <UserDeleteConfirmModal
         user={userToDelete}

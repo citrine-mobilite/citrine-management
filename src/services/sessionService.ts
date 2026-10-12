@@ -5,7 +5,7 @@ import { safeStorage } from '../utils/safeStorage';
 const SESSION_USER_KEY = 'citrine_current_user';
 const SESSION_SIGNATURE_KEY = 'citrine_session_sig';
 const SESSION_EXPIRY_KEY = 'citrine_token_expiry';
-const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 jours
+const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 heures de session max
 
 /**
  * Normalise un rôle en format UI (Capitalisé : 'Administrateur', 'Responsable', 'Employé')
@@ -92,6 +92,11 @@ export function clearSecureSession(): void {
   safeStorage.removeItem(SESSION_USER_KEY);
   safeStorage.removeItem(SESSION_SIGNATURE_KEY);
   safeStorage.removeItem(SESSION_EXPIRY_KEY);
+  try {
+    sessionStorage.removeItem(SESSION_USER_KEY);
+    sessionStorage.removeItem(SESSION_SIGNATURE_KEY);
+    sessionStorage.removeItem(SESSION_EXPIRY_KEY);
+  } catch {}
 }
 
 /**

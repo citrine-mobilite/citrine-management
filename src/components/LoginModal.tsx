@@ -17,13 +17,19 @@ export default function LoginModal({
   onLoginSuccess,
   onAddNotification,
 }: LoginModalProps) {
-  const [email, setEmail] = useState('citrinemobilite@gmail.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const availableUsers = users && users.length > 0 ? users : INITIAL_DEFAULT_USERS;
+
+  const handleSelectQuickAccount = (targetEmail: string, targetPass: string) => {
+    setEmail(targetEmail);
+    setPassword(targetPass);
+    setError(null);
+  };
 
   // Handle Email + Password Login
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -160,7 +166,7 @@ export default function LoginModal({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="citrinemobilite@gmail.com"
+                  placeholder="nom@entreprise.com"
                   className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 focus:bg-white focus:border-emerald-600 outline-none transition font-medium"
                 />
               </div>
@@ -211,6 +217,36 @@ export default function LoginModal({
               )}
             </button>
           </form>
+
+          {/* Sélecteurs de rôles démo rapides */}
+          <div className="pt-3 border-t border-stone-200/80 space-y-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block text-center">
+              Accès démo rapide par rôle
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleSelectQuickAccount('citrinemobilite@gmail.com', 'admin123')}
+                className="px-2 py-1.5 bg-stone-100 hover:bg-emerald-50 hover:text-[#2A7B76] hover:border-emerald-200 border border-stone-200 rounded-xl text-[10px] font-bold text-stone-700 transition cursor-pointer text-center"
+              >
+                Admin
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectQuickAccount('responsable@citrine.cm', 'admin123')}
+                className="px-2 py-1.5 bg-stone-100 hover:bg-emerald-50 hover:text-[#2A7B76] hover:border-emerald-200 border border-stone-200 rounded-xl text-[10px] font-bold text-stone-700 transition cursor-pointer text-center"
+              >
+                Manager
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectQuickAccount('employe@citrine.cm', 'admin123')}
+                className="px-2 py-1.5 bg-stone-100 hover:bg-emerald-50 hover:text-[#2A7B76] hover:border-emerald-200 border border-stone-200 rounded-xl text-[10px] font-bold text-stone-700 transition cursor-pointer text-center"
+              >
+                Employé
+              </button>
+            </div>
+          </div>
 
         </div>
 

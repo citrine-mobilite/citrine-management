@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AppUser, Role, UserRole } from './types';
 import { TabType, ToastMessage } from './components';
 import Sidebar from './components/Sidebar';
@@ -15,6 +15,7 @@ import { useAppInitialData } from './hooks/useAppInitialData';
 import { loadSecureSession, storeSecureSession, clearSecureSession } from './services/sessionService';
 import { soundService } from './services/soundService';
 import { haptic } from './services/hapticService';
+import { extractPresenceRequests } from './components/presence/requests/presenceRequestsUtils';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
@@ -28,16 +29,16 @@ export default function App() {
     let hash = '';
     try {
       if (typeof window !== 'undefined' && window.location && typeof window.location.hash === 'string') {
-        hash = window.location.hash.replace(/^#\/?/, '');
+        hash = window.location.hash.replace(/^#\/?/, '').trim();
       }
     } catch {}
     const validTabs: TabType[] = [
       'dashboard', 'employee_portal', 'calls', 'presences', 'statistics', 'tasks',
       'reminders', 'logs', 'collaborators', 'discipline', 'documents', 'communications',
       'finances', 'inventory', 'partners', 'recruitment', 'expense_claims', 'hse',
-      'visitors', 'ideas_surveys', 'users', 'settings', 'profile', ''
+      'visitors', 'ideas_surveys', 'users', 'settings', 'profile'
     ];
-    if (validTabs.includes(hash as TabType)) return hash as TabType;
+    if (hash && validTabs.includes(hash as TabType)) return hash as TabType;
     return 'dashboard';
   });
 
@@ -101,15 +102,23 @@ export default function App() {
     }
   };
 
-  const pendingRequestsCount = data.presences.reduce((count, p) => {
-    let add = 0;
-    if (p.emergencies) add += p.emergencies.filter((e) => e.status === 'pending').length;
-    if (p.correctionReasonStatus === 'pending') add += 1;
-    if (p.departureReasonStatus === 'pending') add += 1;
-    return count + add;
-  }, 0);
+  const pendingRequestsCount = useMemo(() => {
+    const requests = extractPresenceRequests(data.presences, data.employees);
+    return requests.filter((r) => r.status === 'pending').length;
+  }, [data.presences, data.employees]);
 
-  const unreadRemindersCount = data.reminders.filter((r) => r.status === 'pending').length;
+  const unreadRemindersCount = useMemo(() => {
+    return data.reminders.filter((r) => r.status === 'pending').length;
+  }, [data.reminders]);
+
+  const isEmployee = currentUser?.role === 'employé';
+
+  // Force l'employé à ne voir que son Espace Personnel et son Profil
+  useEffect(() => {
+    if (isEmployee && activeTab !== 'employee_portal' && activeTab !== 'profile') {
+      setActiveTab('employee_portal');
+    }
+  }, [isEmployee, activeTab]);
 
   if (!currentUser) {
     return (
@@ -140,23 +149,25 @@ export default function App() {
 
       {/* Main Container */}
       <div className="flex-1 flex min-w-0">
-        {/* Desktop Sidebar & Mobile Drawer */}
-        <Sidebar
-          activeTab={activeTab}
-          onSelectTab={(tab) => {
-            haptic.light();
-            setActiveTab(tab);
-            setMobileMenuOpen(false);
-          }}
-          isOpen={isSidebarOpen}
-          onToggleOpen={() => setIsSidebarOpen(!isSidebarOpen)}
-          unreadRemindersCount={unreadRemindersCount}
-          pendingPresencesRequestsCount={pendingRequestsCount}
-          mobileMenuOpen={mobileMenuOpen}
-          onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
-          currentUser={currentUser}
-          moduleConfig={data.moduleConfig}
-        />
+        {/* Desktop Sidebar & Mobile Drawer : Réservé aux Administrateurs et Responsables */}
+        {!isEmployee && (
+          <Sidebar
+            activeTab={activeTab}
+            onSelectTab={(tab) => {
+              haptic.light();
+              setActiveTab(tab);
+              setMobileMenuOpen(false);
+            }}
+            isOpen={isSidebarOpen}
+            onToggleOpen={() => setIsSidebarOpen(!isSidebarOpen)}
+            unreadRemindersCount={unreadRemindersCount}
+            pendingPresencesRequestsCount={pendingRequestsCount}
+            mobileMenuOpen={mobileMenuOpen}
+            onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+            currentUser={currentUser}
+            moduleConfig={data.moduleConfig}
+          />
+        )}
 
         {/* Tab Content Panel with safe bottom padding for mobile */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden pb-32 sm:pb-12">

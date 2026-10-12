@@ -17,6 +17,7 @@ import { CompanyModulesToggle } from './settings/CompanyModulesToggle';
 import { DisciplinaryMotifsManagementSection } from './settings/DisciplinaryMotifsManagementSection';
 import { SecuritySettingsSection } from './settings/SecuritySettingsSection';
 import { DatabaseRebuildSection } from './settings/DatabaseRebuildSection';
+import ErrorBoundary from './ErrorBoundary';
 
 interface CompanySettingsPanelProps {
   moduleConfig: CompanyModuleConfig;
@@ -176,45 +177,47 @@ export default function CompanySettingsPanel({
 
       {/* Domaine Thématique Actif (Contenu Cloisonné) */}
       <div className="transition-all duration-200">
-        {activeTab === 'identity' && (
-          <CompanyIdentitySettings
-            moduleConfig={safeConfig}
-            onUpdateModuleConfig={handleUpdate}
-            showToast={showToast}
-          />
-        )}
+        <ErrorBoundary>
+          {activeTab === 'identity' && (
+            <CompanyIdentitySettings
+              moduleConfig={safeConfig}
+              onUpdateModuleConfig={handleUpdate}
+              showToast={showToast}
+            />
+          )}
 
-        {activeTab === 'schedules' && (
-          <CompanyScheduleSettings
-            moduleConfig={safeConfig}
-            onUpdateModuleConfig={handleUpdate}
-            showToast={showToast}
-          />
-        )}
+          {activeTab === 'schedules' && (
+            <CompanyScheduleSettings
+              moduleConfig={safeConfig}
+              onUpdateModuleConfig={handleUpdate}
+              showToast={showToast}
+            />
+          )}
 
-        {activeTab === 'modules' && (
-          <CompanyModulesToggle
-            moduleConfig={safeConfig}
-            onUpdateModuleConfig={handleUpdate}
-            showToast={showToast}
-          />
-        )}
+          {activeTab === 'modules' && (
+            <CompanyModulesToggle
+              moduleConfig={safeConfig}
+              onUpdateModuleConfig={handleUpdate}
+              showToast={showToast}
+            />
+          )}
 
-        {activeTab === 'discipline' && (
-          <DisciplinaryMotifsManagementSection showToast={showToast} />
-        )}
+          {activeTab === 'discipline' && (
+            <DisciplinaryMotifsManagementSection showToast={showToast} />
+          )}
 
-        {activeTab === 'security' && (
-          <SecuritySettingsSection
-            moduleConfig={safeConfig}
-            onUpdateModuleConfig={handleUpdate}
-            showToast={showToast}
-          />
-        )}
+          {activeTab === 'security' && (
+            <SecuritySettingsSection
+              moduleConfig={safeConfig}
+              onUpdateModuleConfig={handleUpdate}
+              showToast={showToast}
+            />
+          )}
 
-        {activeTab === 'database' && (
-          <DatabaseRebuildSection showToast={showToast} />
-        )}
+          {activeTab === 'database' && (
+            <DatabaseRebuildSection showToast={showToast} />
+          )}
+        </ErrorBoundary>
       </div>
     </div>
   );

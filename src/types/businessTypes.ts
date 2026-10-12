@@ -325,6 +325,11 @@ export interface CompanyModuleConfig {
   companyLatitude?: number;
   companyLongitude?: number;
   qrCodeSecret: string;
+  doorQrCodeToken?: string;
+  doorQrCodeGeneratedAt?: string;
+  doorQrSiteName?: string;
+  doorQrRequireGps?: boolean;
+  doorQrPosterTitle?: string;
   officeWifiSsid?: string;
   allowedOfficeIPs: string[];
   siteLocations: Array<{ name: string; address: string; lat: number; lng: number }> | any[];
@@ -384,7 +389,12 @@ export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
   companyName: 'Citrine Entreprise SARL',
   companyLatitude: 4.051056,
   companyLongitude: 9.7678687,
-  qrCodeSecret: '',
+  qrCodeSecret: 'CITRINE_SECRET_2026',
+  doorQrCodeToken: 'CITRINE_DOOR_HQ_MAIN_2026',
+  doorQrCodeGeneratedAt: '2026-03-01T08:00:00.000Z',
+  doorQrSiteName: 'Entrée Principale (HQ Siège)',
+  doorQrRequireGps: false,
+  doorQrPosterTitle: 'BORNE OFFICIELLE DE POINTAGE',
   officeWifiSsid: '',
   allowedOfficeIPs: [],
   siteLocations: [],

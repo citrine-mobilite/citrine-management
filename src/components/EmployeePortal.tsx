@@ -63,6 +63,7 @@ export default function EmployeePortal(props: EmployeePortalProps) {
     onUpdateTasks,
     onAddNotification,
     onOpenProfileModal,
+    moduleConfig,
   } = props;
 
   const logic = useEmployeePortalLogic(props);
@@ -251,6 +252,7 @@ export default function EmployeePortal(props: EmployeePortalProps) {
         employeeProfile={logic.employeeProfile}
         onConfirmClocking={logic.handleConfirmClocking}
         showToast={logic.showToast}
+        moduleConfig={moduleConfig}
       />
 
       <EmployeeCustomTimeModal
@@ -300,6 +302,8 @@ export default function EmployeePortal(props: EmployeePortalProps) {
         <OfficeQRCodeModal
           isOpen={logic.showOfficeQRModal}
           onClose={() => logic.setShowOfficeQRModal(false)}
+          qrSecret={moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026'}
+          companyName={moduleConfig?.companyName || 'Citrine Entreprise SARL'}
         />
       )}
 

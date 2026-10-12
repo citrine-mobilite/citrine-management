@@ -96,7 +96,7 @@ export default function ProfilePage({
       </div>
 
       {/* Subtab content container */}
-      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-stone-200 shadow-sm">
+      <div className="bg-white p-4 sm:p-6 rounded-3xl border border-stone-200 shadow-sm">
         {activeSubTab === 'info' && (
           <ProfileInfoSubTab
             currentUser={currentUser}
@@ -119,6 +119,17 @@ export default function ProfilePage({
         {activeSubTab === 'permissions' && (
           <ProfilePermissionsSubTab currentUser={currentUser} />
         )}
+      </div>
+
+      {/* Mobile Logout Button Section */}
+      <div className="sm:hidden pt-2">
+        <button
+          onClick={onLogout}
+          className="w-full py-3.5 bg-red-50 hover:bg-red-100 text-red-700 active:bg-red-200 font-bold text-sm rounded-2xl transition flex items-center justify-center gap-2 cursor-pointer border border-red-200 shadow-2xs"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>Se déconnecter de la session</span>
+        </button>
       </div>
     </div>
   );
