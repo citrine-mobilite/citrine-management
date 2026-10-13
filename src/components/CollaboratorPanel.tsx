@@ -302,48 +302,46 @@ export default function CollaboratorPanel({
         });
       }
 
-      // Création automatique du compte utilisateur associé
-      if (formData.createUserAccount && formData.email.trim()) {
-        try {
-          const userAccount: AppUser = {
-            id: userId,
-            name: formData.name.trim(),
-            email: formData.email.trim().toLowerCase(),
-            role: formData.userRole,
-            status: 'actif',
-            department: formData.department || 'Citrine Management',
-            phone: formData.phone || '',
-            employeeId: empId,
-            createdAt: new Date().toISOString(),
-            passwordHash: formData.userPassword.trim() || 'Collab@2026',
-            authMethod: 'password',
-          };
-          await saveUser(userAccount);
-          if (onUpdateUsers && users) {
-            onUpdateUsers([userAccount, ...users]);
-          }
-
-          logAdminOperation({
-            authorName: 'Administrateur',
-            targetUserId: userId,
-            targetEmployeeId: empId,
-            targetName: formData.name.trim(),
-            operationType: 'role_change',
-            operationLabel: 'Attribution du compte utilisateur',
-            details: `Accès système : ${formData.userRole} | Identifiant : ${userAccount.email}`,
-          });
-
-          if (showToast) {
-            showToast(
-              `Collaborateur et compte utilisateur créés ! Identifiant: ${userAccount.email} | Mot de passe: ${formData.userPassword}`,
-              'success'
-            );
-          }
-        } catch {
-          if (showToast) showToast('Collaborateur créé, mais erreur de création du compte utilisateur.', 'error');
+      // Création automatique et obligatoire du compte utilisateur associé
+      try {
+        const userEmail = formData.email.trim() ? formData.email.trim().toLowerCase() : `collab_${Date.now()}@citrinemgmt.cm`;
+        const userAccount: AppUser = {
+          id: userId,
+          name: formData.name.trim(),
+          email: userEmail,
+          role: formData.userRole,
+          status: 'actif',
+          department: formData.department || 'Citrine Management',
+          phone: formData.phone || '',
+          employeeId: empId,
+          createdAt: new Date().toISOString(),
+          passwordHash: formData.userPassword.trim() || 'Collab@2026',
+          authMethod: 'password',
+        };
+        await saveUser(userAccount);
+        if (onUpdateUsers && users) {
+          onUpdateUsers([userAccount, ...users]);
         }
-      } else {
-        if (showToast) showToast('Collaborateur créé avec succès.', 'success');
+
+        logAdminOperation({
+          authorName: 'Administrateur',
+          targetUserId: userId,
+          targetEmployeeId: empId,
+          targetName: formData.name.trim(),
+          operationType: 'role_change',
+          operationLabel: 'Création obligatoire du compte utilisateur',
+          details: `Accès système : ${formData.userRole} | Identifiant : ${userEmail}`,
+        });
+
+        if (showToast) {
+          showToast(
+            `Collaborateur et compte utilisateur créés avec succès ! Identifiant: ${userEmail} | MDP: ${formData.userPassword}`,
+            'success'
+          );
+        }
+      } catch (err) {
+        console.warn('Erreur création compte utilisateur:', err);
+        if (showToast) showToast('Collaborateur créé mais échec de création du compte utilisateur.', 'error');
       }
 
       setAuditOpsList(getAdminAuditOperations());
@@ -1273,75 +1271,62 @@ export default function CollaboratorPanel({
                 </div>
               </div>
 
-              {/* Compte Utilisateur Associé (Création automatique) */}
+              {/* Compte Utilisateur Associé (Création obligatoire) */}
               {!editingEmployee && (
                 <div className="bg-emerald-50/60 border border-[#2A7B76]/30 rounded-2xl p-4 space-y-3 normal-case">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <KeyRound className="h-4 w-4 text-[#2A7B76]" />
-                      <h4 className="font-serif font-bold text-xs text-stone-900">
-                        Création automatique du Compte Utilisateur de Connexion
-                      </h4>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-stone-700">
-                      <input
-                        type="checkbox"
-                        checked={formData.createUserAccount}
-                        onChange={(e) => setFormData({ ...formData, createUserAccount: e.target.checked })}
-                        className="rounded text-[#2A7B76] focus:ring-[#2A7B76]"
-                      />
-                      <span>Créer l'accès utilisateur</span>
-                    </label>
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="h-4 w-4 text-[#2A7B76]" />
+                    <h4 className="font-serif font-bold text-xs text-stone-900">
+                      Création obligatoire du Compte Utilisateur de Connexion
+                    </h4>
                   </div>
 
-                  {formData.createUserAccount && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                      <div>
-                        <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
-                          Mot de passe initial pour se connecter *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            required={formData.createUserAccount}
-                            value={formData.userPassword}
-                            onChange={(e) => setFormData({ ...formData, userPassword: e.target.value })}
-                            placeholder="Ex: Collab@2026"
-                            className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-mono font-bold text-stone-800 focus:ring-2 focus:ring-[#2A7B76] outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const randomPw = `Collab@${Math.floor(1000 + Math.random() * 9000)}`;
-                              setFormData({ ...formData, userPassword: randomPw });
-                            }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#2A7B76] font-bold hover:underline"
-                          >
-                            Générer
-                          </button>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
-                          Rôle du compte utilisateur *
-                        </label>
-                        <select
-                          value={formData.userRole}
-                          onChange={(e) => setFormData({ ...formData, userRole: e.target.value as any })}
-                          className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-bold text-stone-800 focus:ring-2 focus:ring-[#2A7B76] outline-none"
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
+                        Mot de passe initial pour se connecter *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          required
+                          value={formData.userPassword}
+                          onChange={(e) => setFormData({ ...formData, userPassword: e.target.value })}
+                          placeholder="Ex: Collab@2026"
+                          className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-mono font-bold text-stone-800 focus:ring-2 focus:ring-[#2A7B76] outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const randomPw = `Collab@${Math.floor(1000 + Math.random() * 9000)}`;
+                            setFormData({ ...formData, userPassword: randomPw });
+                          }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#2A7B76] font-bold hover:underline"
                         >
-                          <option value="employé">Employé (peut badger & voir son espace)</option>
-                          <option value="responsable">Responsable (génération QR code 30s & badgeage)</option>
-                          <option value="administrateur">Administrateur (contrôle global)</option>
-                        </select>
-                      </div>
-
-                      <div className="sm:col-span-2 text-[11px] text-stone-600 bg-white/80 p-2.5 rounded-xl border border-stone-200/80">
-                        💡 <strong>Synchronisation automatique :</strong> Le collaborateur utilisera son adresse email (<strong>{formData.email || 'à renseigner ci-dessus'}</strong>) et ce mot de passe pour se connecter et badger. Sa fiche collaborateur stocke quant à elle ses paramètres RH, ses salaires et ses contrats.
+                          Générer
+                        </button>
                       </div>
                     </div>
-                  )}
+
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
+                        Rôle du compte utilisateur *
+                      </label>
+                      <select
+                        value={formData.userRole}
+                        onChange={(e) => setFormData({ ...formData, userRole: e.target.value as any })}
+                        className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-bold text-stone-800 focus:ring-2 focus:ring-[#2A7B76] outline-none"
+                      >
+                        <option value="employé">Employé (peut badger & voir son espace)</option>
+                        <option value="responsable">Responsable (génération QR code 30s & badgeage)</option>
+                        <option value="administrateur">Administrateur (contrôle global)</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2 text-[11px] text-stone-600 bg-white/80 p-2.5 rounded-xl border border-stone-200/80">
+                      💡 <strong>Création obligatoire :</strong> Chaque nouveau collaborateur se voit attribuer automatiquement un compte de connexion (email: <strong>{formData.email || 'généré automatiquement'}</strong>) pour se connecter au portail et effectuer ses pointages.
+                    </div>
+                  </div>
                 </div>
               )}
 

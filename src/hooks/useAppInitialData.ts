@@ -20,6 +20,7 @@ import {
 } from '../types';
 import { subscribeToCollection, subscribeToDocument, saveDocument, deleteDocument, getCollection, COLLECTIONS } from '../services/dataService';
 import { subscribeToUsers } from '../services/userService';
+import { cloudSqlService } from '../services/cloudSqlService';
 import { INITIAL_SEEDED_EMPLOYEES } from '../services/dbInitService';
 import { safeStorage } from '../utils/safeStorage';
 import { CITRINE_DEFAULT_LOGO_BASE64 } from '../assets/citrineLogoBase64';
@@ -177,19 +178,40 @@ export function useAppInitialData() {
   }, []);
 
   const handleUpdateEmployees = async (updated: Employee[]) => {
+    try {
+      localStorage.setItem('citrine_employees', JSON.stringify(updated));
+    } catch {}
+
     for (const emp of updated) {
       const existing = employees.find((e) => e.id === emp.id);
       if (!existing || JSON.stringify(existing) !== JSON.stringify(emp)) {
-        await saveDocument(COLLECTIONS.EMPLOYEES, emp);
+        try {
+          await saveDocument(COLLECTIONS.EMPLOYEES, emp);
+        } catch (e) {
+          console.warn('Supabase save employee notice:', e);
+        }
+        try {
+          await cloudSqlService.saveDocument(COLLECTIONS.EMPLOYEES, emp);
+        } catch (e) {
+          console.warn('Cloud SQL save employee notice:', e);
+        }
       }
     }
     for (const emp of employees) {
       if (!updated.some((e) => e.id === emp.id)) {
-        await deleteDocument(COLLECTIONS.EMPLOYEES, emp.id);
+        try {
+          await deleteDocument(COLLECTIONS.EMPLOYEES, emp.id);
+        } catch (e) {
+          console.warn('Supabase delete employee notice:', e);
+        }
+        try {
+          await cloudSqlService.deleteDocument(COLLECTIONS.EMPLOYEES, emp.id);
+        } catch (e) {
+          console.warn('Cloud SQL delete employee notice:', e);
+        }
       }
     }
     setEmployees(updated);
-    localStorage.setItem('citrine_employees', JSON.stringify(updated));
   };
 
   const handleUpdatePresences = async (updated: Presence[]) => {
