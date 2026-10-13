@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, AlertCircle, ArrowRight, UserCheck, Eye, EyeOff, Shield, KeyRound } from 'lucide-react';
 import { AppUser } from '../types';
-import { findUserByEmail, saveUser, INITIAL_DEFAULT_USERS, LANDRY_EMPLOYEE_USER, CITRINE_MOBILITE_ADMIN_USER } from '../services/userService';
+import { findUserByEmail, saveUser, INITIAL_DEFAULT_USERS } from '../services/userService';
 import { recordConnectionLog } from '../services/connectionLogService';
 import { verifyPassword } from '../utils/cryptoUtils';
 import { supabase } from '../lib/supabase';
@@ -61,11 +61,37 @@ export default function LoginModal({
         // En cas d'erreur réseau, bascule transparente sur la validation locale PBKDF2
       }
 
+      const fallbackAdmin: AppUser = {
+        id: 'user-admin-citrine-mob',
+        name: 'Citrine Mobilité',
+        email: 'citrinemobilite@gmail.com',
+        role: 'administrateur',
+        status: 'actif',
+        phone: '+237 600 000 099',
+        authMethod: 'password',
+        department: 'Direction Générale',
+        passwordHash: 'pbkdf2:c623b3faebf9ba3c38f47273a303e218:5beb725b10c47a811cac27ba53cb762d2ff94af8cc847520aabda912c9ee9424',
+        createdAt: '2026-01-01T00:00:00.000Z'
+      };
+
+      const fallbackEmployee: AppUser = {
+        id: 'usr-emp-landrymouns',
+        name: 'Landry Moutongo',
+        email: 'landrymouns@gmail.com',
+        role: 'employé',
+        status: 'actif',
+        phone: '+237 600 000 001',
+        authMethod: 'password',
+        department: 'Logistique & Terrain',
+        passwordHash: 'pbkdf2:5f4af53c9702106b1487e4289c2ef906:a54d68de1d57dc115a8689d6c2bcdd6340f97b511f24cad526ead492a75327d5',
+        createdAt: '2026-01-01T00:00:00.000Z'
+      };
+
       // 2. Résolution du profil utilisateur
       const user =
         findUserByEmail(availableUsers, cleanEmail) ||
-        (cleanEmail === 'citrinemobilite@gmail.com' ? CITRINE_MOBILITE_ADMIN_USER : undefined) ||
-        (cleanEmail === 'landrymouns@gmail.com' ? LANDRY_EMPLOYEE_USER : undefined);
+        (cleanEmail === 'citrinemobilite@gmail.com' ? fallbackAdmin : undefined) ||
+        (cleanEmail === 'landrymouns@gmail.com' ? fallbackEmployee : undefined);
 
       if (!user && !supabaseAuthenticated) {
         setError('Adresse email ou mot de passe incorrect.');
@@ -101,8 +127,8 @@ export default function LoginModal({
       const storedPass =
         activeUser.passwordHash ||
         (cleanEmail === 'citrinemobilite@gmail.com'
-          ? CITRINE_MOBILITE_ADMIN_USER.passwordHash
-          : (cleanEmail === 'landrymouns@gmail.com' ? LANDRY_EMPLOYEE_USER.passwordHash : 'Citrine Management2026!'));
+          ? fallbackAdmin.passwordHash
+          : (cleanEmail === 'landrymouns@gmail.com' ? fallbackEmployee.passwordHash : 'Citrine Management2026!'));
 
       const verifyResult = await verifyPassword(cleanPassword, storedPass);
 

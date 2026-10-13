@@ -20,6 +20,7 @@ import {
 import { ToastMessage } from './components/Toast';
 import { useAppInitialData } from './hooks/useAppInitialData';
 import { loadSecureSession, storeSecureSession, clearSecureSession } from './services/sessionService';
+import { subscribeToUsers } from './services/userService';
 import { getDefaultPortalForUser, isEmployeeUser } from './utils/roleUtils';
 import Sidebar, { TabType } from './components/Sidebar';
 import { AppTopNavbar } from './components/navigation/AppTopNavbar';
@@ -137,6 +138,28 @@ export default function App() {
       setIsAuthLoading(false);
     });
   }, []);
+
+  // Real-time synchronization of currentUser (avatar, name, phone, etc.) across devices
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsub = subscribeToUsers((usersList) => {
+      const latest = usersList.find(
+        (u) => u.email.toLowerCase() === currentUser.email.toLowerCase() || u.id === currentUser.id
+      );
+      if (latest) {
+        if (
+          latest.avatarUrl !== currentUser.avatarUrl ||
+          latest.name !== currentUser.name ||
+          latest.phone !== currentUser.phone ||
+          latest.department !== currentUser.department
+        ) {
+          setCurrentUser(latest);
+          storeSecureSession(latest);
+        }
+      }
+    });
+    return () => unsub();
+  }, [currentUser?.email, currentUser?.id]);
 
   const handleLoginSuccess = async (user: AppUser) => {
     setCurrentUser(user);

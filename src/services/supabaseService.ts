@@ -534,16 +534,32 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
   }
 }
 
-// Save document to Supabase with upsert
+// Save document to Supabase with robust upsert / update / insert fallback
 export async function saveDocument<T extends { id: string }>(collectionName: string, item: T): Promise<T> {
   try {
     const table = mapCollectionToTable(collectionName);
     const row = itemToSupabaseRow(collectionName, item);
 
-    const onConflict = table === 'generic_collections' ? 'collection,doc_id' : 'doc_id';
-    const { error } = await supabaseAdmin.from(table).upsert(row, { onConflict });
-    if (error) {
-      console.warn(`[Supabase Save Notice] Could not upsert into ${table}:`, error.message);
+    const { error: upsertError } = await supabase
+      .from(table)
+      .upsert(row, { onConflict: table === 'generic_collections' ? 'collection,doc_id' : 'doc_id' });
+
+    if (upsertError) {
+      // Fallback check & update or insert
+      const query = table === 'generic_collections'
+        ? supabase.from(table).select('id').eq('collection', collectionName).eq('doc_id', row.doc_id).maybeSingle()
+        : supabase.from(table).select('id').eq('doc_id', row.doc_id).maybeSingle();
+
+      const { data: existing } = await query;
+      if (existing) {
+        if (table === 'generic_collections') {
+          await supabase.from(table).update(row).eq('collection', collectionName).eq('doc_id', row.doc_id);
+        } else {
+          await supabase.from(table).update(row).eq('doc_id', row.doc_id);
+        }
+      } else {
+        await supabase.from(table).insert(row);
+      }
     }
     return item;
   } catch (err) {
@@ -557,12 +573,12 @@ export async function deleteDocument(collectionName: string, id: string): Promis
   try {
     const table = mapCollectionToTable(collectionName);
     if (table === 'generic_collections') {
-      await supabaseAdmin.from(table).delete().match({ collection: collectionName, doc_id: String(id) });
+      await supabase.from(table).delete().match({ collection: collectionName, doc_id: String(id) });
     } else {
       if (/^\d+$/.test(String(id))) {
-        await supabaseAdmin.from(table).delete().or(`doc_id.eq.${id},id.eq.${id}`);
+        await supabase.from(table).delete().or(`doc_id.eq.${id},id.eq.${id}`);
       } else {
-        await supabaseAdmin.from(table).delete().match({ doc_id: String(id) });
+        await supabase.from(table).delete().match({ doc_id: String(id) });
       }
     }
     return true;
@@ -578,14 +594,12 @@ export function subscribeToCollection<T>(collectionName: string, callback: (data
   
   // Initial fetch
   fetchCollection<T>(collectionName).then((items) => {
-    if (items.length > 0) {
-      offlineService.cacheListLocally(collectionName, items as any);
-      callback(items);
-    }
+    offlineService.cacheListLocally(collectionName, items as any);
+    callback(items);
   });
 
   // Realtime channel
-  const channelName = `realtime_${table}_${collectionName}_${Date.now()}`;
+  const channelName = `realtime_${table}_${collectionName}_${Date.now()}_${Math.random()}`;
   const channel = supabase
     .channel(channelName)
     .on(
@@ -594,10 +608,8 @@ export function subscribeToCollection<T>(collectionName: string, callback: (data
       async () => {
         // Re-fetch collection on change
         const updated = await fetchCollection<T>(collectionName);
-        if (updated.length > 0) {
-          offlineService.cacheListLocally(collectionName, updated as any);
-          callback(updated);
-        }
+        offlineService.cacheListLocally(collectionName, updated as any);
+        callback(updated);
       }
     )
     .subscribe();
