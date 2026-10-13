@@ -119,21 +119,43 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Écouteur pour le clic sur la notification
+// Écouteur pour le clic sur la notification (Web Push & Notification native)
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  // Ouvre l'application ou la met au premier plan
+  if (event.action === 'fermer') {
+    return;
+  }
+
+  // Cible de redirection précise
+  const rawTarget = event.notification.data?.url || event.notification.data?.link || '/';
+  const targetUrl = new URL(rawTarget, self.location.origin).href;
+
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      const urlToOpen = event.notification.data?.url || '/';
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientList) => {
+      // 1. Chercher si un client avec la même origine est déjà ouvert
       for (const client of clientList) {
-        if (client.url.includes(urlToOpen) && 'focus' in client) {
-          return client.focus();
+        if ('focus' in client) {
+          await client.focus();
+          // Informer l'application React du lien cliqué sans recharger la page
+          if ('postMessage' in client) {
+            client.postMessage({
+              type: 'NAVIGATE_TO',
+              url: targetUrl,
+              link: event.notification.data?.link || rawTarget,
+              action: event.action
+            });
+          }
+          if ('navigate' in client && client.url !== targetUrl) {
+            return client.navigate(targetUrl);
+          }
+          return;
         }
       }
+
+      // 2. Si aucune fenêtre n'est ouverte, ouvrir la fenêtre directement sur l'URL cible
       if (self.clients.openWindow) {
-        return self.clients.openWindow(urlToOpen);
+        return self.clients.openWindow(targetUrl);
       }
     })
   );

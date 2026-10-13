@@ -55,7 +55,7 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
     const newToken = `CITRINE_DOOR_${randomHex}_${timestampHex}`;
     const nowIso = new Date().toISOString();
 
-    const updated: CompanyModuleConfig = {
+    const updated: any = {
       ...(moduleConfig || {}),
       doorQrCodeToken: newToken,
       qrCodeSecret: newToken, // Rétrocompatibilité
@@ -77,7 +77,7 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
 
   const handleSaveParams = (e: React.FormEvent) => {
     e.preventDefault();
-    const updated: CompanyModuleConfig = {
+    const updated: any = {
       ...(moduleConfig || {}),
       doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
       doorQrRequireGps: requireGps,

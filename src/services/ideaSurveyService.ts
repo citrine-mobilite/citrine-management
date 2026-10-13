@@ -5,7 +5,7 @@ import {
   saveDocument, 
   deleteDocument, 
   getCollection 
-} from './firestoreService';
+} from './dataService';
 
 export const INITIAL_IDEAS: IdeaSuggestion[] = [
   {

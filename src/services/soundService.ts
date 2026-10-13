@@ -76,6 +76,10 @@ class SoundService {
     } catch {}
   }
 
+  public playClockingChime(): void {
+    this.playPointageSuccess();
+  }
+
   public playPointageDeparture(): void {
     try {
       const ctx = this.getContext();
@@ -220,6 +224,13 @@ class SoundService {
       } catch {}
       this.fallbackAlarmAudio = null;
     }
+  }
+
+  public playClick(): void {
+    try {
+      const ctx = this.getContext();
+      playBeepSequence(ctx, [{ freq: 600, start: 0, duration: 0.04, type: 'sine' }], 0.1);
+    } catch {}
   }
 }
 

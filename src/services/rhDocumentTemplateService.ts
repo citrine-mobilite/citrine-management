@@ -4,7 +4,7 @@ import {
   subscribeToCollection, 
   saveDocument, 
   deleteDocument 
-} from './firestoreService';
+} from './dataService';
 
 /**
  * Modèles officiels initiaux de documents RH (conservés et synchronisés en base de données Firestore)

@@ -1,5 +1,5 @@
-import React from 'react';
-import { LayoutDashboard, UserCheck, Clock, Calendar, Menu, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LayoutDashboard, UserCheck, Clock, Calendar, Menu, User, Bell } from 'lucide-react';
 import { TabType } from '../Sidebar';
 import { AppUser } from '../../types';
 import { haptic } from '../../services/hapticService';
@@ -19,6 +19,18 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
   setMobileMenuOpen,
 }) => {
   const isEmployee = isEmployeeUser(currentUser);
+  const [mobileUnreadCount, setMobileUnreadCount] = useState<number>(0);
+
+  useEffect(() => {
+    const handleAlertsUpdate = (e: Event) => {
+      const custom = e as CustomEvent<{ unreadCount: number }>;
+      if (typeof custom.detail?.unreadCount === 'number') {
+        setMobileUnreadCount(custom.detail.unreadCount);
+      }
+    };
+    window.addEventListener('citrine:alerts_read_updated', handleAlertsUpdate);
+    return () => window.removeEventListener('citrine:alerts_read_updated', handleAlertsUpdate);
+  }, []);
 
   const scrollToTop = () => {
     if (typeof window !== 'undefined') {
@@ -38,13 +50,41 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
             scrollToTop();
           }}
           className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition cursor-pointer ${
-            activeTab === 'employee_portal'
+            activeTab === 'employee_portal' && (typeof window === 'undefined' || !window.location.hash.includes('alerts'))
               ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
               : 'text-stone-500 hover:text-stone-800'
           }`}
         >
           <UserCheck className="h-5 w-5" />
           <span className="text-[11px] font-bold">Mon Espace</span>
+        </button>
+
+        {/* Mes Alertes & Notifications */}
+        <button
+          onClick={() => {
+            haptic.light();
+            setActiveTab('employee_portal');
+            if (typeof window !== 'undefined') {
+              window.location.hash = '#employee/alerts';
+              window.dispatchEvent(new CustomEvent('citrine:switch_employee_subtab', { detail: { subtab: 'alerts' } }));
+            }
+            scrollToTop();
+          }}
+          className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition cursor-pointer relative ${
+            activeTab === 'employee_portal' && typeof window !== 'undefined' && window.location.hash.includes('alerts')
+              ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
+              : 'text-stone-500 hover:text-stone-800'
+          }`}
+        >
+          <div className="relative">
+            <Bell className="h-5 w-5" />
+            {mobileUnreadCount > 0 && (
+              <span className="absolute -top-1 -right-1.5 px-1 min-w-[14px] h-3.5 bg-amber-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center font-mono">
+                {mobileUnreadCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-bold">Alertes</span>
         </button>
 
         {/* Mon Profil & Déconnexion */}

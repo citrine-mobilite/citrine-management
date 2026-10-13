@@ -124,17 +124,20 @@ export const pushNotificationService = {
     try {
       // Configuration par défaut et polie pour la notification
       const defaultOptions: any = {
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
+        icon: '/pwa-192x192.png',
+        badge: '/pwa-192x192.png',
         dir: 'auto',
         lang: 'fr',
-        tag: 'citrine-alert', // Permet d'éviter d'empiler indéfiniment
-        renotify: true, // Re-vibre / réémet un son si la même balise est mise à jour
+        tag: 'citrine-alert',
+        renotify: true,
         vibrate: [100, 50, 100],
-        ...options
+        ...options,
+        data: {
+          ...(options as any)?.data,
+        },
       };
 
-      // Si un Service Worker est disponible, on privilégie l'envoi via celui-ci (obligatoire sur mobile)
+      // Si un Service Worker est disponible, on privilégie l'envoi via celui-ci (obligatoire sur mobile & PWA)
       if ('serviceWorker' in navigator) {
         try {
           let registration = await navigator.serviceWorker.getRegistration();
@@ -151,7 +154,19 @@ export const pushNotificationService = {
       }
 
       // Création de l'objet de notification natif de repli pour bureau
-      new Notification(title, defaultOptions);
+      const nativeNotif = new Notification(title, defaultOptions);
+      nativeNotif.onclick = (e) => {
+        e.preventDefault();
+        window.focus();
+        const targetLink = defaultOptions.data?.link || defaultOptions.data?.url;
+        if (targetLink) {
+          const formatted = targetLink.startsWith('#') || targetLink.startsWith('/')
+            ? targetLink
+            : `#${targetLink}`;
+          window.location.hash = formatted;
+          window.dispatchEvent(new CustomEvent('citrine:deep_link', { detail: { link: targetLink } }));
+        }
+      };
       return true;
     } catch (error) {
       console.error("Erreur lors de l'envoi de la notification native:", error);

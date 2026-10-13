@@ -6,11 +6,14 @@ import {
   EmergencyDeclaration, 
   PresenceStatus, 
   CompanyModuleConfig, 
-  AttendanceIncident 
+  AttendanceIncident,
+  EmergencyType,
+  NotificationLog
 } from '../../types';
 import { getCurrentUserLocation } from '../../utils/geolocation';
 import { isLate } from '../../utils/dateUtils';
 import { incidentService } from '../../services/incidentService';
+import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 
 interface UseClockingActionsProps {
   employeeProfile: Employee;
@@ -21,6 +24,7 @@ interface UseClockingActionsProps {
   moduleConfig?: CompanyModuleConfig;
   attendanceIncidents?: AttendanceIncident[];
   onAddAttendanceIncident?: (incident: AttendanceIncident) => void;
+  onAddNotification?: (log: NotificationLog) => void;
 }
 
 export function useClockingActions({
@@ -32,11 +36,12 @@ export function useClockingActions({
   moduleConfig,
   attendanceIncidents = [],
   onAddAttendanceIncident,
+  onAddNotification,
 }: UseClockingActionsProps) {
   const [isLocating, setIsLocating] = useState<boolean>(false);
 
   const handleConfirmClocking = async (
-    pendingClockAction: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure' | null,
+    pendingClockAction: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure' | 'sortieProStart' | 'sortieProEnd' | null,
     method: ClockingMethod,
     onSuccess: () => void,
     customLocation?: { latitude?: number; longitude?: number; locationName?: string }
@@ -175,6 +180,10 @@ export function useClockingActions({
           existing.pauseEnd = timeStr;
         } else if (pendingClockAction === 'departure') {
           existing.departureTime = timeStr;
+        } else if (pendingClockAction === 'sortieProStart') {
+          existing.sortieProStart = timeStr;
+        } else if (pendingClockAction === 'sortieProEnd') {
+          existing.sortieProEnd = timeStr;
         }
         existing.location = locationName;
         existing.latitude = latitude;
@@ -191,6 +200,8 @@ export function useClockingActions({
           pauseStart: pendingClockAction === 'pauseStart' ? timeStr : null,
           pauseEnd: pendingClockAction === 'pauseEnd' ? timeStr : null,
           departureTime: pendingClockAction === 'departure' ? timeStr : null,
+          sortieProStart: pendingClockAction === 'sortieProStart' ? timeStr : null,
+          sortieProEnd: pendingClockAction === 'sortieProEnd' ? timeStr : null,
           location: locationName,
           latitude,
           longitude,
@@ -200,8 +211,72 @@ export function useClockingActions({
       }
 
       onUpdatePresences(updatedPresences);
+
+      if (onAddNotification) {
+        const actionLabels: Record<string, string> = {
+          arrival: 'Arrivée',
+          pauseStart: 'Début de pause',
+          pauseEnd: 'Fin de pause',
+          departure: 'Départ',
+          sortieProStart: 'Mission pro (Départ)',
+          sortieProEnd: 'Mission pro (Retour)',
+        };
+        const actionLabel = actionLabels[pendingClockAction] || 'Pointage';
+
+        // Garantir STRICTEMENT une seule notification claire et exhaustive par action (pas de doublon)
+        let notifTitle = `Pointage enregistré : ${actionLabel}`;
+        let notifContent = `Votre pointage (${actionLabel}) a été validé à ${timeStr} sur le site ${locationName}.`;
+        let notifPayload: any = {
+          source: 'pointage',
+          employeeId: employeeProfile.id,
+          action: pendingClockAction,
+          time: timeStr,
+          date: todayStr,
+        };
+
+        if (isLateArrival) {
+          notifTitle = `Pointage validé : Arrivée (Retard constaté)`;
+          notifContent = `Votre arrivée a été validée à ${timeStr} sur le site ${locationName}. Un incident de retard (après ${lateThreshold}) a été consigné automatiquement.`;
+          notifPayload.incidentType = 'retard';
+        } else if (pendingClockAction === 'departure' && timeStr < plannedDeparture) {
+          notifTitle = `Pointage validé : Départ (Sortie prématurée)`;
+          notifContent = `Départ badgé à ${timeStr} sur le site ${locationName} avant ${plannedDeparture}. Un incident de sortie anticipée a été consigné automatiquement.`;
+          notifPayload.incidentType = 'sortie_prematuree';
+        }
+
+        onAddNotification({
+          id: `notif-clock-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          type: 'system',
+          recipient: employeeProfile.id,
+          title: notifTitle,
+          content: notifContent,
+          payload: JSON.stringify(notifPayload),
+          timestamp: new Date().toISOString(),
+          read: false,
+        });
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+        }
+      }
+
+      try {
+        pushNotificationBridgeService.sendPush({
+          title: `Pointage de ${employeeProfile.name}`,
+          message: `${employeeProfile.name} a effectué un pointage (${pendingClockAction}) à ${timeStr} sur le site ${locationName}.`,
+          senderName: employeeProfile.name,
+          type: 'attendance',
+          link: 'presences',
+        });
+      } catch (e) {
+        console.warn('Failed to send push notification:', e);
+      }
       if (!isLateArrival && pendingClockAction === 'arrival') {
         showToast('Pointage Réussi', `Arrivée à l'heure badgée avec succès (${timeStr}).`, 'success');
+      } else if (pendingClockAction === 'sortieProStart') {
+        showToast('Sortie Pro Badgée', `Départ en mission extérieure enregistré à ${timeStr}.`, 'success');
+      } else if (pendingClockAction === 'sortieProEnd') {
+        showToast('Retour Pro Badgé', `Retour de mission professionnelle enregistré à ${timeStr}.`, 'success');
       } else if (pendingClockAction !== 'arrival') {
         showToast('Pointage Validé', `Votre action (${pendingClockAction}) a été enregistrée.`, 'success');
       }
@@ -255,11 +330,22 @@ export function useClockingActions({
   };
 
   const handleConfirmEmergency = async (
-    emergencyType: 'retard' | 'pause_anticipee' | 'rallonge_pause' | 'depart_anticipe',
+    emergencyType: EmergencyType,
     emergencyReason: string,
     onSuccess: () => void
   ) => {
     if (!emergencyReason.trim()) return;
+
+    if (emergencyType === 'retour_sortie_professionnelle') {
+      const existingPresences = presences.find((p) => p.employeeId === employeeProfile.id && p.date === todayStr);
+      const hasStartedMission = existingPresences?.sortieProStart || existingPresences?.emergencies?.some(e => e.type === 'sortie_professionnelle');
+      const alreadyEndedMission = existingPresences?.sortieProEnd || existingPresences?.emergencies?.some(e => e.type === 'retour_sortie_professionnelle');
+      if (!hasStartedMission || alreadyEndedMission) {
+        showToast('Action Interdite', 'Impossible de badger un retour de mission si vous n\'avez pas encore pointé une sortie de mission (ou mission déjà clôturée) !', 'warning');
+        return;
+      }
+    }
+
     const now = new Date();
     const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -270,7 +356,7 @@ export function useClockingActions({
       employeeName: employeeProfile.name,
       date: todayStr,
       timeString,
-      type: emergencyType,
+      type: emergencyType as any,
       origin: 'signale_par_employe',
       reason: emergencyReason.trim(),
       isDeclaredInAdvance: true,
@@ -286,7 +372,7 @@ export function useClockingActions({
     const newEmergency: EmergencyDeclaration = {
       id: `emg-${Date.now()}`,
       type: emergencyType,
-      reason: emergencyReason,
+      reason: emergencyReason.trim(),
       timeString,
       timestamp: now.toISOString(),
       status: 'pending',
@@ -300,6 +386,12 @@ export function useClockingActions({
     if (existingIdx >= 0) {
       const existing = { ...updatedPresences[existingIdx] };
       existing.emergencies = [...(existing.emergencies || []), newEmergency];
+      if (emergencyType === 'sortie_professionnelle') {
+        existing.sortieProStart = timeString;
+        existing.sortieProReason = emergencyReason.trim();
+      } else if (emergencyType === 'retour_sortie_professionnelle') {
+        existing.sortieProEnd = timeString;
+      }
       updatedPresences[existingIdx] = existing;
     } else {
       updatedPresences.push({
@@ -311,17 +403,68 @@ export function useClockingActions({
         pauseStart: null,
         pauseEnd: null,
         departureTime: null,
+        sortieProStart: emergencyType === 'sortie_professionnelle' ? timeString : null,
+        sortieProEnd: emergencyType === 'retour_sortie_professionnelle' ? timeString : null,
+        sortieProReason: emergencyType === 'sortie_professionnelle' ? emergencyReason.trim() : null,
         emergencies: [newEmergency],
       });
     }
 
     onUpdatePresences(updatedPresences);
+
+    if (onAddNotification) {
+      const emergencyLabels: Record<string, string> = {
+        sortie_professionnelle: 'Sortie professionnelle',
+        retour_sortie_professionnelle: 'Retour de mission pro',
+        permission: 'Demande de permission',
+        retard: 'Déclaration de retard',
+        depart_anticipe: 'Départ anticipé',
+        arret_maladie: 'Arrêt maladie',
+        urgence_personnelle: 'Urgence personnelle',
+      };
+      const label = emergencyLabels[emergencyType] || 'Signalement RH';
+
+      onAddNotification({
+        id: `notif-signalement-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        type: 'system',
+        recipient: employeeProfile.id,
+        title: `Signalement : ${label}`,
+        content: `Votre déclaration (${label}) a été enregistrée à ${timeString}. Motif : ${emergencyReason.trim() || 'N/A'}.`,
+        payload: JSON.stringify({ 
+          source: 'signalement', 
+          employeeId: employeeProfile.id, 
+          type: emergencyType,
+          reason: emergencyReason.trim(),
+          date: todayStr 
+        }),
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+      }
+    }
+
     onSuccess();
-    showToast(
-      'Incident Signalé',
-      'Votre signalement a été enregistré avec succès et pris en compte dans le radar d\'assiduité.',
-      'info'
-    );
+
+    if (emergencyType === 'sortie_professionnelle') {
+      showToast('Sortie Pro Déclarée', `Départ en mission extérieure enregistré à ${timeString}.`, 'success');
+    } else if (emergencyType === 'retour_sortie_professionnelle') {
+      showToast('Retour Pro Déclaré', `Retour de mission professionnelle enregistré à ${timeString}.`, 'success');
+    } else if (emergencyType === 'permission') {
+      showToast('Permission Déclarée', 'Votre demande de permission exceptionnelle a été transmise aux RH.', 'info');
+    } else if (emergencyType === 'retard') {
+      showToast('Retard Signalé', 'Votre signalement de retard a été transmis avec succès.', 'info');
+    } else if (emergencyType === 'depart_anticipe') {
+      showToast('Départ Anticipé Signalé', 'Votre départ anticipé a été notifié aux responsables.', 'warning');
+    } else {
+      showToast(
+        'Situation Signalée',
+        'Votre déclaration a été enregistrée avec succès et prise en compte dans le suivi RH.',
+        'info'
+      );
+    }
   };
 
   return {

@@ -1,30 +1,19 @@
-import { 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
-  onSnapshot, 
-  Unsubscribe, 
-  collection, 
-  query, 
-  where 
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { COLLECTIONS } from './firestoreService';
+import { supabase, supabaseAdmin } from '../lib/supabase';
 import { VoIPCall, CallType, AppUser, VoIPCallParticipant } from '../types';
 import { webRTCService } from './webRTCService';
 import { soundService } from './soundService';
-import { sendCandidate, sendSignal, listenToCandidates, listenToSignals } from './calls/signalingFirestore';
+import { sendCandidate, listenToCandidates } from './calls/signalingSupabase';
 import { CallEventCallbacks } from './calls/callTypes';
 
+type Unsubscribe = () => void;
+
 class CallSignalingService {
-  private activeCallUnsub: Unsubscribe | null = null;
+  private activeCallChannel: any = null;
   private candidatesUnsub: Unsubscribe | null = null;
-  private signalsUnsub: Unsubscribe | null = null;
   private currentCallId: string | null = null;
 
   /**
-   * Écoute en continu les appels entrants dirigés vers l'utilisateur connecté
+   * Écoute en continu les appels entrants dirigés vers l'utilisateur connecté via Supabase Realtime
    */
   public listenForIncomingCalls(
     userId: string,
@@ -32,38 +21,32 @@ class CallSignalingService {
   ): Unsubscribe {
     if (!userId) return () => {};
 
-    const callsCol = collection(db, COLLECTIONS.CALLS);
-    const q = query(
-      callsCol,
-      where('calleeId', '==', userId),
-      where('status', '==', 'ringing')
-    );
+    const userChannel = supabase.channel(`incoming_calls_user_${userId}`);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (snapshot.empty) {
-        soundService.stopIncomingRingtone();
-        onIncomingCall(null);
-        return;
+    userChannel.on('broadcast', { event: 'incoming_call' }, ({ payload }) => {
+      const callData = payload as VoIPCall;
+      if (callData && callData.status === 'ringing') {
+        const callTime = new Date(callData.createdAt).getTime();
+        const now = Date.now();
+        if (now - callTime < 60000) {
+          soundService.playIncomingRingtone();
+          onIncomingCall(callData);
+        } else {
+          onIncomingCall(null);
+        }
       }
-
-      // Prend le premier appel en sonnerie active
-      const docChange = snapshot.docs[0];
-      const callData = { id: docChange.id, ...docChange.data() } as VoIPCall;
-
-      // Vérifie que l'appel est récent (moins de 60 secondes)
-      const callTime = new Date(callData.createdAt).getTime();
-      const now = Date.now();
-      if (now - callTime < 60000) {
-        soundService.playIncomingRingtone();
-        onIncomingCall(callData);
-      } else {
-        onIncomingCall(null);
-      }
-    }, (error) => {
-      console.warn("Écoute des appels entrants différée :", error);
     });
 
-    return unsubscribe;
+    userChannel.on('broadcast', { event: 'call_ended' }, () => {
+      soundService.stopIncomingRingtone();
+      onIncomingCall(null);
+    });
+
+    userChannel.subscribe();
+
+    return () => {
+      supabase.removeChannel(userChannel);
+    };
   }
 
   /**
@@ -80,7 +63,6 @@ class CallSignalingService {
 
     const callId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     this.currentCallId = callId;
-    const callDocRef = doc(db, COLLECTIONS.CALLS, callId);
 
     // Démarre le flux audio / vidéo local
     await webRTCService.startLocalStream(type);
@@ -131,35 +113,57 @@ class CallSignalingService {
       offer: { type: 'offer', sdp: offer.sdp || '' },
     };
 
-    await setDoc(callDocRef, callData);
+    // Notification broadcast temps réel à l'appelé
+    const calleeChannel = supabase.channel(`incoming_calls_user_${callee.id}`);
+    calleeChannel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        calleeChannel.send({
+          type: 'broadcast',
+          event: 'incoming_call',
+          payload: callData,
+        });
+      }
+    });
+
+    // Enregistrement asynchrone non-bloquant en table Supabase calls
+    supabaseAdmin.from('calls').upsert({
+      doc_id: callId,
+      caller_id: caller.id,
+      callee_id: callee.id,
+      type,
+      status: 'ringing',
+      raw_data: callData,
+      updated_at: new Date().toISOString()
+    }).then(() => {}, () => {});
+
     soundService.playOutgoingRingback();
 
     // Écoute les ICE candidates envoyés par le destinataire
     this.candidatesUnsub = listenToCandidates(callId, caller.id, (c) => webRTCService.addIceCandidate(c.fromUserId, c));
 
-    // Écoute l'état du document d'appel en temps réel (réponse ou fin d'appel)
-    this.activeCallUnsub = onSnapshot(callDocRef, async (snap) => {
-      const data = snap.data() as VoIPCall | undefined;
-      if (!data) return;
+    // Canal dédié à cet appel
+    const callChannel = supabase.channel(`call_room_${callId}`);
+    this.activeCallChannel = callChannel;
 
-      // Quand l'appelé décroche et envoie sa réponse SDP
-      if (data.status === 'connected' && data.answer) {
-        soundService.stopOutgoingRingback();
+    callChannel.on('broadcast', { event: 'call_answered' }, async ({ payload }) => {
+      soundService.stopOutgoingRingback();
+      if (payload?.answer) {
         try {
-          await webRTCService.handleAnswer(callee.id, data.answer as RTCSessionDescriptionInit);
+          await webRTCService.handleAnswer(callee.id, payload.answer as RTCSessionDescriptionInit);
           callbacks?.onConnected?.();
         } catch (err) {
-          console.warn("Erreur établissement réponse WebRTC :", err);
+          console.warn('Erreur établissement réponse WebRTC :', err);
         }
       }
-
-      // Quand l'appel est terminé ou rejeté
-      if (data.status === 'ended' || data.status === 'rejected' || data.status === 'missed') {
-        soundService.stopOutgoingRingback();
-        callbacks?.onEnded?.(data.endReason || "L'appel a pris fin.");
-        this.cleanUp();
-      }
     });
+
+    callChannel.on('broadcast', { event: 'call_ended' }, ({ payload }) => {
+      soundService.stopOutgoingRingback();
+      callbacks?.onEnded?.(payload?.reason || "L'appel a pris fin.");
+      this.cleanUp();
+    });
+
+    callChannel.subscribe();
 
     return callData;
   }
@@ -197,36 +201,39 @@ class CallSignalingService {
 
     if (call.offer) {
       const answer = await webRTCService.handleOffer(call.callerId, call.offer as RTCSessionDescriptionInit);
-      const callDocRef = doc(db, COLLECTIONS.CALLS, call.id);
-      
-      const updatedParticipants: VoIPCallParticipant[] = (call.participants || []).map((p) => {
-        if (p.id === call.calleeId) {
-          return { ...p, status: 'joined', joinedAt: new Date().toISOString() };
+
+      const callChannel = supabase.channel(`call_room_${call.id}`);
+      this.activeCallChannel = callChannel;
+
+      callChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          callChannel.send({
+            type: 'broadcast',
+            event: 'call_answered',
+            payload: {
+              answer: { type: 'answer', sdp: answer.sdp || '' },
+              calleeId: call.calleeId,
+            },
+          });
         }
-        return p;
       });
 
-      await updateDoc(callDocRef, {
-        status: 'connected',
-        startedAt: new Date().toISOString(),
-        answer: { type: 'answer', sdp: answer.sdp || '' },
-        participants: updatedParticipants
+      callChannel.on('broadcast', { event: 'call_ended' }, ({ payload }) => {
+        callbacks?.onEnded?.(payload?.reason || "L'appel est terminé.");
+        this.cleanUp();
       });
+
+      supabaseAdmin.from('calls').upsert({
+        doc_id: call.id,
+        status: 'connected',
+        started_at: new Date().toISOString(),
+        raw_data: { ...call, status: 'connected', answer: { type: 'answer', sdp: answer.sdp || '' } },
+        updated_at: new Date().toISOString()
+      }).then(() => {}, () => {});
     }
 
     soundService.playCallConnected();
     this.candidatesUnsub = listenToCandidates(call.id, call.calleeId, (c) => webRTCService.addIceCandidate(c.fromUserId, c));
-
-    // Écoute de la fin d'appel
-    const callDocRef = doc(db, COLLECTIONS.CALLS, call.id);
-    this.activeCallUnsub = onSnapshot(callDocRef, (snap) => {
-      const data = snap.data() as VoIPCall | undefined;
-      if (!data) return;
-      if (data.status === 'ended' || data.status === 'rejected') {
-        callbacks?.onEnded?.(data.endReason || "L'appel est terminé.");
-        this.cleanUp();
-      }
-    });
   }
 
   /**
@@ -234,14 +241,24 @@ class CallSignalingService {
    */
   public async rejectCall(callId: string, reason = "Appel refusé"): Promise<void> {
     soundService.stopIncomingRingtone();
-    try {
-      const callDocRef = doc(db, COLLECTIONS.CALLS, callId);
-      await updateDoc(callDocRef, {
-        status: 'rejected',
-        endedAt: new Date().toISOString(),
-        endReason: reason,
-      });
-    } catch {}
+    const callChannel = supabase.channel(`call_room_${callId}`);
+    callChannel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        callChannel.send({
+          type: 'broadcast',
+          event: 'call_ended',
+          payload: { reason },
+        });
+      }
+    });
+
+    supabaseAdmin.from('calls').upsert({
+      doc_id: callId,
+      status: 'rejected',
+      end_reason: reason,
+      updated_at: new Date().toISOString()
+    }).then(() => {}, () => {});
+
     this.cleanUp();
   }
 
@@ -254,14 +271,24 @@ class CallSignalingService {
     soundService.stopIncomingRingtone();
 
     if (idToClose) {
-      try {
-        const callDocRef = doc(db, COLLECTIONS.CALLS, idToClose);
-        await updateDoc(callDocRef, {
-          status: 'ended',
-          endedAt: new Date().toISOString(),
-          endReason: reason,
-        });
-      } catch {}
+      const callChannel = supabase.channel(`call_room_${idToClose}`);
+      callChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          callChannel.send({
+            type: 'broadcast',
+            event: 'call_ended',
+            payload: { reason },
+          });
+        }
+      });
+
+      supabaseAdmin.from('calls').upsert({
+        doc_id: idToClose,
+        status: 'ended',
+        ended_at: new Date().toISOString(),
+        end_reason: reason,
+        updated_at: new Date().toISOString()
+      }).then(() => {}, () => {});
     }
 
     soundService.playCallEnded();
@@ -272,12 +299,12 @@ class CallSignalingService {
   public cleanUp(): void {
     soundService.stopOutgoingRingback();
     soundService.stopIncomingRingtone();
-    if (this.activeCallUnsub) this.activeCallUnsub();
+    if (this.activeCallChannel) {
+      supabase.removeChannel(this.activeCallChannel);
+      this.activeCallChannel = null;
+    }
     if (this.candidatesUnsub) this.candidatesUnsub();
-    if (this.signalsUnsub) this.signalsUnsub();
-    this.activeCallUnsub = null;
     this.candidatesUnsub = null;
-    this.signalsUnsub = null;
     this.currentCallId = null;
   }
 }

@@ -14,7 +14,7 @@ export const DashboardQuickTasksWidget: React.FC<DashboardQuickTasksWidgetProps>
   reminders,
   onSelectTab,
 }) => {
-  const pendingTasks = tasks.filter((t) => t.status !== 'termine');
+  const pendingTasks = tasks.filter((t) => t.status !== 'completed');
   const activeReminders = reminders.filter((r) => r.status === 'pending');
 
   return (

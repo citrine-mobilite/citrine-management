@@ -11,7 +11,8 @@ import {
   User,
   AlertTriangle
 } from 'lucide-react';
-import { Task, Employee, TaskStatus, TaskPriority, TaskProject, Subtask, Comment } from '../../types';
+import { Task, Employee, TaskStatus, TaskPriority, TaskProject, Subtask, Comment, AppUser } from '../../types';
+import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 
 interface TaskDetailDrawerProps {
   task: Task | null;
@@ -21,6 +22,8 @@ interface TaskDetailDrawerProps {
   onSaveTask: (updatedTask: Task) => void;
   onDeleteTask: (taskId: string) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
+  currentRole?: string;
+  currentUser?: AppUser | null;
 }
 
 export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = (props) => {
@@ -40,13 +43,19 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   onSaveTask,
   onDeleteTask,
   showToast,
+  currentRole,
+  currentUser,
 }) => {
-  // Local draft state for renaming, editing description, status, priority, etc.
+  const isEmployee = currentRole === 'employé' || (currentUser && currentUser.role === 'employé');
+
+  // Local draft state
   const [draftTitle, setDraftTitle] = useState(task.title);
   const [draftDescription, setDraftDescription] = useState(task.description || '');
   const [draftStatus, setDraftStatus] = useState<TaskStatus>(task.status);
   const [draftPriority, setDraftPriority] = useState<TaskPriority>(task.priority);
-  const [draftAssignedTo, setDraftAssignedTo] = useState(task.assignedTo || 'Équipe');
+  const [draftAssignedList, setDraftAssignedList] = useState<string[]>(
+    task.assignedTo ? task.assignedTo.split(',').map(s => s.trim()) : ['Équipe']
+  );
   const [draftDate, setDraftDate] = useState(task.date);
   const [draftProjectId, setDraftProjectId] = useState(task.projectId || 'general');
   const [draftIsMilestone, setDraftIsMilestone] = useState(!!task.isMilestone);
@@ -67,7 +76,7 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
     setDraftDescription(task.description || '');
     setDraftStatus(task.status);
     setDraftPriority(task.priority);
-    setDraftAssignedTo(task.assignedTo || 'Équipe');
+    setDraftAssignedList(task.assignedTo ? task.assignedTo.split(',').map(s => s.trim()) : ['Équipe']);
     setDraftDate(task.date);
     setDraftProjectId(task.projectId || 'general');
     setDraftIsMilestone(!!task.isMilestone);
@@ -90,13 +99,17 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
       return;
     }
 
+    const finalAssigned = isEmployee
+      ? (currentUser?.name || task.assignedTo || 'Équipe')
+      : (draftAssignedList.length > 0 ? draftAssignedList.join(', ') : 'Équipe');
+
     const updated: Task = {
       ...task,
       title: draftTitle.trim(),
       description: draftDescription.trim(),
       status: draftStatus,
       priority: draftPriority,
-      assignedTo: draftAssignedTo,
+      assignedTo: finalAssigned,
       date: draftDate,
       projectId: draftProjectId,
       isMilestone: draftIsMilestone,
@@ -145,7 +158,7 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
     if (!newCommentText.trim()) return;
     const newCom: Comment = {
       id: `com-${Date.now()}`,
-      author: 'Utilisateur',
+      author: currentUser?.name || 'Utilisateur',
       text: newCommentText.trim(),
       timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
     };
@@ -153,7 +166,13 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
     setComments(updated);
     setNewCommentText('');
     onSaveTask({ ...task, comments: updated });
-    if (showToast) showToast('Commentaire ajouté.', 'success');
+
+    pushNotificationBridgeService.sendPush({
+      title: `Nouveau Commentaire 💬`,
+      message: `${newCom.author} a commenté sur la tâche "${task.title}": "${newCom.text}"`,
+      type: 'task_comment',
+      link: '#tasks'
+    });
   };
 
   const handleSignalBlocker = () => {
@@ -219,54 +238,6 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
             />
           </div>
 
-          {/* Toggle Type Jalon vs Tâche */}
-          <div className="bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200/80 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="font-bold text-amber-900 flex items-center gap-1.5 cursor-pointer">
-                <Flag className="h-4 w-4 fill-amber-600 text-amber-600" />
-                <span>Marquer comme Jalon Clé (Milestone)</span>
-              </label>
-              <input
-                type="checkbox"
-                checked={draftIsMilestone}
-                onChange={(e) => setDraftIsMilestone(e.target.checked)}
-                className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
-              />
-            </div>
-            {draftIsMilestone && (
-              <div className="space-y-2 pt-2 border-t border-amber-200/60">
-                <div>
-                  <label className="block font-bold text-amber-900 text-[11px] mb-1">
-                    Livrable attendu ou critère de succès :
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Livrable validé par le client, signature officielle..."
-                    value={draftMilestoneTarget}
-                    onChange={(e) => setDraftMilestoneTarget(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-xl border border-amber-300 bg-white text-stone-800 text-xs focus:ring-1 focus:ring-amber-500 outline-none"
-                  />
-                </div>
-                <div>
-                  <div className="flex justify-between text-[11px] font-bold text-amber-900 mb-1">
-                    <span>Progression du Jalon :</span>
-                    <span>{draftMilestoneProgress}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={draftMilestoneProgress}
-                    onChange={(e) => setDraftMilestoneProgress(Number(e.target.value))}
-                    className="w-full accent-amber-600 cursor-pointer"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Description : Ajouter ou modifier la description */}
           <div>
             <label className="block text-stone-700 font-bold mb-1">
               Description & Spécifications
@@ -343,18 +314,47 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
 
             <div>
               <label className="block text-stone-600 font-bold mb-1 text-[11px] flex items-center gap-1">
-                <User className="h-3 w-3 text-[#2A7B76]" /> Assigné à (Membres)
+                <User className="h-3 w-3 text-[#2A7B76]" /> Assigné à
               </label>
-              <select
-                value={draftAssignedTo}
-                onChange={(e) => setDraftAssignedTo(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white font-medium text-stone-800"
-              >
-                <option value="Équipe">Toute l'équipe du projet</option>
-                {eligibleEmployees.map((emp) => (
-                  <option key={emp.id} value={emp.name}>{emp.name}</option>
-                ))}
-              </select>
+              {isEmployee ? (
+                <input
+                  type="text"
+                  disabled
+                  value={task.assignedTo || currentUser?.name || 'Moi'}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 bg-stone-100 text-stone-600 font-medium cursor-not-allowed text-[11px]"
+                />
+              ) : (
+                <div className="space-y-1 max-h-32 overflow-y-auto p-1.5 bg-white rounded-lg border border-stone-200">
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-stone-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draftAssignedList.includes('Équipe')}
+                      onChange={(e) => {
+                        if (e.target.checked) setDraftAssignedList(['Équipe']);
+                        else setDraftAssignedList(draftAssignedList.filter(x => x !== 'Équipe'));
+                      }}
+                      className="rounded border-stone-300 text-[#2A7B76]"
+                    />
+                    <span>Toute l'équipe</span>
+                  </label>
+                  {eligibleEmployees.map((emp) => (
+                    <label key={emp.id} className="flex items-center gap-1.5 text-[11px] font-medium text-stone-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={draftAssignedList.includes(emp.name)}
+                        onChange={(e) => {
+                          let updated = draftAssignedList.filter(x => x !== 'Équipe');
+                          if (e.target.checked) updated.push(emp.name);
+                          else updated = updated.filter(x => x !== emp.name);
+                          setDraftAssignedList(updated.length > 0 ? updated : ['Équipe']);
+                        }}
+                        className="rounded border-stone-300 text-[#2A7B76]"
+                      />
+                      <span>{emp.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -378,17 +378,17 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
             <div className="space-y-1.5">
               {subtasks.map((sub) => (
                 <div key={sub.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200">
-                  <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={sub.completed}
                       onChange={() => handleToggleSubtask(sub.id)}
-                      className="w-3.5 h-3.5 text-[#2A7B76] rounded cursor-pointer"
+                      className="w-4 h-4 rounded border-stone-300 text-[#2A7B76]"
                     />
-                    <span className={`text-xs ${sub.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>
+                    <span className={`text-xs ${sub.completed ? 'line-through text-stone-400 font-medium' : 'text-stone-800 font-bold'}`}>
                       {sub.title}
                     </span>
-                  </div>
+                  </label>
                 </div>
               ))}
             </div>
@@ -396,40 +396,18 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
             <div className="flex items-center gap-2 pt-1">
               <input
                 type="text"
-                placeholder="Nouvelle sous-tâche..."
+                placeholder="Ajouter une sous-tâche..."
                 value={newSubtaskTitle}
                 onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                className="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-xs outline-none focus:ring-1 focus:ring-[#2A7B76]"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddSubtask(); } }}
+                className="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-xs outline-none focus:ring-2 focus:ring-[#2A7B76]"
               />
               <button
                 type="button"
                 onClick={handleAddSubtask}
-                className="px-3 py-1.5 bg-[#2A7B76] text-white rounded-xl text-xs font-bold cursor-pointer"
+                className="px-3 py-1.5 bg-[#2A7B76] text-white rounded-xl text-xs font-bold hover:bg-[#23635f] cursor-pointer"
               >
                 Ajouter
-              </button>
-            </div>
-          </div>
-
-          {/* Signalement de blocage */}
-          <div className="space-y-2 bg-rose-50/50 p-3.5 rounded-2xl border border-rose-200/70">
-            <h4 className="font-bold text-rose-800 text-[11px] flex items-center gap-1">
-              <AlertTriangle className="h-3.5 w-3.5 text-rose-600" /> Signaler une difficulté / incident bloquant
-            </h4>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Ex: En attente d'un document client, panne API..."
-                value={blockerText}
-                onChange={(e) => setBlockerText(e.target.value)}
-                className="flex-1 px-3 py-1.5 rounded-xl border border-rose-200 bg-white text-xs outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleSignalBlocker}
-                className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-rose-700 transition"
-              >
-                Bloquer
               </button>
             </div>
           </div>
@@ -437,18 +415,21 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
           {/* Section Commentaires */}
           <div className="space-y-2.5 bg-stone-50 p-4 rounded-2xl border border-stone-200/80">
             <h4 className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
-              <MessageSquare className="h-4 w-4 text-[#2A7B76]" /> Commentaires & Activités
+              <MessageSquare className="h-3.5 w-3.5 text-[#2A7B76]" /> Commentaires & Activité
             </h4>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
+            <div className="space-y-2 max-h-36 overflow-y-auto">
               {comments.map((com) => (
-                <div key={com.id} className="bg-white p-2.5 rounded-xl border border-stone-200 text-xs space-y-0.5">
-                  <div className="flex items-center justify-between text-[10px] text-stone-400">
+                <div key={com.id} className="bg-white p-2.5 rounded-xl border border-stone-200 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[10px] text-stone-400 font-medium">
                     <span className="font-bold text-stone-700">{com.author}</span>
                     <span>{com.timestamp}</span>
                   </div>
-                  <p className="text-stone-600">{com.text}</p>
+                  <p className="text-stone-800">{com.text}</p>
                 </div>
               ))}
+              {comments.length === 0 && (
+                <p className="text-[11px] text-stone-400 italic">Aucun commentaire pour le moment.</p>
+              )}
             </div>
 
             <div className="flex items-center gap-2 pt-1">
@@ -457,46 +438,68 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
                 placeholder="Écrire un commentaire..."
                 value={newCommentText}
                 onChange={(e) => setNewCommentText(e.target.value)}
-                className="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-xs outline-none focus:ring-1 focus:ring-[#2A7B76]"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddComment(); } }}
+                className="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-xs outline-none focus:ring-2 focus:ring-[#2A7B76]"
               />
               <button
                 type="button"
                 onClick={handleAddComment}
-                className="px-3 py-1.5 bg-[#2A7B76] text-white rounded-xl text-xs font-bold cursor-pointer"
+                className="px-3 py-1.5 bg-[#2A7B76] text-white rounded-xl text-xs font-bold hover:bg-[#23635f] cursor-pointer"
               >
-                Publier
+                Envoyer
               </button>
             </div>
           </div>
+
+          {/* Section Signalement de blocage */}
+          <div className="space-y-2 bg-rose-50/70 p-4 rounded-2xl border border-rose-200">
+            <h4 className="font-bold text-rose-800 text-xs flex items-center gap-1.5">
+              <ShieldAlert className="h-3.5 w-3.5 text-rose-600" /> Signaler une difficulté / un blocage
+            </h4>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Décrivez le blocage rencontré..."
+                value={blockerText}
+                onChange={(e) => setBlockerText(e.target.value)}
+                className="flex-1 px-3 py-1.5 rounded-xl border border-rose-200 bg-white text-xs outline-none focus:ring-2 focus:ring-rose-500 text-rose-900"
+              />
+              <button
+                type="button"
+                onClick={handleSignalBlocker}
+                className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 cursor-pointer"
+              >
+                Signaler
+              </button>
+            </div>
+          </div>
+
         </form>
 
         {/* Footer Actions */}
         <div className="pt-3 border-t border-stone-100 flex items-center justify-between">
           <button
             type="button"
-            onClick={() => onDeleteTask(task.id)}
-            className="text-rose-600 hover:text-rose-800 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            onClick={() => {
+              if (confirm('Voulez-vous vraiment supprimer cette tâche ?')) {
+                onDeleteTask(task.id);
+                onClose();
+              }
+            }}
+            className="px-3.5 py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
           >
-            <Trash2 className="h-4 w-4" /> Supprimer la tâche
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>Supprimer la tâche</span>
           </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold cursor-pointer"
-            >
-              Fermer
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSaveAll()}
-              className="px-4 py-2 bg-[#2A7B76] hover:bg-[#236864] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-            >
-              <Save className="h-3.5 w-3.5" />
-              Enregistrer
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-stone-100 text-stone-700 font-bold text-xs hover:bg-stone-200 transition cursor-pointer"
+          >
+            Fermer
+          </button>
         </div>
+
       </div>
     </div>
   );

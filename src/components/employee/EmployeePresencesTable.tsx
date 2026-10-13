@@ -1,39 +1,30 @@
 import React from 'react';
-import { Clock, MapPin, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ArrowDown } from 'lucide-react';
+import { Clock, MapPin } from 'lucide-react';
 import { Presence } from '../../types';
-import { SearchableSelect } from '../common/SearchableSelect';
 import { getHolidayInfo } from '../../utils/cameroonHolidays';
 
 interface EmployeePresencesTableProps {
   myPresences: Presence[];
   displayedPresences: Presence[];
-  paginationMode: 'pages' | 'infinite';
-  setPaginationMode: (mode: 'pages' | 'infinite') => void;
-  pageSize: number;
-  setPageSize: (size: number) => void;
-  presencePage: number;
-  setPresencePage: React.Dispatch<React.SetStateAction<number>>;
-  totalPages: number;
-  infiniteCount: number;
-  setInfiniteCount: React.Dispatch<React.SetStateAction<number>>;
+  paginationMode?: 'pages' | 'infinite';
+  setPaginationMode?: (mode: 'pages' | 'infinite') => void;
+  pageSize?: number;
+  setPageSize?: (size: number) => void;
+  presencePage?: number;
+  setPresencePage?: any;
+  totalPages?: number;
+  infiniteCount?: number;
+  setInfiniteCount?: any;
 }
 
 export const EmployeePresencesTable: React.FC<EmployeePresencesTableProps> = ({
   myPresences,
-  displayedPresences,
-  paginationMode,
-  setPaginationMode,
-  pageSize,
-  setPageSize,
-  presencePage,
-  setPresencePage,
-  totalPages,
-  infiniteCount,
-  setInfiniteCount,
 }) => {
+  const sortedPresences = [...myPresences].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   return (
     <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs overflow-hidden">
-      <div className="p-4 border-b border-stone-100 bg-stone-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-4 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
             <Clock className="h-4 w-4 text-[#2A7B76]" /> Historique de Mes Pointages
@@ -42,65 +33,17 @@ export const EmployeePresencesTable: React.FC<EmployeePresencesTableProps> = ({
             {myPresences.length} total
           </span>
         </div>
-
-        {/* Desktop & Mobile controls */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200">
-            <button
-              onClick={() => setPaginationMode('pages')}
-              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition ${
-                paginationMode === 'pages'
-                  ? 'bg-white text-[#2A7B76] shadow-2xs'
-                  : 'text-stone-500 hover:text-stone-800'
-              }`}
-            >
-              Pages
-            </button>
-            <button
-              onClick={() => setPaginationMode('infinite')}
-              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition ${
-                paginationMode === 'infinite'
-                  ? 'bg-white text-[#2A7B76] shadow-2xs'
-                  : 'text-stone-500 hover:text-stone-800'
-              }`}
-            >
-              Défilement
-            </button>
-          </div>
-
-          {paginationMode === 'pages' && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-stone-500 font-bold hidden sm:inline">Lignes :</span>
-              <div className="w-20">
-                <SearchableSelect
-                  value={pageSize}
-                  onChange={(val) => {
-                    setPageSize(Number(val));
-                    setPresencePage(1);
-                  }}
-                  options={[
-                    { value: 5, label: '5' },
-                    { value: 10, label: '10' },
-                    { value: 20, label: '20' },
-                    { value: 50, label: '50' },
-                  ]}
-                  triggerClassName="py-1 px-2 text-[11px] h-7"
-                />
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
-      {displayedPresences.length === 0 ? (
+      {sortedPresences.length === 0 ? (
         <div className="p-8 text-center text-stone-400 text-xs italic">
           Aucun historique de présence enregistré pour le moment.
         </div>
       ) : (
         <>
           {/* Mobile Cards Layout (< sm) */}
-          <div className="sm:hidden divide-y divide-stone-100">
-            {displayedPresences.map((p) => {
+          <div className="sm:hidden divide-y divide-stone-100 max-h-[500px] overflow-y-auto">
+            {sortedPresences.map((p) => {
               const hInfo = getHolidayInfo(p.date);
               return (
                 <div key={p.id} className="p-4 space-y-2 bg-white">
@@ -117,12 +60,12 @@ export const EmployeePresencesTable: React.FC<EmployeePresencesTableProps> = ({
                       className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
                         p.status === 'present'
                           ? 'bg-emerald-100 text-emerald-800'
-                          : p.status === 'retard'
+                          : p.status === 'late'
                           ? 'bg-amber-100 text-amber-800'
                           : 'bg-red-100 text-red-800'
                       }`}
                     >
-                      {p.status === 'present' ? 'Présent' : p.status === 'retard' ? 'Retard' : 'Absent'}
+                      {p.status === 'present' ? 'Présent' : p.status === 'late' ? 'Retard' : 'Absent'}
                     </span>
                   </div>
 
@@ -184,21 +127,21 @@ export const EmployeePresencesTable: React.FC<EmployeePresencesTableProps> = ({
           </div>
 
           {/* Desktop Table View (>= sm) */}
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden sm:block overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-stone-50 text-stone-500 text-[10px] uppercase font-bold border-b border-stone-100 tracking-wider">
+              <thead className="bg-stone-50 text-stone-500 text-[10px] uppercase font-bold border-b border-stone-100 tracking-wider sticky top-0 z-10">
                 <tr>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Statut</th>
-                  <th className="py-3 px-4">Arrivée</th>
-                  <th className="py-3 px-4">Début Pause</th>
-                  <th className="py-3 px-4">Fin Pause</th>
-                  <th className="py-3 px-4">Départ</th>
-                  <th className="py-3 px-4">Lieu / Méthode</th>
+                  <th className="py-3 px-4 bg-stone-50">Date</th>
+                  <th className="py-3 px-4 bg-stone-50">Statut</th>
+                  <th className="py-3 px-4 bg-stone-50">Arrivée</th>
+                  <th className="py-3 px-4 bg-stone-50">Début Pause</th>
+                  <th className="py-3 px-4 bg-stone-50">Fin Pause</th>
+                  <th className="py-3 px-4 bg-stone-50">Départ</th>
+                  <th className="py-3 px-4 bg-stone-50">Lieu / Méthode</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 font-medium text-stone-700">
-                {displayedPresences.map((p) => {
+                {sortedPresences.map((p) => {
                   const hInfo = getHolidayInfo(p.date);
                   return (
                     <tr key={p.id} className="hover:bg-stone-50/60 transition">
@@ -222,12 +165,12 @@ export const EmployeePresencesTable: React.FC<EmployeePresencesTableProps> = ({
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             p.status === 'present'
                               ? 'bg-emerald-100 text-emerald-800'
-                              : p.status === 'retard'
+                              : p.status === 'late'
                               ? 'bg-amber-100 text-amber-800'
                               : 'bg-red-100 text-red-800'
                           }`}
                         >
-                          {p.status === 'present' ? 'Présent' : p.status === 'retard' ? 'Retard' : 'Absent'}
+                          {p.status === 'present' ? 'Présent' : p.status === 'late' ? 'Retard' : 'Absent'}
                         </span>
                       </td>
                       <td className="py-3 px-4 font-mono text-emerald-700 font-bold">{p.arrivalTime || '--:--'}</td>
@@ -270,59 +213,8 @@ export const EmployeePresencesTable: React.FC<EmployeePresencesTableProps> = ({
           </div>
         </>
       )}
-
-      {/* Pagination Footer */}
-      {paginationMode === 'pages' && totalPages > 1 && (
-        <div className="p-3 border-t border-stone-100 bg-stone-50/60 flex items-center justify-between text-xs">
-          <span className="text-[11px] text-stone-500">
-            Page <span className="font-bold text-stone-800">{presencePage}</span> sur{' '}
-            <span className="font-bold text-stone-800">{totalPages}</span>
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPresencePage(1)}
-              disabled={presencePage === 1}
-              className="p-1 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-30 cursor-pointer"
-            >
-              <ChevronsLeft className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => setPresencePage((prev) => Math.max(1, prev - 1))}
-              disabled={presencePage === 1}
-              className="p-1 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-30 cursor-pointer"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => setPresencePage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={presencePage === totalPages}
-              className="p-1 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-30 cursor-pointer"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => setPresencePage(totalPages)}
-              disabled={presencePage === totalPages}
-              className="p-1 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-30 cursor-pointer"
-            >
-              <ChevronsRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Infinite Scroll Charger Plus */}
-      {paginationMode === 'infinite' && infiniteCount < myPresences.length && (
-        <div className="p-3 border-t border-stone-100 bg-stone-50/60 text-center">
-          <button
-            onClick={() => setInfiniteCount((prev) => prev + 10)}
-            className="text-xs font-bold text-[#2A7B76] hover:text-[#20635F] inline-flex items-center gap-1.5 py-1 px-3 rounded-xl bg-white border border-stone-200 shadow-3xs cursor-pointer"
-          >
-            <ArrowDown className="h-3.5 w-3.5" />
-            Charger 10 pointages supplémentaires ({myPresences.length - infiniteCount} restants)
-          </button>
-        </div>
-      )}
     </div>
   );
 };
+
+export default EmployeePresencesTable;

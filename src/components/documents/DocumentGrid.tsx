@@ -23,7 +23,7 @@ export const DocumentGrid: React.FC<DocumentGridProps> = ({ documents, searchTer
         <Database className="h-6 w-6 text-stone-300 mx-auto" />
         <p className="font-semibold text-stone-600">Aucun document archivé dans la base pour le moment.</p>
         <p className="text-[11px] text-stone-400">
-          Tous les documents RH enregistrés dans la base Firestore apparaîtront ici.
+          Tous les documents RH enregistrés dans la base Supabase apparaîtront ici.
         </p>
       </div>
     );

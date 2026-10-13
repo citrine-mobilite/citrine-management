@@ -164,14 +164,25 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         departure: 'le Départ'
       };
       onAddNotification({
-        id: `notif-${Date.now()}`,
-        title: `Pointage par Responsable : ${targetEmployee.name}`,
-        message: `${adminName} a badgé ${actionLabels[clockAction]} de ${targetEmployee.name} à ${nowTime}. Motif : ${reasonInput.trim()}`,
+        id: `notif-clock-admin-${Date.now()}-${targetEmployee.id}`,
+        title: `Pointage par Responsable : ${actionLabels[clockAction]}`,
+        content: `${adminName} a validé votre pointage (${actionLabels[clockAction]}) à ${nowTime}. Motif : ${reasonInput.trim() || 'N/A'}`,
+        payload: JSON.stringify({
+          source: 'admin_on_behalf',
+          employeeId: targetEmployee.id,
+          action: clockAction,
+          time: nowTime,
+          date: todayStr,
+        }),
         timestamp: new Date().toISOString(),
-        type: 'presence',
+        type: 'system',
         read: false,
-        recipient: targetEmployee.name,
+        recipient: targetEmployee.id,
       });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+      }
     }
 
     if (showToast) {

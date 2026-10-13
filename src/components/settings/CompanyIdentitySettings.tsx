@@ -99,7 +99,7 @@ export const CompanyIdentitySettings: React.FC<CompanyIdentitySettingsProps> = (
         </button>
       </div>
 
-      {/* 1. LOGO OFFICIEL CONSERVÉ EN BASE FIRESTORE */}
+      {/* 1. LOGO OFFICIEL CONSERVÉ EN BASE SUPABASE */}
       <CompanyLogoCard
         companyLogoBase64={formData.companyLogoBase64}
         onSelectLogo={handleSelectLogo}

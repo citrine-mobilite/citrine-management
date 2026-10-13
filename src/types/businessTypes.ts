@@ -67,7 +67,7 @@ export interface GeneratedDocument {
   targetDate?: string;
   targetReason?: string;
   isGeneric?: boolean; // Document générique (ex: trame, note générale non stockée en BD)
-  saveToDatabase?: boolean; // Indique si persisté en base Firestore
+  saveToDatabase?: boolean; // Indique si persisté en base Supabase
   includeSignature?: boolean; // Par défaut FALSE (la signature ne doit pas être par défaut)
   signatureType?: 'none' | 'collaborator_only' | 'direction_only' | 'both';
 }
@@ -341,7 +341,7 @@ export interface CompanyModuleConfig {
   lateThresholdTime?: string;
   defaultSalary?: number;
   kioskPin?: string;
-  companyLogoBase64?: string; // Logo de l'entreprise stocké tel quel en base de données Firestore (PNG/JPEG en base64)
+  companyLogoBase64?: string; // Logo de l'entreprise stocké tel quel en base de données Supabase (PNG/JPEG en base64)
   companyLogoUrl?: string; // URL directe vers le fichier image (non-SVG)
   companyLegalForm?: string;
   companyBaseline?: string;

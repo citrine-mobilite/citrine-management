@@ -1,19 +1,8 @@
-import { 
-  collection, 
-  getDocs, 
-  doc, 
-  setDoc, 
-  onSnapshot,
-  query,
-  orderBy,
-  limit
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { ConnectionLog } from '../types';
+import { supabase, supabaseAdmin } from '../lib/supabase';
 
 export const CONNECTION_LOGS_COLLECTION = 'connection_logs';
-
-const LOCAL_STORAGE_KEY = 'processflow_connection_logs';
+const LOCAL_STORAGE_KEY = 'citrine_connection_logs';
 
 // Get fallback local connection logs
 function getLocalLogs(): ConnectionLog[] {
@@ -38,7 +27,7 @@ function saveLocalLogs(logs: ConnectionLog[]): void {
   }
 }
 
-// Record a real connection log
+// Record a connection log with instant local save and Supabase sync
 export async function recordConnectionLog(data: {
   userId: string;
   userName: string;
@@ -55,59 +44,59 @@ export async function recordConnectionLog(data: {
     userName: data.userName,
     userEmail: data.userEmail.toLowerCase(),
     timestamp: new Date().toISOString(),
-    ipAddress: data.ipAddress || 'IP Inconnue',
-    location: data.location || 'Non spécifiée',
+    ipAddress: data.ipAddress || 'IP Locale',
+    location: data.location || 'Douala, Cameroun',
     authMethod: data.authMethod,
     status: data.status,
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Navigateur Web',
     details: data.details || (data.status === 'success' ? 'Connexion authentifiée avec succès' : 'Échec de la tentative de connexion')
   };
 
-  // Save to LocalStorage
+  // 1. Sauvegarde locale immédiate (< 1ms)
   const local = getLocalLogs();
   const updatedLocal = [newLog, ...local];
   saveLocalLogs(updatedLocal);
 
-  // Save to Firestore
-  try {
-    const docRef = doc(db, CONNECTION_LOGS_COLLECTION, newLog.id);
-    await setDoc(docRef, newLog);
-  } catch (err) {
-    console.warn('Firestore connection_logs write offline, saved locally:', err);
-  }
+  // 2. Synchronisation non-bloquante avec Supabase
+  Promise.race([
+    supabaseAdmin.from('connection_logs').upsert({
+      doc_id: newLog.id,
+      user_id: newLog.userId,
+      user_name: newLog.userName,
+      user_email: newLog.userEmail,
+      timestamp: newLog.timestamp,
+      ip_address: newLog.ipAddress,
+      location: newLog.location,
+      auth_method: newLog.authMethod,
+      status: newLog.status,
+      details: newLog.details,
+      raw_data: newLog
+    }, { onConflict: 'doc_id' }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+  ]).catch(() => {});
 
   return newLog;
 }
 
-// Subscribe to real-time connection logs
+// Subscribe to real-time connection logs via Supabase Realtime & Local storage
 export function subscribeToConnectionLogs(callback: (logs: ConnectionLog[]) => void) {
-  try {
-    const q = query(
-      collection(db, CONNECTION_LOGS_COLLECTION),
-      orderBy('timestamp', 'desc'),
-      limit(100)
-    );
+  // 1. Livrer les logs locaux immédiatement
+  callback(getLocalLogs());
 
-    return onSnapshot(
-      q,
-      (snapshot) => {
-        const list: ConnectionLog[] = [];
-        snapshot.forEach((d) => list.push(d.data() as ConnectionLog));
-        if (list.length > 0) {
-          saveLocalLogs(list);
-          callback(list);
-        } else {
-          callback(getLocalLogs());
-        }
-      },
-      (err) => {
-        console.warn('Firestore subscription error for connection logs, falling back to local:', err);
+  // 2. Écouter via Supabase Realtime
+  const channelName = `realtime_conn_logs_${Date.now()}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'connection_logs' },
+      () => {
         callback(getLocalLogs());
       }
-    );
-  } catch (err) {
-    console.warn('Error setting up connection logs snapshot, using local:', err);
-    callback(getLocalLogs());
-    return () => {};
-  }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

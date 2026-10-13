@@ -207,7 +207,7 @@ export const DocumentTableView: React.FC<DocumentTableViewProps> = ({
         <span>Affichage de <strong>{sortedDocuments.length}</strong> document(s) archivé(s)</span>
         <span className="flex items-center gap-1 text-[#2A7B76] font-semibold">
           <Database className="h-3 w-3" />
-          Synchronisé avec Firestore
+          Synchronisé avec Supabase
         </span>
       </div>
     </div>

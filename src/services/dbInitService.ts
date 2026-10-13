@@ -1,5 +1,3 @@
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { 
   AppUser, 
   Employee, 
@@ -11,7 +9,8 @@ import {
   DEFAULT_MODULE_CONFIG 
 } from '../types';
 import { hashPassword } from '../utils/cryptoUtils';
-import rawDatabaseExport from '../data/firestoreDatabaseExport.json';
+import { supabaseService } from './supabaseService';
+import rawDatabaseExport from '../data/citrineDatabaseExport.json';
 
 export interface InitDatabaseResult {
   success: boolean;
@@ -58,15 +57,13 @@ export const INITIAL_SEEDED_COMPANY_CONFIG: CompanyModuleConfig = {
   lateThresholdTime: '08:15',
   defaultSalary: 200000,
   hqName: 'Siège Social Citrine Mobilité',
-  hqAddress: 'Douala, Cameroun'
+  hqAddress: 'Douala - Akwa, Boulevard de la Liberté',
+  hqLatitude: 4.051056,
+  hqLongitude: 9.7678687,
+  companyName: 'Citrine',
 };
 
-/**
- * Reconstruct and initialize all Firestore collections with structured default data from full JSON dump
- */
-export async function initializeFullFirestoreDatabase(options?: {
-  overwriteExisting?: boolean;
-}): Promise<InitDatabaseResult> {
+export async function initDatabaseWithExport(options?: { overwriteExisting?: boolean }): Promise<InitDatabaseResult> {
   const counts = {
     users: 0,
     employees: 0,
@@ -82,10 +79,10 @@ export async function initializeFullFirestoreDatabase(options?: {
     totalDocuments: 0
   };
 
-  const defaultPasswordHash = await hashPassword('admin123');
+  const defaultPasswordHash = await hashPassword('Citrine2026!');
   const collections = rawDatabaseExport.collections as Record<string, any[]>;
 
-  // 1. Synchronize to Local Storage Cache First (Ensures instant offline/online availability)
+  // 1. Synchronisation instantanée du stockage local
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       if (collections.users) localStorage.setItem('citrine_users', JSON.stringify(collections.users));
@@ -102,15 +99,13 @@ export async function initializeFullFirestoreDatabase(options?: {
       if (collections.partners) localStorage.setItem('citrine_partners', JSON.stringify(collections.partners));
       if (collections.disciplinary_incidents) localStorage.setItem('citrine_disciplinary_incidents', JSON.stringify(collections.disciplinary_incidents));
       if (collections.departments) localStorage.setItem('citrine_departments', JSON.stringify(collections.departments));
-      if (collections._records) localStorage.setItem('citrine__records', JSON.stringify(collections._records));
-      if (collections._settings) localStorage.setItem('citrine__settings', JSON.stringify(collections._settings[0] || {}));
       localStorage.setItem('citrine_module_config', JSON.stringify(INITIAL_SEEDED_COMPANY_CONFIG));
     }
   } catch (storageErr) {
     console.warn('[Storage Cache Sync] Warning:', storageErr);
   }
 
-  // 2. Count all documents from JSON dataset
+  // 2. Comptage des entités
   for (const [colName, docs] of Object.entries(collections)) {
     if (!Array.isArray(docs)) continue;
     for (const _ of docs) {
@@ -130,34 +125,25 @@ export async function initializeFullFirestoreDatabase(options?: {
   counts.companySettings++;
   counts.totalDocuments++;
 
-  // 3. Attempt Firestore writes in the background
-  try {
-    for (const [colName, docs] of Object.entries(collections)) {
-      if (!Array.isArray(docs)) continue;
-      for (const item of docs) {
-        try {
-          const docId = item.id || `doc-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-          const docRef = doc(db, colName, docId);
-          let itemToSave = { ...item };
+  // 3. Synchronisation non-bloquante avec Supabase
+  setTimeout(async () => {
+    try {
+      for (const [colName, docs] of Object.entries(collections)) {
+        if (!Array.isArray(docs)) continue;
+        for (const item of docs) {
+          const itemToSave = { ...item };
           if (colName === 'users') {
             itemToSave.passwordHash = itemToSave.passwordHash || defaultPasswordHash;
           }
-          await setDoc(docRef, itemToSave, { merge: !options?.overwriteExisting });
-        } catch (docErr) {
-          // Non-blocking: continue writing other documents
+          await supabaseService.saveDocument(colName, itemToSave);
         }
       }
+    } catch (err) {
+      console.warn('[Supabase Seeding Async Notice]:', err);
     }
+  }, 100);
 
-    try {
-      const settingsRef = doc(db, 'company_settings', 'default');
-      await setDoc(settingsRef, INITIAL_SEEDED_COMPANY_CONFIG, { merge: !options?.overwriteExisting });
-    } catch (sErr) {}
-  } catch (err) {
-    console.warn('[Firestore Remote Sync] Note:', err);
-  }
-
-  // 4. Trigger UI event to update all React components in real time
+  // 4. Notification UI en temps réel
   try {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('citrine_db_rebuilt', { detail: { counts } }));
@@ -166,7 +152,10 @@ export async function initializeFullFirestoreDatabase(options?: {
 
   return {
     success: true,
-    message: `Base de données et tables initialisées avec succès (${counts.totalDocuments} fiches réparties dans 18 tables).`,
+    message: `Base de données et tables initialisées avec succès (${counts.totalDocuments} fiches réparties dans les modules).`,
     counts
   };
 }
+
+export const initializeFullDatabase = initDatabaseWithExport;
+export const initializeFullFirestoreDatabase = initDatabaseWithExport;

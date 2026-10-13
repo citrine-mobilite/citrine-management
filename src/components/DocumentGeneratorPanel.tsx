@@ -113,7 +113,7 @@ export default function DocumentGeneratorPanel({
 
   // Réinitialisation des modèles par défaut en base de données
   const handleResetTemplates = async () => {
-    if (!window.confirm("Voulez-vous synchroniser et actualiser l'ensemble des modèles RH en base de données Firestore ?")) {
+    if (!window.confirm("Voulez-vous synchroniser et actualiser l'ensemble des modèles RH en base de données Supabase ?")) {
       return;
     }
     setIsResettingTemplates(true);
@@ -137,7 +137,7 @@ export default function DocumentGeneratorPanel({
             <h2 className="font-serif font-bold text-xl">Générateur de Documents RH & Contrats</h2>
           </div>
           <p className="text-xs text-emerald-100/90 mt-1">
-            Papier officiel CITRINE SARL · Modèles & Données 100% conservés en base Firestore · Affichage Cards ou DataTable.
+            Papier officiel CITRINE SARL · Modèles & Données 100% conservés en base Supabase · Affichage Cards ou DataTable.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
@@ -146,7 +146,7 @@ export default function DocumentGeneratorPanel({
             type="button"
             onClick={() => setIsCreateTemplateModalOpen(true)}
             className="px-3.5 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-xs text-white text-xs font-bold rounded-2xl transition flex items-center gap-1.5 border border-white/20 cursor-pointer shadow-xs"
-            title="Créer un nouveau type de document RH stocké en base de données Firestore"
+            title="Créer un nouveau type de document RH stocké en base de données Supabase"
           >
             <FolderPlus className="h-4 w-4 text-emerald-200" />
             <span>+ Nouveau Type de Modèle</span>
@@ -157,7 +157,7 @@ export default function DocumentGeneratorPanel({
             disabled={isResettingTemplates}
             onClick={handleResetTemplates}
             className="px-3 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-xs text-white text-xs font-semibold rounded-2xl transition flex items-center gap-1.5 border border-white/15 cursor-pointer disabled:opacity-50"
-            title="Synchroniser les modèles RH en base Firestore"
+            title="Synchroniser les modèles RH en base Supabase"
           >
             <RotateCcw className={`h-3.5 w-3.5 ${isResettingTemplates ? 'animate-spin' : ''}`} />
             <span className="hidden lg:inline">Restaurer Modèles</span>

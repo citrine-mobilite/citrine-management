@@ -4,3 +4,4 @@ export * from './types/presenceTypes';
 export * from './types/taskTypes';
 export * from './types/businessTypes';
 export * from './types/callTypes';
+export * from './types/leaveTypes';

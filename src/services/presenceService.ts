@@ -1,5 +1,5 @@
 import { ClockingMethod, Presence } from '../types';
-import { COLLECTIONS, saveDocument } from './firestoreService';
+import { COLLECTIONS, saveDocument } from './dataService';
 import { badgeCodeService } from './badgeCodeService';
 import { dynamicQrService } from './dynamicQrService';
 

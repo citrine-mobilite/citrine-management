@@ -13,6 +13,7 @@ interface ProfilePageProps {
   onLogout: () => void;
   onAddNotification: (notif: any) => void;
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onUpdateUser?: (updated: AppUser) => void;
 }
 
 export default function ProfilePage({
@@ -21,6 +22,7 @@ export default function ProfilePage({
   onLogout,
   onAddNotification,
   showToast,
+  onUpdateUser,
 }: ProfilePageProps) {
   const [activeSubTab, setActiveSubTab] = useState<'info' | 'security' | 'activity' | 'permissions'>('info');
   const [connectionLogs, setConnectionLogs] = useState<ConnectionLog[]>([]);
@@ -102,6 +104,7 @@ export default function ProfilePage({
             currentUser={currentUser}
             onAddNotification={onAddNotification}
             showToast={showToast}
+            onUpdateUser={onUpdateUser}
           />
         )}
         {activeSubTab === 'security' && (

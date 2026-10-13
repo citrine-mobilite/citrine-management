@@ -17,6 +17,7 @@ interface AppTopNavbarProps {
   onToggleMobileMenu: () => void;
   unreadNotificationsCount: number;
   liveTimeString: string;
+  onOpenEmployeeAlerts?: () => void;
 }
 
 export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
@@ -27,6 +28,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
   onToggleMobileMenu,
   unreadNotificationsCount,
   liveTimeString,
+  onOpenEmployeeAlerts,
 }) => {
   const isEmployee = isEmployeeUser(currentUser);
   const isOnline = useOnlineStatus();
@@ -110,16 +112,22 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
           <span>{liveTimeString}</span>
         </div>
 
-        {/* PWA Install Button (Compact) */}
-        <div className="hidden xs:block">
-          <PWAInstallButton />
-        </div>
-
         {/* Notifications Icon Button */}
         <button
-          onClick={() => setActiveTab('logs')}
+          onClick={() => {
+            haptic.light();
+            if (isEmployee) {
+              if (onOpenEmployeeAlerts) {
+                onOpenEmployeeAlerts();
+              } else {
+                setActiveTab('employee_portal');
+              }
+            } else {
+              setActiveTab('logs');
+            }
+          }}
           className="p-1.5 sm:p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition relative cursor-pointer"
-          title="Notifications & Alertes"
+          title={isEmployee ? "Mes Alertes & Notifications" : "Notifications & Alertes"}
         >
           <Bell className="h-4 w-4" />
           {unreadNotificationsCount > 0 && (
@@ -127,19 +135,19 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
           )}
         </button>
 
+        {/* PWA Install Button */}
+        <div className="hidden xs:block">
+          <PWAInstallButton />
+        </div>
+
         {/* User Profile Trigger Button */}
         {currentUser && (
           <button
             onClick={() => {
               haptic.light();
-              setActiveTab('profile');
               if (onOpenProfile) onOpenProfile();
             }}
-            className={`flex items-center gap-1.5 p-1 sm:p-1.5 pl-1.5 sm:pl-2 rounded-2xl border transition cursor-pointer select-none ${
-              activeTab === 'profile'
-                ? 'bg-[#2A7B76]/10 border-[#2A7B76]/40 text-[#2A7B76]'
-                : 'border-stone-200 hover:bg-stone-50 text-stone-700'
-            }`}
+            className="flex items-center gap-1.5 p-1 sm:p-1.5 pl-1.5 sm:pl-2 rounded-2xl border border-stone-200 hover:bg-stone-50 text-stone-700 transition cursor-pointer select-none"
             title="Mon Profil & Déconnexion"
           >
             <div className="flex flex-col text-right hidden sm:flex">
@@ -150,12 +158,11 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
                 {currentUser.role}
               </span>
             </div>
-
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#2A7B76] text-white flex items-center justify-center font-bold text-[11px] sm:text-xs overflow-hidden shadow-2xs shrink-0">
+            <div className="w-7 h-7 rounded-xl bg-[#2A7B76]/15 text-[#2A7B76] flex items-center justify-center font-bold text-xs overflow-hidden">
               {currentUser.avatarUrl ? (
-                <img src={currentUser.avatarUrl} alt="" className="w-full h-full object-cover" />
+                <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-full h-full object-cover" />
               ) : (
-                <span>{currentUser.name.slice(0, 2).toUpperCase()}</span>
+                currentUser.name.slice(0, 2).toUpperCase()
               )}
             </div>
           </button>

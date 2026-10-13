@@ -6,7 +6,7 @@ import { CallHistoryList } from './calls/CallHistoryList';
 import { ActiveCallModal } from './ActiveCallModal';
 import { IncomingCallModal } from './IncomingCallModal';
 import { callSignalingService } from '../services/callSignalingService';
-import { COLLECTIONS, subscribeToCollection } from '../services/firestoreService';
+import { COLLECTIONS, subscribeToCollection } from '../services/dataService';
 
 interface TeamCallsPanelProps {
   currentUser: AppUser | null;

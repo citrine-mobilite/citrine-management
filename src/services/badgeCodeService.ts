@@ -1,5 +1,5 @@
 import { BadgeSecurityCode16 } from '../types';
-import { COLLECTIONS, saveDocument, deleteDocument, subscribeToCollection } from './firestoreService';
+import { COLLECTIONS, saveDocument, deleteDocument, subscribeToCollection } from './dataService';
 import { offlineService } from './offlineService';
 
 // Helper to generate a 16-character alphanumeric code

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Smartphone, Share, PlusSquare, MoreVertical, Monitor, CheckCircle2, Download } from 'lucide-react';
+import React from 'react';
+import { X, Smartphone, Share, PlusSquare, Download } from 'lucide-react';
 
 interface UniversalInstallModalProps {
   isOpen: boolean;
@@ -12,28 +12,22 @@ export const UniversalInstallModal: React.FC<UniversalInstallModalProps> = ({
   isOpen,
   onClose,
   isIos = false,
-  isAndroid = false,
 }) => {
-  const [platformTab, setPlatformTab] = useState<'android' | 'ios' | 'desktop'>(() => {
-    if (isIos) return 'ios';
-    if (isAndroid) return 'android';
-    return 'android';
-  });
-
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-md w-full overflow-hidden animate-in slide-in-from-bottom-4 duration-300 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-stone-900 rounded-3xl border border-stone-200 dark:border-stone-800 shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
+        
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 p-4 text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-              <Smartphone className="h-4 w-4 text-emerald-200" />
+        <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-900 p-5 text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner">
+              <Download className="h-5 w-5 text-emerald-200 animate-bounce" />
             </div>
             <div>
-              <h3 className="font-serif font-bold text-sm">Installer l'Application Citrine</h3>
-              <p className="text-[10px] text-emerald-100">Accès rapide 1-clic & mode hors-ligne</p>
+              <h3 className="font-bold text-base tracking-tight">Installer Citrine</h3>
+              <p className="text-xs text-emerald-100">Application Rapide & Hors-ligne</p>
             </div>
           </div>
           <button
@@ -44,182 +38,50 @@ export const UniversalInstallModal: React.FC<UniversalInstallModalProps> = ({
           </button>
         </div>
 
-        {/* Platform Selector Tabs */}
-        <div className="flex border-b border-stone-200 bg-stone-50/80 p-1.5 gap-1 shrink-0">
-          <button
-            onClick={() => setPlatformTab('android')}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              platformTab === 'android'
-                ? 'bg-white text-[#2A7B76] shadow-xs border border-stone-200/60'
-                : 'text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <Smartphone className="h-3.5 w-3.5" />
-            <span>Android / Chrome</span>
-          </button>
-          <button
-            onClick={() => setPlatformTab('ios')}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              platformTab === 'ios'
-                ? 'bg-white text-[#2A7B76] shadow-xs border border-stone-200/60'
-                : 'text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <Share className="h-3.5 w-3.5" />
-            <span>iPhone / iPad</span>
-          </button>
-          <button
-            onClick={() => setPlatformTab('desktop')}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              platformTab === 'desktop'
-                ? 'bg-white text-[#2A7B76] shadow-xs border border-stone-200/60'
-                : 'text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <Monitor className="h-3.5 w-3.5" />
-            <span>PC / Mac</span>
-          </button>
-        </div>
-
-        {/* Instructions Body */}
-        <div className="p-5 overflow-y-auto space-y-4 text-xs text-stone-700">
-          {platformTab === 'android' && (
-            <div className="space-y-3">
-              <p className="font-medium text-stone-800">
-                Pour installer l'application sur votre smartphone ou tablette Android :
-              </p>
-              <div className="space-y-2.5 bg-stone-50 p-3.5 rounded-2xl border border-stone-100">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-[#2A7B76] flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                    1
-                  </div>
-                  <div>
-                    <span className="font-bold text-stone-900">Ouvrez le menu Chrome</span>
-                    <p className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
-                      Touchez les 3 points <MoreVertical className="h-3.5 w-3.5 inline text-stone-700" /> en haut à droite.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-[#2A7B76] flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                    2
-                  </div>
-                  <div>
-                    <span className="font-bold text-stone-900">Sélectionnez « Installer l'application »</span>
-                    <p className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
-                      ou « Ajouter à l'écran d'accueil ».
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-[#2A7B76] flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                    3
-                  </div>
-                  <div>
-                    <span className="font-bold text-stone-900">Validez « Installer »</span>
-                    <p className="text-[11px] text-stone-500 mt-0.5">
-                      Citrine se lance ensuite en plein écran comme une application native.
-                    </p>
-                  </div>
-                </div>
+        {/* Content */}
+        <div className="p-6 space-y-5 text-stone-700 dark:text-stone-300">
+          {isIos ? (
+            <div className="space-y-4">
+              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 p-4 rounded-2xl text-xs space-y-2">
+                <p className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4 text-amber-600" /> Sur iPhone / iPad (Safari) :
+                </p>
+                <ol className="list-decimal list-inside space-y-1.5 text-amber-800 dark:text-amber-300 font-medium">
+                  <li>Ouvrez cette page dans <strong className="text-amber-950 dark:text-white underline">Safari</strong>.</li>
+                  <li>Touchez le bouton <strong className="inline-flex items-center gap-1 bg-white dark:bg-stone-800 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-700"><Share className="w-3 h-3 text-[#2A7B76]" /> Partager</strong> en bas.</li>
+                  <li>Sélectionnez <strong className="inline-flex items-center gap-1 bg-white dark:bg-stone-800 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-700"><PlusSquare className="w-3 h-3 text-[#2A7B76]" /> Sur l'écran d'accueil</strong>.</li>
+                </ol>
               </div>
             </div>
-          )}
-
-          {platformTab === 'ios' && (
-            <div className="space-y-3">
-              <p className="font-medium text-stone-800">
-                Sur Safari iOS (iPhone ou iPad) :
+          ) : (
+            <div className="space-y-4 text-center">
+              <p className="text-xs text-stone-600 dark:text-stone-400">
+                Installez Citrine directement sur votre écran d'accueil pour un accès instantané en 1 clic et un fonctionnement hors-ligne optimal.
               </p>
-              <div className="space-y-2.5 bg-stone-50 p-3.5 rounded-2xl border border-stone-100">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-[#2A7B76] flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                    1
-                  </div>
-                  <div>
-                    <span className="font-bold text-stone-900">Touchez le bouton Partager</span>
-                    <p className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
-                      Icône <Share className="h-3.5 w-3.5 text-[#2A7B76] inline" /> en bas de l'écran Safari.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-[#2A7B76] flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                    2
-                  </div>
-                  <div>
-                    <span className="font-bold text-stone-900">Sélectionnez « Sur l'écran d'accueil »</span>
-                    <p className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
-                      Icône <PlusSquare className="h-3.5 w-3.5 text-[#2A7B76] inline" /> dans la liste d'actions.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-[#2A7B76] flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                    3
-                  </div>
-                  <div>
-                    <span className="font-bold text-stone-900">Appuyez sur « Ajouter »</span>
-                    <p className="text-[11px] text-stone-500 mt-0.5">
-                      L'icône apparaîtra sur votre écran d'accueil avec les notifications activées.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              
+              <button
+                onClick={() => {
+                  // If browser supports install prompt or just instructions
+                  window.dispatchEvent(new Event('beforeinstallprompt'));
+                  alert("Pour installer l'application :\n\n- Sur Chrome/Android/PC : Cliquez sur l'icône d'installation dans la barre d'adresse ou le menu du navigateur.\n- Sur iPhone (Safari) : Touchez Partager > Sur l'écran d'accueil.");
+                  onClose();
+                }}
+                className="w-full py-3 px-4 bg-gradient-to-r from-[#2A7B76] to-emerald-800 hover:from-[#23635f] hover:to-emerald-900 text-white font-bold text-sm rounded-2xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Installer maintenant</span>
+              </button>
             </div>
           )}
-
-          {platformTab === 'desktop' && (
-            <div className="space-y-3">
-              <p className="font-medium text-stone-800">
-                Sur ordinateur (Google Chrome, Microsoft Edge, Brave) :
-              </p>
-              <div className="space-y-2.5 bg-stone-50 p-3.5 rounded-2xl border border-stone-100">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-[#2A7B76] flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                    1
-                  </div>
-                  <div>
-                    <span className="font-bold text-stone-900">Regardez la barre d'adresse</span>
-                    <p className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
-                      Cliquez sur l'icône <Download className="h-3.5 w-3.5 text-[#2A7B76] inline" /> ou <Monitor className="h-3.5 w-3.5 text-[#2A7B76] inline" /> à droite de l'URL.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-[#2A7B76] flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                    2
-                  </div>
-                  <div>
-                    <span className="font-bold text-stone-900">Cliquez sur « Installer »</span>
-                    <p className="text-[11px] text-stone-500 mt-0.5">
-                      L'application s'ouvre instantanément dans sa propre fenêtre de travail.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 p-2.5 bg-emerald-50 text-emerald-900 rounded-xl border border-emerald-200/60">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-            <span className="text-[11px] leading-tight">
-              Sans passer par l'App Store ou Play Store : installation directe & ultra-légère.
-            </span>
-          </div>
 
           <button
             onClick={onClose}
-            className="w-full py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold rounded-xl transition cursor-pointer shadow-xs"
+            className="w-full py-2.5 text-xs font-semibold text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition cursor-pointer"
           >
-            Fermer le guide
+            Fermer
           </button>
         </div>
+
       </div>
     </div>
   );

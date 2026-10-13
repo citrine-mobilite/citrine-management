@@ -31,6 +31,7 @@ import { getEmployeeSoftColor } from '../utils/colorUtils';
 import DynamicQrManagerModal from './presence/DynamicQrManagerModal';
 import AdminOnBehalfClockModal from './presence/AdminOnBehalfClockModal';
 import { PersonalAccessKeyModal } from './presence/PersonalAccessKeyModal';
+import { StaticDoorQrModal } from './presence/StaticDoorQrModal';
 import { PresenceIncidentsAdminView } from './presence/PresenceIncidentsAdminView';
 import PresenceRequestsView from './PresenceRequestsView';
 import { extractPresenceRequests } from './presence/requests/presenceRequestsUtils';
@@ -48,6 +49,7 @@ interface PresencePanelProps {
   onSelectTab?: (tab: any) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
   moduleConfig?: CompanyModuleConfig;
+  onUpdateModuleConfig?: (config: CompanyModuleConfig) => void;
   currentUser?: AppUser;
   attendanceIncidents?: AttendanceIncident[];
   onUpdateAttendanceIncidents?: (incidents: AttendanceIncident[]) => void;
@@ -63,6 +65,7 @@ export default function PresencePanel({
   showToast,
   currentUser,
   moduleConfig,
+  onUpdateModuleConfig,
   attendanceIncidents = [],
   onUpdateAttendanceIncidents,
   onAddAttendanceIncident,
@@ -86,6 +89,7 @@ export default function PresencePanel({
 
   // Dedicated Badging Modals for Responsable
   const [isDynamicQrModalOpen, setIsDynamicQrModalOpen] = useState(false);
+  const [isStaticDoorQrOpen, setIsStaticDoorQrOpen] = useState(false);
   const [isAdminClockModalOpen, setIsAdminClockModalOpen] = useState(false);
   const [isOfficeQrModalOpen, setIsOfficeQrModalOpen] = useState(false);
   const [activePresenceTab, setActivePresenceTab] = useState<'presences' | 'requests' | 'incidents'>('presences');
@@ -335,14 +339,23 @@ export default function PresencePanel({
       
       {/* 🚀 BARRE D'ACTIONS RAPIDES DU RESPONSABLE (Badgeage & Pointage) */}
       <div className="bg-white p-3 sm:p-4 rounded-3xl border border-stone-200/90 shadow-2xs">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
           {/* Bouton dédié : Générer QR Code Dynamique (30 secondes) */}
           <button
             onClick={() => setIsDynamicQrModalOpen(true)}
             className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#2A7B76] to-emerald-700 hover:from-[#20635F] hover:to-emerald-800 text-white font-extrabold text-xs shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
           >
             <QrCode className="h-4 w-4 text-emerald-200 animate-pulse shrink-0" />
-            <span>Générer QR Code Dynamique (30s)</span>
+            <span>QR Code Dynamique (30s)</span>
+          </button>
+
+          {/* Bouton dédié : Affiche / QR Code Statique (Porte & Bureau) */}
+          <button
+            onClick={() => setIsStaticDoorQrOpen(true)}
+            className="w-full py-3 px-4 rounded-2xl bg-teal-50 hover:bg-teal-100 text-[#2A7B76] font-bold text-xs border border-teal-200 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
+          >
+            <DoorClosed className="h-4 w-4 text-[#2A7B76] shrink-0" />
+            <span>QR Code Statique (Porte / Bureau)</span>
           </button>
 
           {/* Bouton : Badger pour un collaborateur */}
@@ -1067,6 +1080,17 @@ export default function PresencePanel({
           onClose={() => setIsOfficeQrModalOpen(false)}
           managerName={currentUser?.name || 'Responsable'}
           companyName={moduleConfig?.companyName || 'Citrine Entreprise'}
+          showToast={showToast}
+        />
+      )}
+
+      {/* 🚪 MODAL 4 : AFFICHE & QR CODE STATIQUE DE PORTE / BUREAU */}
+      {isStaticDoorQrOpen && (
+        <StaticDoorQrModal
+          isOpen={isStaticDoorQrOpen}
+          onClose={() => setIsStaticDoorQrOpen(false)}
+          moduleConfig={moduleConfig}
+          onUpdateModuleConfig={onUpdateModuleConfig}
           showToast={showToast}
         />
       )}

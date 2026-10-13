@@ -52,13 +52,13 @@ export const CompanyLogoCard: React.FC<CompanyLogoCardProps> = ({
               Logo de l'Entreprise (Conservé en Base de Données)
             </h4>
             <p className="text-[11px] text-stone-500">
-              L'image (PNG, JPEG, WebP) est stockée directement dans Firestore pour un affichage pérenne.
+              L'image (PNG, JPEG, WebP) est stockée directement dans Supabase pour un affichage pérenne.
             </p>
           </div>
         </div>
 
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 self-start sm:self-auto">
-          <CheckCircle2 className="h-3.5 w-3.5" /> Stockage Firestore Actif
+          <CheckCircle2 className="h-3.5 w-3.5" /> Stockage Supabase Actif
         </span>
       </div>
 

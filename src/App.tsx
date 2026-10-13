@@ -1,225 +1,307 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { AppUser, Role, UserRole } from './types';
-import { TabType, ToastMessage } from './components';
-import Sidebar from './components/Sidebar';
-import LoginModal from './components/LoginModal';
-import ProfileModal from './components/ProfileModal';
-import OfflineStatusBanner from './components/OfflineStatusBanner';
-import ToastContainer from './components/Toast';
-import { PushNotificationManagerModal } from './components/PushNotificationManagerModal';
-import { PwaInstallBanner } from './components/pwa/PwaInstallBanner';
-import { AppTopNavbar } from './components/navigation/AppTopNavbar';
-import { AppMobileBottomNav } from './components/navigation/AppMobileBottomNav';
-import { AppTabRouter } from './components/navigation/AppTabRouter';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  AppUser, 
+  Employee,
+  Presence,
+  Task,
+  Reminder,
+  NotificationLog,
+  SalaryPayment,
+  FinancialTransaction,
+  EmployeeSalaryDebt,
+  GeneratedDocument,
+  DisciplinaryIncident,
+  AttendanceIncident,
+  InventoryItem,
+  Partner,
+  CompanyModuleConfig,
+  LeaveRequest,
+} from './types';
+import { ToastMessage } from './components/Toast';
 import { useAppInitialData } from './hooks/useAppInitialData';
 import { loadSecureSession, storeSecureSession, clearSecureSession } from './services/sessionService';
-import { soundService } from './services/soundService';
-import { haptic } from './services/hapticService';
-import { extractPresenceRequests } from './components/presence/requests/presenceRequestsUtils';
-import { isEmployeeUser, getDefaultPortalForUser } from './utils/roleUtils';
+import { getDefaultPortalForUser, isEmployeeUser } from './utils/roleUtils';
+import Sidebar, { TabType } from './components/Sidebar';
+import { AppTopNavbar } from './components/navigation/AppTopNavbar';
+import { AppTabRouter } from './components/navigation/AppTabRouter';
+import { AppMobileBottomNav } from './components/navigation/AppMobileBottomNav';
+import LoginModal from './components/LoginModal';
+import ProfileModal from './components/ProfileModal';
+import KioskClockingModal from './components/KioskClockingModal';
+import OfficeQRCodeModal from './components/OfficeQRCodeModal';
+import ToastContainer from './components/Toast';
+import { DatabaseHealthBanner } from './components/common/DatabaseHealthBanner';
+import OfflineStatusBanner from './components/OfflineStatusBanner';
 
 export default function App() {
+  const initialData = useAppInitialData();
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('emp-1');
-  const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
-  const [showPushModal, setShowPushModal] = useState<boolean>(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<TabType>(() => {
-    let hash = '';
-    try {
-      if (typeof window !== 'undefined' && window.location && typeof window.location.hash === 'string') {
-        hash = window.location.hash.replace(/^#\/?/, '').trim();
-      }
-    } catch {}
-    const validTabs: TabType[] = [
-      'dashboard', 'employee_portal', 'calls', 'presences', 'statistics', 'tasks',
-      'reminders', 'logs', 'collaborators', 'discipline', 'documents', 'communications',
-      'finances', 'inventory', 'partners', 'recruitment', 'expense_claims', 'hse',
-      'visitors', 'ideas_surveys', 'users', 'settings', 'profile'
-    ];
-    if (hash && validTabs.includes(hash as TabType)) return hash as TabType;
-    return 'dashboard';
-  });
+  // Navigation & UI States
+  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Modals
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [kioskModalOpen, setKioskModalOpen] = useState(false);
+  const [officeQrModalOpen, setOfficeQrModalOpen] = useState(false);
+
+  // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
-    const newToast: ToastMessage = {
-      id: `toast-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      message,
-      type,
-    };
-    setToasts((prev) => [...prev.slice(-4), newToast]);
-    if (type === 'error') {
-      soundService.playAlertNotification(0.75);
+  const deduceTitle = (text: string, t: string): string => {
+    const lower = text.toLowerCase();
+    if (lower.includes('pointage') || lower.includes('badgé') || lower.includes('arrivée') || lower.includes('départ') || lower.includes('pause')) return 'Pointage de Présence';
+    if (lower.includes('permission') || lower.includes('congé') || lower.includes('absence')) return 'Demande de Permission / Congé';
+    if (lower.includes('frais') || lower.includes('remboursement') || lower.includes('dépense')) return 'Note de Frais';
+    if (lower.includes('paie') || lower.includes('salaire') || lower.includes('bulletin')) return 'Rémunération & Paie';
+    if (lower.includes('prêt') || lower.includes('acompte')) return 'Avance & Prêt Financier';
+    if (lower.includes('tâche') || lower.includes('task')) return 'Gestion des Tâches';
+    if (lower.includes('incident') || lower.includes('retard') || lower.includes('discipline')) return 'Signalement RH / Incident';
+    if (lower.includes('profil') || lower.includes('avatar') || lower.includes('mot de passe') || lower.includes('compte')) return 'Gestion du Profil';
+    if (lower.includes('code') || lower.includes('badge') || lower.includes('qr')) return 'Code d’Accès & Badge';
+    if (lower.includes('supprim') || lower.includes('annul')) return 'Suppression effectuée';
+    if (lower.includes('modifi') || lower.includes('mis à jour')) return 'Mise à jour enregistrée';
+    if (t === 'error') return 'Attention requise';
+    if (t === 'warning') return 'Avertissement système';
+    if (t === 'info') return 'Information Citrine';
+    return 'Opération confirmée';
+  };
+
+  const showToast = (
+    titleOrMessage: string,
+    messageOrType?: string | 'success' | 'error' | 'warning' | 'info',
+    type?: 'success' | 'error' | 'warning' | 'info'
+  ) => {
+    let resolvedTitle = '';
+    let resolvedMessage = '';
+    let resolvedType: 'success' | 'error' | 'warning' | 'info' = 'success';
+
+    if (type) {
+      resolvedTitle = titleOrMessage;
+      resolvedMessage = String(messageOrType || '');
+      resolvedType = type;
+    } else if (
+      messageOrType === 'success' || 
+      messageOrType === 'error' || 
+      messageOrType === 'warning' || 
+      messageOrType === 'info'
+    ) {
+      resolvedType = messageOrType;
+      resolvedTitle = deduceTitle(titleOrMessage, resolvedType);
+      resolvedMessage = titleOrMessage;
+    } else if (typeof messageOrType === 'string' && messageOrType.trim().length > 0) {
+      resolvedTitle = titleOrMessage;
+      resolvedMessage = messageOrType;
+      resolvedType = 'success';
+    } else {
+      resolvedType = 'success';
+      resolvedTitle = deduceTitle(titleOrMessage, resolvedType);
+      resolvedMessage = titleOrMessage;
     }
-  }, []);
 
-  const handleDismissToast = useCallback((id: string) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+    setToasts((prev) => [...prev, { id, title: resolvedTitle, message: resolvedMessage, type: resolvedType }]);
+  };
+
+  const dismissToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  };
 
-  const data = useAppInitialData();
+  // Clock
+  const [currentTime, setCurrentTime] = useState<string>(() => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  });
 
-  // Real-time clock
-  const [liveTimeString, setLiveTimeString] = useState<string>('');
   useEffect(() => {
-    const update = () => {
+    const interval = setInterval(() => {
       const d = new Date();
-      setLiveTimeString(
-        d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      );
-    };
-    update();
-    const interval = setInterval(update, 1000);
+      setCurrentTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Secure session initialization
+  // Restore authenticated session on mount
   useEffect(() => {
     loadSecureSession().then((user) => {
       if (user) {
         setCurrentUser(user);
-        const targetTab = getDefaultPortalForUser(user) as TabType;
-        setActiveTab(targetTab);
+        setActiveTab(getDefaultPortalForUser(user) as TabType);
       }
+      setIsAuthLoading(false);
+    }).catch(() => {
+      setIsAuthLoading(false);
     });
   }, []);
 
-  const handleSetCurrentUser = (user: AppUser | null) => {
+  const handleLoginSuccess = async (user: AppUser) => {
     setCurrentUser(user);
-    if (user) {
-      storeSecureSession(user);
-      const targetTab = getDefaultPortalForUser(user) as TabType;
-      setActiveTab(targetTab);
-    } else {
-      clearSecureSession();
-    }
+    await storeSecureSession(user);
+    setActiveTab(getDefaultPortalForUser(user) as TabType);
+    showToast(`Bienvenue, ${user.name} !`);
   };
 
-  const pendingRequestsCount = useMemo(() => {
-    const requests = extractPresenceRequests(data.presences, data.employees);
-    return requests.filter((r) => r.status === 'pending').length;
-  }, [data.presences, data.employees]);
+  const handleLogout = () => {
+    clearSecureSession();
+    setCurrentUser(null);
+    setProfileModalOpen(false);
+    showToast('Vous avez été déconnecté.');
+  };
 
-  const unreadRemindersCount = useMemo(() => {
-    return data.reminders.filter((r) => r.status === 'pending').length;
-  }, [data.reminders]);
-
-  const isEmployee = isEmployeeUser(currentUser);
-
-  // Force l'employé à ne voir que son Espace Personnel et son Profil
-  useEffect(() => {
-    if (isEmployee && activeTab !== 'employee_portal' && activeTab !== 'profile') {
-      setActiveTab('employee_portal');
+  // Badges counts
+  const unreadNotificationsCount = useMemo(() => {
+    if (!currentUser) return 0;
+    const isEmp = isEmployeeUser(currentUser);
+    if (!isEmp) {
+      return initialData.notifications.filter((n) => !n.read).length;
     }
-  }, [isEmployee, activeTab]);
+    return initialData.notifications.filter(
+      (n) => !n.read && (
+        n.recipient === currentUser.name || 
+        n.recipient === currentUser.email || 
+        n.recipient === 'Tous'
+      )
+    ).length;
+  }, [initialData.notifications, currentUser]);
 
-  if (!currentUser) {
+  const pendingLeavesCount = useMemo(() => {
+    return initialData.leaveRequests.filter((l) => l.status === 'pending').length;
+  }, [initialData.leaveRequests]);
+
+  const pendingPresencesRequestsCount = useMemo(() => {
+    return initialData.attendanceIncidents.filter((i) => i.status === 'signale' || !i.isJustified).length;
+  }, [initialData.attendanceIncidents]);
+
+  if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
-        <LoginModal
-          users={data.users}
-          onAddNotification={data.handleAddNotification}
-          onLoginSuccess={handleSetCurrentUser}
-        />
-        <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-[#2A7B76] border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-serif font-semibold text-stone-600">Chargement de Citrine Management...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated -> Show Login Screen
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-stone-100 flex flex-col justify-between">
+        <DatabaseHealthBanner />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <LoginModal
+            users={initialData.users}
+            onLoginSuccess={handleLoginSuccess}
+            onAddNotification={initialData.handleAddNotification}
+          />
+        </div>
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-stone-100/90 text-stone-900 flex flex-col antialiased">
+    <div className="min-h-screen bg-stone-100 flex flex-col text-stone-900 font-sans selection:bg-[#2A7B76] selection:text-white">
+      {/* Database Diagnostic and Permission Health Banner */}
+      <DatabaseHealthBanner />
+
+      {/* Offline Status */}
+      <OfflineStatusBanner />
+
       {/* Top Navbar */}
       <AppTopNavbar
         currentUser={currentUser}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenProfile={() => setActiveTab('profile')}
-        onOpenKioskModal={() => {}}
-        onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
-        unreadNotificationsCount={unreadRemindersCount + pendingRequestsCount}
-        liveTimeString={liveTimeString}
+        onOpenKioskModal={() => setKioskModalOpen(true)}
+        onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
+        unreadNotificationsCount={unreadNotificationsCount}
+        liveTimeString={currentTime}
+        onOpenEmployeeAlerts={() => setActiveTab('communications')}
       />
 
-      {/* Main Container */}
-      <div className="flex-1 flex min-w-0">
-        {/* Desktop Sidebar & Mobile Drawer : Réservé aux Administrateurs et Responsables */}
-        {!isEmployee && (
+      {/* Main Layout Container */}
+      <div className="flex-1 flex w-full max-w-[1920px] mx-auto overflow-hidden">
+        {/* Desktop Sidebar (Admins & Managers) */}
+        {!isEmployeeUser(currentUser) && (
           <Sidebar
             activeTab={activeTab}
             onSelectTab={(tab) => {
-              haptic.light();
               setActiveTab(tab);
               setMobileMenuOpen(false);
             }}
             isOpen={isSidebarOpen}
-            onToggleOpen={() => setIsSidebarOpen(!isSidebarOpen)}
-            unreadRemindersCount={unreadRemindersCount}
-            pendingPresencesRequestsCount={pendingRequestsCount}
+            onToggleOpen={() => setIsSidebarOpen((prev) => !prev)}
+            unreadRemindersCount={initialData.reminders.filter((r) => !r.stopped && !r.triggered).length}
+            pendingPresencesRequestsCount={pendingPresencesRequestsCount}
+            pendingLeavesCount={pendingLeavesCount}
             mobileMenuOpen={mobileMenuOpen}
-            onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+            onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
             currentUser={currentUser}
-            moduleConfig={data.moduleConfig}
+            moduleConfig={initialData.moduleConfig}
           />
         )}
 
-        {/* Tab Content Panel with safe bottom padding for mobile */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden pb-32 sm:pb-12">
-          {/* Offline & PWA Banners */}
-          <OfflineStatusBanner />
-          <PwaInstallBanner />
-
-          {/* Router Content */}
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-20 md:pb-8">
           <AppTabRouter
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             currentUser={currentUser}
-            employees={data.employees}
-            presences={data.presences}
-            tasks={data.tasks}
-            reminders={data.reminders}
-            notifications={data.notifications}
-            salaryPayments={data.salaryPayments}
-            financialTransactions={data.financialTransactions}
-            salaryDebts={data.salaryDebts}
-            documents={data.documents}
-            disciplinaryIncidents={data.disciplinaryIncidents}
-            attendanceIncidents={data.attendanceIncidents}
-            inventoryItems={data.inventoryItems}
-            partners={data.partners}
-            users={data.users}
-            moduleConfig={data.moduleConfig}
+            employees={initialData.employees}
+            presences={initialData.presences}
+            tasks={initialData.tasks}
+            reminders={initialData.reminders}
+            notifications={initialData.notifications}
+            salaryPayments={initialData.salaryPayments}
+            financialTransactions={initialData.financialTransactions}
+            salaryDebts={initialData.salaryDebts}
+            documents={initialData.documents}
+            disciplinaryIncidents={initialData.disciplinaryIncidents}
+            attendanceIncidents={initialData.attendanceIncidents}
+            inventoryItems={initialData.inventoryItems}
+            partners={initialData.partners}
+            users={initialData.users}
+            moduleConfig={initialData.moduleConfig}
             selectedEmployeeId={selectedEmployeeId}
             setSelectedEmployeeId={setSelectedEmployeeId}
-            currentTime={liveTimeString}
-            onUpdatePresences={data.handleUpdatePresences}
-            onUpdateTasks={data.setTasks}
-            onUpdateReminders={data.setReminders}
-            onAddNotification={data.handleAddNotification}
-            onUpdateNotifications={data.setNotifications}
-            onUpdateEmployees={data.handleUpdateEmployees}
-            onUpdateSalaryDebts={data.setSalaryDebts}
-            onUpdateSalaryPayments={data.setSalaryPayments}
-            onUpdateFinancialTransactions={data.setFinancialTransactions}
-            onUpdateDocuments={data.setDocuments}
-            onUpdateDisciplinaryIncidents={data.setDisciplinaryIncidents}
-            onUpdateAttendanceIncidents={data.handleUpdateAttendanceIncidents}
-            onAddAttendanceIncident={data.handleAddAttendanceIncident}
-            onUpdateInventoryItems={data.setInventoryItems}
-            onUpdatePartners={data.setPartners}
-            onUpdateUsers={data.setUsers}
-            onUpdateModuleConfig={data.handleUpdateModuleConfig}
+            currentTime={currentTime}
+            onUpdatePresences={initialData.handleUpdatePresences}
+            onUpdateTasks={initialData.setTasks}
+            onUpdateReminders={initialData.setReminders}
+            onAddNotification={initialData.handleAddNotification}
+            onUpdateNotifications={initialData.setNotifications}
+            onUpdateEmployees={initialData.handleUpdateEmployees}
+            onUpdateSalaryDebts={initialData.setSalaryDebts}
+            onUpdateSalaryPayments={initialData.setSalaryPayments}
+            onUpdateFinancialTransactions={initialData.setFinancialTransactions}
+            onUpdateDocuments={initialData.setDocuments}
+            onUpdateDisciplinaryIncidents={initialData.setDisciplinaryIncidents}
+            onUpdateAttendanceIncidents={initialData.handleUpdateAttendanceIncidents}
+            onAddAttendanceIncident={initialData.handleAddAttendanceIncident}
+            onUpdateInventoryItems={initialData.setInventoryItems}
+            onUpdatePartners={initialData.setPartners}
+            onUpdateUsers={initialData.setUsers}
+            onUpdateModuleConfig={initialData.handleUpdateModuleConfig}
             onOpenProfileModal={() => setActiveTab('profile')}
             showToast={showToast}
-            handleSetCurrentUser={handleSetCurrentUser}
+            handleSetCurrentUser={setCurrentUser}
+            onUpdateUser={(updated) => {
+              setCurrentUser(updated);
+              storeSecureSession(updated);
+            }}
+            leaveRequests={initialData.leaveRequests}
+            onUpdateLeaveRequests={initialData.setLeaveRequests}
           />
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation (Responsive & Hero Palette) */}
+      {/* Mobile Bottom Navigation Bar */}
       <AppMobileBottomNav
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -227,17 +309,52 @@ export default function App() {
         setMobileMenuOpen={setMobileMenuOpen}
       />
 
-      {/* Push Notifications Manager */}
-      {showPushModal && (
-        <PushNotificationManagerModal
-          isOpen={showPushModal}
-          onClose={() => setShowPushModal(false)}
+      {/* Profile Modal */}
+      {profileModalOpen && (
+        <ProfileModal
           currentUser={currentUser}
+          onClose={() => setProfileModalOpen(false)}
+          onLogout={handleLogout}
+          onAddNotification={initialData.handleAddNotification}
+          onUpdateUser={(u) => {
+            setCurrentUser(u);
+            storeSecureSession(u);
+          }}
         />
       )}
 
-      {/* Toast Notifications */}
-      <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+      {/* Kiosk Mode Clocking Modal */}
+      {kioskModalOpen && (
+        <KioskClockingModal
+          isOpen={kioskModalOpen}
+          onClose={() => setKioskModalOpen(false)}
+          employees={initialData.employees}
+          presences={initialData.presences}
+          onUpdatePresences={initialData.handleUpdatePresences}
+          onAddNotification={initialData.handleAddNotification}
+          companyName={initialData.moduleConfig.companyName}
+          moduleConfig={initialData.moduleConfig}
+          onAddAttendanceIncident={initialData.handleAddAttendanceIncident}
+        />
+      )}
+
+      {/* Office QR Code Modal */}
+      {officeQrModalOpen && (
+        <OfficeQRCodeModal
+          isOpen={officeQrModalOpen}
+          onClose={() => setOfficeQrModalOpen(false)}
+          qrSecret={initialData.moduleConfig.qrCodeSecret}
+          companyName={initialData.moduleConfig.companyName}
+          managerName={currentUser.name}
+          onLaunchKiosk={() => {
+            setOfficeQrModalOpen(false);
+            setKioskModalOpen(true);
+          }}
+        />
+      )}
+
+      {/* Toast Notification Container */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

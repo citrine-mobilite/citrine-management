@@ -16,6 +16,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { Employee, AppUser, Presence, Task, AttendanceIncident } from '../../types';
+import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 interface EmployeeProfileTabProps {
   employeeProfile: Employee;
@@ -40,7 +41,7 @@ export const EmployeeProfileTab: React.FC<EmployeeProfileTabProps> = ({
     ? (currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1))
     : 'Collaborateur';
 
-  const myPresencesCount = presences.filter(p => p.employeeId === employeeProfile.id || p.employeeName === employeeProfile.name).length;
+  const myPresencesCount = presences.filter(p => p.employeeId === employeeProfile.id).length;
   const myPendingTasksCount = tasks.filter(t => t.assignedTo === employeeProfile.id && t.status !== 'completed').length;
   const myIncidentsCount = incidents.filter(i => i.employeeId === employeeProfile.id).length;
 
@@ -96,15 +97,18 @@ export const EmployeeProfileTab: React.FC<EmployeeProfileTabProps> = ({
           </div>
         </div>
 
-        {onOpenProfileModal && (
-          <button
-            onClick={onOpenProfileModal}
-            className="shrink-0 bg-[#2A7B76] hover:bg-[#20615d] active:scale-98 text-white px-5 py-3 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
-          >
-            <Pencil className="h-4 w-4 text-emerald-200" />
-            <span>Modifier Mon Profil & Sécurité</span>
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <PWAInstallButton />
+          {onOpenProfileModal && (
+            <button
+              onClick={onOpenProfileModal}
+              className="shrink-0 bg-[#2A7B76] hover:bg-[#20615d] active:scale-98 text-white px-5 py-3 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
+            >
+              <Pencil className="h-4 w-4 text-emerald-200" />
+              <span>Modifier Mon Profil & Sécurité</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Grid Details */}

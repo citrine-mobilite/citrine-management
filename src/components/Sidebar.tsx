@@ -30,6 +30,7 @@ export type TabType =
   | 'hse'
   | 'visitors'
   | 'ideas_surveys'
+  | 'leave_requests'
   | 'users'
   | ''
   | 'settings'
@@ -42,6 +43,7 @@ interface SidebarProps {
   onToggleOpen: () => void;
   unreadRemindersCount: number;
   pendingPresencesRequestsCount?: number;
+  pendingLeavesCount?: number;
   mobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
   currentUser: AppUser | null;
@@ -55,6 +57,7 @@ export default function Sidebar({
   onToggleOpen,
   unreadRemindersCount,
   pendingPresencesRequestsCount = 0,
+  pendingLeavesCount = 0,
   mobileMenuOpen,
   onToggleMobileMenu,
   currentUser,
@@ -67,6 +70,7 @@ export default function Sidebar({
     moduleConfig,
     unreadRemindersCount,
     pendingPresencesRequestsCount,
+    pendingLeavesCount,
   });
 
   return (

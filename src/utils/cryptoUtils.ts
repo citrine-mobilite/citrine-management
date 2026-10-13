@@ -8,6 +8,16 @@
  * - Au moins 10 caractères (12 par défaut)
  * - Contient majuscules, minuscules, chiffres et caractères spéciaux
  */
+function getCrypto(): Crypto {
+  if (typeof window !== 'undefined' && window.crypto) {
+    return window.crypto;
+  }
+  if (typeof globalThis !== 'undefined' && (globalThis as any).crypto) {
+    return (globalThis as any).crypto;
+  }
+  throw new Error('Web Crypto API non disponible');
+}
+
 export function generateStrongPassword(length = 12): string {
   const actualLength = Math.max(10, length);
   const uppers = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -15,7 +25,6 @@ export function generateStrongPassword(length = 12): string {
   const digits = '23456789';
   const specials = '!@#$%^&*()_+-=[]{}|;:,.<>?';
 
-  // Garantir au moins un caractère de chaque catégorie obligatoire
   const password = [
     uppers.charAt(Math.floor(Math.random() * uppers.length)),
     lowers.charAt(Math.floor(Math.random() * lowers.length)),
@@ -29,7 +38,6 @@ export function generateStrongPassword(length = 12): string {
     password.push(allChars.charAt(Math.floor(Math.random() * allChars.length)));
   }
 
-  // Mélanger de manière aléatoire
   for (let i = password.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [password[i], password[j]] = [password[j], password[i]];
@@ -40,6 +48,7 @@ export function generateStrongPassword(length = 12): string {
 
 export async function hashPassword(password: string, saltHex?: string): Promise<string> {
   if (!password) return '';
+  const cryptoInstance = getCrypto();
   const encoder = new TextEncoder();
   
   let saltBytes: Uint8Array;
@@ -47,13 +56,13 @@ export async function hashPassword(password: string, saltHex?: string): Promise<
     saltBytes = hexToBytes(saltHex);
   } else {
     saltBytes = new Uint8Array(16);
-    window.crypto.getRandomValues(saltBytes);
+    cryptoInstance.getRandomValues(saltBytes);
   }
   
   const saltStr = bytesToHex(saltBytes);
   const passwordBuffer = encoder.encode(password);
 
-  const baseKey = await window.crypto.subtle.importKey(
+  const baseKey = await cryptoInstance.subtle.importKey(
     'raw',
     passwordBuffer,
     { name: 'PBKDF2' },
@@ -61,10 +70,10 @@ export async function hashPassword(password: string, saltHex?: string): Promise<
     ['deriveBits', 'deriveKey']
   );
 
-  const derivedKey = await window.crypto.subtle.deriveBits(
+  const derivedKey = await cryptoInstance.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      salt: saltBytes,
+      salt: saltBytes as unknown as BufferSource,
       iterations: 100000,
       hash: 'SHA-256'
     },
@@ -124,7 +133,7 @@ export async function createSessionChecksum(userId: string, role: string, email:
   const payload = `${userId}:${role}:${email}:citrine-salt-2026`;
   const encoder = new TextEncoder();
   const data = encoder.encode(payload);
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+  const hashBuffer = await getCrypto().subtle.digest('SHA-256', data);
   return bytesToHex(new Uint8Array(hashBuffer));
 }
 

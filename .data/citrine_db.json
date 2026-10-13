@@ -1,0 +1,300 @@
+{
+  "tasks": [
+    {
+      "id": "task-1791846189097",
+      "date": "2026-10-12",
+      "time": "18:00",
+      "title": "test",
+      "status": "idea",
+      "comments": [],
+      "priority": "medium",
+      "subtasks": [],
+      "incidents": [],
+      "projectId": "general",
+      "assignedTo": "Landry Moutongo",
+      "description": "test",
+      "_dbId": 2,
+      "updatedAt": "2026-10-12T23:04:53.919Z"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "notif-emp-action-1791845845099-f1trd",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "Action employé : Landry Dev",
+      "content": "Landry Dev a validé une action (Mise à jour / Enregistrement) sur le module [tasks].",
+      "payload": "{\"source\":\"employee_action\",\"method\":\"POST\",\"collection\":\"tasks\",\"docId\":\"task-test-1\",\"empName\":\"Landry Dev\",\"timestamp\":\"2026-10-12T22:57:25.099Z\"}",
+      "timestamp": "2026-10-12T22:57:25.099Z",
+      "read": false,
+      "updatedAt": "2026-10-12T22:57:25.099Z"
+    },
+    {
+      "id": "notif-emp-action-1791845850310-muzup",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "Action employé : Collaborateur",
+      "content": "Collaborateur a validé une action (Suppression) sur le module [tasks].",
+      "payload": "{\"source\":\"employee_action\",\"method\":\"DELETE\",\"collection\":\"tasks\",\"docId\":\"task-test-1\",\"empName\":\"Collaborateur\",\"timestamp\":\"2026-10-12T22:57:30.310Z\"}",
+      "timestamp": "2026-10-12T22:57:30.310Z",
+      "read": false,
+      "updatedAt": "2026-10-12T22:57:30.310Z"
+    },
+    {
+      "id": "notif-emp-act-1791846189126-rd4gf",
+      "read": true,
+      "type": "system",
+      "title": "🔔 Action Employé : Landry Moutongo",
+      "content": "Landry Moutongo a modifié une entrée dans le module [Tâche de travail] (Réf: task-1791846189097).",
+      "payload": "{\"source\":\"auto_employee_action_interceptor\",\"actionType\":\"update\",\"collection\":\"tasks\",\"itemId\":\"task-1791846189097\",\"actorName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:03:09.126Z\"}",
+      "recipient": "Direction & RH",
+      "timestamp": "2026-10-12T23:03:09.126Z",
+      "_dbId": 2,
+      "updatedAt": "2026-10-12T23:06:45.282Z"
+    },
+    {
+      "id": "notif-1791846189097",
+      "type": "system",
+      "title": "Nouvelle Tâche Assignée",
+      "content": "test (2026-10-12)",
+      "payload": "{}",
+      "recipient": "Landry Moutongo",
+      "timestamp": "2026-10-12T23:03:09.097Z",
+      "_dbId": 1,
+      "read": true,
+      "updatedAt": "2026-10-12T23:06:02.571Z"
+    },
+    {
+      "id": "notif-emp-action-1791846189766-wq3et",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "Action employé : Landry Moutongo",
+      "content": "Landry Moutongo a validé une action (Mise à jour / Enregistrement) sur le module [tasks].",
+      "payload": "{\"source\":\"employee_action\",\"method\":\"POST\",\"collection\":\"tasks\",\"docId\":\"task-1791846189097\",\"empName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:03:09.766Z\"}",
+      "timestamp": "2026-10-12T23:03:09.766Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:03:09.766Z"
+    },
+    {
+      "id": "notif-emp-action-1791846189768-2r4uq",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "Action employé : Landry Moutongo",
+      "content": "Landry Moutongo a validé une action (Suppression) sur le module [tasks].",
+      "payload": "{\"source\":\"employee_action\",\"method\":\"DELETE\",\"collection\":\"tasks\",\"docId\":\"task-1785778644074\",\"empName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:03:09.768Z\"}",
+      "timestamp": "2026-10-12T23:03:09.768Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:03:09.768Z"
+    },
+    {
+      "id": "notif-emp-act-1791846189130-17dq5",
+      "read": true,
+      "type": "system",
+      "title": "🔔 Action Employé : Landry Moutongo",
+      "content": "Landry Moutongo a supprimé un élément dans le module [Tâche de travail] (Réf: task-1785778644074).",
+      "payload": "{\"source\":\"auto_employee_action_interceptor\",\"actionType\":\"delete\",\"collection\":\"tasks\",\"itemId\":\"task-1785778644074\",\"actorName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:03:09.130Z\"}",
+      "recipient": "Direction & RH",
+      "timestamp": "2026-10-12T23:03:09.130Z",
+      "_dbId": 3,
+      "updatedAt": "2026-10-12T23:06:05.280Z"
+    },
+    {
+      "id": "notif-emp-act-1791846291541-2h6xj",
+      "read": true,
+      "type": "system",
+      "title": "🔔 Action Employé : Landry Moutongo",
+      "content": "Landry Moutongo a modifié une entrée dans le module [Tâche de travail] (Réf: task-1791846189097).",
+      "payload": "{\"source\":\"auto_employee_action_interceptor\",\"actionType\":\"update\",\"collection\":\"tasks\",\"itemId\":\"task-1791846189097\",\"actorName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:04:51.541Z\"}",
+      "recipient": "Direction & RH",
+      "timestamp": "2026-10-12T23:04:51.541Z",
+      "_dbId": 4,
+      "updatedAt": "2026-10-12T23:06:42.558Z"
+    },
+    {
+      "id": "notif-emp-action-1791846293919-9eeu7",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "Action employé : Landry Moutongo",
+      "content": "Landry Moutongo a validé une action (Mise à jour / Enregistrement) sur le module [tasks].",
+      "payload": "{\"source\":\"employee_action\",\"method\":\"POST\",\"collection\":\"tasks\",\"docId\":\"task-1791846189097\",\"empName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:04:53.919Z\"}",
+      "timestamp": "2026-10-12T23:04:53.919Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:04:53.919Z"
+    },
+    {
+      "id": "notif-task-move-1791846291522-task-1791846189097",
+      "type": "system",
+      "title": "Mouvement de Tâche : test",
+      "content": "La tâche est passée au statut « idea ».",
+      "payload": "{\"source\":\"task_movement\",\"taskId\":\"task-1791846189097\",\"employeeId\":\"Landry Moutongo\",\"newStatus\":\"idea\",\"previousStatus\":\"todo\"}",
+      "recipient": "Landry Moutongo",
+      "timestamp": "2026-10-12T23:04:51.522Z",
+      "_dbId": 5,
+      "read": true,
+      "updatedAt": "2026-10-12T23:06:39.996Z"
+    },
+    {
+      "id": "notif-avatar-1791846441710",
+      "type": "system",
+      "recipient": "landrymouns@gmail.com",
+      "title": "Modification de l'avatar",
+      "content": "La photo de profil / avatar de Landry Moutongo a été modifiée avec succès.",
+      "payload": "",
+      "timestamp": "2026-10-12T23:07:21.710Z",
+      "updatedAt": "2026-10-12T23:07:22.231Z"
+    },
+    {
+      "id": "notif-emp-action-1791846442233-ywa62",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "Action employé : Landry Moutongo",
+      "content": "Landry Moutongo a validé une action (Mise à jour / Enregistrement) sur le module [employees].",
+      "payload": "{\"source\":\"employee_action\",\"method\":\"POST\",\"collection\":\"employees\",\"docId\":\"emp-1785638247317\",\"empName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:07:22.233Z\"}",
+      "timestamp": "2026-10-12T23:07:22.233Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:07:22.233Z"
+    },
+    {
+      "id": "notif-emp-act-1791846441709-tjoc1",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "🔔 Action Employé : Landry Moutongo",
+      "content": "Landry Moutongo a modifié une entrée dans le module [employees] (Réf: emp-1785638247317).",
+      "payload": "{\"source\":\"auto_employee_action_interceptor\",\"actionType\":\"update\",\"collection\":\"employees\",\"itemId\":\"emp-1785638247317\",\"actorName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:07:21.709Z\"}",
+      "timestamp": "2026-10-12T23:07:21.709Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:07:22.237Z"
+    },
+    {
+      "id": "notif-emp-act-1791846443988-fao1j",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "🔔 Action Employé : Landry Moutongo",
+      "content": "Landry Moutongo a modifié une entrée dans le module [employees] (Réf: emp-1785638247317).",
+      "payload": "{\"source\":\"auto_employee_action_interceptor\",\"actionType\":\"update\",\"collection\":\"employees\",\"itemId\":\"emp-1785638247317\",\"actorName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:07:23.988Z\"}",
+      "timestamp": "2026-10-12T23:07:23.988Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:07:24.240Z"
+    },
+    {
+      "id": "notif-emp-action-1791846444245-wdsvy",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "Action employé : Landry Moutongo",
+      "content": "Landry Moutongo a validé une action (Mise à jour / Enregistrement) sur le module [employees].",
+      "payload": "{\"source\":\"employee_action\",\"method\":\"POST\",\"collection\":\"employees\",\"docId\":\"emp-1785638247317\",\"empName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:07:24.245Z\"}",
+      "timestamp": "2026-10-12T23:07:24.245Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:07:24.245Z"
+    },
+    {
+      "id": "notif-prof-1791846443988",
+      "type": "system",
+      "recipient": "landrymouns@gmail.com",
+      "title": "Mise à jour du profil",
+      "content": "Le profil de Landry Moutongo a été mis à jour.",
+      "payload": "",
+      "timestamp": "2026-10-12T23:07:23.988Z",
+      "updatedAt": "2026-10-12T23:07:24.267Z"
+    },
+    {
+      "id": "notif-prof-1791846448972",
+      "type": "system",
+      "recipient": "landrymouns@gmail.com",
+      "title": "Mise à jour du profil",
+      "content": "Le profil de Landry Moutongo a été mis à jour.",
+      "payload": "",
+      "timestamp": "2026-10-12T23:07:28.972Z",
+      "updatedAt": "2026-10-12T23:07:29.165Z"
+    },
+    {
+      "id": "notif-emp-act-1791846448972-pmc3w",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "🔔 Action Employé : Landry Moutongo",
+      "content": "Landry Moutongo a modifié une entrée dans le module [employees] (Réf: emp-1785638247317).",
+      "payload": "{\"source\":\"auto_employee_action_interceptor\",\"actionType\":\"update\",\"collection\":\"employees\",\"itemId\":\"emp-1785638247317\",\"actorName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:07:28.972Z\"}",
+      "timestamp": "2026-10-12T23:07:28.972Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:07:29.166Z"
+    },
+    {
+      "id": "notif-emp-action-1791846449169-j5mhd",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "Action employé : Landry Moutongo",
+      "content": "Landry Moutongo a validé une action (Mise à jour / Enregistrement) sur le module [employees].",
+      "payload": "{\"source\":\"employee_action\",\"method\":\"POST\",\"collection\":\"employees\",\"docId\":\"emp-1785638247317\",\"empName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:07:29.169Z\"}",
+      "timestamp": "2026-10-12T23:07:29.169Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:07:29.169Z"
+    },
+    {
+      "id": "notif-emp-action-1791846660917-hkjo5",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "Action employé : Landry Moutongo",
+      "content": "Landry Moutongo a validé une action (Mise à jour / Enregistrement) sur le module [leave_requests].",
+      "payload": "{\"source\":\"employee_action\",\"method\":\"POST\",\"collection\":\"leave_requests\",\"docId\":\"leave-1791846659240-mpbm4\",\"empName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:11:00.917Z\"}",
+      "timestamp": "2026-10-12T23:11:00.917Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:11:00.917Z"
+    },
+    {
+      "id": "notif-leave-leave-1791846659240-mpbm4",
+      "type": "system",
+      "recipient": "Direction RH & Responsables",
+      "title": "Demande de Repos compensateur / Récupération : Landry Moutongo",
+      "content": "Landry Moutongo (Logistique & Terrain) sollicite 3 jour(s) du 2026-10-13 au 2026-10-15. Motif : je veux me reposer",
+      "payload": "{\"source\":\"leave_request\",\"leaveId\":\"leave-1791846659240-mpbm4\",\"employeeId\":\"emp-1785638247317\",\"employeeName\":\"Landry Moutongo\",\"type\":\"recuperation\",\"startDate\":\"2026-10-13\",\"endDate\":\"2026-10-15\",\"daysCount\":3}",
+      "timestamp": "2026-10-12T23:10:59.240Z",
+      "updatedAt": "2026-10-12T23:11:00.923Z"
+    },
+    {
+      "id": "notif-emp-act-1791846659243-a5u42",
+      "type": "system",
+      "recipient": "Direction & RH",
+      "title": "🔔 Action Employé : Landry Moutongo",
+      "content": "Landry Moutongo a modifié une entrée dans le module [Demande de Congé] (Réf: leave-1791846659240-mpbm4).",
+      "payload": "{\"source\":\"auto_employee_action_interceptor\",\"actionType\":\"update\",\"collection\":\"leave_requests\",\"itemId\":\"leave-1791846659240-mpbm4\",\"actorName\":\"Landry Moutongo\",\"timestamp\":\"2026-10-12T23:10:59.243Z\"}",
+      "timestamp": "2026-10-12T23:10:59.243Z",
+      "read": false,
+      "updatedAt": "2026-10-12T23:11:01.679Z"
+    }
+  ],
+  "employees": [
+    {
+      "id": "emp-1785638247317",
+      "name": "Landry Moutongo",
+      "email": "landrymouns@gmail.com",
+      "phone": "+237 600 000 001",
+      "salary": 100000,
+      "status": "en_poste",
+      "hireDate": "2026-07-08",
+      "roleType": "administrateur",
+      "avatarUrl": "https://api.dicebear.com/7.x/personas/svg?seed=Landry%20Moutongo_7_s4y8h",
+      "birthDate": "2026-08-04",
+      "_dbId": 2,
+      "department": "Logistique & Terrain",
+      "updatedAt": "2026-10-12T23:07:29.168Z"
+    }
+  ],
+  "leave_requests": [
+    {
+      "id": "leave-1791846659240-mpbm4",
+      "employeeId": "emp-1785638247317",
+      "employeeName": "Landry Moutongo",
+      "employeeEmail": "landrymouns@gmail.com",
+      "employeeAvatar": "https://api.dicebear.com/7.x/personas/svg?seed=Landry%20Moutongo_7_s4y8h",
+      "department": "Logistique & Terrain",
+      "type": "recuperation",
+      "startDate": "2026-10-13",
+      "endDate": "2026-10-15",
+      "daysCount": 3,
+      "reason": "je veux me reposer",
+      "status": "pending",
+      "createdAt": "2026-10-12T23:10:59.240Z",
+      "updatedAt": "2026-10-12T23:11:00.916Z"
+    }
+  ]
+}

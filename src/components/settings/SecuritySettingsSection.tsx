@@ -33,7 +33,7 @@ export const SecuritySettingsSection: React.FC<SecuritySettingsSectionProps> = (
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const rawIps = typeof formData.allowedOfficeIPs === 'string' ? formData.allowedOfficeIPs : '';
-    const updated: CompanyModuleConfig = {
+    const updated: any = {
       ...(moduleConfig || {}),
       qrCodeSecret: (formData.qrCodeSecret || 'CITRINE_SECRET_2026').trim(),
       officeWifiSsid: (formData.officeWifiSsid || '').trim(),

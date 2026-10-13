@@ -87,9 +87,9 @@ const SETTINGS_TABS: TabItem[] = [
     id: 'database',
     label: 'Base de Données',
     shortLabel: 'Maintenance',
-    description: 'Santé Firestore & reconstruction',
+    description: 'Santé Supabase & synchronisation',
     icon: Database,
-    badge: 'Firestore',
+    badge: 'Supabase',
   },
 ];
 
@@ -132,7 +132,7 @@ export default function CompanySettingsPanel({
 
         <div className="flex items-center gap-2 self-start md:self-auto bg-black/20 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/10 text-xs">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="font-medium text-emerald-100">Synchronisé avec Firestore</span>
+          <span className="font-medium text-emerald-100">Synchronisé avec Supabase</span>
         </div>
       </div>
 

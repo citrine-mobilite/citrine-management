@@ -49,7 +49,7 @@ export const DocTemplateSelector: React.FC<DocTemplateSelectorProps> = ({
               type="button"
               onClick={onCreateNewTemplate}
               className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#2A7B76] border border-emerald-200/80 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Ajouter un nouveau type de document personnalisé en base Firestore"
+              title="Ajouter un nouveau type de document personnalisé en base Supabase"
             >
               <FolderPlus className="h-3.5 w-3.5" />
               <span>+ Nouveau Modèle BD</span>
@@ -157,7 +157,7 @@ export const DocTemplateSelector: React.FC<DocTemplateSelectorProps> = ({
                 Créer un Nouveau Type de Document
               </h4>
               <p className="text-[10px] text-stone-400 mt-0.5">
-                Sans modifier le code · Stocké en base Firestore
+                Sans modifier le code · Stocké en base Supabase
               </p>
             </div>
           </button>

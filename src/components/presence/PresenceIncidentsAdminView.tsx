@@ -10,10 +10,13 @@ import {
   Check, 
   X,
   FileCheck2,
-  Calendar
+  Calendar,
+  Plus
 } from 'lucide-react';
-import { AttendanceIncident, Employee } from '../../types';
+import { AttendanceIncident, Employee, NotificationLog } from '../../types';
 import { incidentService } from '../../services/incidentService';
+import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
+import { COLLECTIONS, saveDocument } from '../../services/dataService';
 
 interface PresenceIncidentsAdminViewProps {
   attendanceIncidents: AttendanceIncident[];
@@ -33,6 +36,16 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedIncidentForJustification, setSelectedIncidentForJustification] = useState<AttendanceIncident | null>(null);
   const [adminNote, setAdminNote] = useState('');
+
+  // Modal création manuelle
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newEmployeeId, setNewEmployeeId] = useState('');
+  const [newType, setNewType] = useState<AttendanceIncident['type']>('absence_injustifiee');
+  const [newDate, setNewDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [newTime, setNewTime] = useState(() => new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+  const [newReason, setNewReason] = useState('');
+  const [newAdminNote, setNewAdminNote] = useState('Signalement consigné manuellement au registre RH.');
+  const [isCreating, setIsCreating] = useState(false);
 
   const filtered = attendanceIncidents.filter((inc) => {
     const matchesSearch = 
@@ -83,8 +96,92 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
         return 'Pause anticipée';
       case 'pause_prolongee':
         return 'Pause prolongée';
+      case 'absence_injustifiee':
+        return 'Absence injustifiée';
+      case 'depart_sans_validation':
+        return 'Départ sans validation';
+      case 'absence_non_autorisee':
+        return 'Absence non autorisée';
       default:
         return 'Autre';
+    }
+  };
+
+  const handleCreateManualIncident = async () => {
+    if (!newEmployeeId) {
+      showToast?.('Veuillez sélectionner un employé.', 'error');
+      return;
+    }
+    if (!newReason.trim()) {
+      showToast?.('Veuillez renseigner le motif du signalement.', 'error');
+      return;
+    }
+
+    const emp = employees.find((e) => e.id === newEmployeeId);
+    if (!emp) return;
+
+    setIsCreating(true);
+    try {
+      const now = new Date();
+      const newInc: AttendanceIncident = {
+        id: `inc-admin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        date: newDate,
+        timeString: newTime,
+        type: newType,
+        origin: 'signale_par_responsable',
+        reason: newReason.trim(),
+        isDeclaredInAdvance: false,
+        isJustified: false,
+        status: 'injustifie',
+        adminComment: newAdminNote.trim() || 'Signalement consigné manuellement au registre RH.',
+        createdAt: now.toISOString(),
+      };
+
+      await incidentService.saveIncident(newInc);
+      if (onUpdateAttendanceIncidents) {
+        onUpdateAttendanceIncidents([newInc, ...attendanceIncidents]);
+      }
+
+      // Notification Push & Alert
+      pushNotificationBridgeService.sendPush({
+        title: `🚨 Signalement RH : ${emp.name}`,
+        message: `Signalement d'absence/manquement consigné pour le ${newDate}. Motif : ${newReason.trim()}`,
+        senderName: 'Direction RH',
+        type: 'alert',
+      });
+
+      const notif: NotificationLog = {
+        id: `notif-inc-${newInc.id}`,
+        type: 'system',
+        recipient: emp.email || emp.name,
+        title: '🚨 Signalement RH d’Absence Non Autorisée',
+        content: `Un signalement d'absence non validée a été consigné pour le ${newDate}. Motif : ${newReason.trim()}`,
+        payload: JSON.stringify({
+          source: 'incident_manual',
+          incidentId: newInc.id,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          type: newType,
+          date: newDate,
+        }),
+        timestamp: now.toISOString(),
+        read: false,
+      };
+
+      await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+      }
+
+      showToast?.(`Signalement consigné avec succès sur ${emp.name}.`, 'success');
+      setShowCreateModal(false);
+      setNewReason('');
+    } catch {
+      showToast?.('Erreur lors de la création du signalement.', 'error');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -140,13 +237,15 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-700 font-semibold focus:outline-none"
           >
             <option value="all">Tous les types</option>
+            <option value="absence_injustifiee">Absences injustifiées</option>
+            <option value="depart_sans_validation">Départs sans validation</option>
             <option value="retard">Retards</option>
             <option value="sortie_prematuree">Sorties prématurées</option>
             <option value="pause_anticipee">Pauses anticipées</option>
@@ -162,6 +261,18 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
             <option value="declared">Signalés par employés</option>
             <option value="auto">Détectés automatiquement</option>
           </select>
+
+          <button
+            onClick={() => {
+              setNewEmployeeId(employees[0]?.id || '');
+              setShowCreateModal(true);
+            }}
+            className="bg-[#2A7B76] hover:bg-[#20635F] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 ml-auto md:ml-0"
+            title="Consigner manuellement un manquement ou une absence non validée"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Nouveau signalement</span>
+          </button>
         </div>
       </div>
 
@@ -322,6 +433,125 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
                 className="px-4 py-2 rounded-xl bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold cursor-pointer shadow-xs"
               >
                 Valider & Justifier
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Création Manuelle de Signalement */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-xs p-3 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 border border-stone-200 shadow-2xl my-8">
+            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+              <h3 className="font-serif font-bold text-base text-stone-900 flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-amber-600" />
+                <span>Nouveau Signalement Manuel de Présence</span>
+              </h3>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="p-1 rounded-xl text-stone-400 hover:bg-stone-100 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-stone-600">
+              Consignez un manquement, un départ précipité ou une absence constatée sans validation managériale.
+            </p>
+
+            <div className="space-y-1 text-xs">
+              <label className="font-bold text-stone-700">Collaborateur concerné *</label>
+              <select
+                value={newEmployeeId}
+                onChange={(e) => setNewEmployeeId(e.target.value)}
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-900 focus:outline-none focus:border-[#2A7B76]"
+              >
+                <option value="">Sélectionnez un employé...</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name} ({emp.roleType || 'Employé'}) - {emp.department || 'Opérations'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <label className="font-bold text-stone-700">Type d'incident</label>
+              <select
+                value={newType}
+                onChange={(e) => setNewType(e.target.value as any)}
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-900 focus:outline-none focus:border-[#2A7B76]"
+              >
+                <option value="absence_injustifiee">Absence injustifiée / Départ sans validation</option>
+                <option value="depart_sans_validation">Départ avant approbation de congé</option>
+                <option value="depart_anticipe">Départ anticipé non autorisé</option>
+                <option value="sortie_prematuree">Sortie de poste non autorisée</option>
+                <option value="retard">Retard non justifié</option>
+                <option value="autre">Autre anomalie de présence</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-stone-700">Date de l'incident</label>
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-stone-700">Heure de l'incident</label>
+                <input
+                  type="time"
+                  value={newTime}
+                  onChange={(e) => setNewTime(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <label className="font-bold text-stone-700">Motif & faits constatés *</label>
+              <textarea
+                rows={3}
+                value={newReason}
+                onChange={(e) => setNewReason(e.target.value)}
+                placeholder="Ex: A sollicité une absence de 2 jours et est parti sans que l'on ne valide..."
+                required
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl p-2.5 text-xs text-stone-800 resize-none focus:outline-none focus:border-[#2A7B76]"
+              />
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <label className="font-bold text-stone-700">Observation administrative</label>
+              <input
+                type="text"
+                value={newAdminNote}
+                onChange={(e) => setNewAdminNote(e.target.value)}
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-800 focus:outline-none focus:border-[#2A7B76]"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateManualIncident}
+                disabled={isCreating}
+                className="px-5 py-2 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+              >
+                <ShieldAlert className="h-4 w-4" />
+                <span>{isCreating ? 'Enregistrement...' : 'Enregistrer le signalement'}</span>
               </button>
             </div>
           </div>

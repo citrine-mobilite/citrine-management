@@ -21,11 +21,11 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-3 w-full md:w-auto">
+      <div className="flex flex-row items-center justify-end gap-2 w-full md:w-auto">
         {/* Nouveau Projet */}
         <button
           onClick={onOpenNewProject}
-          className="bg-white/15 hover:bg-white/25 text-white font-semibold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 transition cursor-pointer border border-white/25 active:scale-98"
+          className="bg-white/15 hover:bg-white/25 text-white font-semibold px-3.5 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer border border-white/25 active:scale-98 whitespace-nowrap"
         >
           <FolderPlus className="h-4 w-4 text-emerald-200" />
           <span>Nouveau Projet</span>
@@ -34,7 +34,7 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
         {/* Nouvelle Tâche */}
         <button
           onClick={onOpenCreateTask}
-          className="bg-white text-[#2A7B76] hover:bg-emerald-50 font-bold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 shadow-sm hover:shadow transition cursor-pointer active:scale-98"
+          className="bg-white text-[#2A7B76] hover:bg-emerald-50 font-bold px-3.5 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 shadow-sm hover:shadow transition cursor-pointer active:scale-98 whitespace-nowrap"
         >
           <Plus className="h-4 w-4" />
           <span>Nouvelle Tâche</span>

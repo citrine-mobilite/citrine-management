@@ -131,6 +131,8 @@ export default function TaskPanel({
         defaultProjectId={logic.activeProjectId}
         defaultStatus={logic.createModalDefaultStatus}
         isMilestoneDefault={logic.isMilestoneModalDefault}
+        currentRole={currentRole}
+        currentUser={currentUser}
       />
 
       {/* Modal Création Nouveau Module */}

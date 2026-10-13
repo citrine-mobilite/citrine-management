@@ -1,5 +1,5 @@
-import React from 'react';
-import { Clock, Calendar, DollarSign, CreditCard, CheckSquare, AlertTriangle, Bell, User } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Clock, Calendar, DollarSign, CreditCard, CheckSquare, AlertTriangle, Bell, User, Smartphone, CalendarDays } from 'lucide-react';
 import { 
   AppUser, 
   Employee, 
@@ -10,27 +10,31 @@ import {
   EmployeeSalaryDebt,
   NotificationLog,
   CompanyModuleConfig,
-  AttendanceIncident 
+  AttendanceIncident,
+  LeaveRequest 
 } from '../types';
 import OfficeQRCodeModal from './OfficeQRCodeModal';
 import RhReportModal from './RhReportModal';
 import { useEmployeePortalLogic } from './employee/useEmployeePortalLogic';
+import { appBadgeService } from '../utils/appBadgeService';
 
 // Subcomponents (< 300 lines each)
 import { EmployeeHeroBanner } from './employee/EmployeeHeroBanner';
 import { EmployeeDailyClockingWidget } from './employee/EmployeeDailyClockingWidget';
 import { EmployeePresencesHistorySection } from './employee/EmployeePresencesHistorySection';
 import { EmployeeIncidentsTab } from './employee/EmployeeIncidentsTab';
+import { EmployeeLeaveTab } from './employee/EmployeeLeaveTab';
 import EmployeeSalaryTab from './employee/EmployeeSalaryTab';
 import EmployeeLoansTab from './employee/EmployeeLoansTab';
 import { EmployeeAssignedTasksSection } from './employee/EmployeeAssignedTasksSection';
+import TaskPanel from './TaskPanel';
 import { EmployeePointageModal } from './employee/EmployeePointageModal';
 import { EmployeeCustomTimeModal } from './employee/EmployeeCustomTimeModal';
 import { EmployeeEmergencyDeclarationModal } from './employee/EmployeeEmergencyDeclarationModal';
 import { EmployeeLoanRequestModal } from './employee/EmployeeLoanRequestModal';
 import EmployeePayslipModal from './employee/EmployeePayslipModal';
-import { EmployeeProfileTab } from './employee/EmployeeProfileTab';
 import { EmployeeAlertsTab } from './employee/EmployeeAlertsTab';
+import ProfilePage from './ProfilePage';
 
 interface EmployeePortalProps {
   currentUser: AppUser | null;
@@ -48,6 +52,13 @@ interface EmployeePortalProps {
   moduleConfig?: CompanyModuleConfig;
   attendanceIncidents?: AttendanceIncident[];
   onAddAttendanceIncident?: (incident: AttendanceIncident) => void;
+  notifications?: NotificationLog[];
+  onUpdateNotifications?: (logs: NotificationLog[]) => void;
+  leaveRequests?: LeaveRequest[];
+  initialSubTab?: string;
+  onUpdateUser?: (updated: AppUser) => void;
+  onLogout?: () => void;
+  showToast?: (titleOrMessage: string, descOrType?: any, type?: any) => void;
 }
 
 const formatXAF = (amount: number = 0) => {
@@ -68,17 +79,15 @@ export default function EmployeePortal(props: EmployeePortalProps) {
 
   const logic = useEmployeePortalLogic(props);
 
+  const pendingTasksCount = tasks.filter(t => (t.assignedTo === logic.employeeProfile.id || t.assignedTo === logic.employeeProfile.name) && t.status !== 'completed').length;
+  const totalBadgeCount = (logic.unreadAlertsCount || 0) + pendingTasksCount;
+
+  useEffect(() => {
+    appBadgeService.updateBadge(totalBadgeCount);
+  }, [totalBadgeCount]);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Toast Notification */}
-      {logic.toastMessage && (
-        <div className="fixed top-20 right-4 z-50 bg-[#2A7B76] text-white p-4 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-3 duration-300">
-          <div>
-            <h4 className="font-bold text-xs">{logic.toastMessage.title}</h4>
-            <p className="text-[11px] text-emerald-100">{logic.toastMessage.desc}</p>
-          </div>
-        </div>
-      )}
 
       {/* Hero Profile Banner with Hero palette and Dual-Role display */}
       <EmployeeHeroBanner
@@ -94,12 +103,10 @@ export default function EmployeePortal(props: EmployeePortalProps) {
         {[
           { id: 'clocking', label: 'Pointage Direct', icon: Clock, badge: undefined },
           { id: 'presences', label: 'Mes Pointages', icon: Calendar, badge: undefined },
-          { id: 'incidents', label: 'Mes Incidents', icon: AlertTriangle, badge: logic.myIncidents.length },
-          { id: 'salaries', label: 'Mes Salaires', icon: DollarSign, badge: undefined },
-          { id: 'loans', label: 'Prêts & Avances', icon: CreditCard, badge: undefined },
-          { id: 'tasks', label: 'Mes Tâches', icon: CheckSquare, badge: tasks.filter(t => t.assignedTo === logic.employeeProfile.id && t.status !== 'completed').length || undefined },
-          { id: 'alerts', label: 'Mes Alertes', icon: Bell, badge: undefined },
-          { id: 'profile', label: 'Mon Profil', icon: User, badge: undefined },
+          { id: 'leaves', label: 'Mes Congés & Permissions', icon: CalendarDays, badge: (props.leaveRequests || []).filter(l => (l.employeeId === logic.employeeProfile.id || l.employeeEmail === logic.employeeProfile.email) && l.status === 'pending').length || undefined },
+          { id: 'incidents', label: 'Signalements', icon: AlertTriangle, badge: logic.myIncidents.length },
+          { id: 'tasks', label: 'Mes Tâches', icon: CheckSquare, badge: tasks.filter(t => (t.assignedTo === logic.employeeProfile.id || t.assignedTo === logic.employeeProfile.name) && t.status !== 'completed').length || undefined },
+          { id: 'alerts', label: 'Mes Alertes', icon: Bell, badge: logic.unreadAlertsCount > 0 ? logic.unreadAlertsCount : undefined },
         ].map((tab) => {
           const TabIcon = tab.icon;
           const isActive = logic.activeTab === tab.id;
@@ -188,29 +195,25 @@ export default function EmployeePortal(props: EmployeePortalProps) {
         />
       )}
 
-      {logic.activeTab === 'salaries' && (
-        <EmployeeSalaryTab
+      {logic.activeTab === 'leaves' && (
+        <EmployeeLeaveTab
           employeeProfile={logic.employeeProfile}
-          mySalaryPayments={salaryPayments.filter(p => p.employeeId === logic.employeeProfile.id)}
-          formatXAF={formatXAF}
-          onSelectPayslip={logic.setSelectedPayslip}
-        />
-      )}
-
-      {logic.activeTab === 'loans' && (
-        <EmployeeLoansTab
-          salaryDebts={salaryDebts}
-          currentEmployeeId={logic.employeeProfile.id}
-          onRequestLoan={() => logic.setShowLoanModal(true)}
-          formatXAF={formatXAF}
+          currentUser={currentUser}
+          leaveRequests={props.leaveRequests || []}
+          onAddNotification={onAddNotification}
+          showToast={logic.showToast}
         />
       )}
 
       {logic.activeTab === 'tasks' && (
-        <EmployeeAssignedTasksSection
-          tasks={tasks}
-          employeeProfile={logic.employeeProfile}
+        <TaskPanel
+          tasks={tasks.filter(t => t.assignedTo === logic.employeeProfile.name || t.assignedTo === logic.employeeProfile.id || t.employeeId === logic.employeeProfile.id || t.assignedTo === currentUser?.name)}
           onUpdateTasks={onUpdateTasks}
+          onAddNotification={onAddNotification}
+          currentRole="employé"
+          employees={props.employees}
+          currentUser={currentUser}
+          showToast={(msg, type) => logic.showToast('Tâches', msg, type === 'error' ? 'warning' : 'success')}
         />
       )}
 
@@ -220,19 +223,10 @@ export default function EmployeePortal(props: EmployeePortalProps) {
           currentUser={currentUser}
           tasks={tasks}
           incidents={props.attendanceIncidents || []}
-          onAddNotification={onAddNotification}
-        />
-      )}
-
-      {logic.activeTab === 'profile' && (
-        <EmployeeProfileTab
-          employeeProfile={logic.employeeProfile}
-          currentUser={currentUser}
+          notifications={props.notifications || []}
           presences={props.presences || []}
-          tasks={tasks}
-          incidents={props.attendanceIncidents || []}
-          calculateTenure={logic.calculateTenure}
-          onOpenProfileModal={onOpenProfileModal}
+          onAddNotification={onAddNotification}
+          onUpdateNotifications={props.onUpdateNotifications}
         />
       )}
 
@@ -256,37 +250,48 @@ export default function EmployeePortal(props: EmployeePortalProps) {
       />
 
       <EmployeeCustomTimeModal
-        showCustomClockModal={logic.showCustomClockModal}
-        setShowCustomClockModal={logic.setShowCustomClockModal}
-        customClockHour={logic.customClockHour}
-        setCustomClockHour={logic.setCustomClockHour}
-        customClockMinute={logic.customClockMinute}
-        setCustomClockMinute={logic.setCustomClockMinute}
+        show={logic.showCustomClockModal}
+        onClose={() => logic.setShowCustomClockModal(false)}
+        clockFieldToEdit="arrival"
+        setClockFieldToEdit={() => {}}
+        customTimeValue={`${logic.customClockHour}:${logic.customClockMinute}`}
+        setCustomTimeValue={(val) => {
+          const parts = val.split(':');
+          if (parts.length === 2) {
+            logic.setCustomClockHour(parts[0]);
+            logic.setCustomClockMinute(parts[1]);
+          }
+        }}
         customClockReason={logic.customClockReason}
         setCustomClockReason={logic.setCustomClockReason}
         customClockError={logic.customClockError}
-        setCustomClockError={logic.setCustomClockError}
-        onConfirmCustomClock={logic.handleConfirmCustomClock}
+        moduleConfig={moduleConfig}
+        onSubmit={logic.handleConfirmCustomClock}
       />
 
       <EmployeeEmergencyDeclarationModal
-        showEmergencyModal={logic.showEmergencyModal}
-        setShowEmergencyModal={logic.setShowEmergencyModal}
+        show={logic.showEmergencyModal}
+        onClose={() => logic.setShowEmergencyModal(false)}
         emergencyType={logic.emergencyType}
         setEmergencyType={logic.setEmergencyType}
         emergencyReason={logic.emergencyReason}
         setEmergencyReason={logic.setEmergencyReason}
-        onConfirmEmergency={logic.handleConfirmEmergency}
+        onSubmit={logic.handleConfirmEmergency}
       />
 
       <EmployeeLoanRequestModal
-        showLoanModal={logic.showLoanModal}
-        setShowLoanModal={logic.setShowLoanModal}
-        employeeProfile={logic.employeeProfile}
-        onAddNotification={onAddNotification}
-        onSuccess={() =>
-          logic.showToast('Demande Envoyée', 'Votre demande de prêt a été transmise pour validation.', 'success')
-        }
+        show={logic.showLoanModal}
+        onClose={() => logic.setShowLoanModal(false)}
+        loanSuccess={false}
+        loanAmount=""
+        setLoanAmount={() => {}}
+        loanReason=""
+        setLoanReason={() => {}}
+        onSubmit={(e) => {
+          e.preventDefault();
+          logic.setShowLoanModal(false);
+          logic.showToast('Demande Envoyée', 'Votre demande de prêt a été transmise pour validation.', 'success');
+        }}
       />
 
       {logic.selectedPayslip && (
@@ -311,6 +316,8 @@ export default function EmployeePortal(props: EmployeePortalProps) {
         <RhReportModal
           isOpen={Boolean(logic.certifiedReport)}
           report={logic.certifiedReport}
+          selectedMonth={logic.portalReportMonth}
+          onMonthChange={logic.handleGeneratePortalReport}
           onClose={() => logic.setCertifiedReport(null)}
         />
       )}

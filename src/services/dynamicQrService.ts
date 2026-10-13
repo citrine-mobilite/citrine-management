@@ -1,5 +1,5 @@
 import { DynamicQrSession } from '../types';
-import { COLLECTIONS, saveDocument, subscribeToDocument, subscribeToCollection, deleteDocument } from './firestoreService';
+import { COLLECTIONS, saveDocument, subscribeToDocument, subscribeToCollection, deleteDocument } from './dataService';
 import { offlineService } from './offlineService';
 
 export class DynamicQrService {

@@ -180,7 +180,7 @@ export default function SystemLogsPanel({
   const [auditFilterType, setAuditFilterType] = useState<string>('all');
   const [auditList, setAuditList] = useState<AdminAccountOperation[]>(() => getAdminAuditOperations());
   const [auditPage, setAuditPage] = useState(1);
-  const AUDIT_PER_PAGE = 10;
+  const AUDIT_PER_PAGE = 25;
 
   const handleRefresh = () => {
     setAuditList(getAdminAuditOperations());
@@ -209,7 +209,7 @@ export default function SystemLogsPanel({
   const [sessionDateFilter, setSessionDateFilter] = useState<string>('');
   const [sessionLevelFilter, setSessionLevelFilter] = useState<string>('all');
   const [sessionPage, setSessionPage] = useState<number>(1);
-  const SESSIONS_PER_PAGE = 10;
+  const SESSIONS_PER_PAGE = 25;
 
   const filteredSessionLogs = useMemo(() => {
     return sessionLogs.filter((s) => {
@@ -234,7 +234,7 @@ export default function SystemLogsPanel({
   // 3. Notifications State (Paginated par 10)
   const [notifFilter, setNotifFilter] = useState<'all' | 'read' | 'unread'>('all');
   const [notifPage, setNotifPage] = useState(1);
-  const NOTIFS_PER_PAGE = 10;
+  const NOTIFS_PER_PAGE = 25;
 
   const filteredNotifs = useMemo(() => {
     return notifications.filter((n) => {
@@ -561,7 +561,7 @@ export default function SystemLogsPanel({
               })
             )}
 
-            {/* Pagination Controls par 10 pour l'état des sessions */}
+            {/* Pagination Controls par 25 pour l'état des sessions */}
             {filteredSessionLogs.length > 0 && (
               <div className="pt-3 px-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs border-t border-stone-100">
                 <div className="text-stone-500 text-[11px]">
@@ -569,7 +569,7 @@ export default function SystemLogsPanel({
                   <span className="font-bold text-stone-800">
                     {Math.min(sessionPage * SESSIONS_PER_PAGE, filteredSessionLogs.length)}
                   </span>{' '}
-                  sur <span className="font-bold text-[#2A7B76]">{filteredSessionLogs.length}</span> sessions (10 par page)
+                  sur <span className="font-bold text-[#2A7B76]">{filteredSessionLogs.length}</span> sessions (25 par page)
                 </div>
 
                 <div className="flex items-center gap-1.5">
@@ -749,7 +749,7 @@ export default function SystemLogsPanel({
               </table>
             </div>
 
-            {/* Pagination Controls par 10 */}
+            {/* Pagination Controls par 25 */}
             {filteredAuditOps.length > 0 && (
               <div className="px-5 py-3.5 bg-stone-50/70 border-t border-stone-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                 <div className="text-stone-500 text-[11px]">
@@ -757,7 +757,7 @@ export default function SystemLogsPanel({
                   <span className="font-bold text-stone-800">
                     {Math.min(auditPage * AUDIT_PER_PAGE, filteredAuditOps.length)}
                   </span>{' '}
-                  sur <span className="font-bold text-[#2A7B76]">{filteredAuditOps.length}</span> opérations (10 par page)
+                  sur <span className="font-bold text-[#2A7B76]">{filteredAuditOps.length}</span> opérations (25 par page)
                 </div>
 
                 <div className="flex items-center gap-1.5">
@@ -855,7 +855,7 @@ export default function SystemLogsPanel({
             )}
           </div>
 
-          {/* Pagination Controls par 10 pour les Notifications */}
+          {/* Pagination Controls par 25 pour les Notifications */}
           {filteredNotifs.length > 0 && (
             <div className="px-5 py-3.5 bg-white rounded-2xl border border-stone-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-2xs">
               <div className="text-stone-500 text-[11px]">
@@ -863,7 +863,7 @@ export default function SystemLogsPanel({
                 <span className="font-bold text-stone-800">
                   {Math.min(notifPage * NOTIFS_PER_PAGE, filteredNotifs.length)}
                 </span>{' '}
-                sur <span className="font-bold text-[#2A7B76]">{filteredNotifs.length}</span> notifications (10 par page)
+                sur <span className="font-bold text-[#2A7B76]">{filteredNotifs.length}</span> notifications (25 par page)
               </div>
 
               <div className="flex items-center gap-1.5">

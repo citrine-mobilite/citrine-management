@@ -1,6 +1,7 @@
 import React from 'react';
 import { Briefcase, Mail, Phone, Calendar, Award, Pencil, ShieldCheck, Clock, CheckCircle2, Coffee, Sparkles } from 'lucide-react';
 import { Employee, AppUser, Presence } from '../../types';
+import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 interface EmployeeHeroBannerProps {
   employeeProfile: Employee;
@@ -103,16 +104,11 @@ export const EmployeeHeroBanner: React.FC<EmployeeHeroBannerProps> = ({
         </div>
 
         {/* Right: Quick Actions */}
-        <div className="flex flex-row lg:flex-col items-center gap-2.5 shrink-0 w-full sm:w-auto justify-center lg:justify-start">
-          {onOpenProfileModal && (
-            <button
-              onClick={onOpenProfileModal}
-              className="w-full sm:w-auto bg-white/15 hover:bg-white/25 active:scale-98 text-white border border-white/30 font-bold px-4 py-2.5 rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-sm backdrop-blur-xs"
-            >
-              <Pencil className="h-3.5 w-3.5 text-[#F3D079]" />
-              <span>Gérer Mon Profil & Sécurité</span>
-            </button>
-          )}
+        <div className="flex flex-row flex-wrap items-center gap-2.5 shrink-0 w-full lg:w-auto justify-center lg:justify-start">
+
+          <div className="w-full sm:w-auto flex justify-center">
+            <PWAInstallButton />
+          </div>
 
           <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/20 border border-white/10 text-[11px] text-white/70">
             <Sparkles className="h-3 w-3 text-[#F3D079]" />

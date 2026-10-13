@@ -15,11 +15,15 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'read' | 'unread'>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
+  const ITEMS_PER_PAGE = 25;
 
-  // Filter notifications for the current user
-  const userNotifications = notifications.filter(
-    (n) => n.recipient === currentUser.name || n.recipient === currentUser.email
+  const isAdmin = currentUser.role === 'administrateur' || (currentUser.role as string) === 'super_administrateur' || currentUser.role === 'responsable';
+
+  // Filter notifications for the current user or show all for admin/responsable
+  const userNotifications = isAdmin ? notifications : notifications.filter(
+    (n) => n.recipient === currentUser.name || 
+           n.recipient === currentUser.email || 
+           (currentUser.phone && n.recipient.includes(currentUser.phone))
   );
 
   const filtered = userNotifications.filter(
@@ -36,9 +40,22 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
 
   const handleMarkAllAsRead = () => {
     if (onUpdateNotifications) {
-      const updated = notifications.map((n) => 
-        (n.recipient === currentUser.name || n.recipient === currentUser.email) ? { ...n, read: true } : n
-      );
+      const updated = notifications.map((n) => {
+        if (isAdmin || n.recipient === currentUser.name || n.recipient === currentUser.email || (currentUser.phone && n.recipient.includes(currentUser.phone))) {
+          return { ...n, read: true };
+        }
+        return n;
+      });
+      onUpdateNotifications(updated);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('citrine:alerts_read_updated', { detail: { unreadCount: 0 } }));
+      }
+    }
+  };
+
+  const handleToggleRead = (id: string) => {
+    if (onUpdateNotifications) {
+      const updated = notifications.map((n) => (n.id === id ? { ...n, read: !n.read } : n));
       onUpdateNotifications(updated);
     }
   };
@@ -78,7 +95,7 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
             <button
               key={f}
               onClick={() => {setFilter(f); setCurrentPage(1);}}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition cursor-pointer ${
                 filter === f ? 'bg-[#2A7B76] text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
               }`}
             >
@@ -87,7 +104,7 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
           ))}
           <button
             onClick={handleMarkAllAsRead}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition cursor-pointer"
           >
             <CheckCircle className="h-3.5 w-3.5" />
             Tout marquer lues
@@ -96,9 +113,9 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
       </div>
 
       {/* List */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         {paginatedNotifications.map((log) => (
-          <NotificationListItem key={log.id} notification={log} onSelect={() => {}} />
+          <NotificationListItem key={log.id} notification={log} onSelect={() => {}} onToggleRead={handleToggleRead} />
         ))}
         {paginatedNotifications.length === 0 && (
           <div className="text-center py-10 text-stone-500 text-sm">Aucune notification trouvée.</div>

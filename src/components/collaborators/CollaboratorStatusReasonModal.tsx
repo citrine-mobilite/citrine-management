@@ -49,7 +49,7 @@ export const CollaboratorStatusReasonModal: React.FC<CollaboratorStatusReasonMod
         if (showToast) showToast('Veuillez préciser le motif personnalisé.', 'error');
         return;
       }
-      const cat = targetStatus === 'renvoye' ? 'renvoi' : targetStatus === 'suspension' ? 'suspension' : 'commun';
+      const cat = targetStatus === 'renvoye' ? 'renvoi' : targetStatus === 'suspendu' ? 'suspension' : 'commun';
       const created = disciplinaryReasonsService.addCustomReason(customReasonText.trim(), cat);
       finalReason = created.label;
     }

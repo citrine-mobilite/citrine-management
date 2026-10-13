@@ -24,7 +24,7 @@ export const DisciplinaryTableView: React.FC<DisciplinaryTableViewProps> = ({
       i.category,
       i.severity,
       i.status,
-      i.brokenRuleReference || '',
+      (i as any).brokenRuleReference || '',
     ]);
     exportToExcel('registre_disciplinaire.xls', 'Registre des Faits & Sanctions Disciplinaires', headers, rows);
   };
@@ -163,7 +163,7 @@ export const DisciplinaryTableView: React.FC<DisciplinaryTableViewProps> = ({
                           downloadDisciplinaryLetterPdf(
                             incident,
                             { id: incident.employeeId, name: incident.employeeName },
-                            incident.sanctionType || 'avertissement'
+                            incident.sanctionType as any || 'avertissement'
                           )
                         }
                         className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition"

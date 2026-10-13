@@ -174,10 +174,10 @@ export default function OfflineStatusBanner({ onToast, compact = false }: Offlin
                 <div className="flex items-center gap-2 truncate">
                   <HardDrive className="h-3.5 w-3.5 text-stone-400 shrink-0" />
                   <span className="font-mono font-bold text-stone-800 uppercase text-[10px]">
-                    {item.collection}
+                    {(item as any).collection}
                   </span>
                   <span className="text-stone-600 truncate text-[10px]">
-                    {item.action === 'set' ? 'Création/Mise à jour' : 'Suppression'} (Doc: {item.docId})
+                    {(item as any).action === 'set' ? 'Création/Mise à jour' : 'Suppression'} (Doc: {(item as any).docId})
                   </span>
                 </div>
                 <span className="text-[9px] font-mono text-stone-400 shrink-0">

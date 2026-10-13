@@ -15,10 +15,12 @@ import {
   Partner, 
   AppUser, 
   CompanyModuleConfig, 
-  DEFAULT_MODULE_CONFIG 
+  DEFAULT_MODULE_CONFIG,
+  LeaveRequest 
 } from '../types';
-import { subscribeToCollection, subscribeToDocument, saveDocument, deleteDocument, COLLECTIONS } from '../services/firestoreService';
+import { subscribeToCollection, subscribeToDocument, saveDocument, deleteDocument, getCollection, COLLECTIONS } from '../services/dataService';
 import { subscribeToUsers } from '../services/userService';
+import { INITIAL_SEEDED_EMPLOYEES } from '../services/dbInitService';
 import { safeStorage } from '../utils/safeStorage';
 import { CITRINE_DEFAULT_LOGO_BASE64 } from '../assets/citrineLogoBase64';
 
@@ -69,9 +71,12 @@ export function useAppInitialData() {
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try {
       const saved = localStorage.getItem('citrine_employees');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {}
-    return [];
+    return INITIAL_SEEDED_EMPLOYEES || [];
   });
 
   const [presences, setPresences] = useState<Presence[]>(() => {
@@ -100,6 +105,13 @@ export function useAppInitialData() {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('citrine_leave_requests');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
 
   const [moduleConfig, setModuleConfig] = useState<CompanyModuleConfig>(() => {
     const cached = getCachedModuleConfig();
@@ -107,7 +119,7 @@ export function useAppInitialData() {
     return DEFAULT_MODULE_CONFIG;
   });
 
-  // Subscriptions to Firestore Collections
+  // Subscriptions to Supabase Tables
   useEffect(() => {
     const unsubs = [
       subscribeToCollection<Employee>(COLLECTIONS.EMPLOYEES, (data) => {
@@ -121,6 +133,11 @@ export function useAppInitialData() {
       subscribeToCollection<Task>(COLLECTIONS.TASKS, setTasks),
       subscribeToCollection<Reminder>(COLLECTIONS.REMINDERS, setReminders),
       subscribeToCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS, setNotifications),
+      subscribeToCollection<LeaveRequest>(COLLECTIONS.LEAVE_REQUESTS, (data) => {
+        const sorted = [...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setLeaveRequests(sorted);
+        localStorage.setItem('citrine_leave_requests', JSON.stringify(sorted));
+      }),
       subscribeToCollection<SalaryPayment>(COLLECTIONS.SALARY_PAYMENTS, setSalaryPayments),
       subscribeToCollection<FinancialTransaction>(COLLECTIONS.FINANCIAL_TRANSACTIONS, setFinancialTransactions),
       subscribeToCollection<EmployeeSalaryDebt>(COLLECTIONS.EMPLOYEE_SALARY_DEBT, setSalaryDebts),
@@ -332,6 +349,41 @@ export function useAppInitialData() {
     const updated = [incident, ...attendanceIncidents.filter((i) => i.id !== incident.id)];
     setAttendanceIncidents(updated);
     localStorage.setItem('citrine_attendance_incidents', JSON.stringify(updated));
+
+    // Si l'incident provient d'un pointage automatique (retard ou sortie prématurée),
+    // le module de pointage émet déjà UNE notification exhaustive et claire.
+    // Ne pas en générer une deuxième ici pour respecter la règle stricte "1 action = 1 notification".
+    if ((incident.employeeId || incident.employeeName) && incident.origin !== 'automatique_pointage') {
+      const typeLabels: Record<string, string> = {
+        retard: 'Retard constaté',
+        sortie_prematuree: 'Sortie prématurée',
+        depart_anticipe: 'Départ anticipé',
+        absence_injustifiee: 'Absence injustifiée',
+      };
+      const label = typeLabels[incident.type] || 'Signalement RH';
+      const notifId = `notif-inc-${incident.id}`;
+      const notif: NotificationLog = {
+        id: notifId,
+        type: 'system',
+        recipient: incident.employeeId || incident.employeeName || 'Collaborateur',
+        title: `Signalement RH : ${label}`,
+        content: incident.reason || `Incident enregistré pour la date du ${incident.date}.`,
+        payload: JSON.stringify({
+          source: 'attendance_incident',
+          incidentId: incident.id,
+          employeeId: incident.employeeId,
+          type: incident.type,
+          date: incident.date,
+        }),
+        timestamp: incident.createdAt || new Date().toISOString(),
+        read: false,
+      };
+      await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
+      setNotifications((prev) => [notif, ...prev.filter((n) => n.id !== notifId)]);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+      }
+    }
   };
 
   const handleUpdateInventoryItems = async (updated: InventoryItem[]) => {
@@ -381,10 +433,73 @@ export function useAppInitialData() {
     await saveDocument(COLLECTIONS.NOTIFICATIONS, n);
   };
 
+  const handleUpdateLeaveRequests = async (updated: LeaveRequest[]) => {
+    for (const l of updated) {
+      const existing = leaveRequests.find((x) => x.id === l.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(l)) {
+        await saveDocument(COLLECTIONS.LEAVE_REQUESTS, l);
+      }
+    }
+    for (const l of leaveRequests) {
+      if (!updated.some((x) => x.id === l.id)) {
+        await deleteDocument(COLLECTIONS.LEAVE_REQUESTS, l.id);
+      }
+    }
+    setLeaveRequests(updated);
+    localStorage.setItem('citrine_leave_requests', JSON.stringify(updated));
+  };
+
   const handleUpdateModuleConfig = (newConfig: CompanyModuleConfig) => {
     setModuleConfig(newConfig);
     setCachedModuleConfig(newConfig);
     saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...newConfig, id: 'main_config' });
+  };
+
+  const refreshAll = async () => {
+    try {
+      const [
+        freshUsers,
+        freshEmployees,
+        freshPresences,
+        freshLeaves,
+        freshNotifs,
+        freshIncidents,
+      ] = await Promise.all([
+        getCollection<AppUser>(COLLECTIONS.USERS),
+        getCollection<Employee>(COLLECTIONS.EMPLOYEES),
+        getCollection<Presence>(COLLECTIONS.PRESENCES),
+        getCollection<LeaveRequest>(COLLECTIONS.LEAVE_REQUESTS),
+        getCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS),
+        getCollection<AttendanceIncident>(COLLECTIONS.ATTENDANCE_INCIDENTS),
+      ]);
+
+      if (freshUsers && freshUsers.length > 0) {
+        setUsers(freshUsers);
+        try { localStorage.setItem('citrine_users', JSON.stringify(freshUsers)); } catch {}
+      }
+      if (freshEmployees && freshEmployees.length > 0) {
+        setEmployees(freshEmployees);
+        try { localStorage.setItem('citrine_employees', JSON.stringify(freshEmployees)); } catch {}
+      }
+      if (freshPresences && freshPresences.length > 0) {
+        setPresences(freshPresences);
+        try { localStorage.setItem('citrine_presences', JSON.stringify(freshPresences)); } catch {}
+      }
+      if (freshLeaves && freshLeaves.length > 0) {
+        const sorted = [...freshLeaves].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setLeaveRequests(sorted);
+        try { localStorage.setItem('citrine_leave_requests', JSON.stringify(sorted)); } catch {}
+      }
+      if (freshNotifs && freshNotifs.length > 0) {
+        setNotifications(freshNotifs);
+      }
+      if (freshIncidents && freshIncidents.length > 0) {
+        setAttendanceIncidents(freshIncidents);
+        try { localStorage.setItem('citrine_attendance_incidents', JSON.stringify(freshIncidents)); } catch {}
+      }
+    } catch (e) {
+      console.warn('Erreur lors du rafraîchissement global:', e);
+    }
   };
 
   return {
@@ -402,10 +517,13 @@ export function useAppInitialData() {
     inventoryItems,
     partners,
     users,
+    leaveRequests,
     moduleConfig,
+    refreshAll,
     setTasks: handleUpdateTasks,
     setReminders: handleUpdateReminders,
     setNotifications: handleUpdateNotifications,
+    setLeaveRequests: handleUpdateLeaveRequests,
     setSalaryPayments: handleUpdateSalaryPayments,
     setFinancialTransactions: handleUpdateFinancialTransactions,
     setSalaryDebts: handleUpdateSalaryDebts,

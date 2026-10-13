@@ -6,6 +6,7 @@ import { isLate } from '../utils/dateUtils';
 import { KioskPinBanner } from './kiosk/KioskPinBanner';
 import { KioskEmployeeCard } from './kiosk/KioskEmployeeCard';
 import { incidentService } from '../services/incidentService';
+import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
 
 interface KioskClockingModalProps {
   isOpen: boolean;
@@ -127,6 +128,45 @@ export default function KioskClockingModal({
     }
 
     onUpdatePresences(updatedPresences);
+
+    const actionLabels = {
+      arrival: 'Arrivée (Pointage)',
+      pauseStart: 'Début Pause',
+      pauseEnd: 'Fin Pause',
+      departure: 'Départ (Pointage)',
+    };
+
+    if (onAddNotification) {
+      onAddNotification({
+        id: `notif-kiosk-${Date.now()}-${emp.id}`,
+        type: 'system',
+        recipient: emp.id,
+        title: `Pointage sur Borne : ${actionLabels[action] || action}`,
+        content: `Pointage (${actionLabels[action] || action}) validé sur la borne d'accueil à ${timeStr}.`,
+        payload: JSON.stringify({
+          source: 'kiosk',
+          employeeId: emp.id,
+          action,
+          time: timeStr,
+          date: todayStr,
+        }),
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+      }
+    }
+
+    pushNotificationBridgeService.sendPush({
+      title: `Pointage Enregistré ⏱️`,
+      message: `${emp.name} a pointé : ${actionLabels[action] || action} à ${timeStr}.`,
+      senderName: emp.name,
+      type: 'attendance',
+      link: 'presences',
+    });
+
     setToastMessage(`Pointage de ${emp.name} validé (${action}) à ${timeStr}`);
     setTimeout(() => setToastMessage(null), 3000);
   };

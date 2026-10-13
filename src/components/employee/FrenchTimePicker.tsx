@@ -43,7 +43,7 @@ export default function FrenchTimePicker({ value, onChange, className = "", id }
       <div className="w-20">
         <SearchableSelect
           value={initialHour}
-          onChange={(val) => handleHourChange(val)}
+          onChange={(val) => handleHourChange(String(val))}
           placeholder="-- h"
           searchPlaceholder="Heure..."
           options={hoursList.map(h => ({ value: h, label: `${h}h` }))}
@@ -53,7 +53,7 @@ export default function FrenchTimePicker({ value, onChange, className = "", id }
       <div className="w-22">
         <SearchableSelect
           value={initialMin}
-          onChange={(val) => handleMinChange(val)}
+          onChange={(val) => handleMinChange(String(val))}
           placeholder="-- min"
           searchPlaceholder="Min..."
           disabled={!initialHour}

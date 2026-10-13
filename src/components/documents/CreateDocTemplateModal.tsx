@@ -177,7 +177,7 @@ La présente pièce lui est délivrée pour servir et valoir ce que de droit.`);
                 Créer un Nouveau Type de Document RH
               </h3>
               <p className="text-xs text-stone-500">
-                Enregistré directement en base de données Firestore · Zéro modification de code nécessaire
+                Enregistré directement en base de données Supabase · Zéro modification de code nécessaire
               </p>
             </div>
           </div>
@@ -198,12 +198,12 @@ La présente pièce lui est délivrée pour servir et valoir ce que de droit.`);
             </div>
           )}
 
-          {/* Bandeau d'information Firestore */}
+          {/* Bandeau d'information Supabase */}
           <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-start gap-3">
             <Database className="h-4 w-4 text-[#2A7B76] shrink-0 mt-0.5" />
             <div className="text-xs text-stone-700 leading-relaxed">
               <strong className="text-emerald-900 block font-semibold">Stockage automatique en Base de Données</strong>
-              Ce nouveau modèle sera stocké dans la collection Firestore <code className="bg-emerald-100/70 px-1 py-0.5 rounded text-[11px] font-mono">rh_document_templates</code>. Il sera instantanément disponible pour toute l'équipe sans redéploiement.
+              Ce nouveau modèle sera stocké dans la table Supabase <code className="bg-emerald-100/70 px-1 py-0.5 rounded text-[11px] font-mono">rh_document_templates</code>. Il sera instantanément disponible pour toute l'équipe sans redéploiement.
             </div>
           </div>
 

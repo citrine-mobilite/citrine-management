@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { KeyRound, RefreshCw, Copy, Check } from 'lucide-react';
 import { generateKioskPinCode } from '../../utils/geolocation';
-import { saveDocument, COLLECTIONS } from '../../services/firestoreService';
+import { saveDocument, COLLECTIONS } from '../../services/dataService';
 import { CompanyModuleConfig } from '../../types';
 
 interface KioskPinBannerProps {

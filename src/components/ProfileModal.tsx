@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { User, Shield, Lock, Activity, X, LogOut } from 'lucide-react';
+import { User, Shield, Lock, Activity, X, LogOut, Smartphone } from 'lucide-react';
 import { AppUser, ConnectionLog } from '../types';
 import { subscribeToConnectionLogs } from '../services/connectionLogService';
 import { ProfileInfoSubTab } from './profile/ProfileInfoSubTab';
 import { ProfileSecuritySubTab } from './profile/ProfileSecuritySubTab';
 import { ProfileActivitySubTab } from './profile/ProfileActivitySubTab';
 import { ProfilePermissionsSubTab } from './profile/ProfilePermissionsSubTab';
+import { EmployeePwaInstallTab } from './employee/EmployeePwaInstallTab';
 
 interface ProfileModalProps {
   currentUser: AppUser;
   onClose: () => void;
   onLogout: () => void;
   onAddNotification: (notif: any) => void;
+  onUpdateUser?: (updated: AppUser) => void;
 }
 
 export default function ProfileModal({
@@ -19,8 +21,9 @@ export default function ProfileModal({
   onClose,
   onLogout,
   onAddNotification,
+  onUpdateUser,
 }: ProfileModalProps) {
-  const [activeTab, setActiveTab] = useState<'info' | 'security' | 'activity' | 'permissions'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'security' | 'install' | 'activity' | 'permissions'>('info');
   const [connectionLogs, setConnectionLogs] = useState<ConnectionLog[]>([]);
 
   useEffect(() => {
@@ -71,6 +74,7 @@ export default function ProfileModal({
           {[
             { id: 'info', label: 'Profil', icon: User },
             { id: 'security', label: 'Mot de passe', icon: Lock },
+            { id: 'install', label: "Installer l'App", icon: Smartphone },
             { id: 'activity', label: 'Connexions', icon: Activity },
             { id: 'permissions', label: 'Rôles & Droits', icon: Shield },
           ].map((tab) => {
@@ -99,10 +103,14 @@ export default function ProfileModal({
             <ProfileInfoSubTab
               currentUser={currentUser}
               onAddNotification={onAddNotification}
+              onUpdateUser={onUpdateUser}
             />
           )}
           {activeTab === 'security' && (
             <ProfileSecuritySubTab currentUser={currentUser} />
+          )}
+          {activeTab === 'install' && (
+            <EmployeePwaInstallTab />
           )}
           {activeTab === 'activity' && (
             <ProfileActivitySubTab

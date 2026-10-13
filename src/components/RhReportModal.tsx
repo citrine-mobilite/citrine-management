@@ -21,12 +21,16 @@ interface RhReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   report: AttendanceMonthlyReport | null;
+  selectedMonth?: string;
+  onMonthChange?: (month: string) => void;
 }
 
-export default function RhReportModal({ isOpen, onClose, report }: RhReportModalProps) {
+export default function RhReportModal({ isOpen, onClose, report, selectedMonth, onMonthChange }: RhReportModalProps) {
   const [copiedFingerprint, setCopiedFingerprint] = useState(false);
 
   if (!isOpen || !report) return null;
+
+  const currentMonthValue = selectedMonth || report.monthStr || '2026-10';
 
   const handleCopyFingerprint = () => {
     if (!report.certificate) return;
@@ -46,12 +50,30 @@ export default function RhReportModal({ isOpen, onClose, report }: RhReportModal
       <div className="bg-white text-stone-900 rounded-3xl shadow-2xl max-w-4xl w-full p-6 sm:p-10 space-y-6 max-h-[92vh] overflow-y-auto border border-green-200 relative print:max-w-none print:max-h-none print:shadow-none print:border-none print:p-6 print:rounded-none">
         
         {/* Screen Controls Header (hidden in print) */}
-        <div className="flex items-center justify-between border-b border-stone-200 pb-4 print:hidden">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-stone-200 pb-4 gap-3 print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="px-3 py-1 bg-green-900 text-green-100 text-xs font-bold rounded-full flex items-center gap-1.5">
               <Award className="h-3.5 w-3.5 text-green-300" />
-              Rapport RH Certifié & Scellé Numériquement
+              Rapport RH Certifié
             </span>
+
+            {onMonthChange && (
+              <div className="flex items-center gap-1.5 bg-stone-100 px-2.5 py-1 rounded-xl text-xs font-medium text-stone-700">
+                <Calendar className="h-3.5 w-3.5 text-[#2A7B76]" />
+                <span className="text-[11px] font-bold">Mois :</span>
+                <input
+                  type="month"
+                  min="2026-10"
+                  value={currentMonthValue < '2026-10' ? '2026-10' : currentMonthValue}
+                  onChange={(e) => {
+                    const val = e.target.value >= '2026-10' ? e.target.value : '2026-10';
+                    onMonthChange(val);
+                  }}
+                  className="bg-white border border-stone-200 rounded-lg px-2 py-0.5 text-xs font-bold text-stone-800 focus:outline-none focus:border-[#2A7B76] cursor-pointer"
+                  title="Changer de mois (à partir d'octobre 2026)"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

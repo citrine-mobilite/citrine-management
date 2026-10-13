@@ -81,7 +81,7 @@ export default function PullToRefreshContainer({ children, onRefresh }: PullToRe
           />
           <span className="text-[11px] text-stone-700 dark:text-stone-200">
             {isRefreshing 
-              ? 'Vérification de la synchronisation Firestore...' 
+              ? 'Vérification de la synchronisation Supabase...' 
               : pullY >= THRESHOLD 
                 ? 'Relâcher pour synchroniser' 
                 : 'Tirer vers le bas pour rafraîchir'
@@ -94,7 +94,7 @@ export default function PullToRefreshContainer({ children, onRefresh }: PullToRe
       {syncSuccess && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-xl flex items-center gap-2 animate-bounce">
           <CheckCircle2 className="h-4 w-4" />
-          <span>Base de données Firestore synchronisée !</span>
+          <span>Base de données Supabase synchronisée !</span>
         </div>
       )}
 

@@ -165,3 +165,21 @@ export function canPerformManagerAction(user: AppUser | null): boolean {
   const role = toUserRole(user.role);
   return role === 'administrateur' || role === 'responsable';
 }
+
+/**
+ * Recharge la session de l'utilisateur depuis la base de données distante pour synchroniser le profil multi-appareils
+ */
+export async function refreshSecureSessionFromDb(emailOrId: string): Promise<AppUser | null> {
+  try {
+    const { fetchFreshUser } = await import('./userService');
+    const freshUser = await fetchFreshUser(emailOrId);
+    if (freshUser) {
+      await storeSecureSession(freshUser);
+      return freshUser;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Erreur refreshSecureSessionFromDb:', err);
+    return null;
+  }
+}

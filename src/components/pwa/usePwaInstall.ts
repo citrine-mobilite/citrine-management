@@ -62,12 +62,10 @@ export function usePwaInstall() {
   }, []);
 
   const triggerInstall = async () => {
-    console.log('Triggering install, deferredPrompt:', deferredPrompt);
     if (deferredPrompt) {
       try {
         await deferredPrompt.prompt();
         const choice = await deferredPrompt.userChoice;
-        console.log('User choice:', choice);
         if (choice.outcome === 'accepted') {
           setIsInstalled(true);
         }
@@ -81,7 +79,6 @@ export function usePwaInstall() {
       }
     }
 
-    console.log('No deferred prompt, showing modal');
     setShowInstallModal(true);
   };
 

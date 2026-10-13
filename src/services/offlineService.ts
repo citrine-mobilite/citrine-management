@@ -1,6 +1,5 @@
 import { dbPromise } from '../lib/idb';
-import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabaseService } from './supabaseService';
 import { sendBatchedOfflineWhatsappNotifications } from './notificationSender';
 import { NotificationLog } from '../types';
 
@@ -66,9 +65,10 @@ export const offlineService = {
     try {
       const idb = await dbPromise;
       await idb.put('offline_queue', action);
+      console.log(`[Offline Queue] Action mise en attente (${actionType} ${collectionName}) :`, action.id);
       this.notifySyncStateChange();
     } catch (e) {
-      console.error('Error adding to offline queue:', e);
+      console.error('Failed to enqueue offline action:', e);
     }
 
     return action;
@@ -79,17 +79,8 @@ export const offlineService = {
       const idb = await dbPromise;
       return await idb.getAll('offline_queue');
     } catch (e) {
-      console.error('Error fetching offline queue:', e);
+      console.error('Failed to get offline queue:', e);
       return [];
-    }
-  },
-
-  async getQueueCount(): Promise<number> {
-    try {
-      const queue = await this.getQueue();
-      return queue.length;
-    } catch {
-      return 0;
     }
   },
 
@@ -99,7 +90,7 @@ export const offlineService = {
       await idb.delete('offline_queue', id);
       this.notifySyncStateChange();
     } catch (e) {
-      console.error(`Error removing queued item ${id}:`, e);
+      console.error('Failed to remove action from queue:', e);
     }
   },
 
@@ -109,11 +100,11 @@ export const offlineService = {
       await idb.clear('offline_queue');
       this.notifySyncStateChange();
     } catch (e) {
-      console.error('Error clearing offline queue:', e);
+      console.error('Failed to clear offline queue:', e);
     }
   },
 
-  // Generic IndexedDB store caching
+  // Helpers for local IDB caching
   async cacheLocally<T extends { id: string }>(storeName: string, item: T): Promise<void> {
     try {
       const idb = await dbPromise;
@@ -166,7 +157,7 @@ export const offlineService = {
     }
   },
 
-  // Process the queued offline actions to sync with Firestore
+  // Process the queued offline actions to sync with Supabase
   async syncOfflineQueue(): Promise<{ success: boolean; syncedCount: number; errors: number }> {
     if (!this.isOnline()) {
       return { success: false, syncedCount: 0, errors: 0 };
@@ -186,33 +177,7 @@ export const offlineService = {
         if (action.actionType === 'save') {
           const docId = action.payload.id || action.payload.employeeId;
           if (docId) {
-            // Conflict resolution: Manager edits take precedence over Employee edits
-            if (action.collectionName === 'tasks') {
-              try {
-                const ref = doc(db, action.collectionName, docId);
-                const existingSnap = await getDoc(ref);
-                if (existingSnap.exists()) {
-                  const existingData = existingSnap.data() as any;
-                  const existingRole = existingData.lastUpdatedByRole;
-                  const incomingRole = action.payload.lastUpdatedByRole;
-
-                  const isExistingManager = existingRole === 'Administrateur' || existingRole === 'Responsable';
-                  const isIncomingEmployee = incomingRole === 'Employé';
-
-                  if (isExistingManager && isIncomingEmployee) {
-                    console.log(`[Sync Conflit Résolu] Rejet de la modification hors-ligne de l'employé car le responsable a priorité sur la tâche ${docId}`);
-                    // Discard this queued offline write action (don't overwrite manager's newer version)
-                    await this.removeQueueAction(action.id);
-                    // Update the local IndexedDB cache with the manager's version
-                    await this.cacheLocally(action.collectionName, existingData);
-                    continue;
-                  }
-                }
-              } catch (err) {
-                console.warn('Conflict resolution check failed during sync:', err);
-              }
-            }
-            await setDoc(doc(db, action.collectionName, docId), action.payload, { merge: true });
+            await supabaseService.saveDocument(action.collectionName, action.payload);
           }
           if (action.collectionName === 'notifications' && action.payload && action.payload.type === 'whatsapp') {
             queuedNotificationsToBatch.push(action.payload as NotificationLog);
@@ -220,10 +185,10 @@ export const offlineService = {
         } else if (action.actionType === 'delete') {
           const docId = typeof action.payload === 'string' ? action.payload : action.payload.id;
           if (docId) {
-            await deleteDoc(doc(db, action.collectionName, docId));
+            await supabaseService.deleteDocument(action.collectionName, docId);
           }
         }
-        // Successfully synced to Firestore, remove from queue
+        // Successfully synced to Supabase, remove from queue
         await this.removeQueueAction(action.id);
         syncedCount++;
       } catch (err) {

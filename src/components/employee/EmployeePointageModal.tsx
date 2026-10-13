@@ -25,7 +25,7 @@ import { haptic } from '../../services/hapticService';
 interface EmployeePointageModalProps {
   showClockingModal: boolean;
   setShowClockingModal: (val: boolean) => void;
-  pendingClockAction: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure' | null;
+  pendingClockAction: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure' | 'sortieProStart' | 'sortieProEnd' | null;
   selectedClockMethod: ClockingMethod;
   setSelectedClockMethod: (val: ClockingMethod) => void;
   qrCodeError: string | null;
@@ -80,9 +80,10 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
   const officialSiteName = moduleConfig?.doorQrSiteName || moduleConfig?.hqName || 'Entrée Principale (HQ Siège)';
   const requireGpsStrict = moduleConfig?.doorQrRequireGps === true;
 
-  // Réinitialisation de l'état à l'ouverture
+  // Réinitialisation de l'état UNIQUEMENT à l'ouverture du modal
+  const prevShowClockingModalRef = useRef(false);
   useEffect(() => {
-    if (showClockingModal) {
+    if (showClockingModal && !prevShowClockingModalRef.current) {
       setCurrentStep('select_method');
       setCode16Input('');
       setManualTokenInput('');
@@ -90,13 +91,14 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
       setIsCapturingGps(false);
       setDetectedQrCode(null);
       setIsProcessingDetection(false);
-    } else {
+    } else if (!showClockingModal && prevShowClockingModalRef.current) {
       stopCameraScan();
       if (scanIntervalRef.current) {
         clearInterval(scanIntervalRef.current);
         scanIntervalRef.current = null;
       }
     }
+    prevShowClockingModalRef.current = showClockingModal;
   }, [showClockingModal, stopCameraScan]);
 
   const getActionTitle = () => {
@@ -109,6 +111,10 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
         return 'Badger mon Retour de Pause';
       case 'departure':
         return 'Badger mon Départ';
+      case 'sortieProStart':
+        return 'Badger ma Sortie Professionnelle (Mission)';
+      case 'sortieProEnd':
+        return 'Badger mon Retour de Sortie Professionnelle';
       default:
         return 'Pointage de Présence';
     }
@@ -146,11 +152,12 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
     // 1. CAS QR CODE DYNAMIQUE (Généré par le responsable sur son écran)
     if (cleanToken.startsWith('CITRINE-DYN') || cleanToken.startsWith('DYN-') || currentStep === 'scan_dynamic') {
       try {
+        const qrAction = (pendingClockAction === 'sortieProStart' ? 'arrival' : pendingClockAction === 'sortieProEnd' ? 'departure' : pendingClockAction) || 'arrival';
         const result = await dynamicQrService.validateAndConsumeDynamicQr(
           cleanToken,
           employeeProfile.id,
           employeeProfile.name,
-          pendingClockAction || 'arrival'
+          qrAction as any
         );
 
         if (result.success) {
@@ -289,7 +296,12 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
       if (qrResult && qrResult.data) {
         const found = qrResult.data.trim();
         if (found.length > 2) {
-          handleProcessScannedQrCode(found);
+          setDetectedQrCode(found);
+          haptic.success();
+          if (scanIntervalRef.current) {
+            clearInterval(scanIntervalRef.current);
+            scanIntervalRef.current = null;
+          }
         }
       }
     }, 120);
@@ -613,6 +625,41 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Carte de confirmation lorsque le QR Code est détecté */}
+              {detectedQrCode && (
+                <div className="bg-emerald-50 border-2 border-emerald-400 p-4 rounded-2xl space-y-2 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>QR Code détecté avec succès !</span>
+                  </div>
+                  <p className="text-[11px] font-mono text-emerald-700 bg-white p-2 rounded-xl border border-emerald-200 truncate">
+                    {detectedQrCode}
+                  </p>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleProcessScannedQrCode(detectedQrCode)}
+                      disabled={isProcessingDetection}
+                      className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <Check className="h-4 w-4" />
+                      <span>Confirmer et badger</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDetectedQrCode(null);
+                        setIsProcessingDetection(false);
+                        startCameraScan();
+                      }}
+                      className="px-3.5 py-2.5 bg-white hover:bg-stone-100 text-stone-700 font-bold text-xs rounded-xl border border-stone-200 transition cursor-pointer"
+                    >
+                      Recommencer
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Bouton de secours : valider directement ou téléverser photo */}
               <div className="flex flex-col sm:flex-row gap-2 pt-1">

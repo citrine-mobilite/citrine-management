@@ -1,10 +1,12 @@
-import React, { useEffect } from 'react';
-import { CheckCircle2, AlertCircle, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { CheckCircle2, AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
 
 export interface ToastMessage {
   id: string;
+  title?: string;
   message: string;
-  type: 'success' | 'error';
+  type?: 'success' | 'error' | 'warning' | 'info';
+  duration?: number;
 }
 
 interface ToastProps {
@@ -16,7 +18,11 @@ export default function ToastContainer({ toasts, onDismiss }: ToastProps) {
   if (!toasts || toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-md w-full px-4 pointer-events-none">
+    <div 
+      className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[100] flex flex-col gap-2.5 max-w-sm sm:max-w-md w-full px-3 sm:px-0 pointer-events-none"
+      role="region"
+      aria-label="Notifications système"
+    >
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
@@ -24,45 +30,121 @@ export default function ToastContainer({ toasts, onDismiss }: ToastProps) {
   );
 }
 
-function ToastItem({ toast, onDismiss }: { key?: string; toast: ToastMessage; onDismiss: (id: string) => void }) {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onDismiss(toast.id);
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, [toast.id, onDismiss]);
+const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void }> = ({ toast, onDismiss }) => {
+  const duration = toast.duration || 4500;
+  const [progress, setProgress] = useState(100);
 
-  const isSuccess = toast.type === 'success';
+  useEffect(() => {
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 100 - (elapsed / duration) * 100);
+      setProgress(remaining);
+      if (elapsed >= duration) {
+        clearInterval(interval);
+        onDismiss(toast.id);
+      }
+    }, 40);
+
+    return () => clearInterval(interval);
+  }, [toast.id, duration, onDismiss]);
+
+  const type = toast.type || 'success';
+
+  const config = {
+    success: {
+      icon: CheckCircle2,
+      badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+      badgeTag: 'Confirmé',
+      tagBg: 'bg-emerald-100 text-emerald-800',
+      leftBar: 'bg-emerald-500',
+      progressBarBg: 'bg-emerald-500',
+      defaultTitle: 'Validation confirmée',
+      border: 'border-emerald-200/90 hover:border-emerald-300',
+      accentGlow: 'shadow-emerald-950/10 ring-1 ring-emerald-500/10',
+    },
+    error: {
+      icon: AlertCircle,
+      badgeBg: 'bg-rose-50 text-rose-700 border-rose-200/80',
+      badgeTag: 'Erreur',
+      tagBg: 'bg-rose-100 text-rose-800',
+      leftBar: 'bg-rose-500',
+      progressBarBg: 'bg-rose-500',
+      defaultTitle: 'Attention requise',
+      border: 'border-rose-200/90 hover:border-rose-300',
+      accentGlow: 'shadow-rose-950/10 ring-1 ring-rose-500/10',
+    },
+    warning: {
+      icon: AlertTriangle,
+      badgeBg: 'bg-amber-50 text-amber-800 border-amber-200/80',
+      badgeTag: 'Avertissement',
+      tagBg: 'bg-amber-100 text-amber-800',
+      leftBar: 'bg-amber-500',
+      progressBarBg: 'bg-amber-500',
+      defaultTitle: 'Information importante',
+      border: 'border-amber-200/90 hover:border-amber-300',
+      accentGlow: 'shadow-amber-950/10 ring-1 ring-amber-500/10',
+    },
+    info: {
+      icon: Info,
+      badgeBg: 'bg-teal-50 text-[#2A7B76] border-teal-200/80',
+      badgeTag: 'Système',
+      tagBg: 'bg-teal-100 text-[#2A7B76]',
+      leftBar: 'bg-[#2A7B76]',
+      progressBarBg: 'bg-[#2A7B76]',
+      defaultTitle: 'Notification Citrine',
+      border: 'border-stone-200/90 hover:border-stone-300',
+      accentGlow: 'shadow-stone-900/10 ring-1 ring-teal-500/10',
+    },
+  }[type];
+
+  const IconComponent = config.icon;
+  const title = toast.title || config.defaultTitle;
 
   return (
     <div
-      className={`pointer-events-auto flex items-start justify-between p-4 rounded-xl shadow-xl border transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${
-        isSuccess
-          ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-900/30'
-          : 'bg-green-600 text-white border-green-500 shadow-green-900/30'
-      }`}
+      className={`pointer-events-auto relative overflow-hidden bg-white/98 backdrop-blur-md text-stone-900 rounded-2xl border shadow-xl ${config.border} ${config.accentGlow} p-4 transition-all duration-300 animate-in fade-in slide-in-from-top-3 flex items-start gap-3.5`}
       role="alert"
     >
-      <div className="flex items-start gap-3">
-        {isSuccess ? (
-          <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-100" />
-        ) : (
-          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-green-100" />
-        )}
-        <div>
-          <h4 className="font-semibold text-sm leading-tight text-white">
-            {isSuccess ? 'Opération réussie' : 'Erreur ou Échec'}
-          </h4>
-          <p className="text-xs text-white/95 mt-1 font-medium">{toast.message}</p>
-        </div>
+      {/* Accent left line */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${config.leftBar}`} />
+
+      {/* Semantic Icon Badge */}
+      <div className={`p-2 rounded-xl shrink-0 border ${config.badgeBg} shadow-2xs`}>
+        <IconComponent className="w-4 h-4" />
       </div>
+
+      {/* Main Toast Content */}
+      <div className="flex-1 min-w-0 pr-1">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <h4 className="font-serif font-bold text-xs sm:text-sm text-stone-900 leading-tight">
+            {title}
+          </h4>
+          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${config.tagBg}`}>
+            {config.badgeTag}
+          </span>
+        </div>
+        <p className="text-[11px] sm:text-xs text-stone-600 leading-relaxed break-words font-medium">
+          {toast.message}
+        </p>
+      </div>
+
+      {/* Dismiss Button */}
       <button
         onClick={() => onDismiss(toast.id)}
-        className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors ml-2 shrink-0"
-        aria-label="Fermer"
+        className="text-stone-400 hover:text-stone-700 p-1.5 rounded-xl hover:bg-stone-100 transition-colors shrink-0 cursor-pointer active:scale-90"
+        aria-label="Fermer la notification"
       >
-        <X className="w-4 h-4" />
+        <X className="w-3.5 h-3.5" />
       </button>
+
+      {/* Progress countdown bar */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-stone-100 overflow-hidden">
+        <div 
+          className={`h-full transition-all duration-75 ease-linear ${config.progressBarBg}`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
     </div>
   );
 }

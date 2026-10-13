@@ -25,7 +25,7 @@ export const ColleaguesCallDirectory: React.FC<ColleaguesCallDirectoryProps> = (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
       {filtered.map((c) => {
         const presence = presenceMap.get(c.id) || presenceMap.get(c.email.toLowerCase());
-        const isOnline = presence?.state === 'online';
+        const isOnline = (presence as any)?.status === 'online' || (presence as any)?.state === 'online' || (presence as any)?.isOnline;
 
         return (
           <div

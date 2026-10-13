@@ -16,7 +16,8 @@ import {
   InventoryItem, 
   Partner, 
   CompanyModuleConfig,
-  DEFAULT_MODULE_CONFIG
+  DEFAULT_MODULE_CONFIG,
+  LeaveRequest
 } from '../../types';
 import ModuleSkeletonLoader from '../ModuleSkeletonLoader';
 import ErrorBoundary from '../ErrorBoundary';
@@ -31,6 +32,7 @@ import SystemLogsPanel from '../SystemLogsPanel';
 import CollaboratorPanel from '../CollaboratorPanel';
 import ProfilePage from '../ProfilePage';
 
+const LeaveManagementPanel = lazy(() => import('../LeaveManagementPanel'));
 const DisciplinaryPanel = lazy(() => import('../DisciplinaryPanel'));
 const DocumentGeneratorPanel = lazy(() => import('../DocumentGeneratorPanel'));
 const CommunicationPanel = lazy(() => import('../CommunicationPanel'));
@@ -68,6 +70,7 @@ export interface AppTabRouterProps {
   selectedEmployeeId: string;
   setSelectedEmployeeId: (id: string) => void;
   currentTime: string;
+  employeeInitialSubTab?: string;
   onUpdatePresences: (p: Presence[]) => void;
   onUpdateTasks: (t: Task[]) => void;
   onUpdateReminders: (r: Reminder[]) => void;
@@ -88,6 +91,9 @@ export interface AppTabRouterProps {
   onOpenProfileModal: () => void;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   handleSetCurrentUser: (u: AppUser | null) => void;
+  onUpdateUser?: (updated: AppUser) => void;
+  leaveRequests?: LeaveRequest[];
+  onUpdateLeaveRequests?: (leaves: LeaveRequest[]) => void;
 }
 
 export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
@@ -96,11 +102,12 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
     salaryPayments, financialTransactions, salaryDebts, documents, disciplinaryIncidents,
     attendanceIncidents = [], onUpdateAttendanceIncidents, onAddAttendanceIncident,
     inventoryItems, partners, users, moduleConfig, selectedEmployeeId, setSelectedEmployeeId,
-    currentTime, onUpdatePresences, onUpdateTasks, onUpdateReminders, onAddNotification,
+    currentTime, employeeInitialSubTab, onUpdatePresences, onUpdateTasks, onUpdateReminders, onAddNotification,
     onUpdateNotifications, onUpdateEmployees, onUpdateSalaryDebts, onUpdateSalaryPayments,
     onUpdateFinancialTransactions, onUpdateDocuments, onUpdateDisciplinaryIncidents,
     onUpdateInventoryItems, onUpdatePartners, onUpdateUsers, onUpdateModuleConfig,
-    onOpenProfileModal, showToast, handleSetCurrentUser,
+    onOpenProfileModal, showToast, handleSetCurrentUser, onUpdateUser,
+    leaveRequests = [], onUpdateLeaveRequests,
   } = props;
 
   return (
@@ -112,22 +119,39 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
         />
       )}
+      {activeTab === 'leave_requests' && (
+        <LeaveManagementPanel
+          leaveRequests={leaveRequests}
+          employees={employees}
+          currentUser={currentUser}
+          onAddAttendanceIncident={onAddAttendanceIncident}
+          onAddNotification={onAddNotification}
+          showToast={(title, desc, type) => showToast(`${title} : ${desc}`, type === 'warning' ? 'error' : 'success')}
+        />
+      )}
       {activeTab === 'employee_portal' && (
         <EmployeePortal
           currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}
           salaryPayments={salaryPayments} financialTransactions={financialTransactions}
           salaryDebts={salaryDebts} onUpdatePresences={onUpdatePresences} onUpdateTasks={onUpdateTasks}
           onAddNotification={onAddNotification} currentTime={currentTime}
+          notifications={notifications}
+          onUpdateNotifications={onUpdateNotifications}
           onOpenProfileModal={onOpenProfileModal} moduleConfig={moduleConfig}
           attendanceIncidents={attendanceIncidents}
           onAddAttendanceIncident={onAddAttendanceIncident}
+          initialSubTab={employeeInitialSubTab}
+          leaveRequests={leaveRequests}
+          onUpdateUser={onUpdateUser}
+          onLogout={() => handleSetCurrentUser(null)}
+          showToast={showToast}
         />
       )}
       {activeTab === 'presences' && (
         <PresencePanel
           employees={employees} presences={presences} onUpdatePresences={onUpdatePresences}
           onAddNotification={onAddNotification}
-          currentRole={currentUser?.role || 'Administrateur'}
+          currentRole={(currentUser?.role || 'Administrateur') as any}
           selectedEmployeeId={selectedEmployeeId}
           currentTime={currentTime}
           onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
@@ -135,6 +159,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           currentUser={currentUser}
           showToast={showToast}
           moduleConfig={moduleConfig}
+          onUpdateModuleConfig={onUpdateModuleConfig}
           attendanceIncidents={attendanceIncidents}
           onUpdateAttendanceIncidents={onUpdateAttendanceIncidents}
           onAddAttendanceIncident={onAddAttendanceIncident}
@@ -214,25 +239,25 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onAddNotification={onAddNotification}
           showToast={showToast}
           currentUser={currentUser}
-          currentRole={currentUser?.role || 'admin'}
+          currentRole={(currentUser?.role || 'admin') as any}
           moduleConfig={moduleConfig}
         />
       )}
       {activeTab === 'communications' && (
-        <CommunicationPanel employees={employees} onAddNotification={onAddNotification} showToast={showToast} />
+        <CommunicationPanel employees={employees} currentRole={(currentUser?.role || 'admin') as any} onAddNotification={onAddNotification} showToast={showToast} />
       )}
       {activeTab === 'finances' && (
         <FinancePanel
           employees={employees} salaryPayments={salaryPayments} financialTransactions={financialTransactions}
           salaryDebts={salaryDebts} onUpdateSalaryPayments={onUpdateSalaryPayments} onUpdateFinancialTransactions={onUpdateFinancialTransactions}
-          onUpdateSalaryDebts={onUpdateSalaryDebts} onAddNotification={onAddNotification} onSelectTab={setActiveTab} currentUser={currentUser}
+          onUpdateSalaryDebts={onUpdateSalaryDebts} onAddNotification={onAddNotification} currentRole={(currentUser?.role || 'admin') as any} showToast={showToast}
         />
       )}
       {activeTab === 'inventory' && (
         <InventoryPanel inventoryItems={inventoryItems} employees={employees} onUpdateInventoryItems={onUpdateInventoryItems} onAddNotification={onAddNotification} showToast={showToast} />
       )}
       {activeTab === 'partners' && (
-        <PartnersPanel partners={partners} onUpdatePartners={onUpdatePartners} onAddNotification={onAddNotification} showToast={showToast} />
+        <PartnersPanel partners={partners} onUpdatePartners={onUpdatePartners} onAddNotification={onAddNotification} showToast={showToast} currentRole={(currentUser?.role || 'admin') as any} />
       )}
       {activeTab === 'users' && (
         <UserManagementPanel users={users} onAddNotification={onAddNotification} currentUser={currentUser!} onUpdateUsers={onUpdateUsers} showToast={showToast} />
@@ -296,6 +321,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           currentUser={currentUser}
           onBackToDashboard={() => setActiveTab(currentUser.role === 'employé' ? 'employee_portal' : 'dashboard')}
           onLogout={() => handleSetCurrentUser(null)} onAddNotification={onAddNotification} showToast={showToast}
+          onUpdateUser={onUpdateUser}
         />
       )}
 
@@ -316,6 +342,8 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
             onOpenProfileModal={onOpenProfileModal} moduleConfig={moduleConfig}
             attendanceIncidents={attendanceIncidents}
             onAddAttendanceIncident={onAddAttendanceIncident}
+            initialSubTab={employeeInitialSubTab}
+            showToast={showToast}
           />
         ) : (
           <AdminDashboardOverview

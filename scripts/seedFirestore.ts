@@ -42,7 +42,6 @@ async function seedDatabase() {
     enableLogs: false,
     enableInventory: false,
     enablePartners: false,
-    enablePricing: false,
     enableDiscipline: true,
     enableOrgChart: true,
     enableStatistics: true,

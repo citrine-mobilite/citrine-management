@@ -1,14 +1,29 @@
 export type PresenceStatus = 'present' | 'late' | 'absent' | 'not_tracked';
 
-export type EmergencyType = 'retard' | 'pause_anticipee' | 'rallonge_pause' | 'depart_anticipe' | 'sortie_prematuree';
+export type EmergencyType =
+  | 'retard'
+  | 'sortie_professionnelle'
+  | 'retour_sortie_professionnelle'
+  | 'depart_anticipe'
+  | 'permission'
+  | 'pause_anticipee'
+  | 'rallonge_pause'
+  | 'sortie_prematuree'
+  | 'autre';
 
 export type IncidentType =
   | 'retard'
+  | 'sortie_professionnelle'
+  | 'retour_sortie_professionnelle'
   | 'sortie_prematuree'
   | 'depart_anticipe'
+  | 'permission'
   | 'pause_anticipee'
   | 'rallonge_pause'
   | 'pause_prolongee'
+  | 'absence_injustifiee'
+  | 'depart_sans_validation'
+  | 'absence_non_autorisee'
   | 'autre';
 
 export type IncidentOrigin = 'signale_par_employe' | 'automatique_pointage' | 'signale_par_responsable';
@@ -92,6 +107,9 @@ export interface Presence {
   pauseStart: string | null;
   pauseEnd: string | null;
   departureTime: string | null;
+  sortieProStart?: string | null;
+  sortieProEnd?: string | null;
+  sortieProReason?: string | null;
   status: PresenceStatus;
   correctionReason?: string | null;
   correctionReasonStatus?: 'pending' | 'approved' | 'rejected' | null;

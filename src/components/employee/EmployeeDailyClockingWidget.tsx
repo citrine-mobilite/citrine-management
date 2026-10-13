@@ -1,9 +1,8 @@
 import React from 'react';
 import { MapPin } from 'lucide-react';
-import { Employee, Presence, AppUser, CompanyModuleConfig } from '../../types';
+import { Employee, Presence, AppUser, CompanyModuleConfig, EmergencyType } from '../../types';
 import { EmployeeDailyClockingHeader } from './EmployeeDailyClockingHeader';
 import { EmployeeClockProgressionStepper } from './EmployeeClockProgressionStepper';
-import { EmployeeSensorsDiagnostic } from './EmployeeSensorsDiagnostic';
 import { EmployeeClockActionButtons } from './EmployeeClockActionButtons';
 import { EmployeeClockEmergencySection } from './EmployeeClockEmergencySection';
 
@@ -15,19 +14,19 @@ interface EmployeeDailyClockingWidgetProps {
   currentDateStr: string;
   liveTimeString: string;
   isLocating: boolean;
-  sensorsDiagnostic: {
+  sensorsDiagnostic?: {
     status: 'idle' | 'scanning' | 'done';
     gps: { ok: boolean; coords?: string; error?: string };
     camera: { ok: boolean; error?: string };
   };
-  runSensorsDiagnostic: () => void;
+  runSensorsDiagnostic?: () => void;
   setShowOfficeQRModal: (val: boolean) => void;
   setShowClockingModal: (val: boolean) => void;
-  setPendingClockAction: (action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure') => void;
+  setPendingClockAction: (action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure' | 'sortieProStart' | 'sortieProEnd') => void;
   setSelectedClockMethod: (method: 'qr_code' | 'wifi_ip' | 'gps' | 'kiosk_pin') => void;
   setQrCodeError: (val: string | null) => void;
   startCameraScan: () => void;
-  setEmergencyType: (val: 'retard' | 'pause_anticipee' | 'rallonge_pause' | 'depart_anticipe') => void;
+  setEmergencyType: (val: EmergencyType) => void;
   setEmergencyReason: (val: string) => void;
   setShowEmergencyModal: (val: boolean) => void;
   setCustomClockReason: (val: string) => void;
@@ -44,8 +43,6 @@ export const EmployeeDailyClockingWidget: React.FC<EmployeeDailyClockingWidgetPr
   currentDateStr,
   liveTimeString,
   isLocating,
-  sensorsDiagnostic,
-  runSensorsDiagnostic,
   setShowOfficeQRModal,
   setShowClockingModal,
   setPendingClockAction,
@@ -60,7 +57,7 @@ export const EmployeeDailyClockingWidget: React.FC<EmployeeDailyClockingWidgetPr
   setShowCustomClockModal,
   moduleConfig,
 }) => {
-  const handleTriggerClock = (action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure') => {
+  const handleTriggerClock = (action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure' | 'sortieProStart' | 'sortieProEnd') => {
     setPendingClockAction(action);
     setQrCodeError(null);
     setSelectedClockMethod('qr_code');
@@ -84,11 +81,6 @@ export const EmployeeDailyClockingWidget: React.FC<EmployeeDailyClockingWidgetPr
       <EmployeeClockProgressionStepper 
         todayPresence={todayPresence} 
         enableBreakTracking={enableBreakTracking}
-      />
-
-      <EmployeeSensorsDiagnostic
-        sensorsDiagnostic={sensorsDiagnostic}
-        runSensorsDiagnostic={runSensorsDiagnostic}
       />
 
       {todayPresence?.location && !isLocating && (
@@ -122,7 +114,7 @@ export const EmployeeDailyClockingWidget: React.FC<EmployeeDailyClockingWidgetPr
       <EmployeeClockEmergencySection
         todayPresence={todayPresence}
         onOpenEmergencyModal={() => {
-          setEmergencyType('retard');
+          setEmergencyType('sortie_professionnelle');
           setEmergencyReason('');
           setShowEmergencyModal(true);
         }}

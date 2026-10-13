@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { X, Save, CheckSquare } from 'lucide-react';
-import { Task, Employee, TaskStatus, TaskPriority, TaskProject } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { X, CheckSquare } from 'lucide-react';
+import { Task, Employee, TaskStatus, TaskPriority, TaskProject, AppUser } from '../../types';
 
 interface TaskCreateModalProps {
   isOpen: boolean;
@@ -11,6 +11,8 @@ interface TaskCreateModalProps {
   defaultProjectId?: string;
   defaultStatus?: TaskStatus;
   isMilestoneDefault?: boolean;
+  currentRole?: string;
+  currentUser?: AppUser | null;
 }
 
 export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
@@ -21,14 +23,25 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   projects,
   defaultProjectId = 'general',
   defaultStatus = 'todo',
+  currentRole,
+  currentUser,
 }) => {
+  const isEmployee = currentRole === 'employé' || (currentUser && currentUser.role === 'employé');
+  const defaultAssigneeName = currentUser?.name || employees[0]?.name || 'Équipe';
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [projectId, setProjectId] = useState(defaultProjectId !== 'all' ? defaultProjectId : 'general');
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>('medium');
-  const [assignedTo, setAssignedTo] = useState(employees[0]?.name || 'Équipe');
+  const [assignedList, setAssignedList] = useState<string[]>(isEmployee ? [defaultAssigneeName] : ['Équipe']);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    if (isEmployee && currentUser) {
+      setAssignedList([currentUser.name || defaultAssigneeName]);
+    }
+  }, [isEmployee, currentUser]);
 
   if (!isOpen) return null;
 
@@ -42,6 +55,10 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
     e.preventDefault();
     if (!title.trim()) return;
 
+    const finalAssigned = isEmployee 
+      ? (currentUser?.name || assignedList[0] || 'Équipe') 
+      : (assignedList.length > 0 ? assignedList.join(', ') : 'Équipe');
+
     onCreateTask({
       title: title.trim(),
       description: description.trim(),
@@ -49,7 +66,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
       time: '18:00',
       priority,
       status,
-      assignedTo,
+      assignedTo: finalAssigned,
       projectId: projectId || 'general',
     });
 
@@ -150,44 +167,69 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
                 <option value="high">🔴 Haute</option>
               </select>
             </div>
-            <div>
-              <label className="block font-bold text-stone-700 mb-1">Assigné à</label>
-              <select
-                value={assignedTo}
-                onChange={(e) => setAssignedTo(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-medium"
-              >
-                <option value="Équipe">Toute l'équipe</option>
-                {availableEmployees.map((emp) => (
-                  <option key={emp.id} value={emp.name}>{emp.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block font-bold text-stone-700 mb-1">Échéance</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-medium"
-              />
+            <div className="col-span-2">
+              <label className="block font-bold text-stone-700 mb-1">Assigné à (Plusieurs personnes possibles)</label>
+              {isEmployee ? (
+                <input
+                  type="text"
+                  disabled
+                  value={currentUser?.name || assignedList[0] || 'Moi'}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-100 text-stone-600 font-bold cursor-not-allowed"
+                />
+              ) : (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto p-2 bg-stone-50 rounded-xl border border-stone-200">
+                  <label className="flex items-center gap-2 text-xs font-bold text-stone-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={assignedList.includes('Équipe')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setAssignedList(['Équipe']);
+                        } else {
+                          setAssignedList(assignedList.filter(x => x !== 'Équipe'));
+                        }
+                      }}
+                      className="rounded border-stone-300 text-[#2A7B76]"
+                    />
+                    <span>Toute l'équipe</span>
+                  </label>
+                  {availableEmployees.map((emp) => (
+                    <label key={emp.id} className="flex items-center gap-2 text-xs font-medium text-stone-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={assignedList.includes(emp.name)}
+                        onChange={(e) => {
+                          let updated = assignedList.filter(x => x !== 'Équipe');
+                          if (e.target.checked) {
+                            updated.push(emp.name);
+                          } else {
+                            updated = updated.filter(x => x !== emp.name);
+                          }
+                          setAssignedList(updated.length > 0 ? updated : ['Équipe']);
+                        }}
+                        className="rounded border-stone-300 text-[#2A7B76]"
+                      />
+                      <span>{emp.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-stone-100">
+          <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 font-bold cursor-pointer"
+              className="px-4 py-2.5 rounded-xl text-stone-600 hover:bg-stone-100 font-bold transition cursor-pointer"
             >
               Annuler
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-[#2A7B76] hover:bg-[#236864] text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition"
+              className="bg-[#2A7B76] hover:bg-[#23635f] text-white font-bold px-5 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2"
             >
-              <Save className="h-4 w-4" />
-              <span>Créer la Tâche</span>
+              Créer la tâche
             </button>
           </div>
         </form>

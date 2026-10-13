@@ -16,7 +16,7 @@ export const FinancialLedgerTable: React.FC<FinancialLedgerTableProps> = ({ tran
     const rows = transactions.map((tx) => [
       tx.id,
       tx.date,
-      tx.title,
+      (tx as any).title || (tx as any).description || 'Transaction',
       tx.type === 'income' ? 'Recette' : 'Dépense',
       tx.amount || 0,
     ]);
@@ -72,7 +72,7 @@ export const FinancialLedgerTable: React.FC<FinancialLedgerTableProps> = ({ tran
               transactions.map((tx) => (
                 <tr key={tx.id} className="hover:bg-stone-50/50">
                   <td className="py-3 text-stone-600">{tx.date}</td>
-                  <td className="py-3 font-bold text-stone-900">{tx.title}</td>
+                  <td className="py-3 font-bold text-stone-900">{(tx as any).title || (tx as any).description || 'Transaction'}</td>
                   <td className="py-3">
                     <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-bold ${tx.type === 'income' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                       {tx.type === 'income' ? 'Recette' : 'Dépense'}

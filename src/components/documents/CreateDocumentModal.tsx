@@ -246,7 +246,7 @@ export const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({
 
     onSaveDocument(newDoc);
     if (showToast) {
-      showToast('Document RH officiel enregistré et synchronisé en base de données Firestore.');
+      showToast('Document RH officiel enregistré et synchronisé en base de données Supabase.');
     }
     onClose();
   };
@@ -435,7 +435,7 @@ export const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({
                   <span className="font-bold text-stone-800 block flex items-center gap-1.5">
                     Conservation & Archivage en Base de Données
                     <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.2 rounded border border-emerald-300">
-                      Firestore Actif
+                      Supabase Actif
                     </span>
                   </span>
                   <span className="text-[10px] text-stone-600">

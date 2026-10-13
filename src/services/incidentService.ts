@@ -1,17 +1,17 @@
 import { AttendanceIncident, IncidentType } from '../types';
-import { COLLECTIONS, saveDocument, subscribeToCollection, deleteDocument } from './firestoreService';
+import { COLLECTIONS, saveDocument, subscribeToCollection, deleteDocument } from './dataService';
 
 const LOCAL_STORAGE_KEY = 'citrine_attendance_incidents';
 
 export class IncidentService {
   /**
-   * Save or update an incident in Firestore and LocalStorage
+   * Save or update an incident in database and LocalStorage
    */
   public async saveIncident(incident: AttendanceIncident): Promise<void> {
     try {
       await saveDocument(COLLECTIONS.ATTENDANCE_INCIDENTS, incident);
     } catch (err) {
-      console.warn('Could not save incident to Firestore directly, caching locally:', err);
+      console.warn('Could not save incident to database directly, caching locally:', err);
     }
 
     try {

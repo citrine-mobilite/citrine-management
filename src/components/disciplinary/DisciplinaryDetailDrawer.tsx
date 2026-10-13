@@ -293,7 +293,7 @@ export const DisciplinaryDetailDrawer: React.FC<DisciplinaryDetailDrawerProps> =
         {/* Drawer Actions Footer */}
         <div className="p-4 bg-stone-50 border-t border-stone-200 flex items-center justify-between gap-3 shrink-0">
           <button
-            onClick={() => downloadDisciplinaryLetterPdf(incident, { id: incident.employeeId, name: incident.employeeName }, incident.sanctionType || 'avertissement')}
+            onClick={() => downloadDisciplinaryLetterPdf(incident, { id: incident.employeeId, name: incident.employeeName }, incident.sanctionType as any || 'avertissement')}
             className="px-4 py-2.5 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
           >
             <Download className="h-4 w-4" /> Lettre PDF

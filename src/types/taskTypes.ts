@@ -1,7 +1,7 @@
 import { Role } from './userTypes';
 
-export type TaskStatus = 'todo' | 'in_progress' | 'completed' | 'pending_validation' | 'blocked' | 'idea';
-export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskStatus = 'todo' | 'in_progress' | 'completed' | 'pending_validation' | 'blocked' | 'idea' | 'en_cours';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent' | 'haut';
 
 export interface Comment {
   id: string;
@@ -58,6 +58,8 @@ export interface Task {
   difficultyAlertSent?: boolean;
   employeeId?: string;
   assignedTo?: string;
+  dueDate?: string;
+  category?: string;
   projectId?: string;
   isMilestone?: boolean; // Indique si la tâche est un Jalon stratégique clé
   milestoneProgress?: number; // Progression du jalon (0 - 100%)
@@ -76,6 +78,8 @@ export interface Reminder {
   id: string;
   title: string;
   note?: string;
+  description?: string;
+  status?: string;
   date?: string;
   time?: string;
   location?: string;

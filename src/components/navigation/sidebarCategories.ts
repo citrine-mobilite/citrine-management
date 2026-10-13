@@ -22,7 +22,8 @@ import {
   Receipt,
   ShieldAlert,
   Contact2,
-  Lightbulb
+  Lightbulb,
+  CalendarDays
 } from 'lucide-react';
 import { TabType } from '../Sidebar';
 import { CompanyModuleConfig } from '../../types';
@@ -46,6 +47,7 @@ interface GetSidebarCategoriesOptions {
   moduleConfig: CompanyModuleConfig;
   unreadRemindersCount: number;
   pendingPresencesRequestsCount: number;
+  pendingLeavesCount?: number;
 }
 
 export function getSidebarCategories({
@@ -53,6 +55,7 @@ export function getSidebarCategories({
   moduleConfig,
   unreadRemindersCount,
   pendingPresencesRequestsCount,
+  pendingLeavesCount = 0,
 }: GetSidebarCategoriesOptions): SidebarCategory[] {
   const categories: SidebarCategory[] = [];
   const normalizedRole = normalizeRoleString(userRole);
@@ -129,6 +132,14 @@ export function getSidebarCategories({
         description: '',
         icon: Clock,
         badge: pendingPresencesRequestsCount > 0 ? pendingPresencesRequestsCount : undefined,
+      });
+
+      pilotageItems.push({
+        id: 'leave_requests',
+        label: 'Congés et permissions',
+        description: '',
+        icon: CalendarDays,
+        badge: pendingLeavesCount > 0 ? pendingLeavesCount : undefined,
       });
     }
 

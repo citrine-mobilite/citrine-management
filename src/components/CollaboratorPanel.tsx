@@ -48,6 +48,8 @@ import { disciplinaryReasonsService } from '../services/disciplinaryReasonsServi
 import { logAdminOperation, getAdminAuditOperations, AdminAccountOperation } from '../services/adminAuditService';
 import { exportToExcel } from '../services/excelExportService';
 import { exportElementToPdf } from '../services/pdfExportService';
+import RhReportModal from './RhReportModal';
+import { buildMonthlyAttendanceReport, AttendanceMonthlyReport } from '../services/rhReportService';
 
 interface CollaboratorPanelProps {
   employees: Employee[];
@@ -118,6 +120,23 @@ export default function CollaboratorPanel({
   const [auditOpsList, setAuditOpsList] = useState<AdminAccountOperation[]>(() => getAdminAuditOperations());
   const [teamFilter, setTeamFilter] = useState('all');
   const [managerFilter, setManagerFilter] = useState('all');
+  const [rhReportModal, setRhReportModal] = useState<AttendanceMonthlyReport | null>(null);
+  const [rhReportMonth, setRhReportMonth] = useState<string>('2026-10');
+  const [isGeneratingRhReport, setIsGeneratingRhReport] = useState<boolean>(false);
+
+  const handleGenerateEmpMonthlyReport = async (targetEmp: Employee, monthStr?: string) => {
+    setIsGeneratingRhReport(true);
+    try {
+      const m = monthStr || rhReportMonth || '2026-10';
+      const cleanMonth = m < '2026-10' ? '2026-10' : m;
+      const report = await buildMonthlyAttendanceReport(targetEmp, presences, cleanMonth);
+      setRhReportModal(report);
+    } catch (e) {
+      console.warn('Erreur génération rapport:', e);
+    } finally {
+      setIsGeneratingRhReport(false);
+    }
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -664,7 +683,29 @@ export default function CollaboratorPanel({
 
             {activeDetailTab === 'presences' && (
               <div className="space-y-3">
-                <h4 className="font-serif font-bold text-xs text-stone-900 pb-2 border-b border-stone-100">Historique complet des pointages</h4>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-2 border-b border-stone-100 gap-2">
+                  <h4 className="font-serif font-bold text-xs text-stone-900">Historique complet des pointages</h4>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-stone-500 font-bold text-[11px]">Mois (dès Oct 2026) :</span>
+                    <input
+                      type="month"
+                      min="2026-10"
+                      value={rhReportMonth < '2026-10' ? '2026-10' : rhReportMonth}
+                      onChange={(e) => setRhReportMonth(e.target.value >= '2026-10' ? e.target.value : '2026-10')}
+                      className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-0.5 text-xs font-bold text-stone-800"
+                      title="Mois d'attestation de présence"
+                    />
+                    <button
+                      onClick={() => handleGenerateEmpMonthlyReport(emp, rhReportMonth)}
+                      disabled={isGeneratingRhReport}
+                      className="bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold px-3 py-1 rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="Télécharger la fiche de présence certifiée en PDF"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      <span>{isGeneratingRhReport ? 'Génération...' : 'Fiche Mensuelle (PDF)'}</span>
+                    </button>
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
@@ -1463,6 +1504,20 @@ export default function CollaboratorPanel({
             </div>
           </div>
         </div>
+      )}
+
+      {rhReportModal && (
+        <RhReportModal
+          isOpen={Boolean(rhReportModal)}
+          report={rhReportModal}
+          selectedMonth={rhReportMonth}
+          onMonthChange={(m) => {
+            setRhReportMonth(m);
+            const targetEmp = employees.find((e) => e.id === rhReportModal.employee.id) || rhReportModal.employee;
+            handleGenerateEmpMonthlyReport(targetEmp, m);
+          }}
+          onClose={() => setRhReportModal(null)}
+        />
       )}
     </div>
   );
