@@ -37,40 +37,56 @@ export function mapCollectionToTable(collectionName: string): string {
     case 'connection_logs': return 'connection_logs';
     case 'admin_audit_logs':
     case 'citrine_admin_audit_operations_v1': return 'admin_audit_logs';
+    case 'task_assignees': return 'task_assignees';
+    case 'task_project_members': return 'task_project_members';
+    case 'reminder_recipients': return 'reminder_recipients';
+    case 'notification_recipients': return 'notification_recipients';
+    case 'presence_pauses': return 'presence_pauses';
     default: return 'generic_collections';
   }
 }
 
-// Convert Firestore/App item into Supabase row format
+function isUuid(val: any): boolean {
+  if (typeof val !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
+// Convert App item into Supabase row format
 function itemToSupabaseRow(collectionName: string, item: any): any {
   const table = mapCollectionToTable(collectionName);
-  const docId = String(item.id || item.docId || `doc_${Date.now()}`);
-
-  if (table === 'generic_collections') {
-    return {
-      collection: collectionName,
-      doc_id: docId,
-      data: item,
-      updated_at: new Date().toISOString(),
-    };
-  }
 
   const base: any = {
-    doc_id: docId,
     raw_data: item,
     updated_at: new Date().toISOString(),
   };
 
-  // Only assign numeric id if explicitly provided as an integer, otherwise let BIGSERIAL auto-increment
+  // 1. Only assign numeric id if explicitly provided as an integer, otherwise let BIGSERIAL auto-increment
   if (typeof item.id === 'number' || (typeof item.id === 'string' && /^\d+$/.test(item.id))) {
     base.id = Number(item.id);
+  }
+
+  // 2. Assign uid (UUID v4) if present
+  if (item.uid && isUuid(item.uid)) {
+    base.uid = item.uid;
+  } else if (typeof item.id === 'string' && isUuid(item.id)) {
+    base.uid = item.id;
+  }
+
+  if (table === 'generic_collections') {
+    return {
+      collection: collectionName,
+      data: item,
+      updated_at: new Date().toISOString(),
+      ...(base.id ? { id: base.id } : {}),
+      ...(base.uid ? { uid: base.uid } : {}),
+    };
   }
 
   switch (table) {
     case 'users':
       return {
         ...base,
-        uid: item.uid || docId,
+        ...(base.uid ? { uid: base.uid } : {}),
         email: item.email || '',
         name: item.name || null,
         role: item.role || 'Employé',
@@ -80,27 +96,44 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         avatar_url: item.avatarUrl || null,
         employee_id: item.employeeId || null,
       };
-    case 'employees':
+    case 'employees': {
+      const isStatusActive = item.status === true || item.status === 'en_poste' || item.status === 'actif';
+      const employmentStatus = (typeof item.status === 'string' && item.status !== 'actif' && item.status !== 'inactif')
+        ? item.status
+        : (item.employmentStatus || (isStatusActive ? 'en_poste' : 'parti'));
+      
+      const numUserId = (typeof item.userId === 'number' || (typeof item.userId === 'string' && /^\d+$/.test(item.userId)))
+        ? Number(item.userId)
+        : null;
+      const numRoleId = (typeof item.roleId === 'number' || (typeof item.roleId === 'string' && /^\d+$/.test(item.roleId)))
+        ? Number(item.roleId)
+        : null;
+      const numManagerId = (typeof item.managerId === 'number' || (typeof item.managerId === 'string' && /^\d+$/.test(item.managerId)))
+        ? Number(item.managerId)
+        : null;
+
       return {
         ...base,
         name: item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || null,
         first_name: item.firstName || null,
         last_name: item.lastName || null,
-        email: item.email || null,
-        phone: item.phone || null,
-        role: item.role || 'Employé',
-        role_type: item.roleType || null,
+        email: item.email ? String(item.email).trim().toLowerCase() : null,
+        phone: item.phone ? String(item.phone).trim() : null,
+        role_type: item.roleType || item.role || null,
         department: item.department || null,
-        position: item.position || null,
-        status: item.status || 'en_poste',
-        hire_date: item.hireDate || null,
-        departure_date: item.departureDate || null,
-        salary: typeof item.salary === 'number' ? item.salary : 0,
+        position: item.position || item.role || item.roleType || null,
+        status: isStatusActive,
+        employment_status: employmentStatus,
+        hire_date: item.hireDate ? String(item.hireDate).split('T')[0] : null,
+        departure_date: item.departureDate ? String(item.departureDate).split('T')[0] : null,
+        salary: Math.max(0, typeof item.salary === 'number' ? item.salary : (Number(item.salary) || 0)),
         avatar_url: item.avatarUrl || null,
-        user_id: item.userId || null,
-        manager_id: item.managerId || null,
+        user_id: numUserId,
+        role_id: numRoleId,
+        manager_id: numManagerId,
         team: item.team || null,
       };
+    }
     case 'tasks':
       return {
         ...base,
@@ -502,13 +535,52 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
 
 // Convert Supabase row back into App item format
 function supabaseRowToItem(collectionName: string, row: any): any {
-  if (row.collection && row.doc_id && row.data) {
-    return { ...row.data, id: row.doc_id, _dbId: row.id };
+  if (!row) return null;
+
+  if (row.collection && row.data) {
+    return { ...row.data, id: String(row.id), uid: row.uid, _dbId: row.id };
   }
+
+  const table = mapCollectionToTable(collectionName);
+  if (table === 'employees') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    return {
+      ...raw,
+      id: String(row.id),
+      uid: row.uid,
+      _dbId: row.id,
+      userId: row.user_id ? String(row.user_id) : raw.userId,
+      roleId: row.role_id ? String(row.role_id) : raw.roleId,
+      managerId: row.manager_id ? String(row.manager_id) : raw.managerId,
+      name: row.name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || raw.name || 'Collaborateur',
+      firstName: row.first_name || raw.firstName,
+      lastName: row.last_name || raw.lastName,
+      email: row.email || raw.email || '',
+      phone: row.phone || raw.phone || '',
+      roleType: row.role_type || raw.roleType || 'employé',
+      role: row.position || raw.role || row.role_type || 'Employé',
+      position: row.position || raw.position,
+      department: row.department || raw.department || 'Général',
+      status: row.employment_status || (row.status ? 'en_poste' : 'parti'),
+      employmentStatus: row.employment_status || 'en_poste',
+      hireDate: row.hire_date || raw.hireDate,
+      departureDate: row.departure_date || raw.departureDate,
+      salary: typeof row.salary === 'number' ? row.salary : (Number(row.salary) || raw.salary || 0),
+      avatarUrl: row.avatar_url || raw.avatarUrl || '',
+      team: row.team || raw.team,
+      departureReason: raw.departureReason,
+      suspensionReason: raw.suspensionReason,
+      suspensionDate: raw.suspensionDate,
+      birthDate: raw.birthDate,
+      createdAt: row.created_at || raw.createdAt,
+      updatedAt: row.updated_at || raw.updatedAt,
+    };
+  }
+
   if (row.raw_data && typeof row.raw_data === 'object') {
-    return { ...row.raw_data, id: row.doc_id || String(row.id), _dbId: row.id };
+    return { ...row.raw_data, id: String(row.id), uid: row.uid, _dbId: row.id };
   }
-  return { ...row, id: row.doc_id || String(row.id), _dbId: row.id };
+  return { ...row, id: String(row.id), uid: row.uid, _dbId: row.id };
 }
 
 // Fetch collection from Supabase
@@ -540,27 +612,28 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
     const table = mapCollectionToTable(collectionName);
     const row = itemToSupabaseRow(collectionName, item);
 
-    const { error: upsertError } = await supabase
-      .from(table)
-      .upsert(row, { onConflict: table === 'generic_collections' ? 'collection,doc_id' : 'doc_id' });
-
-    if (upsertError) {
-      // Fallback check & update or insert
-      const query = table === 'generic_collections'
-        ? supabase.from(table).select('id').eq('collection', collectionName).eq('doc_id', row.doc_id).maybeSingle()
-        : supabase.from(table).select('id').eq('doc_id', row.doc_id).maybeSingle();
-
-      const { data: existing } = await query;
-      if (existing) {
-        if (table === 'generic_collections') {
-          await supabase.from(table).update(row).eq('collection', collectionName).eq('doc_id', row.doc_id);
-        } else {
-          await supabase.from(table).update(row).eq('doc_id', row.doc_id);
-        }
-      } else {
-        await supabase.from(table).insert(row);
-      }
+    if (row.id) {
+      const { data, error } = await supabase.from(table).upsert(row, { onConflict: 'id' }).select().single();
+      if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      if (!error) return item;
+    } else if (row.uid) {
+      const { data, error } = await supabase.from(table).upsert(row, { onConflict: 'uid' }).select().single();
+      if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      if (!error) return item;
+    } else if (table === 'users' && row.email) {
+      const { data, error } = await supabase.from(table).upsert(row, { onConflict: 'email' }).select().single();
+      if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      if (!error) return item;
+    } else if (table === 'employees' && row.email) {
+      const { data, error } = await supabase.from(table).upsert(row, { onConflict: 'email' }).select().single();
+      if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      if (!error) return item;
+    } else {
+      const { data, error } = await supabase.from(table).insert(row).select().single();
+      if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      if (!error) return item;
     }
+
     return item;
   } catch (err) {
     console.warn(`[Supabase Save] Exception saving to ${collectionName}:`, err);
@@ -572,14 +645,12 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
 export async function deleteDocument(collectionName: string, id: string): Promise<boolean> {
   try {
     const table = mapCollectionToTable(collectionName);
-    if (table === 'generic_collections') {
-      await supabase.from(table).delete().match({ collection: collectionName, doc_id: String(id) });
+    if (/^\d+$/.test(String(id))) {
+      await supabase.from(table).delete().eq('id', Number(id));
+    } else if (isUuid(String(id))) {
+      await supabase.from(table).delete().eq('uid', String(id));
     } else {
-      if (/^\d+$/.test(String(id))) {
-        await supabase.from(table).delete().or(`doc_id.eq.${id},id.eq.${id}`);
-      } else {
-        await supabase.from(table).delete().match({ doc_id: String(id) });
-      }
+      await supabase.from(table).delete().match({ id: String(id) });
     }
     return true;
   } catch (err) {

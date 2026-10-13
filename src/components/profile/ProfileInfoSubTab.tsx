@@ -5,6 +5,7 @@ import { saveUser } from '../../services/userService';
 import { saveDocument, COLLECTIONS } from '../../services/dataService';
 import { storeSecureSession } from '../../services/sessionService';
 import { CollaboratorAvatarPickerModal } from '../collaborators/CollaboratorAvatarPickerModal';
+import { generateUuidV4 } from '../../services/employeeService';
 
 interface ProfileInfoSubTabProps {
   currentUser: AppUser;
@@ -61,6 +62,7 @@ export const ProfileInfoSubTab: React.FC<ProfileInfoSubTabProps> = ({
         } else {
           const newEmp = {
             id: currentUser.id || `emp-${Date.now()}`,
+            uid: generateUuidV4(),
             name: name.trim(),
             email: currentUser.email,
             roleType: currentUser.role || 'employé',
@@ -68,6 +70,7 @@ export const ProfileInfoSubTab: React.FC<ProfileInfoSubTabProps> = ({
             phone: phone.trim(),
             avatarUrl: newUrl.trim(),
             status: 'en_poste',
+            employmentStatus: 'en_poste',
             hireDate: new Date().toISOString().split('T')[0],
             salary: 0,
           };
@@ -139,6 +142,7 @@ export const ProfileInfoSubTab: React.FC<ProfileInfoSubTabProps> = ({
         } else {
           const newEmp = {
             id: currentUser.id || `emp-${Date.now()}`,
+            uid: generateUuidV4(),
             name: name.trim(),
             email: currentUser.email,
             roleType: currentUser.role || 'employé',
@@ -146,6 +150,7 @@ export const ProfileInfoSubTab: React.FC<ProfileInfoSubTabProps> = ({
             phone: phone.trim(),
             avatarUrl: avatarUrl.trim(),
             status: 'en_poste',
+            employmentStatus: 'en_poste',
             hireDate: new Date().toISOString().split('T')[0],
             salary: 0,
           };

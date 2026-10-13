@@ -126,11 +126,11 @@ class CallSignalingService {
     });
 
     // Enregistrement asynchrone non-bloquant en table Supabase calls
-    supabaseAdmin.from('calls').upsert({
-      doc_id: callId,
+    supabaseAdmin.from('calls').insert({
+      room_id: callId,
       caller_id: caller.id,
-      callee_id: callee.id,
-      type,
+      recipient_id: callee.id,
+      call_type: type,
       status: 'ringing',
       raw_data: callData,
       updated_at: new Date().toISOString()
@@ -223,13 +223,11 @@ class CallSignalingService {
         this.cleanUp();
       });
 
-      supabaseAdmin.from('calls').upsert({
-        doc_id: call.id,
+      supabaseAdmin.from('calls').update({
         status: 'connected',
-        started_at: new Date().toISOString(),
         raw_data: { ...call, status: 'connected', answer: { type: 'answer', sdp: answer.sdp || '' } },
         updated_at: new Date().toISOString()
-      }).then(() => {}, () => {});
+      }).eq('room_id', call.id).then(() => {}, () => {});
     }
 
     soundService.playCallConnected();
@@ -252,12 +250,10 @@ class CallSignalingService {
       }
     });
 
-    supabaseAdmin.from('calls').upsert({
-      doc_id: callId,
+    supabaseAdmin.from('calls').update({
       status: 'rejected',
-      end_reason: reason,
       updated_at: new Date().toISOString()
-    }).then(() => {}, () => {});
+    }).eq('room_id', callId).then(() => {}, () => {});
 
     this.cleanUp();
   }
@@ -282,13 +278,10 @@ class CallSignalingService {
         }
       });
 
-      supabaseAdmin.from('calls').upsert({
-        doc_id: idToClose,
+      supabaseAdmin.from('calls').update({
         status: 'ended',
-        ended_at: new Date().toISOString(),
-        end_reason: reason,
         updated_at: new Date().toISOString()
-      }).then(() => {}, () => {});
+      }).eq('room_id', idToClose).then(() => {}, () => {});
     }
 
     soundService.playCallEnded();

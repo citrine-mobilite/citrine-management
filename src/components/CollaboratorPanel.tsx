@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { 
   Employee, 
+  EmployeeStatus,
   Presence, 
   Task, 
   SalaryPayment, 
@@ -42,6 +43,7 @@ import { CollaboratorPresenceMap } from './CollaboratorPresenceMap';
 import { getEmployeeSoftColor } from '../utils/colorUtils';
 import { downloadPayslipPdf } from '../services/pdfExportService';
 import { saveUser } from '../services/userService';
+import { generateUuidV4 } from '../services/employeeService';
 import { CollaboratorAvatarPickerModal } from './collaborators/CollaboratorAvatarPickerModal';
 import { CollaboratorStatusReasonModal } from './collaborators/CollaboratorStatusReasonModal';
 import { disciplinaryReasonsService } from '../services/disciplinaryReasonsService';
@@ -78,6 +80,14 @@ const STATUS_MAP = {
   parti: { label: 'Départ', color: 'bg-stone-100 text-stone-700 border-stone-300' },
   renvoye: { label: 'Renvoyé', color: 'bg-red-50 text-red-700 border-red-200' },
 };
+
+function getEmployeeStatusKey(emp: Employee): keyof typeof STATUS_MAP {
+  const s = emp.employmentStatus || (typeof emp.status === 'string' ? emp.status : (emp.status ? 'en_poste' : 'parti'));
+  if (s && s in STATUS_MAP) {
+    return s as keyof typeof STATUS_MAP;
+  }
+  return 'en_poste';
+}
 
 export default function CollaboratorPanel({
   employees,
@@ -144,18 +154,18 @@ export default function CollaboratorPanel({
     email: '',
     phone: '',
     roleType: 'employé' as Employee['roleType'],
-    department: 'Citrine Management',
+    department: '',
     managerId: '',
-    team: 'Équipe IT & Développement',
+    team: '',
     hireDate: new Date().toISOString().split('T')[0],
-    birthDate: '2000-01-05',
-    salary: 200000,
-    status: 'en_poste' as Employee['status'],
+    birthDate: '',
+    salary: 0,
+    status: 'en_poste' as EmployeeStatus,
     departureReason: '',
     suspensionReason: '',
     avatarUrl: '',
     createUserAccount: true,
-    userPassword: 'Collab@2026',
+    userPassword: '',
     userRole: 'employé' as UserRole,
   });
 
@@ -166,18 +176,18 @@ export default function CollaboratorPanel({
       email: '',
       phone: '',
       roleType: 'employé',
-      department: 'Citrine Management',
+      department: '',
       managerId: '',
-      team: 'Équipe IT & Développement',
+      team: '',
       hireDate: new Date().toISOString().split('T')[0],
-      birthDate: '2000-01-05',
-      salary: 200000,
+      birthDate: '',
+      salary: 0,
       status: 'en_poste',
       departureReason: '',
       suspensionReason: '',
-      avatarUrl: `https://api.dicebear.com/7.x/personas/svg?seed=Citrine_${Date.now()}`,
+      avatarUrl: '',
       createUserAccount: true,
-      userPassword: `Collab@${Math.floor(1000 + Math.random() * 9000)}`,
+      userPassword: '',
       userRole: 'employé',
     });
     setIsModalOpen(true);
@@ -257,10 +267,12 @@ export default function CollaboratorPanel({
       setAuditOpsList(getAdminAuditOperations());
       if (showToast) showToast('Collaborateur mis à jour avec succès.', 'success');
     } else {
+      const empUid = generateUuidV4();
       const empId = `emp-${Date.now()}`;
       const userId = `user-${Date.now()}`;
       const newEmp: Employee = {
         id: empId,
+        uid: empUid,
         userId: userId,
         avatarUrl: formData.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(formData.name)}`,
         name: formData.name.trim(),
@@ -274,6 +286,7 @@ export default function CollaboratorPanel({
         birthDate: formData.birthDate,
         salary: Number(formData.salary) || 0,
         status: formData.status,
+        employmentStatus: formData.status,
         departureReason: formData.departureReason,
         suspensionReason: formData.suspensionReason,
       };
@@ -507,9 +520,9 @@ export default function CollaboratorPanel({
                   {emp.roleType || 'Employé'}
                 </span>
                 <span className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-lg border ${
-                  STATUS_MAP[emp.status || 'en_poste']?.color
+                  STATUS_MAP[getEmployeeStatusKey(emp)]?.color
                 }`}>
-                  {STATUS_MAP[emp.status || 'en_poste']?.label}
+                  {STATUS_MAP[getEmployeeStatusKey(emp)]?.label}
                 </span>
               </div>
 
@@ -973,14 +986,14 @@ export default function CollaboratorPanel({
                     <td className="p-4">
                       <div className="flex items-center gap-1.5">
                         <span className={`inline-block text-[9px] font-bold uppercase px-2.5 py-1 rounded-lg border ${
-                          STATUS_MAP[emp.status || 'en_poste']?.color
+                          STATUS_MAP[getEmployeeStatusKey(emp)]?.color
                         }`}>
-                          {STATUS_MAP[emp.status || 'en_poste']?.label}
+                          {STATUS_MAP[getEmployeeStatusKey(emp)]?.label}
                         </span>
                         
                         <select
-                          value={emp.status || 'en_poste'}
-                          onChange={(e) => handleStatusChangeQuick(emp.id, e.target.value as Employee['status'])}
+                          value={getEmployeeStatusKey(emp)}
+                          onChange={(e) => handleStatusChangeQuick(emp.id, e.target.value as EmployeeStatus)}
                           className="px-1.5 py-1 rounded-md border border-stone-200 bg-stone-50 text-[10px] outline-none cursor-pointer focus:ring-1 focus:ring-[#2A7B76]"
                         >
                           <option value="en_poste">En poste</option>

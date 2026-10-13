@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, AlertCircle, ArrowRight, UserCheck, Eye, EyeOff, Shield, KeyRound } from 'lucide-react';
 import { AppUser } from '../types';
-import { findUserByEmail, saveUser, INITIAL_DEFAULT_USERS } from '../services/userService';
+import { findUserByEmail, saveUser, fetchFreshUser } from '../services/userService';
 import { recordConnectionLog } from '../services/connectionLogService';
 import { verifyPassword } from '../utils/cryptoUtils';
 import { supabase } from '../lib/supabase';
@@ -24,8 +24,6 @@ export default function LoginModal({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const availableUsers = users && users.length > 0 ? users : INITIAL_DEFAULT_USERS;
-
   // Handle Email + Password Login
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +40,7 @@ export default function LoginModal({
     setLoading(true);
 
     try {
-      // 1. Tenter l'authentification Supabase Auth avec timeout strict de 1.5s
+      // 1. Tenter l'authentification Supabase Auth avec timeout court
       let supabaseAuthenticated = false;
       try {
         const supaResult = await Promise.race([
@@ -57,41 +55,15 @@ export default function LoginModal({
         if (supaResult?.data?.user && !supaResult.error) {
           supabaseAuthenticated = true;
         }
-      } catch (e) {
-        // En cas d'erreur réseau, bascule transparente sur la validation locale PBKDF2
+      } catch {
+        // Poursuite avec vérification locale / base de données
       }
 
-      const fallbackAdmin: AppUser = {
-        id: 'user-admin-citrine-mob',
-        name: 'Citrine Mobilité',
-        email: 'citrinemobilite@gmail.com',
-        role: 'administrateur',
-        status: 'actif',
-        phone: '+237 600 000 099',
-        authMethod: 'password',
-        department: 'Direction Générale',
-        passwordHash: 'pbkdf2:c623b3faebf9ba3c38f47273a303e218:5beb725b10c47a811cac27ba53cb762d2ff94af8cc847520aabda912c9ee9424',
-        createdAt: '2026-01-01T00:00:00.000Z'
-      };
-
-      const fallbackEmployee: AppUser = {
-        id: 'usr-emp-landrymouns',
-        name: 'Landry Moutongo',
-        email: 'landrymouns@gmail.com',
-        role: 'employé',
-        status: 'actif',
-        phone: '+237 600 000 001',
-        authMethod: 'password',
-        department: 'Logistique & Terrain',
-        passwordHash: 'pbkdf2:5f4af53c9702106b1487e4289c2ef906:a54d68de1d57dc115a8689d6c2bcdd6340f97b511f24cad526ead492a75327d5',
-        createdAt: '2026-01-01T00:00:00.000Z'
-      };
-
-      // 2. Résolution du profil utilisateur
-      const user =
-        findUserByEmail(availableUsers, cleanEmail) ||
-        (cleanEmail === 'citrinemobilite@gmail.com' ? fallbackAdmin : undefined) ||
-        (cleanEmail === 'landrymouns@gmail.com' ? fallbackEmployee : undefined);
+      // 2. Résolution du profil utilisateur depuis les données chargées ou directement depuis Supabase
+      let user = findUserByEmail(users, cleanEmail);
+      if (!user) {
+        user = (await fetchFreshUser(cleanEmail)) || undefined;
+      }
 
       if (!user && !supabaseAuthenticated) {
         setError('Adresse email ou mot de passe incorrect.');
@@ -101,11 +73,11 @@ export default function LoginModal({
 
       const activeUser: AppUser = user || {
         id: `user-${Date.now()}`,
-        name: cleanEmail === 'citrinemobilite@gmail.com' ? 'Citrine Mobilité' : cleanEmail.split('@')[0],
+        name: cleanEmail.split('@')[0],
         email: cleanEmail,
-        role: cleanEmail === 'citrinemobilite@gmail.com' ? 'administrateur' : 'employé',
+        role: 'employé',
         status: 'actif',
-        department: cleanEmail === 'citrinemobilite@gmail.com' ? 'Direction Générale' : 'Logistique & Terrain',
+        department: 'Général',
         createdAt: new Date().toISOString()
       };
 
@@ -123,26 +95,18 @@ export default function LoginModal({
         return;
       }
 
-      // 3. Vérification du mot de passe (PBKDF2 salted hash ou correspondance directe)
-      const storedPass =
-        activeUser.passwordHash ||
-        (cleanEmail === 'citrinemobilite@gmail.com'
-          ? fallbackAdmin.passwordHash
-          : (cleanEmail === 'landrymouns@gmail.com' ? fallbackEmployee.passwordHash : 'Citrine Management2026!'));
+      // 3. Vérification du mot de passe
+      let passwordValid = supabaseAuthenticated;
+      if (!passwordValid && activeUser.passwordHash) {
+        if (activeUser.passwordHash === cleanPassword) {
+          passwordValid = true;
+        } else {
+          const verifyResult = await verifyPassword(cleanPassword, activeUser.passwordHash);
+          passwordValid = verifyResult.valid;
+        }
+      }
 
-      const verifyResult = await verifyPassword(cleanPassword, storedPass);
-
-      const isDirectMatch =
-        (cleanEmail === 'citrinemobilite@gmail.com' && cleanPassword === 'Citrine2026!') ||
-        (cleanEmail === 'landrymouns@gmail.com' && cleanPassword === '123456789') ||
-        cleanPassword === '123456789' ||
-        cleanPassword === 'Citrine2026!' ||
-        cleanPassword === 'admin123' ||
-        cleanPassword === 'Citrine Management2026!' ||
-        cleanPassword === 'admin' ||
-        cleanPassword.toLowerCase() === 'citrine';
-
-      if (!supabaseAuthenticated && !verifyResult.valid && !isDirectMatch) {
+      if (!passwordValid) {
         setError('Adresse email ou mot de passe incorrect.');
         recordConnectionLog({
           userId: activeUser.id,

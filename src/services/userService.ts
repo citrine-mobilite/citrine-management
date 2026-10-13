@@ -1,19 +1,14 @@
 import { AppUser } from '../types';
 import { hashPassword } from '../utils/cryptoUtils';
 import { supabase } from '../lib/supabase';
-import rawDatabaseExport from '../data/citrineDatabaseExport.json';
 import { supabaseService } from './supabaseService';
 import { cloudSqlService } from './cloudSqlService';
 
 export const USERS_COLLECTION = 'users';
 
-const rawUsers: AppUser[] = (rawDatabaseExport?.collections?.users && Array.isArray(rawDatabaseExport.collections.users))
-  ? (rawDatabaseExport.collections.users as AppUser[])
-  : [];
+export const INITIAL_DEFAULT_USERS: AppUser[] = [];
 
-export const INITIAL_DEFAULT_USERS: AppUser[] = rawUsers;
-
-// Récupère les utilisateurs locaux ou par défaut
+// Récupère les utilisateurs locaux mis en cache
 export function getStoredUsers(): AppUser[] {
   try {
     const saved = localStorage.getItem('citrine_users');
@@ -22,11 +17,11 @@ export function getStoredUsers(): AppUser[] {
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch {}
-  return INITIAL_DEFAULT_USERS;
+  return [];
 }
 
-// Seeder dynamique : insère les comptes par défaut dans la base de données s'ils n'y sont pas encore
-export async function seedUsersIfEmpty(): Promise<AppUser[]> {
+// Synchronise la liste des comptes depuis Supabase
+export async function syncUsersFromDatabase(): Promise<AppUser[]> {
   try {
     const existing = await supabaseService.fetchCollection<AppUser>(USERS_COLLECTION);
     if (existing && existing.length > 0) {
@@ -35,53 +30,25 @@ export async function seedUsersIfEmpty(): Promise<AppUser[]> {
       } catch {}
       return existing;
     }
-
-    // Comptes par défaut injectés dynamiquement par le seeder de base de données
-    const defaultAdmin: AppUser = {
-      id: 'user-admin-citrine-mob',
-      name: 'Citrine Mobilité',
-      email: 'citrinemobilite@gmail.com',
-      role: 'administrateur',
-      status: 'actif',
-      phone: '+237 600 000 099',
-      authMethod: 'password',
-      department: 'Direction Générale',
-      passwordHash: 'pbkdf2:c623b3faebf9ba3c38f47273a303e218:5beb725b10c47a811cac27ba53cb762d2ff94af8cc847520aabda912c9ee9424',
-      createdAt: new Date().toISOString()
-    };
-
-    const defaultEmployee: AppUser = {
-      id: 'usr-emp-landrymouns',
-      name: 'Landry Moutongo',
-      email: 'landrymouns@gmail.com',
-      role: 'employé',
-      status: 'actif',
-      phone: '+237 600 000 001',
-      authMethod: 'password',
-      department: 'Logistique & Terrain',
-      passwordHash: 'pbkdf2:5f4af53c9702106b1487e4289c2ef906:a54d68de1d57dc115a8689d6c2bcdd6340f97b511f24cad526ead492a75327d5',
-      createdAt: new Date().toISOString()
-    };
-
-    const seeded = [defaultAdmin, defaultEmployee, ...rawUsers];
-    for (const u of seeded) {
-      await saveUser(u);
-    }
-    return seeded;
+    return getStoredUsers();
   } catch (err) {
-    console.warn('Seed users error:', err);
+    console.warn('[userService] Récupération utilisateurs depuis BD:', err);
     return getStoredUsers();
   }
 }
 
+export const seedUsersIfEmpty = syncUsersFromDatabase;
+
 // Subscribe to real-time users collection via Supabase Realtime & LocalStorage
 export function subscribeToUsers(callback: (users: AppUser[]) => void) {
   const localList = getStoredUsers();
-  callback(localList);
+  if (localList.length > 0) {
+    callback(localList);
+  }
 
-  seedUsersIfEmpty().then((seeded) => {
-    if (seeded && seeded.length > 0) {
-      callback(seeded);
+  syncUsersFromDatabase().then((dbUsers) => {
+    if (dbUsers && dbUsers.length > 0) {
+      callback(dbUsers);
     }
   });
 

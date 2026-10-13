@@ -46,19 +46,38 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
   const VALID_EMPLOYEE_SUBTABS = ['clocking', 'presences', 'incidents', 'leaves', 'salaries', 'loans', 'tasks', 'alerts', 'profile', 'install_pwa'] as const;
   type EmployeeSubTab = typeof VALID_EMPLOYEE_SUBTABS[number];
 
-  const foundEmp = employees.find(
-    (emp) => emp.email?.toLowerCase() === currentUser?.email?.toLowerCase() || emp.id === currentUser?.id || emp.name === currentUser?.name
-  );
+  const foundEmp = employees.find((emp) => {
+    if (!currentUser) return false;
+    const curEmail = currentUser.email?.toLowerCase().trim();
+    const curId = String(currentUser.id || '').trim();
+    const curEmpId = currentUser.employeeId ? String(currentUser.employeeId).trim() : '';
+
+    if (curEmail && emp.email?.toLowerCase().trim() === curEmail) return true;
+    if (curEmpId && (String(emp.id) === curEmpId || emp.uid === curEmpId)) return true;
+    if (emp.userId && String(emp.userId) === curId) return true;
+    if (String(emp.id) === curId) return true;
+    if (emp.name && currentUser.name && emp.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase()) return true;
+    return false;
+  });
 
   const employeeProfile: Employee = {
     id: foundEmp?.id || currentUser?.id || 'unknown',
+    uid: foundEmp?.uid,
+    _dbId: foundEmp?._dbId,
+    userId: foundEmp?.userId || currentUser?.id,
+    roleId: foundEmp?.roleId,
+    managerId: foundEmp?.managerId,
     name: currentUser?.name || foundEmp?.name || 'Collaborateur',
+    firstName: foundEmp?.firstName,
+    lastName: foundEmp?.lastName,
     email: currentUser?.email || foundEmp?.email || '',
     roleType: (foundEmp?.roleType || currentUser?.role || 'employé') as any,
     department: currentUser?.department || foundEmp?.department || 'Général',
+    position: foundEmp?.position || (foundEmp?.roleType as string),
     avatarUrl: currentUser?.avatarUrl || foundEmp?.avatarUrl || '',
     phone: currentUser?.phone || foundEmp?.phone || '',
     status: foundEmp?.status || 'en_poste',
+    employmentStatus: foundEmp?.employmentStatus || 'en_poste',
     hireDate: foundEmp?.hireDate || '2025-01-01',
     salary: foundEmp?.salary || 0,
   };
@@ -84,7 +103,15 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
       const deletedSet = new Set(JSON.parse(localStorage.getItem('citrine_deleted_alerts_ids') || '[]'));
       const customAlerts = JSON.parse(localStorage.getItem('citrine_custom_alerts_list') || '[]');
       
-      const myIds = [employeeProfile.id, currentUser?.id, (employeeProfile as any).code].filter(Boolean).map(s => String(s).trim().toLowerCase());
+      const myIds = [
+        employeeProfile.id,
+        employeeProfile.uid,
+        employeeProfile._dbId,
+        currentUser?.id,
+        currentUser?.employeeId,
+        (currentUser as any)?.uid,
+        (employeeProfile as any).code
+      ].filter(Boolean).map(s => String(s).trim().toLowerCase());
       const myNames = [employeeProfile.name, currentUser?.name].filter(Boolean).map(s => String(s).trim().toLowerCase());
       const myEmails = [employeeProfile.email, currentUser?.email].filter(Boolean).map(s => String(s).trim().toLowerCase());
 

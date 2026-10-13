@@ -59,9 +59,7 @@ export async function recordConnectionLog(data: {
 
   // 2. Synchronisation non-bloquante avec Supabase
   Promise.race([
-    supabaseAdmin.from('connection_logs').upsert({
-      doc_id: newLog.id,
-      user_id: newLog.userId,
+    supabaseAdmin.from('connection_logs').insert({
       user_name: newLog.userName,
       user_email: newLog.userEmail,
       timestamp: newLog.timestamp,
@@ -71,7 +69,7 @@ export async function recordConnectionLog(data: {
       status: newLog.status,
       details: newLog.details,
       raw_data: newLog
-    }, { onConflict: 'doc_id' }),
+    }),
     new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
   ]).catch(() => {});
 

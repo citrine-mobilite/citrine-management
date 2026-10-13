@@ -21,7 +21,6 @@ import {
 import { subscribeToCollection, subscribeToDocument, saveDocument, deleteDocument, getCollection, COLLECTIONS } from '../services/dataService';
 import { subscribeToUsers } from '../services/userService';
 import { cloudSqlService } from '../services/cloudSqlService';
-import { INITIAL_SEEDED_EMPLOYEES } from '../services/dbInitService';
 import { safeStorage } from '../utils/safeStorage';
 import { CITRINE_DEFAULT_LOGO_BASE64 } from '../assets/citrineLogoBase64';
 
@@ -77,7 +76,7 @@ export function useAppInitialData() {
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {}
-    return INITIAL_SEEDED_EMPLOYEES || [];
+    return [];
   });
 
   const [presences, setPresences] = useState<Presence[]>(() => {
@@ -183,7 +182,7 @@ export function useAppInitialData() {
     } catch {}
 
     for (const emp of updated) {
-      const existing = employees.find((e) => e.id === emp.id);
+      const existing = employees.find((e) => e.id === emp.id || (e.uid && emp.uid && e.uid === emp.uid));
       if (!existing || JSON.stringify(existing) !== JSON.stringify(emp)) {
         try {
           await saveDocument(COLLECTIONS.EMPLOYEES, emp);
@@ -198,16 +197,19 @@ export function useAppInitialData() {
       }
     }
     for (const emp of employees) {
-      if (!updated.some((e) => e.id === emp.id)) {
-        try {
-          await deleteDocument(COLLECTIONS.EMPLOYEES, emp.id);
-        } catch (e) {
-          console.warn('Supabase delete employee notice:', e);
-        }
-        try {
-          await cloudSqlService.deleteDocument(COLLECTIONS.EMPLOYEES, emp.id);
-        } catch (e) {
-          console.warn('Cloud SQL delete employee notice:', e);
+      if (!updated.some((e) => e.id === emp.id || (e.uid && emp.uid && e.uid === emp.uid))) {
+        const idToDelete = emp.id || emp.uid;
+        if (idToDelete) {
+          try {
+            await deleteDocument(COLLECTIONS.EMPLOYEES, String(idToDelete));
+          } catch (e) {
+            console.warn('Supabase delete employee notice:', e);
+          }
+          try {
+            await cloudSqlService.deleteDocument(COLLECTIONS.EMPLOYEES, String(idToDelete));
+          } catch (e) {
+            console.warn('Cloud SQL delete employee notice:', e);
+          }
         }
       }
     }

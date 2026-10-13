@@ -18,6 +18,7 @@ import { RecruitmentKpiCards } from './RecruitmentKpiCards';
 import { CandidateDetailModal } from './CandidateDetailModal';
 import { NewJobOfferModal } from './NewJobOfferModal';
 import { NewCandidateModal } from './NewCandidateModal';
+import { generateUuidV4 } from '../../services/employeeService';
 import { RecruitmentOffersView } from './RecruitmentOffersView';
 import { RecruitmentInterviewsView } from './RecruitmentInterviewsView';
 import { RecruitmentApplicationsView, getStageBadge } from './RecruitmentApplicationsView';
@@ -151,6 +152,7 @@ export const RecruitmentPanel: React.FC<RecruitmentPanelProps> = ({
 
     const newEmployee: Employee = {
       id: `emp-${Date.now()}`,
+      uid: generateUuidV4(),
       name: app.candidateName,
       firstName,
       lastName,
@@ -160,6 +162,7 @@ export const RecruitmentPanel: React.FC<RecruitmentPanelProps> = ({
       role: app.jobOfferTitle.toLowerCase().includes('chauffeur') ? 'Chauffeur VTC' : 'Agent Logistique',
       department: 'Logistique & Exploitation',
       status: 'en_poste',
+      employmentStatus: 'en_poste',
       hireDate: new Date().toISOString().split('T')[0],
       salary: 180000,
       avatarUrl: '',

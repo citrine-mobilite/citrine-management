@@ -72,11 +72,14 @@ export function subscribeToDocument<T>(
   const table = mapCollectionToTable(collectionName);
   const channelName = `doc_sub_${table}_${docId}_${Date.now()}`;
   
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(docId);
+  const filter = isUuid ? `uid=eq.${docId}` : (/^\d+$/.test(docId) ? `id=eq.${docId}` : undefined);
+
   const channel = supabase
     .channel(channelName)
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table, filter: `doc_id=eq.${docId}` },
+      filter ? { event: '*', schema: 'public', table, filter } : { event: '*', schema: 'public', table },
       (payload) => {
         if (isCancelled) return;
         if (payload.new && typeof payload.new === 'object') {

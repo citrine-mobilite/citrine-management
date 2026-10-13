@@ -1,167 +1,89 @@
 -- ==============================================================================
--- CITRINE MANAGEMENT - JEU DE DONNÉES DE DÉPART (SEEDING) POUR SUPABASE
--- Project ID: svvgziqcdahkgyugqlvk
--- Exécutez ce script dans votre éditeur SQL Supabase après supabase_schema.sql :
--- https://supabase.com/dashboard/project/svvgziqcdahkgyugqlvk/sql/new
+-- CITRINE MANAGEMENT - JEU DE DONNÉES DE DÉPART (SEEDING) IDEMPOTENT SUPABASE
+-- - id  : Auto-incrémenté (BIGSERIAL)
+-- - uid : UUID v4 (gen_random_uuid())
+-- - Sécurisé : AUCUN mot de passe stocké en clair (gestion par Supabase Auth)
+-- - Idempotent : AUCUN TRUNCATE ni suppression, ré-exécutable à chaud sans perte de données
+-- - Cible : Configuration du compte Super Administrateur / IT pour citrinemobilite@gmail.com
 -- ==============================================================================
 
-INSERT INTO public.departments (doc_id, name, code, description, color, icon_name, raw_data) VALUES ('dept-exec', 'Direction Générale & Stratégie', 'DG', 'Pilotage stratégique, gouvernance et investissements', 'slate', '', '{"id":"dept-exec","name":"Direction Générale & Stratégie","code":"DG","description":"Pilotage stratégique, gouvernance et investissements","color":"slate","parentDepartmentId":null}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.departments (doc_id, name, code, description, color, icon_name, raw_data) VALUES ('dept-ops', 'Opérations, Flotte & Logistique', 'OPS', 'Gestion de la flotte, chauffeurs, régulation et terrain', 'emerald', '', '{"id":"dept-ops","name":"Opérations, Flotte & Logistique","code":"OPS","description":"Gestion de la flotte, chauffeurs, régulation et terrain","color":"emerald","parentDepartmentId":"dept-exec"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.departments (doc_id, name, code, description, color, icon_name, raw_data) VALUES ('dept-tech', 'Technologie & Systèmes d''Information', 'TECH', 'Développement d’applications, infrastructure et données', 'indigo', '', '{"id":"dept-tech","name":"Technologie & Systèmes d''Information","code":"TECH","description":"Développement d’applications, infrastructure et données","color":"indigo","parentDepartmentId":"dept-exec"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.departments (doc_id, name, code, description, color, icon_name, raw_data) VALUES ('dept-rh', 'Ressources Humaines & Juridique', 'RH', 'Gestion des talents, paie, contrats et conformité', 'amber', '', '{"id":"dept-rh","name":"Ressources Humaines & Juridique","code":"RH","description":"Gestion des talents, paie, contrats et conformité","color":"amber","parentDepartmentId":"dept-exec"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.departments (doc_id, name, code, description, color, icon_name, raw_data) VALUES ('dept-fin', 'Finance & Contrôle de Gestion', 'FIN', 'Trésorerie, comptabilité, recouvrement et budgets', 'cyan', '', '{"id":"dept-fin","name":"Finance & Contrôle de Gestion","code":"FIN","description":"Trésorerie, comptabilité, recouvrement et budgets","color":"cyan","parentDepartmentId":"dept-exec"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('user-admin-citrine-mob', 'user-admin-citrine-mob', 'citrinemobilite@gmail.com', 'Citrine Mobilité', 'administrateur', 'actif', '{"id":"user-admin-citrine-mob","role":"administrateur","department":"Direction Générale","name":"Citrine Mobilité","status":"actif","createdAt":"2026-01-01T00:00:00.000Z","email":"citrinemobilite@gmail.com","phone":"+237 600 000 099"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('user-admin-1', 'user-admin-1', 'landrymouns@gmail.com', 'Landry Moutongo', 'employé', 'actif', '{"id":"user-admin-1","role":"employé","department":"Logistique & Terrain","name":"Landry Moutongo","status":"actif","createdAt":"2026-01-01T00:00:00.000Z","email":"landrymouns@gmail.com","phone":"+237 600 000 001"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('user-admin-2', 'user-admin-2', 'admin@citrine.cm', 'Administrateur Citrine', 'administrateur', 'actif', '{"id":"user-admin-2","department":"Direction Générale","createdAt":"2026-01-01T00:00:00.000Z","phone":"+237 600 000 000","status":"actif","role":"administrateur","name":"Administrateur Citrine","email":"admin@citrine.cm"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('user-admin-3', 'user-admin-3', 'doloreskenne6@gmail.com', 'Dolores Kenne', 'administrateur', 'actif', '{"id":"user-admin-3","createdAt":"2026-01-01T00:00:00.000Z","email":"doloreskenne6@gmail.com","status":"actif","phone":"+237 600 000 002","name":"Dolores Kenne","role":"administrateur","department":"Direction Générale"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('user-admin-4', 'user-admin-4', 'landrymoutongo97@gmail.com', 'Landry Moutongo 97', 'administrateur', 'actif', '{"id":"user-admin-4","phone":"+237 600 000 003","createdAt":"2026-01-01T00:00:00.000Z","department":"Direction Générale","email":"landrymoutongo97@gmail.com","status":"actif","name":"Landry Moutongo 97","role":"administrateur"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('user-emp-1', 'user-emp-1', 'employe@citrine.cm', 'Employé Terrain', 'employé', 'actif', '{"id":"user-emp-1","status":"actif","phone":"+237 600 000 005","createdAt":"2026-01-01T00:00:00.000Z","email":"employe@citrine.cm","department":"Logistique & Terrain","name":"Employé Terrain","role":"employé"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('user-manager-1', 'user-manager-1', 'responsable@citrine.cm', 'Responsable Opérations', 'responsable', 'actif', '{"id":"user-manager-1","createdAt":"2026-01-01T00:00:00.000Z","phone":"+237 600 000 004","department":"Opérations","name":"Responsable Opérations","status":"actif","role":"responsable","email":"responsable@citrine.cm"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('user-super-admin', 'user-super-admin', 'admin@admin.com', 'Super Administrateur', 'administrateur', 'actif', '{"id":"user-super-admin","status":"actif","department":"Direction Générale","role":"administrateur","name":"Super Administrateur","phone":"+237 600 000 000","email":"admin@admin.com","createdAt":"2026-01-01T00:00:00.000Z"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('usr-admin-1', 'usr-admin-1', 'landrymoutongo97@gmail.com', 'Landry Moutongo', 'administrateur', 'actif', '{"id":"usr-admin-1","role":"administrateur","lastLoginAt":"2026-07-24T17:00:00.000Z","createdAt":"2026-01-01T08:00:00.000Z","avatarUrl":"https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80","name":"Landry Moutongo","email":"landrymoutongo97@gmail.com","authMethod":"google","status":"actif","department":"Direction Générale"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('usr-admin-2', 'usr-admin-2', 'doloreskenne6@gmail.com', 'Dolores Kenne', 'administrateur', 'actif', '{"id":"usr-admin-2","lastLoginAt":"2026-07-24T16:30:00.000Z","createdAt":"2026-01-01T08:00:00.000Z","role":"administrateur","status":"actif","authMethod":"google","email":"doloreskenne6@gmail.com","department":"Direction RH","name":"Dolores Kenne","avatarUrl":"https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('usr-admin-3', 'usr-admin-3', 'landrymouns@gmail.com', 'mouns eric', 'administrateur', 'actif', '{"id":"usr-admin-3","phone":"+237682891079","lastLoginAt":"2026-07-24T17:15:00.000Z","name":"mouns eric","avatarUrl":"https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&fit=crop&q=80","authMethod":"google","email":"landrymouns@gmail.com","department":"Direction Technique","createdAt":"2026-01-01T08:00:00.000Z","role":"administrateur","status":"actif"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('usr-emp-1785638247317', 'usr-emp-1785638247317', 'landrymouns@gmail.com', 'Landry Moutongo', 'employé', 'actif', '{"id":"usr-emp-1785638247317","role":"employé","department":"Logistique & Terrain","authMethod":"password","createdAt":"2026-08-02T02:37:27.320Z","phone":"+237 600 000 001","avatarUrl":"https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&fit=crop&q=80","name":"Landry Moutongo","email":"landrymouns@gmail.com","status":"actif"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.users (doc_id, uid, email, name, role, status, raw_data) VALUES ('usr-emp-1785861154330', 'usr-emp-1785861154330', 'cmr.backendev@gmail.com', 'Test landry', 'employé', 'actif', '{"id":"usr-emp-1785861154330","department":"informaticien","createdAt":"2026-08-04T16:32:34.330Z","authMethod":"password","status":"actif","role":"employé","email":"cmr.backendev@gmail.com","name":"Test landry","phone":"682891079","avatarUrl":""}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.employees (doc_id, name, email, phone, role, department, position, status, salary, raw_data) VALUES ('emp-1', 'Kenne Londo Doleres', 'Doleres.Kenne@citrine-mobilite.com', '+237 655500443', 'Employé', '', '', 'en_poste', 200000, '{"id":"emp-1","salary":200000,"hireDate":"2026-06-01","email":"Doleres.Kenne@citrine-mobilite.com","roleType":"gestionnaire de projet assistant","status":"en_poste","birthDate":"2000-05-01","phone":"+237 655500443","avatarUrl":"","name":"Kenne Londo Doleres"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.employees (doc_id, name, email, phone, role, department, position, status, salary, raw_data) VALUES ('emp-1785638247317', 'Landry Moutongo', 'landrymouns@gmail.com', '+237 600 000 001', 'Employé', 'Logistique & Terrain', 'Collaborateur Opérationnel', 'en_poste', 150000, '{"id":"emp-1785638247317","roleType":"employé","department":"Logistique & Terrain","position":"Collaborateur Opérationnel","status":"en_poste","email":"landrymouns@gmail.com","name":"Landry Moutongo","salary":150000,"phone":"+237 600 000 001","avatarUrl":"https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&fit=crop&q=80","hireDate":"2026-07-08","birthDate":"1995-01-01"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.employees (doc_id, name, email, phone, role, department, position, status, salary, raw_data) VALUES ('emp-1785861154330', 'Test landry', 'cmr.backendev@gmail.com', '682891079', 'Employé', '', '', 'en_poste', 85000, '{"id":"emp-1785861154330","roleType":"informaticien","status":"en_poste","email":"cmr.backendev@gmail.com","salary":85000,"birthDate":"2026-08-04","hireDate":"2026-08-04","phone":"682891079","name":"Test landry","avatarUrl":""}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.tasks (doc_id, title, description, status, priority, assigned_to, department, due_date, raw_data) VALUES ('task-1785778644074', 'test', 'test', 'todo', 'medium', '', '', '', '{"id":"task-1785778644074","incidents":[],"subtasks":[],"employeeId":"emp-1","priority":"medium","attachments":[],"comments":[{"id":"comment-sys-1785778644074-hjb2j","timestamp":"2026-08-03T17:37:24.074Z","author":"Système (Administrateur)","text":"🆕 Tâche créée de manière planifiée par Administrateur"}],"date":"2026-07-08","description":"test","status":"todo","time":"09:00","title":"test"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.task_projects (doc_id, name, description, color, icon, raw_data) VALUES ('proj_001', 'Déploiement Bornes QR Japoma & Akwa', 'Installation des tablettes de pointage autonome', '#2A7B76', 'QrCode', '{"id":"proj_001","name":"Déploiement Bornes QR Japoma & Akwa","description":"Installation des tablettes de pointage autonome","color":"#2A7B76","icon":"QrCode"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.task_projects (doc_id, name, description, color, icon, raw_data) VALUES ('proj_002', 'Certification HSE Norme Transport 2026', 'Mise en conformité du registre hygiène et sécurité', '#D97706', 'ShieldCheck', '{"id":"proj_002","name":"Certification HSE Norme Transport 2026","description":"Mise en conformité du registre hygiène et sécurité","color":"#D97706","icon":"ShieldCheck"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.task_projects (doc_id, name, description, color, icon, raw_data) VALUES ('proj_003', 'Refonte Partenariats Flotte & Motomen', 'Standardisation des contrats et tarifications', '#4F46E5', 'Handshake', '{"id":"proj_003","name":"Refonte Partenariats Flotte & Motomen","description":"Standardisation des contrats et tarifications","color":"#4F46E5","icon":"Handshake"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.reminders (doc_id, title, note, date, time, raw_data) VALUES ('rem-1', 'Début officiel de la journée de pointage HERO Cab', 'Début officiel de la journée de pointage HERO Cab', '', '08:00', '{"id":"rem-1","time":"08:00","note":"Début officiel de la journée de pointage HERO Cab","triggerBefore":"5m","enabled":true,"soundEnabled":true,"employeeId":"all"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.reminders (doc_id, title, note, date, time, raw_data) VALUES ('rem-2', 'Pause déjeuner équipe opérationnelle', 'Pause déjeuner équipe opérationnelle', '', '12:30', '{"id":"rem-2","time":"12:30","note":"Pause déjeuner équipe opérationnelle","triggerBefore":"none","enabled":true,"soundEnabled":true,"employeeId":"all"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.reminders (doc_id, title, note, date, time, raw_data) VALUES ('rem-3', 'Clôture des pointages et rapport journalier', 'Clôture des pointages et rapport journalier', '', '17:00', '{"id":"rem-3","time":"17:00","note":"Clôture des pointages et rapport journalier","triggerBefore":"15m","enabled":true,"soundEnabled":true,"employeeId":"all"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.presences (doc_id, employee_id, date, status, arrival_time, departure_time, clocking_method, raw_data) VALUES ('p-1785861993442', 'emp-1', '2026-08-04', 'late', '08:00', '22:19', 'manual_admin', '{"id":"p-1785861993442","arrivalTime":"08:00","departureTime":"22:19","date":"2026-08-04","status":"late","clockingMethod":"manual_admin","latitude":4.0157005023600805,"clockLocations":{"departure":{"time":"22:19","zoneName":"Bureau Principal - Douala III","method":"manual_admin","latitude":4.0157005023600805,"siteName":"Bureau Principal - Douala III","longitude":9.819983205664192},"arrival":{"time":"08:10","zoneName":"Bureau Principal - Douala III","longitude":9.819983205664192,"method":"manual_admin","siteName":"Bureau Principal - Douala III","latitude":4.0157005023600805}},"pauseStart":null,"siteName":"Bureau Principal - Douala III","departureReason":"Sortie tardive enregistrée après 17h30","employeeId":"emp-1","updatedAt":"2026-09-18T05:26:14.245Z","pauseEnd":null,"departureReasonStatus":"rejected","longitude":9.819983205664192,"location":"Bureau Principal - Douala III (Douala III, Cameroun (base))"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.presences (doc_id, employee_id, date, status, arrival_time, departure_time, clocking_method, raw_data) VALUES ('p-1785878641828', 'emp-1785638247317', '2026-08-04', 'late', '22:24', '22:24', 'manual_admin', '{"id":"p-1785878641828","clockingMethod":"manual_admin","location":"Bureau Principal - Douala III (Douala III, Cameroun (base))","clockLocations":{"departure":{"time":"22:24","longitude":9.819983205664192,"method":"manual_admin","siteName":"Bureau Principal - Douala III","latitude":4.0157005023600805,"zoneName":"Bureau Principal - Douala III"},"arrival":{"zoneName":"Bureau Principal - Douala III","time":"22:24","siteName":"Bureau Principal - Douala III","latitude":4.0157005023600805,"longitude":9.819983205664192,"method":"manual_admin"}},"date":"2026-08-04","siteName":"Bureau Principal - Douala III","departureReason":"Sortie tardive enregistrée après 17h30","pauseEnd":null,"departureTime":"22:24","employeeId":"emp-1785638247317","arrivalTime":"22:24","latitude":4.0157005023600805,"pauseStart":null,"longitude":9.819983205664192,"departureReasonStatus":"rejected","status":"late","updatedAt":"2026-09-18T05:26:12.546Z"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.presences (doc_id, employee_id, date, status, arrival_time, departure_time, clocking_method, raw_data) VALUES ('p-1785878654823', 'emp-1785861154330', '2026-08-04', 'late', '22:24', '22:24', 'manual_admin', '{"id":"p-1785878654823","departureReason":"Sortie tardive enregistrée après 17h30","pauseEnd":null,"longitude":9.819983205664192,"status":"late","siteName":"Bureau Principal - Douala III","departureTime":"22:24","clockingMethod":"manual_admin","location":"Bureau Principal - Douala III (Douala III, Cameroun (base))","pauseStart":null,"employeeId":"emp-1785861154330","clockLocations":{"departure":{"time":"22:24","longitude":9.819983205664192,"latitude":4.0157005023600805,"siteName":"Bureau Principal - Douala III","zoneName":"Bureau Principal - Douala III","method":"manual_admin"},"arrival":{"longitude":9.819983205664192,"siteName":"Bureau Principal - Douala III","latitude":4.0157005023600805,"method":"manual_admin","zoneName":"Bureau Principal - Douala III","time":"22:24"}},"updatedAt":"2026-09-18T05:26:16.104Z","date":"2026-08-04","arrivalTime":"22:24","latitude":4.0157005023600805,"departureReasonStatus":"rejected"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.inventory (doc_id, name, designation, category, quantity, status, location, unit_price, raw_data) VALUES ('inv-1', 'Ordinateur Portable Dell Latitude 5420', 'Ordinateur Portable Dell Latitude 5420', 'Matériel Informatique', 9, 'neuf', 'Bureau Principal HQ - Salle 102', 650000, '{"id":"inv-1","reference":"INV-2026-001","status":"neuf","createdAt":"2026-08-02T02:39:11.788Z","updatedAt":"2026-08-03T08:03:24.374Z","quantity":9,"location":"Bureau Principal HQ - Salle 102","assignments":[{"status":"usage","assignedAt":"2026-08-03T08:03:24.374Z","id":"asn-1785744204374-7yn","employeeName":"Kenne Londo Doleres","quantity":1,"employeeId":"emp-1"}],"unitPrice":650000,"designation":"Ordinateur Portable Dell Latitude 5420","category":"Matériel Informatique","notes":"Matériel configuré avec suite bureautique et VPN.","quantitiesByStatus":{"endommage":1,"en_reparation":1,"hors_service":2,"neuf":4,"bon_etat":1,"usage":0},"assignedToId":"emp-1"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.inventory (doc_id, name, designation, category, quantity, status, location, unit_price, raw_data) VALUES ('inv-2', 'Fauteuil de bureau ergonomique Mesh Black', 'Fauteuil de bureau ergonomique Mesh Black', 'Mobilier & Bureau', 12, 'bon_etat', 'Bureau Principal HQ - Open Space', 85000, '{"id":"inv-2","unitPrice":85000,"designation":"Fauteuil de bureau ergonomique Mesh Black","status":"bon_etat","category":"Mobilier & Bureau","quantity":12,"createdAt":"2026-08-02T02:39:11.788Z","updatedAt":"2026-08-02T02:39:11.788Z","location":"Bureau Principal HQ - Open Space","reference":"INV-2026-002","notes":"Acheté en 2025, parfait état de marche."}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.inventory (doc_id, name, designation, category, quantity, status, location, unit_price, raw_data) VALUES ('inv-3', 'Vidéoprojecteur Epson Full HD EB-FH52', 'Vidéoprojecteur Epson Full HD EB-FH52', 'Matériel Informatique', 2, 'usage', 'Salle de Réunion Douala', 380000, '{"id":"inv-3","status":"usage","notes":"Lampe vérifiée en Juin 2026.","designation":"Vidéoprojecteur Epson Full HD EB-FH52","updatedAt":"2026-08-02T02:39:11.788Z","createdAt":"2026-08-02T02:39:11.788Z","reference":"INV-2026-003","unitPrice":380000,"quantity":2,"category":"Matériel Informatique","location":"Salle de Réunion Douala"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.inventory (doc_id, name, designation, category, quantity, status, location, unit_price, raw_data) VALUES ('inv-4', 'Imprimante Multifonction HP LaserJet Pro', 'Imprimante Multifonction HP LaserJet Pro', 'Matériel Informatique', 1, 'en_reparation', 'Atelier Maintenance Akwa', 240000, '{"id":"inv-4","category":"Matériel Informatique","quantity":1,"location":"Atelier Maintenance Akwa","status":"en_reparation","unitPrice":240000,"notes":"Changement du rouleau d''entraînement de papier en cours.","designation":"Imprimante Multifonction HP LaserJet Pro","reference":"INV-2026-004","createdAt":"2026-08-02T02:39:11.788Z","updatedAt":"2026-08-02T02:39:11.788Z"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.partners (doc_id, first_name, last_name, phone, email, category, status, address, raw_data) VALUES ('part-1', 'Jean-Paul', 'Fotso', '+237 699 11 22 33', 'jeanpaul.fotso@gmail.com', 'Motoman', 'actif', 'Douala, Makepe', '{"id":"part-1","lastName":"Fotso","firstName":"Jean-Paul","phone":"+237 699 11 22 33","email":"jeanpaul.fotso@gmail.com","category":"Motoman","status":"actif","address":"Douala, Makepe","notes":"Chauffeur moto principal pour livraisons urgentes centre-ville.","createdAt":"2026-08-03T21:15:22.603Z"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.partners (doc_id, first_name, last_name, phone, email, category, status, address, raw_data) VALUES ('part-2', 'Emmanuel', 'Mvondo', '+237 677 88 99 00', 'emmanuel.mvondo@yahoo.fr', 'Taximan', 'actif', 'Douala, Akwa', '{"id":"part-2","lastName":"Mvondo","firstName":"Emmanuel","phone":"+237 677 88 99 00","email":"emmanuel.mvondo@yahoo.fr","category":"Taximan","status":"actif","address":"Douala, Akwa","notes":"Taxi partenaire courses direction aéroport et réunions clients.","createdAt":"2026-08-03T21:15:22.603Z"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.partners (doc_id, first_name, last_name, phone, email, category, status, address, raw_data) VALUES ('part-3', 'Marie Claire', 'Nkamgang', '+237 655 44 33 22', 'marieclaire@outlook.com', 'Particulier', 'futur_partenaire', 'Yaoundé, Bastos', '{"id":"part-3","lastName":"Nkamgang","firstName":"Marie Claire","phone":"+237 655 44 33 22","email":"marieclaire@outlook.com","category":"Particulier","status":"futur_partenaire","address":"Yaoundé, Bastos","notes":"Prospect intéressé par nos services de sous-traitance administrative.","createdAt":"2026-08-03T21:15:22.603Z"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.partners (doc_id, first_name, last_name, phone, email, category, status, address, raw_data) VALUES ('part-4', 'SARL', 'Global Service', '+237 633 22 11 00', 'contact@globalservice.cm', 'Fournisseur', 'actif', 'Douala, Bonanjo', '{"id":"part-4","lastName":"Global Service","firstName":"SARL","phone":"+237 633 22 11 00","email":"contact@globalservice.cm","category":"Fournisseur","status":"actif","address":"Douala, Bonanjo","notes":"Fournisseur de matériel bureautique et consommables.","createdAt":"2026-08-03T21:15:22.603Z"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.partners (doc_id, first_name, last_name, phone, email, category, status, address, raw_data) VALUES ('part-5', 'Eric', 'Tchap', '+237 688 99 00 11', 'eric.tchap@techservices.cm', 'Prestataire', 'inactif', 'Douala, Bepanda', '{"id":"part-5","lastName":"Tchap","firstName":"Eric","phone":"+237 688 99 00 11","email":"eric.tchap@techservices.cm","category":"Prestataire","status":"inactif","address":"Douala, Bepanda","notes":"Maintenance réseau et câblage informatique.","createdAt":"2026-08-03T21:15:22.603Z"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.company_settings (doc_id, name, company_name, work_start_time, planned_departure_time, raw_data) VALUES ('main_config', 'Citrine', 'Citrine', '08:00', '16:30', '{"id":"main_config","lateThresholdTime":"08:15","enableDocuments":false,"defaultSalary":0,"enablePricing":false,"hqLatitude":0,"hqName":"","allowedOfficeIPs":[],"enableInventory":false,"qrCodeSecret":"","enableLogs":false,"kioskPin":"JS3P-NJJB-5X3U-AV33","enableCommunications":false,"officeWifiSsid":"","hqAddress":"","hqLongitude":0,"workStartTime":"08:00","enableOrgChart":true,"enableDiscipline":true,"enablePartners":false,"siteLocations":[],"enableFinances":false}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.financial_transactions (doc_id, date, type, category, amount, description, recipient_or_source, status, raw_data) VALUES ('tx-1', '2026-10-01', 'revenue', 'Courses & Transports VTC', 650000, 'Recettes journalières flotte Douala Centre', '', 'validated', '{"id":"tx-1","date":"2026-10-01","type":"revenue","category":"Courses & Transports VTC","amount":650000,"description":"Recettes journalières flotte Douala Centre","paymentMethod":"Orange Money / MTN Mobile Money","recordedBy":"Admin"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.financial_transactions (doc_id, date, type, category, amount, description, recipient_or_source, status, raw_data) VALUES ('tx-2', '2026-10-01', 'expense', 'Carburant & Entretien', 120000, 'Approvisionnement carburant 6 véhicules de service', '', 'validated', '{"id":"tx-2","date":"2026-10-01","type":"expense","category":"Carburant & Entretien","amount":120000,"description":"Approvisionnement carburant 6 véhicules de service","paymentMethod":"Espèces / Caisse","recordedBy":"Responsable Flotte"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.salary_payments (doc_id, employee_id, period, base_amount, bonus_amount, deductions, net_amount, status, payment_method, raw_data) VALUES ('pay-juillet-2026-emp-5', 'emp-5', 'Juillet 2026', 1200000, 0, 0, 1200000, 'draft', 'transfer', '{"id":"pay-juillet-2026-emp-5","netAmount":1200000,"employeeId":"emp-5","period":"Juillet 2026","status":"draft","deductions":0,"bonusAmount":0,"advanceAmount":0,"notes":"Généré automatiquement d''après la configuration de base.","paymentMethod":"transfer","baseAmount":1200000}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.job_offers (doc_id, title, department, location, contract_type, openings_count, description, status, raw_data) VALUES ('job-001', 'Superviseur Logistique & Dispatch Flotte', 'Logistique & Exploitation', 'Base Japoma - Douala', 'CDI', 2, 'Supervision des départs/retours, plannings de tournée et coordination chauffeurs.', 'ouvert', '{"id":"job-001","title":"Superviseur Logistique & Dispatch Flotte","department":"Logistique & Exploitation","location":"Base Japoma - Douala","contractType":"CDI","openingsCount":2,"description":"Supervision des départs/retours, plannings de tournée et coordination chauffeurs.","status":"ouvert"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.job_offers (doc_id, title, department, location, contract_type, openings_count, description, status, raw_data) VALUES ('job-002', 'Chauffeur VTC / Livreur Professionnel', 'Opérations Terrain', 'Douala (Akwa / Bonanjo)', 'CDD', 5, 'Transport passagers et livraisons colis entreprises partenaires.', 'en_cours', '{"id":"job-002","title":"Chauffeur VTC / Livreur Professionnel","department":"Opérations Terrain","location":"Douala (Akwa / Bonanjo)","contractType":"CDD","openingsCount":5,"description":"Transport passagers et livraisons colis entreprises partenaires.","status":"en_cours"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.job_offers (doc_id, title, department, location, contract_type, openings_count, description, status, raw_data) VALUES ('job-003', 'Mécanicien Automobile Flotte & VTC', 'Maintenance & Atelier', 'Atelier Japoma', 'CDI', 1, 'Maintenance préventive, diagnostics valise électronique et révisions moteurs.', 'ouvert', '{"id":"job-003","title":"Mécanicien Automobile Flotte & VTC","department":"Maintenance & Atelier","location":"Atelier Japoma","contractType":"CDI","openingsCount":1,"description":"Maintenance préventive, diagnostics valise électronique et révisions moteurs.","status":"ouvert"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.expense_claims (doc_id, reference, employee_id, employee_name, title, amount, category, payment_mode, status, raw_data) VALUES ('exp_001', 'NDF-2026-0012', 'emp_001', 'Michel Tchakounte', 'Frais péage et mission contrôle axe Douala-Kribi', 45000, 'transport', 'orange_money', 'approuve', '{"id":"exp_001","reference":"NDF-2026-0012","employeeId":"emp_001","employeeName":"Michel Tchakounte","title":"Frais péage et mission contrôle axe Douala-Kribi","amount":45000,"category":"transport","paymentMode":"orange_money","status":"approuve"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.expense_claims (doc_id, reference, employee_id, employee_name, title, amount, category, payment_mode, status, raw_data) VALUES ('exp_002', 'NDF-2026-0013', 'emp_002', 'Serge Ndjock', 'Achat ampoules halogènes rechange dépannage nuit', 12500, 'materiel_urgence', 'cash', 'soumis', '{"id":"exp_002","reference":"NDF-2026-0013","employeeId":"emp_002","employeeName":"Serge Ndjock","title":"Achat ampoules halogènes rechange dépannage nuit","amount":12500,"category":"materiel_urgence","paymentMode":"cash","status":"soumis"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.hse_incidents (doc_id, reference, site, type, severity, date, title, description, status, raw_data) VALUES ('hse_001', 'HSE-2026-0004', 'Base Logistique Japoma', 'situation_dangereuse', 'modere', '2026-10-08', 'Sol glissant hydrocarbures zone lavage', 'Traces huile moteur non absorbées près du quai #2.', 'actions_lancees', '{"id":"hse_001","reference":"HSE-2026-0004","site":"Base Logistique Japoma","type":"situation_dangereuse","severity":"modere","date":"2026-10-08","title":"Sol glissant hydrocarbures zone lavage","description":"Traces huile moteur non absorbées près du quai #2.","status":"actions_lancees"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.visitor_logs (doc_id, visitor_name, visitor_company, visitor_phone, site_location, purpose, host_employee_name, badge_number, check_in_date, check_in_time, status, raw_data) VALUES ('vis_001', 'Armand Bilong', 'TotalEnergies Cameroun', '+237 690 12 34 56', 'Siège Akwa', 'rdv_commercial', 'Direction Générale', 'VIS-04', '2026-10-12', '09:30', 'sur_site', '{"id":"vis_001","visitorName":"Armand Bilong","visitorCompany":"TotalEnergies Cameroun","visitorPhone":"+237 690 12 34 56","siteLocation":"Siège Akwa","purpose":"rdv_commercial","hostEmployeeName":"Direction Générale","badgeNumber":"VIS-04","checkInDate":"2026-10-12","checkInTime":"09:30","status":"sur_site"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.idea_suggestions (doc_id, title, description, category, is_anonymous, author_name, status, likes_count, raw_data) VALUES ('idea_001', 'Borne de recharge solaire pour motomen à Japoma', 'Installer 2 panneaux solaires avec multiprises pour permettre aux motomen de recharger leurs smartphones.', 'innovation_logistique', false, 'Boris Fomekong', 'a_letude', 8, '{"id":"idea_001","title":"Borne de recharge solaire pour motomen à Japoma","description":"Installer 2 panneaux solaires avec multiprises pour permettre aux motomen de recharger leurs smartphones.","category":"innovation_logistique","isAnonymous":false,"authorName":"Boris Fomekong","status":"a_letude","likesCount":8}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('email-welcome-1785638250698', 'Bienvenue sur ProcessFlow - Vos identifiants de connexion', 'Bonjour mouns eric,
-
-Votre compte de connexion ProcessFlow a été créé par l''administration.
-
-Voici vos identifiants d''accès :
-• Adresse e-mail : landrymouns@gmail.com
-• Mot de passe provisoire : Passepveou!2026
-
-Vous pourrez modifier votre mot de passe à tout moment depuis votre Espace Collaborateur.
-
-Cordialement,
-L''Équipe RH', 'email', false, '{"id":"email-welcome-1785638250698","timestamp":"2026-08-02T02:37:30.698Z","type":"email","title":"Bienvenue sur ProcessFlow - Vos identifiants de connexion","content":"Bonjour mouns eric,\n\nVotre compte de connexion ProcessFlow a été créé par l''administration.\n\nVoici vos identifiants d''accès :\n• Adresse e-mail : landrymouns@gmail.com\n• Mot de passe provisoire : Passepveou!2026\n\nVous pourrez modifier votre mot de passe à tout moment depuis votre Espace Collaborateur.\n\nCordialement,\nL''Équipe RH","recipient":"mouns eric <landrymouns@gmail.com>","read":true,"payload":"{\n  \"userId\": \"usr-emp-1785638247317\",\n  \"email\": \"landrymouns@gmail.com\",\n  \"password\": \"Passepveou!2026\",\n  \"role\": \"employé\"\n}"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('email-welcome-1785861351456', 'Bienvenue sur Citrine Management - Vos identifiants de connexion', 'Bonjour Test landry,
-
-Votre compte de connexion au portail Citrine Management a été créé par l''administration.
-
-Voici vos informations de connexion d''accès :
-• Lien du site : https://process-flow-jet.vercel.app
-• Adresse e-mail : cmr.backendev@gmail.com
-• Mot de passe généré automatiquement : Passihbce2!2026
-• Rôle attribué : EMPLOYÉ
-
-Vous pourrez modifier votre mot de passe à tout moment depuis votre profil sur le site.
-
-Cordialement,
-L''Équipe RH', 'email', false, '{"id":"email-welcome-1785861351456","type":"email","title":"Bienvenue sur Citrine Management - Vos identifiants de connexion","timestamp":"2026-08-04T16:35:51.456Z","payload":"{\n  \"siteUrl\": \"https://process-flow-jet.vercel.app\",\n  \"userId\": \"usr-emp-1785861154330\",\n  \"email\": \"cmr.backendev@gmail.com\",\n  \"password\": \"Passihbce2!2026\",\n  \"role\": \"employé\"\n}","recipient":"Test landry <cmr.backendev@gmail.com>","read":true,"content":"Bonjour Test landry,\n\nVotre compte de connexion au portail Citrine Management a été créé par l''administration.\n\nVoici vos informations de connexion d''accès :\n• Lien du site : https://process-flow-jet.vercel.app\n• Adresse e-mail : cmr.backendev@gmail.com\n• Mot de passe généré automatiquement : Passihbce2!2026\n• Rôle attribué : EMPLOYÉ\n\nVous pourrez modifier votre mot de passe à tout moment depuis votre profil sur le site.\n\nCordialement,\nL''Équipe RH"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('log-badge-1785484037129', 'Badgeage enregistré - Heure d''arrivée (Badgeage) (Kenne Londo Doleres)', 'Kenne Londo Doleres a badgé [Heure d''arrivée (Badgeage)] à 08:47 le 2026-07-31.', 'whatsapp', false, '{"id":"log-badge-1785484037129","recipient":"+237 655500443","type":"whatsapp","title":"Badgeage enregistré - Heure d''arrivée (Badgeage) (Kenne Londo Doleres)","read":true,"content":"Kenne Londo Doleres a badgé [Heure d''arrivée (Badgeage)] à 08:47 le 2026-07-31.","payload":"{\n  \"event\": \"employee_badge\",\n  \"employeeId\": \"emp-1\",\n  \"employeeName\": \"Kenne Londo Doleres\",\n  \"action\": \"arrival\",\n  \"time\": \"08:47\",\n  \"date\": \"2026-07-31\",\n  \"location\": \"Bureau Principal - Douala III\"\n}","timestamp":"2026-07-31T07:47:17.129Z"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('log-badge-1785700195470', 'Badgeage enregistré - Heure d''arrivée (Badgeage) (Kenne Londo Doleres)', 'Kenne Londo Doleres a badgé [Heure d''arrivée (Badgeage)] à 20:49 le 2026-08-02.', 'whatsapp', false, '{"id":"log-badge-1785700195470","recipient":"+237 655500443","read":true,"title":"Badgeage enregistré - Heure d''arrivée (Badgeage) (Kenne Londo Doleres)","payload":"{\n  \"event\": \"employee_badge\",\n  \"employeeId\": \"emp-1\",\n  \"employeeName\": \"Kenne Londo Doleres\",\n  \"action\": \"arrival\",\n  \"time\": \"20:49\",\n  \"date\": \"2026-08-02\",\n  \"location\": \"Bureau Principal - Douala III\"\n}","content":"Kenne Londo Doleres a badgé [Heure d''arrivée (Badgeage)] à 20:49 le 2026-08-02.","timestamp":"2026-08-02T19:49:55.470Z","type":"whatsapp"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('log-badge-1785744189223', 'Badgeage enregistré - Heure d''arrivée (Badgeage) (Kenne Londo Doleres)', 'Kenne Londo Doleres a badgé [Heure d''arrivée (Badgeage)] à 09:03 le 2026-08-03.', 'whatsapp', false, '{"id":"log-badge-1785744189223","type":"whatsapp","recipient":"+237 655500443","content":"Kenne Londo Doleres a badgé [Heure d''arrivée (Badgeage)] à 09:03 le 2026-08-03.","read":true,"timestamp":"2026-08-03T08:03:09.223Z","title":"Badgeage enregistré - Heure d''arrivée (Badgeage) (Kenne Londo Doleres)","payload":"{\n  \"event\": \"employee_badge\",\n  \"employeeId\": \"emp-1\",\n  \"employeeName\": \"Kenne Londo Doleres\",\n  \"action\": \"arrival\",\n  \"time\": \"09:03\",\n  \"date\": \"2026-08-03\",\n  \"location\": \"Bureau Principal - Douala III\"\n}"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('log-badge-1785861005212', '⚠️ Retard Constaté : Kenne Londo Doleres', 'Bonjour Kenne Londo Doleres, un retard d''arrivée a été consigné à 17:30 pour le 2026-08-04 (seuil : 08:15).', 'whatsapp', false, '{"id":"log-badge-1785861005212","read":false,"recipient":"+237 655500443","timestamp":"2026-08-04T16:30:05.212Z","title":"⚠️ Retard Constaté : Kenne Londo Doleres","payload":"{\n  \"event\": \"late_arrival\",\n  \"employeeId\": \"emp-1\",\n  \"employeeName\": \"Kenne Londo Doleres\",\n  \"action\": \"arrival\",\n  \"time\": \"17:30\",\n  \"date\": \"2026-08-04\",\n  \"location\": \"Bureau Principal - Douala III\",\n  \"threshold\": \"08:15\"\n}","type":"whatsapp","content":"Bonjour Kenne Londo Doleres, un retard d''arrivée a été consigné à 17:30 pour le 2026-08-04 (seuil : 08:15)."}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('log-badge-1785861969692', '⚠️ Retard Constaté : Kenne Londo Doleres', 'Bonjour Kenne Londo Doleres, un retard d''arrivée a été consigné à 17:46 pour le 2026-08-04 (seuil : 08:15).', 'whatsapp', false, '{"id":"log-badge-1785861969692","type":"whatsapp","recipient":"+237 655500443","content":"Bonjour Kenne Londo Doleres, un retard d''arrivée a été consigné à 17:46 pour le 2026-08-04 (seuil : 08:15).","timestamp":"2026-08-04T16:46:09.692Z","title":"⚠️ Retard Constaté : Kenne Londo Doleres","read":false,"payload":"{\n  \"event\": \"late_arrival\",\n  \"employeeId\": \"emp-1\",\n  \"employeeName\": \"Kenne Londo Doleres\",\n  \"action\": \"arrival\",\n  \"time\": \"17:46\",\n  \"date\": \"2026-08-04\",\n  \"location\": \"Bureau Principal - Douala III\",\n  \"threshold\": \"08:15\"\n}"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('log-badge-1785861993443', '⚠️ Retard Constaté : Kenne Londo Doleres', 'Bonjour Kenne Londo Doleres, un retard d''arrivée a été consigné à 17:46 pour le 2026-08-04 (seuil : 08:15).', 'whatsapp', false, '{"id":"log-badge-1785861993443","recipient":"+237 655500443","title":"⚠️ Retard Constaté : Kenne Londo Doleres","type":"whatsapp","read":false,"payload":"{\n  \"event\": \"late_arrival\",\n  \"employeeId\": \"emp-1\",\n  \"employeeName\": \"Kenne Londo Doleres\",\n  \"action\": \"arrival\",\n  \"time\": \"17:46\",\n  \"date\": \"2026-08-04\",\n  \"location\": \"Bureau Principal - Douala III\",\n  \"threshold\": \"08:15\"\n}","timestamp":"2026-08-04T16:46:33.443Z","content":"Bonjour Kenne Londo Doleres, un retard d''arrivée a été consigné à 17:46 pour le 2026-08-04 (seuil : 08:15)."}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('log-badge-1785878346914', 'Badgeage enregistré - Heure de départ (Badgeage) (Kenne Londo Doleres)', 'Kenne Londo Doleres a badgé [Heure de départ (Badgeage)] à 22:19 le 2026-08-04.', 'whatsapp', false, '{"id":"log-badge-1785878346914","read":false,"title":"Badgeage enregistré - Heure de départ (Badgeage) (Kenne Londo Doleres)","recipient":"+237 655500443","content":"Kenne Londo Doleres a badgé [Heure de départ (Badgeage)] à 22:19 le 2026-08-04.","payload":"{\n  \"event\": \"employee_badge\",\n  \"employeeId\": \"emp-1\",\n  \"employeeName\": \"Kenne Londo Doleres\",\n  \"action\": \"departure\",\n  \"time\": \"22:19\",\n  \"date\": \"2026-08-04\",\n  \"location\": \"Bureau Principal - Douala III\",\n  \"threshold\": \"08:15\"\n}","timestamp":"2026-08-04T21:19:06.914Z","type":"whatsapp"}') ON CONFLICT (doc_id) DO NOTHING;
-
-INSERT INTO public.notifications (doc_id, title, message, type, is_read, raw_data) VALUES ('log-badge-1785878641828', '⚠️ Retard Constaté : mouns eric', 'Bonjour mouns eric, un retard d''arrivée a été consigné à 22:24 pour le 2026-08-04 (seuil : 08:15).', 'whatsapp', false, '{"id":"log-badge-1785878641828","payload":"{\n  \"event\": \"late_arrival\",\n  \"employeeId\": \"emp-1785638247317\",\n  \"employeeName\": \"mouns eric\",\n  \"action\": \"arrival\",\n  \"time\": \"22:24\",\n  \"date\": \"2026-08-04\",\n  \"location\": \"Bureau Principal - Douala III\",\n  \"threshold\": \"08:15\"\n}","read":false,"content":"Bonjour mouns eric, un retard d''arrivée a été consigné à 22:24 pour le 2026-08-04 (seuil : 08:15).","recipient":"+237682891079","title":"⚠️ Retard Constaté : mouns eric","timestamp":"2026-08-04T21:24:01.828Z","type":"whatsapp"}') ON CONFLICT (doc_id) DO NOTHING;
-
+BEGIN;
+
+-- 1. Rôle Super Administrateur
+INSERT INTO public.roles (uid, name, code, description, permissions, raw_data)
+VALUES (
+    gen_random_uuid(),
+    'Super Administrateur',
+    'SUPER_ADMIN',
+    'Administrateur système et IT avec accès complet',
+    '{"all": true}'::jsonb,
+    '{"name":"Super Administrateur","code":"SUPER_ADMIN","permissions":{"all":true}}'::jsonb
+)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    permissions = EXCLUDED.permissions,
+    updated_at = NOW();
+
+-- 2. Utilisateur Super Admin
+INSERT INTO public.users (uid, email, name, role_id, status, department, phone, raw_data)
+VALUES (
+    gen_random_uuid(),
+    'citrinemobilite@gmail.com',
+    'Citrine Mobilité',
+    (SELECT id FROM public.roles WHERE code = 'SUPER_ADMIN' LIMIT 1),
+    TRUE,
+    'IT',
+    '+237 600 000 099',
+    '{"role":"SUPER_ADMIN","department":"IT","name":"Citrine Mobilité","status":"actif","createdAt":"2026-01-01T00:00:00.000Z","email":"citrinemobilite@gmail.com","phone":"+237 600 000 099"}'::jsonb
+)
+ON CONFLICT (email) DO UPDATE SET 
+    name = EXCLUDED.name, 
+    role_id = EXCLUDED.role_id,
+    status = EXCLUDED.status, 
+    department = EXCLUDED.department, 
+    phone = EXCLUDED.phone,
+    raw_data = EXCLUDED.raw_data,
+    updated_at = NOW();
+
+-- 3. Employé / Collaborateur RH Super Admin
+INSERT INTO public.employees (uid, user_id, role_id, name, email, phone, department, position, role_type, status, hire_date, salary, raw_data)
+VALUES (
+    gen_random_uuid(),
+    (SELECT id FROM public.users WHERE email = 'citrinemobilite@gmail.com' LIMIT 1),
+    (SELECT id FROM public.roles WHERE code = 'SUPER_ADMIN' LIMIT 1),
+    'Citrine Mobilité',
+    'citrinemobilite@gmail.com',
+    '+237 600 000 099',
+    'IT',
+    'Super Administrateur',
+    'Super Administrateur',
+    TRUE,
+    '2026-01-01',
+    300000,
+    '{"salary":300000,"hireDate":"2026-01-01","email":"citrinemobilite@gmail.com","roleType":"Super Administrateur","status":"en_poste","department":"IT","phone":"+237 600 000 099","name":"Citrine Mobilité"}'::jsonb
+)
+ON CONFLICT (email) DO UPDATE SET 
+    user_id = EXCLUDED.user_id,
+    role_id = EXCLUDED.role_id,
+    name = EXCLUDED.name, 
+    department = EXCLUDED.department,
+    position = EXCLUDED.position,
+    role_type = EXCLUDED.role_type,
+    status = EXCLUDED.status,
+    salary = EXCLUDED.salary, 
+    raw_data = EXCLUDED.raw_data,
+    updated_at = NOW();
+
+COMMIT;
 
 -- ==============================================================================
--- ACCÈS ET PRIVILÈGES POSTGRESQL (ANON, AUTHENTICATED, SERVICE_ROLE)
+-- ACCÈS ET PRIVILÈGES POSTGRESQL
 -- ==============================================================================
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
-
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
