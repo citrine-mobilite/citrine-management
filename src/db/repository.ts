@@ -81,6 +81,22 @@ export async function getCollectionData(collectionName: string): Promise<any[]> 
   }
 }
 
+async function resolveEmployeeDbId(client: any, empIdVal: any): Promise<number | null> {
+  if (!empIdVal) return null;
+  if (typeof empIdVal === 'number' && Number.isInteger(empIdVal)) return empIdVal;
+  const strId = String(empIdVal).trim();
+  if (/^\d+$/.test(strId)) return Number(strId);
+
+  try {
+    const { data: byDoc } = await client.from('employees').select('id').eq('doc_id', strId).maybeSingle();
+    if (byDoc?.id) return Number(byDoc.id);
+
+    const { data: byEmail } = await client.from('employees').select('id').eq('email', strId.toLowerCase()).maybeSingle();
+    if (byEmail?.id) return Number(byEmail.id);
+  } catch {}
+  return null;
+}
+
 export async function saveDocumentData(collectionName: string, item: any): Promise<any> {
   const table = mapCollectionToTable(collectionName);
   const docId = String(item.id || item.docId || `doc_${Date.now()}`);
@@ -112,7 +128,43 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
     if (item.priority !== undefined) rowData.priority = item.priority;
     if (item.department !== undefined) rowData.department = item.department;
 
-    await supabaseAdmin.from(table).upsert(rowData, { onConflict: 'doc_id' });
+    if (table === 'presences') {
+      rowData.employee_name = item.employeeName || null;
+      rowData.date = item.date || null;
+      rowData.arrival_time = item.arrivalTime || null;
+      rowData.departure_time = item.departureTime || null;
+      rowData.status = item.status || 'present';
+      rowData.late_minutes = Number(item.lateMinutes || 0);
+      rowData.pause_minutes = Number(item.pauseMinutes || 0);
+      rowData.motif = item.motif || item.adminBadgeReason || null;
+      rowData.signature = item.signature || null;
+      rowData.gps_lat = item.latitude || item.gpsLat || null;
+      rowData.gps_lng = item.longitude || item.gpsLng || null;
+      rowData.method = item.clockingMethod || item.method || 'kiosk';
+      if (item.employeeId) {
+        const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
+        if (resolvedId) rowData.employee_id = resolvedId;
+      }
+    } else if (table === 'attendance_incidents') {
+      rowData.employee_name = item.employeeName || null;
+      rowData.date = item.date || null;
+      rowData.time_string = item.timeString || null;
+      rowData.type = item.type || null;
+      rowData.origin = item.origin || null;
+      rowData.reason = item.reason || null;
+      rowData.is_declared_in_advance = Boolean(item.isDeclaredInAdvance);
+      rowData.is_justified = Boolean(item.isJustified);
+      rowData.status = item.status || 'signale';
+      if (item.employeeId) {
+        const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
+        if (resolvedId) rowData.employee_id = resolvedId;
+      }
+    }
+
+    const { error: saveErr } = await supabaseAdmin.from(table).upsert(rowData, { onConflict: 'doc_id' });
+    if (saveErr) {
+      console.error(`Database save error for table ${table}:`, saveErr.message);
+    }
   } catch (error) {
     console.error(`Database save failed for ${collectionName}/${docId}:`, error);
   }

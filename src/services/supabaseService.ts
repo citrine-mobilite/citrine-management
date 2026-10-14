@@ -51,6 +51,27 @@ function isUuid(val: any): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
 }
 
+async function resolveEmployeeDbId(client: any, empIdVal: any): Promise<number | null> {
+  if (!empIdVal) return null;
+  if (typeof empIdVal === 'number' && Number.isInteger(empIdVal)) return empIdVal;
+  const strId = String(empIdVal).trim();
+  if (/^\d+$/.test(strId)) return Number(strId);
+
+  try {
+    const { data: byDoc } = await client.from('employees').select('id').eq('doc_id', strId).maybeSingle();
+    if (byDoc?.id) return Number(byDoc.id);
+
+    const { data: byEmail } = await client.from('employees').select('id').eq('email', strId.toLowerCase()).maybeSingle();
+    if (byEmail?.id) return Number(byEmail.id);
+
+    if (isUuid(strId)) {
+      const { data: byUid } = await client.from('employees').select('id').eq('uid', strId).maybeSingle();
+      if (byUid?.id) return Number(byUid.id);
+    }
+  } catch {}
+  return null;
+}
+
 // Convert App item into Supabase row format
 function itemToSupabaseRow(collectionName: string, item: any): any {
   const table = mapCollectionToTable(collectionName);
@@ -230,23 +251,25 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         triggered: Boolean(item.triggered),
         stopped: Boolean(item.stopped),
       };
-    case 'presences':
+    case 'presences': {
       return {
         ...base,
         employee_id: item.employeeId || null,
+        employee_name: item.employeeName || null,
         date: item.date || null,
-        status: item.status || 'present',
         arrival_time: item.arrivalTime || null,
-        pause_start: item.pauseStart || null,
-        pause_end: item.pauseEnd || null,
         departure_time: item.departureTime || null,
-        clocking_method: item.clockingMethod || null,
-        location: item.location || null,
-        site_name: item.siteName || null,
-        latitude: item.latitude || null,
-        longitude: item.longitude || null,
-        correction_reason: item.correctionReason || null,
+        status: item.status || 'present',
+        late_minutes: Number(item.lateMinutes || 0),
+        pause_minutes: Number(item.pauseMinutes || 0),
+        motif: item.motif || item.adminBadgeReason || null,
+        signature: item.signature || null,
+        gps_lat: item.latitude || item.gpsLat || null,
+        gps_lng: item.longitude || item.gpsLng || null,
+        method: item.clockingMethod || item.method || 'kiosk',
+        raw_data: item,
       };
+    }
     case 'attendance_incidents':
       return {
         ...base,
@@ -820,6 +843,65 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
         const { data: insertData } = await client.from('tasks').insert({ ...row, doc_id: taskDocId }).select().single();
         if (insertData) return supabaseRowToItem(collectionName, insertData) as T;
       }
+      return item;
+    }
+
+    if (table === 'presences') {
+      try {
+        const empIdVal = (item as any).employeeId || (item as any).employee_id;
+        const resolvedId = await resolveEmployeeDbId(client, empIdVal);
+        if (resolvedId) {
+          row.employee_id = resolvedId;
+        } else {
+          delete row.employee_id;
+        }
+      } catch {
+        delete row.employee_id;
+      }
+
+      const presenceDocId = String(item.id || row.doc_id || `pr-${Date.now()}`);
+      row.doc_id = presenceDocId;
+
+      const { data: upsertData, error: upsertErr } = await client
+        .from('presences')
+        .upsert(row, { onConflict: 'doc_id' })
+        .select()
+        .single();
+      if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
+
+      const { data: insertData, error: insertErr } = await client.from('presences').insert(row).select().single();
+      if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
+      if (insertErr) {
+        console.error('[supabaseService presences save error]:', insertErr.message);
+      }
+      return item;
+    }
+
+    if (table === 'attendance_incidents') {
+      try {
+        const empIdVal = (item as any).employeeId || (item as any).employee_id;
+        const resolvedId = await resolveEmployeeDbId(client, empIdVal);
+        if (resolvedId) {
+          row.employee_id = resolvedId;
+        } else {
+          delete row.employee_id;
+        }
+      } catch {
+        delete row.employee_id;
+      }
+
+      const incDocId = String(item.id || row.doc_id || `inc-${Date.now()}`);
+      row.doc_id = incDocId;
+
+      const { data: upsertData, error: upsertErr } = await client
+        .from('attendance_incidents')
+        .upsert(row, { onConflict: 'doc_id' })
+        .select()
+        .single();
+      if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
+
+      const { data: insertData, error: insertErr } = await client.from('attendance_incidents').insert(row).select().single();
+      if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
       return item;
     }
 

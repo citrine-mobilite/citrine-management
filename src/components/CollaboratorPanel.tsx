@@ -374,15 +374,15 @@ export default function CollaboratorPanel({
         // Si l'une quelconque de ces étapes échoue -> ROLLBACK TOTAL
         const result = await createCollaboratorWithUserTransactional({
           name: formData.name.trim(),
-          firstName: formData.firstName,
-          lastName: formData.lastName,
+          firstName: (formData as any).firstName,
+          lastName: (formData as any).lastName,
           email: userEmail,
           phone: formData.phone,
           userPassword: initialPassword,
           roleType: formData.roleType,
           userRole: formData.userRole,
           department: empDepartment,
-          position: formData.position || formData.roleType,
+          position: (formData as any).position || formData.roleType,
           managerId: formData.managerId,
           team: formData.team,
           hireDate: formData.hireDate,

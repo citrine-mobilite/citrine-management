@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   AppUser, 
   Employee,
@@ -73,6 +73,8 @@ export default function App() {
     return 'Opération confirmée';
   };
 
+  const lastToastRef = useRef<{ message: string; time: number }>({ message: '', time: 0 });
+
   const showToast = (
     titleOrMessage: string,
     messageOrType?: string | 'success' | 'error' | 'warning' | 'info',
@@ -105,6 +107,12 @@ export default function App() {
       resolvedMessage = titleOrMessage;
     }
 
+    const now = Date.now();
+    if (lastToastRef.current.message === resolvedMessage && now - lastToastRef.current.time < 600) {
+      return; // Ignore duplicate toast within 600ms for the same action
+    }
+    lastToastRef.current = { message: resolvedMessage, time: now };
+
     const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
     setToasts((prev) => [...prev, { id, title: resolvedTitle, message: resolvedMessage, type: resolvedType }]);
   };
@@ -127,26 +135,27 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Restore authenticated session on mount with database verification
+  // Restore authenticated session on mount with immediate local trust (preventing refresh logout) and background sync
   useEffect(() => {
     loadSecureSession().then(async (user) => {
       if (user && user.email) {
+        // Restaurer immédiatement l'utilisateur depuis la session locale sécurisée pour éviter toute déconnexion au rafraîchissement
+        setCurrentUser(user);
+        setActiveTab(getDefaultPortalForUser(user) as TabType);
+
+        // Vérification en arrière-plan non bloquante en base de données
         try {
           const { fetchDatabaseUserByEmail } = await import('./services/userService');
           const dbUser = await fetchDatabaseUserByEmail(user.email);
           if (dbUser && dbUser.status === 'actif') {
             setCurrentUser(dbUser);
             await storeSecureSession(dbUser);
-            setActiveTab(getDefaultPortalForUser(dbUser) as TabType);
-          } else {
-            // L'utilisateur n'existe plus en base de données ou est désactivé
+          } else if (dbUser && dbUser.status !== 'actif') {
             clearSecureSession();
             setCurrentUser(null);
           }
         } catch (err) {
-          console.warn('[App] Erreur lors de la vérification de session en base:', err);
-          clearSecureSession();
-          setCurrentUser(null);
+          console.warn('[App] Vérification de session en arrière-plan ignorée (mode hors-ligne ou timeout):', err);
         }
       }
       setIsAuthLoading(false);

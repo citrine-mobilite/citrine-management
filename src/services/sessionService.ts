@@ -5,7 +5,7 @@ import { safeStorage } from '../utils/safeStorage';
 const SESSION_USER_KEY = 'citrine_current_user';
 const SESSION_SIGNATURE_KEY = 'citrine_session_sig';
 const SESSION_EXPIRY_KEY = 'citrine_token_expiry';
-const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 heures de session max
+const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours de session (durée > 1 semaine demandée)
 
 /**
  * Normalise un rôle en format UI (Capitalisé : 'Administrateur', 'Responsable', 'Employé')
