@@ -34,7 +34,7 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
 }) => {
   const currentToken = moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026';
   const siteName = moduleConfig?.doorQrSiteName || moduleConfig?.hqName || 'Entrée Principale (HQ Siège)';
-  const companyName = moduleConfig?.companyName || 'Citrine Entreprise';
+  const companyName = moduleConfig?.companyName || 'Citrine SARL';
 
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);

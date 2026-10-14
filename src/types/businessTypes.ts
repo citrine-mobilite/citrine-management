@@ -390,7 +390,7 @@ export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
   breakStartTime: '12:00',
   breakEndTime: '15:00',
   departureActiveStartTime: '16:00',
-  companyName: 'Citrine Entreprise SARL',
+  companyName: 'Citrine SARL',
   companyLatitude: 4.051056,
   companyLongitude: 9.7678687,
   qrCodeSecret: 'CITRINE_SECRET_2026',

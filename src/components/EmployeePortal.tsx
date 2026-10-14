@@ -334,7 +334,7 @@ export default function EmployeePortal(props: EmployeePortalProps) {
           isOpen={logic.showOfficeQRModal}
           onClose={() => logic.setShowOfficeQRModal(false)}
           qrSecret={moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026'}
-          companyName={moduleConfig?.companyName || 'Citrine Entreprise SARL'}
+          companyName={moduleConfig?.companyName || 'Citrine SARL'}
         />
       )}
 

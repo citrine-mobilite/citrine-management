@@ -176,7 +176,7 @@ export const CompanyHoursAndGeneralSettings: React.FC<CompanyHoursAndGeneralSett
             </label>
             <input
               type="text"
-              value={formData.companyName || formData.hqName || 'Citrine Entreprise SARL'}
+              value={formData.companyName || formData.hqName || 'Citrine SARL'}
               onChange={(e) => {
                 handleChange('companyName', e.target.value);
                 handleChange('hqName', e.target.value);

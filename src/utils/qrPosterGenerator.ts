@@ -15,7 +15,7 @@ export function generateAndDownloadQrPoster(
         ? { companyName: optionsOrCompany }
         : optionsOrCompany;
 
-    const companyName = options.companyName || 'Citrine Entreprise';
+    const companyName = options.companyName || 'Citrine SARL';
     const siteName = options.siteName || 'Entrée Principale (HQ Siège)';
     const title = options.title || 'BORNE OFFICIELLE DE POINTAGE';
     const subtitle = options.subtitle || 'Scannez ce QR Code à l’arrivée, en pause et au départ.';
@@ -77,17 +77,17 @@ export function generateAndDownloadQrPoster(
 
       ctx.drawImage(img, 300, 310, 400, 400);
 
-      // Security instructions
+      // Security instructions in correct logical order
       ctx.fillStyle = '#2A7B76';
       ctx.font = 'bold 22px sans-serif';
       ctx.fillText('INSTRUCTIONS COLLABORATEUR', 500, 785);
 
       ctx.fillStyle = '#44403C';
       ctx.font = '16px sans-serif';
-      ctx.fillText('1. Ouvrez l’application Citrine sur votre smartphone.', 500, 835);
-      ctx.fillText('2. Cliquez sur « Pointage Quotidien » puis « Scanner QR Code ».', 500, 875);
-      ctx.fillText('3. Pointez la caméra vers ce QR Code : le badgeage est immédiat !', 500, 915);
-      ctx.fillText('4. En cas de réseau faible, le pointage est certifié hors-ligne.', 500, 955);
+      ctx.fillText('1. Lancez l’application Citrine SARL sur votre smartphone.', 500, 835);
+      ctx.fillText('2. Accédez à l’onglet « Pointage » puis sélectionnez « Scanner QR Code ».', 500, 875);
+      ctx.fillText('3. Cadrez ce QR Code officiel avec votre caméra pour valider l’action.', 500, 915);
+      ctx.fillText('4. Vérifiez la confirmation instantanée et la mise à jour de votre statut.', 500, 955);
 
       // Token info block
       ctx.fillStyle = '#F1F5F9';
@@ -108,7 +108,7 @@ export function generateAndDownloadQrPoster(
         month: 'long',
         day: 'numeric',
       });
-      ctx.fillText(`Affiche générée le ${todayFormatted} - Système Sécurisé Citrine Enterprise`, 500, 1260);
+      ctx.fillText(`Affiche générée le ${todayFormatted} - Système Sécurisé Citrine SARL`, 500, 1260);
 
       const a = document.createElement('a');
       a.download = `Affiche_Pointage_Borne_${companyName.replace(/\s+/g, '_')}_${siteName.replace(/\s+/g, '_')}.png`;

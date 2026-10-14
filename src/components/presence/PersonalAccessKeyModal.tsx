@@ -14,7 +14,7 @@ export const PersonalAccessKeyModal: React.FC<PersonalAccessKeyModalProps> = ({
   isOpen,
   onClose,
   managerName = 'Responsable sur place',
-  companyName = 'Citrine Entreprise',
+  companyName = 'Citrine SARL',
   showToast,
 }) => {
   const [activationKey, setActivationKey] = useState('');
