@@ -95,7 +95,7 @@ export function subscribeToUsers(callback: (users: AppUser[]) => void) {
   };
 }
 
-export async function saveUser(user: AppUser): Promise<void> {
+export async function saveUser(user: AppUser): Promise<AppUser> {
   try {
     const cleanUser: AppUser = {
       ...user,
@@ -109,7 +109,8 @@ export async function saveUser(user: AppUser): Promise<void> {
     }
 
     cloudSqlService.saveDocument('users', cleanUser).catch(() => {});
-    await supabaseService.saveDocument('users', cleanUser).catch(() => {});
+    const saved = await supabaseService.saveDocument('users', cleanUser);
+    const resolvedUser: AppUser = (saved as AppUser) || cleanUser;
 
     try {
       const client = getClient();
@@ -117,11 +118,15 @@ export async function saveUser(user: AppUser): Promise<void> {
       const userEmployeeId = cleanUser.employeeId;
 
       let empQuery = client.from('employees').select('*');
-      if (userEmployeeId && /^\d+$/.test(userEmployeeId)) {
-        empQuery = empQuery.or(`email.ilike.${userEmail},id.eq.${userEmployeeId},user_id.eq.${cleanUser.id}`);
-      } else {
-        empQuery = empQuery.or(`email.ilike.${userEmail},user_id.eq.${cleanUser.id}`);
-      }
+      const isNumUserId = /^\d+$/.test(String(cleanUser.id));
+      const isNumEmpId = userEmployeeId && /^\d+$/.test(String(userEmployeeId));
+
+      const conditions: string[] = [`email.ilike.${userEmail}`];
+      if (isNumEmpId) conditions.push(`id.eq.${userEmployeeId}`);
+      if (userEmployeeId) conditions.push(`doc_id.eq.${userEmployeeId}`);
+      if (isNumUserId) conditions.push(`user_id.eq.${cleanUser.id}`);
+
+      empQuery = empQuery.or(conditions.join(','));
       const { data: matchedEmp } = await empQuery.maybeSingle();
 
       if (matchedEmp) {
@@ -146,6 +151,7 @@ export async function saveUser(user: AppUser): Promise<void> {
         const updatedEmp: Employee = {
           ...rawEmp,
           id: String(matchedEmp.id),
+          doc_id: matchedEmp.doc_id || rawEmp.doc_id || `emp_${matchedEmp.id}`,
           uid: matchedEmp.uid,
           userId: cleanUser.id,
           name: cleanUser.name,
@@ -167,8 +173,10 @@ export async function saveUser(user: AppUser): Promise<void> {
     } catch (syncErr) {
       console.warn('[userService] Notice synchronisation collaborateur associé:', syncErr);
     }
+    return resolvedUser;
   } catch (error) {
     console.error('Error saving user:', error);
+    return user;
   }
 }
 

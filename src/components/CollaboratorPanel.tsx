@@ -27,7 +27,8 @@ import {
   ShieldAlert,
   History,
   UserCheck,
-  ShieldCheck
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 import { 
   Employee, 
@@ -44,7 +45,8 @@ import { CollaboratorPresenceMap } from './CollaboratorPresenceMap';
 import { getEmployeeSoftColor } from '../utils/colorUtils';
 import { downloadPayslipPdf } from '../services/pdfExportService';
 import { saveUser } from '../services/userService';
-import { generateUuidV4 } from '../services/employeeService';
+import { generateUuidV4, createCollaboratorWithUserTransactional } from '../services/employeeService';
+import { saveDocument, COLLECTIONS } from '../services/dataService';
 import { supabaseAdmin } from '../lib/supabase';
 import { CollaboratorAvatarPickerModal } from './collaborators/CollaboratorAvatarPickerModal';
 import { CollaboratorStatusReasonModal } from './collaborators/CollaboratorStatusReasonModal';
@@ -101,6 +103,7 @@ export default function CollaboratorPanel({
   onUpdatePresences,
   onUpdateTasks,
   onUpdateSalaryPayments,
+  onAddNotification,
   showToast,
   users = [],
   onUpdateUsers,
@@ -127,6 +130,7 @@ export default function CollaboratorPanel({
     emp: Employee;
     targetStatus: 'renvoye' | 'suspendu' | 'parti';
   } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [isAuditHistoryModalOpen, setIsAuditHistoryModalOpen] = useState(false);
   const [auditOpsList, setAuditOpsList] = useState<AdminAccountOperation[]>(() => getAdminAuditOperations());
@@ -337,116 +341,117 @@ export default function CollaboratorPanel({
         }
       }
 
+      if (onAddNotification) {
+        const updateNotif: NotificationLog = {
+          id: `notif-collab-upd-${Date.now()}`,
+          type: 'system',
+          title: 'Fiche collaborateur modifiée',
+          content: `La fiche de ${formData.name.trim()} a été mise à jour par l'administrateur.`,
+          recipient: 'Administrateurs & RH',
+          payload: JSON.stringify({ employeeId: editingEmployee.id, updatedFields: formData }),
+          timestamp: new Date().toISOString(),
+          read: false,
+        };
+        onAddNotification(updateNotif);
+        saveDocument(COLLECTIONS.NOTIFICATIONS, updateNotif).catch(() => {});
+        console.log('🔔 [NOTIFICATION MODIFICATION COLLABORATEUR]:', updateNotif);
+      }
+
       setAuditOpsList(getAdminAuditOperations());
       if (showToast) showToast(`Fiche collaborateur mise à jour (Rôle ID: ${resolvedRoleId}).`, 'success');
     } else {
-      const empUid = generateUuidV4();
-      const empId = `emp-${Date.now()}`;
-      const userUid = generateUuidV4();
-      const userId = userUid;
-      const userEmail = formData.email.trim() ? formData.email.trim().toLowerCase() : `collab_${Date.now()}@citrinemgmt.cm`;
-      const initialPassword = formData.userPassword.trim() || 'Collab@2026';
-      const computedRoleId = formData.userRole === 'administrateur' ? 1 : formData.userRole === 'responsable' ? 2 : 3;
-
-      // 1. Enregistrement préalable du compte utilisateur associé
-      let createdUserAccount: AppUser | null = null;
+      setIsSaving(true);
       try {
-        if (supabaseAdmin) {
-          try {
-            await supabaseAdmin.auth.admin.createUser({
-              email: userEmail,
-              password: initialPassword,
-              email_confirm: true,
-            });
-          } catch (authErr) {
-            console.warn('[CollaboratorPanel] Notice création compte Auth Supabase:', authErr);
-          }
-        }
+        console.log('🚀 [CollaboratorPanel] Lancement de la création transactionnelle...');
+        const userEmail = formData.email.trim() ? formData.email.trim().toLowerCase() : `collab_${Date.now()}@citrinemgmt.cm`;
+        const initialPassword = formData.userPassword.trim() || 'Collab@2026';
 
-        createdUserAccount = {
-          id: userId,
-          uid: userUid,
+        // FLUX TRANSACTIONNEL STRICT :
+        // 1. Création du collaborateur initial dans la table 'employees' (sans user_id)
+        // 2. Automatiquement, création du compte utilisateur dans la table 'users'
+        // 3. Modification du collaborateur pour lui assigner user_id et role_id
+        // 4. Émission et enregistrement de la notification officielle avec logs
+        // Si l'une quelconque de ces étapes échoue -> ROLLBACK TOTAL
+        const result = await createCollaboratorWithUserTransactional({
           name: formData.name.trim(),
+          firstName: formData.firstName,
+          lastName: formData.lastName,
           email: userEmail,
-          role: formData.userRole,
-          roleId: computedRoleId,
-          status: 'actif',
+          phone: formData.phone,
+          userPassword: initialPassword,
+          roleType: formData.roleType,
+          userRole: formData.userRole,
           department: empDepartment,
-          phone: formData.phone || '',
-          employeeId: empId,
-          createdAt: new Date().toISOString(),
-          passwordHash: initialPassword,
-          authMethod: 'password',
-        };
+          position: formData.position || formData.roleType,
+          managerId: formData.managerId,
+          team: formData.team,
+          hireDate: formData.hireDate,
+          birthDate: formData.birthDate,
+          salary: Number(formData.salary) || 0,
+          status: formData.status,
+          departureReason: formData.departureReason,
+          suspensionReason: formData.suspensionReason,
+          avatarUrl: formData.avatarUrl,
+        });
 
-        await saveUser(createdUserAccount);
+        // 1. Mise à jour de l'état local React des collaborateurs
+        onUpdateEmployees([result.employee, ...employees]);
+
+        // 2. Mise à jour de l'état local React des utilisateurs
         if (onUpdateUsers && users) {
-          onUpdateUsers([createdUserAccount, ...users]);
+          onUpdateUsers([result.user, ...users]);
         }
-      } catch (userErr) {
-        console.warn('Erreur création compte utilisateur initial:', userErr);
-      }
 
-      // 2. Création de la fiche collaborateur avec userId et roleId déjà reliés
-      const newEmp: Employee = {
-        id: empId,
-        uid: empUid,
-        userId: userId,
-        roleId: computedRoleId,
-        avatarUrl: formData.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(formData.name)}`,
-        name: formData.name.trim(),
-        email: userEmail,
-        phone: formData.phone,
-        roleType: formData.roleType,
-        department: empDepartment,
-        managerId: formData.managerId,
-        team: formData.team,
-        hireDate: formData.hireDate,
-        birthDate: formData.birthDate,
-        salary: Number(formData.salary) || 0,
-        status: formData.status,
-        employmentStatus: formData.status,
-        departureReason: formData.departureReason,
-        suspensionReason: formData.suspensionReason,
-      };
+        // 3. Déclenchement de la notification dans l'UI
+        if (onAddNotification && result.notification) {
+          onAddNotification(result.notification);
+        }
 
-      // 3. Sauvegarder immédiatement l'employé avec userId et roleId
-      onUpdateEmployees([newEmp, ...employees]);
-
-      // Consigner l'opération de création
-      logAdminOperation({
-        authorName: 'Administrateur',
-        targetEmployeeId: empId,
-        targetUserId: userId,
-        targetName: formData.name.trim(),
-        operationType: 'creation',
-        operationLabel: 'Création du collaborateur',
-        details: `Ajout dans "${formData.team}" sous statut "${formData.status}" | User ID: ${userId} | Rôle ID: ${computedRoleId}`,
-      });
-
-      if (formData.managerId) {
-        const mgrName = employees.find((x) => x.id === formData.managerId)?.name || 'Direction';
+        // 4. Consigner l'opération dans l'audit administrateur
         logAdminOperation({
           authorName: 'Administrateur',
-          targetEmployeeId: empId,
+          targetEmployeeId: result.employee.id,
+          targetUserId: result.user.id,
           targetName: formData.name.trim(),
-          operationType: 'manager_change',
-          operationLabel: 'Rattachement hiérarchique initial',
-          details: `Responsable : ${mgrName}`,
+          operationType: 'creation',
+          operationLabel: 'Création collaborateur (Transactionnel)',
+          details: `Collaborateur ${result.employee.name} créé et lié à l'utilisateur ${result.user.email} (User ID: ${result.user.id}, Rôle ID: ${result.user.roleId})`,
         });
-      }
 
-      if (showToast) {
-        showToast(
-          `Collaborateur et compte créés et liés avec succès ! User ID: ${userId.slice(0, 8)}... | Rôle ID: ${computedRoleId}`,
-          'success'
-        );
-      }
+        if (formData.managerId) {
+          const mgrName = employees.find((x) => x.id === formData.managerId)?.name || 'Direction';
+          logAdminOperation({
+            authorName: 'Administrateur',
+            targetEmployeeId: result.employee.id,
+            targetName: formData.name.trim(),
+            operationType: 'manager_change',
+            operationLabel: 'Rattachement hiérarchique initial',
+            details: `Responsable : ${mgrName}`,
+          });
+        }
 
-      setAuditOpsList(getAdminAuditOperations());
+        setAuditOpsList(getAdminAuditOperations());
+
+        if (showToast) {
+          showToast(
+            `Collaborateur et compte utilisateur créés et liés avec succès ! User ID: ${result.user.id} | Notification émise.`,
+            'success'
+          );
+        }
+
+        setIsModalOpen(false);
+      } catch (err: any) {
+        console.error('❌ [CollaboratorPanel] Échec de la création transactionnelle:', err);
+        if (showToast) {
+          showToast(
+            `Échec création : ${err?.message || 'Erreur inconnue'}. Rollback effectué (aucune donnée orpheline).`,
+            'error'
+          );
+        }
+      } finally {
+        setIsSaving(false);
+      }
     }
-
-    setIsModalOpen(false);
   };
 
   const handleStatusChangeQuick = (empId: string, newStatus: Employee['status']) => {
@@ -1607,9 +1612,17 @@ export default function CollaboratorPanel({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#2A7B76] text-white hover:bg-[#20635F] font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  disabled={isSaving}
+                  className="px-5 py-2 rounded-xl bg-[#2A7B76] text-white hover:bg-[#20635F] disabled:opacity-50 font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition"
                 >
-                  Enregistrer les Modifications
+                  {isSaving && <RefreshCw className="h-4 w-4 animate-spin" />}
+                  <span>
+                    {isSaving
+                      ? 'Enregistrement transactionnel...'
+                      : editingEmployee
+                      ? 'Enregistrer les Modifications'
+                      : 'Créer le Collaborateur & Lier le Compte'}
+                  </span>
                 </button>
               </div>
             </form>

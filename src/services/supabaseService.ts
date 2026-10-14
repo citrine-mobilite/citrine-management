@@ -162,6 +162,10 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         department: empDept,
       };
 
+      const numUserId = (typeof resolvedUserId === 'number' || (typeof resolvedUserId === 'string' && /^\d+$/.test(resolvedUserId)))
+        ? Number(resolvedUserId)
+        : null;
+
       return {
         ...base,
         name: item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || null,
@@ -173,15 +177,14 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         department: empDept,
         position: item.position || item.role || item.roleType || null,
         status: isStatusActive,
-        employment_status: employmentStatus,
         hire_date: item.hireDate ? String(item.hireDate).split('T')[0] : null,
-        departure_date: item.departureDate ? String(item.departureDate).split('T')[0] : null,
         salary: Math.max(0, typeof item.salary === 'number' ? item.salary : (Number(item.salary) || 0)),
-        avatar_url: item.avatarUrl || null,
-        user_id: resolvedUserId,
+        photo_url: item.photoUrl || item.avatarUrl || null,
+        emergency_contact: item.emergencyContact || null,
+        work_location: item.workLocation || 'Douala',
+        badge_code: item.badgeCode || null,
+        user_id: numUserId,
         role_id: resolvedRoleId,
-        manager_id: numManagerId,
-        team: item.team || null,
         raw_data: raw,
       };
     }
@@ -402,13 +405,10 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
       return {
         ...base,
         title: item.title || 'Notification',
-        message: item.message || item.content || null,
-        content: item.content || item.message || null,
-        type: item.type || null,
-        recipient: item.recipient || null,
-        target_user_id: item.targetUserId || null,
+        message: item.message || item.content || 'Notification système',
+        type: item.type || 'system',
+        target_user_id: (typeof item.targetUserId === 'number' || (typeof item.targetUserId === 'string' && /^\d+$/.test(item.targetUserId))) ? Number(item.targetUserId) : null,
         is_read: Boolean(item.isRead || item.read),
-        payload: typeof item.payload === 'string' ? item.payload : JSON.stringify(item.payload || {}),
       };
     case 'company_settings':
       return {
@@ -760,12 +760,34 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
     }
 
     if (table === 'employees') {
-      if (row.id && Number.isInteger(row.id)) {
-        const { data, error } = await client.from('employees').upsert(row, { onConflict: 'id' }).select().single();
+      // Résolution sécurisée de user_id : doit être un BIGINT valide vers users.id
+      if (!row.user_id || !Number.isInteger(row.user_id)) {
+        try {
+          if (row.email) {
+            const { data: u } = await client.from('users').select('id').eq('email', row.email).maybeSingle();
+            if (u?.id) {
+              row.user_id = u.id;
+            } else {
+              delete row.user_id;
+            }
+          } else {
+            delete row.user_id;
+          }
+        } catch {
+          delete row.user_id;
+        }
+      }
+
+      if (row.doc_id) {
+        const { data, error } = await client.from('employees').upsert(row, { onConflict: 'doc_id' }).select().single();
         if (!error && data) return supabaseRowToItem(collectionName, data) as T;
       }
       if (row.email) {
         const { data, error } = await client.from('employees').upsert(row, { onConflict: 'email' }).select().single();
+        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      }
+      if (row.id && Number.isInteger(row.id)) {
+        const { data, error } = await client.from('employees').upsert(row, { onConflict: 'id' }).select().single();
         if (!error && data) return supabaseRowToItem(collectionName, data) as T;
       }
       if (row.uid) {
@@ -774,6 +796,9 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
       }
       const { data, error } = await client.from('employees').insert(row).select().single();
       if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      if (error) {
+        console.error('[supabaseService employees save error]:', error.message);
+      }
       return item;
     }
 

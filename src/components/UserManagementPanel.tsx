@@ -169,6 +169,19 @@ export default function UserManagementPanel({
           operationLabel: 'Création de Compte',
           details: `Création compte ${userToSave.role} (${userToSave.email})`,
         });
+
+        const userNotif = {
+          id: `notif-user-${Date.now()}`,
+          type: 'system',
+          title: 'Nouveau compte utilisateur créé',
+          content: `Le compte pour ${userToSave.name} (${userToSave.email}) avec le rôle ${userToSave.role} a été créé.`,
+          recipient: 'Administrateurs',
+          payload: JSON.stringify({ userId: userToSave.id, email: userToSave.email, role: userToSave.role }),
+          timestamp: new Date().toISOString(),
+          read: false,
+        };
+        onAddNotification(userNotif);
+        console.log('🔔 [NOTIFICATION CRÉÉE] Utilisateur:', userNotif);
       }
 
       showToast?.(

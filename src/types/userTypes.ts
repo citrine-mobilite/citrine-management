@@ -6,6 +6,7 @@ export type UserStatus = 'actif' | 'inactif';
 
 export interface AppUser {
   id: string;
+  doc_id?: string;
   uid?: string;
   email: string;
   name: string;

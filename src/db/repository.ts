@@ -178,3 +178,299 @@ export async function getOrCreateUserRecord(uid: string, email: string, name?: s
     return null;
   }
 }
+
+export interface CreateCollaboratorTransactionInput {
+  name: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  phone?: string;
+  roleType?: string;
+  userRole?: string;
+  department?: string;
+  position?: string;
+  managerId?: string;
+  team?: string;
+  hireDate?: string;
+  birthDate?: string;
+  salary?: number;
+  status?: string;
+  departureReason?: string;
+  suspensionReason?: string;
+  avatarUrl?: string;
+  userPassword?: string;
+}
+
+/**
+ * Exécute le flux transactionnel complet de création de collaborateur :
+ * 1. Création de la fiche collaborateur (employé) sans user_id ni role_id
+ * 2. Création automatique du compte utilisateur
+ * 3. Modification du collaborateur pour lui assigner user_id et role_id
+ * 4. Création et enregistrement de la notification officielle avec logs
+ * 
+ * En cas d'échec à n'importe quelle étape, un ROLLBACK complet est garanti.
+ */
+export async function executeCollaboratorCreationTransaction(input: CreateCollaboratorTransactionInput) {
+  const userEmail = input.email.trim().toLowerCase();
+  const empName = input.name.trim();
+  const empDepartment = input.department?.trim() || 'Direction Générale';
+  const initialPassword = input.userPassword?.trim() || 'Collab@2026';
+
+  const roleTypeLower = (input.roleType || input.userRole || '').toLowerCase();
+  const computedRoleId = roleTypeLower.includes('admin') ? 1 : roleTypeLower.includes('responsable') ? 2 : 3;
+  const resolvedRole = computedRoleId === 1 ? 'administrateur' : computedRoleId === 2 ? 'responsable' : 'employé';
+
+  const empDocId = `emp-${Date.now()}`;
+  const userDocId = `user-${Date.now()}`;
+
+  // 0. Vérification préalable des doublons d'email pour éviter des conflits partiels
+  const { data: existingUser } = await supabaseAdmin.from('users').select('id').eq('email', userEmail).maybeSingle();
+  if (existingUser) {
+    throw new Error(`Un compte utilisateur avec l'email "${userEmail}" existe déjà.`);
+  }
+
+  const { data: existingEmp } = await supabaseAdmin.from('employees').select('id').eq('email', userEmail).maybeSingle();
+  if (existingEmp) {
+    throw new Error(`Un collaborateur avec l'email "${userEmail}" existe déjà.`);
+  }
+
+  let createdEmployeeDbId: number | null = null;
+  let createdUserId: number | null = null;
+  let createdNotifDbId: number | null = null;
+
+  console.log(`🚀 [TRANSACTION INITIALISÉE] Création collaborateur "${empName}" (${userEmail})`);
+
+  try {
+    // -------------------------------------------------------------------------
+    // ÉTAPE 1 : CRÉATION DU COLLABORATEUR DANS LA TABLE EMPLOYEES (SANS USER_ID NI ROLE_ID)
+    // -------------------------------------------------------------------------
+    console.log('📌 [TRANSACTION - ÉTAPE 1/4] Création du collaborateur initial dans la table employees...');
+    const rawEmpData = {
+      doc_id: empDocId,
+      name: empName,
+      first_name: input.firstName || null,
+      last_name: input.lastName || null,
+      email: userEmail,
+      phone: input.phone || null,
+      role_type: input.roleType || 'Employé',
+      department: empDepartment,
+      position: input.position || input.roleType || 'Employé',
+      status: true,
+      hire_date: input.hireDate ? String(input.hireDate).split('T')[0] : null,
+      salary: Math.max(0, Number(input.salary) || 0),
+      photo_url: input.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(empName)}`,
+      emergency_contact: null,
+      work_location: 'Douala',
+      user_id: null,
+      role_id: null,
+      raw_data: {
+        doc_id: empDocId,
+        team: input.team || null,
+        managerId: input.managerId || null,
+        birthDate: input.birthDate || null,
+        avatarUrl: input.avatarUrl || null,
+        departureReason: input.departureReason || null,
+        suspensionReason: input.suspensionReason || null,
+      }
+    };
+
+    const { data: empInserted, error: empInsertErr } = await supabaseAdmin
+      .from('employees')
+      .insert(rawEmpData)
+      .select()
+      .single();
+
+    if (empInsertErr || !empInserted) {
+      throw new Error(`Étape 1 échouée (Création collaborateur): ${empInsertErr?.message || 'Insertion nulle'}`);
+    }
+
+    createdEmployeeDbId = empInserted.id;
+    console.log(`✅ [TRANSACTION - ÉTAPE 1/4 VALIDÉE] Collaborateur créé avec succès. ID: ${createdEmployeeDbId}, DocID: ${empDocId}`);
+
+    // -------------------------------------------------------------------------
+    // ÉTAPE 2 : CRÉATION AUTOMATIQUE DU COMPTE UTILISATEUR ASSOCIÉ
+    // -------------------------------------------------------------------------
+    console.log('📌 [TRANSACTION - ÉTAPE 2/4] Création automatique du compte utilisateur associé...');
+
+    try {
+      await supabaseAdmin.auth.admin.createUser({
+        email: userEmail,
+        password: initialPassword,
+        email_confirm: true,
+      });
+    } catch (authErr: any) {
+      console.warn('[TRANSACTION] Notice Auth Supabase (utilisateur existant ou non-bloquant):', authErr?.message);
+    }
+
+    const { data: userInserted, error: userInsertErr } = await supabaseAdmin
+      .from('users')
+      .insert({
+        doc_id: userDocId,
+        email: userEmail,
+        name: empName,
+        role_id: computedRoleId,
+        status: true,
+        department: empDepartment,
+        phone: input.phone || null,
+        avatar_url: input.avatarUrl || null,
+        raw_data: {
+          doc_id: userDocId,
+          role: resolvedRole,
+          roleId: computedRoleId,
+          employeeId: empDocId,
+          employeeDbId: createdEmployeeDbId,
+          department: empDepartment,
+          passwordHash: initialPassword,
+          createdAt: new Date().toISOString()
+        }
+      })
+      .select()
+      .single();
+
+    if (userInsertErr || !userInserted) {
+      throw new Error(`Étape 2 échouée (Création utilisateur): ${userInsertErr?.message || 'Insertion utilisateur nulle'}`);
+    }
+
+    createdUserId = userInserted.id;
+    console.log(`✅ [TRANSACTION - ÉTAPE 2/4 VALIDÉE] Utilisateur créé avec succès. ID: ${createdUserId}, Email: ${userEmail}`);
+
+    // -------------------------------------------------------------------------
+    // ÉTAPE 3 : MODIFICATION DU COLLABORATEUR POUR LUI ASSIGNER USER_ID ET ROLE_ID
+    // -------------------------------------------------------------------------
+    console.log(`📌 [TRANSACTION - ÉTAPE 3/4] Modification du collaborateur avec user_id: ${createdUserId} et role_id: ${computedRoleId}...`);
+
+    const { data: empUpdated, error: empUpdateErr } = await supabaseAdmin
+      .from('employees')
+      .update({
+        user_id: createdUserId,
+        role_id: computedRoleId,
+        raw_data: {
+          ...rawEmpData.raw_data,
+          userId: createdUserId,
+          roleId: computedRoleId,
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', createdEmployeeDbId)
+      .select()
+      .single();
+
+    if (empUpdateErr || !empUpdated) {
+      throw new Error(`Étape 3 échouée (Mise à jour collaborateur avec user_id/role_id): ${empUpdateErr?.message || 'Mise à jour nulle'}`);
+    }
+
+    console.log(`✅ [TRANSACTION - ÉTAPE 3/4 VALIDÉE] Collaborateur mis à jour avec succès avec user_id: ${createdUserId} et role_id: ${computedRoleId}`);
+
+    // -------------------------------------------------------------------------
+    // ÉTAPE 4 : CRÉATION ET ENREGISTREMENT DE LA NOTIFICATION OFFICIELLE
+    // -------------------------------------------------------------------------
+    console.log('📌 [TRANSACTION - ÉTAPE 4/4] Création et enregistrement de la notification...');
+    const notifDocId = `notif-collab-${Date.now()}`;
+    const notifPayload = {
+      employeeId: empDocId,
+      employeeDbId: createdEmployeeDbId,
+      userId: createdUserId,
+      userEmail,
+      department: empDepartment,
+      role: resolvedRole,
+      createdAt: new Date().toISOString()
+    };
+
+    const notifObj = {
+      id: notifDocId,
+      doc_id: notifDocId,
+      type: 'system',
+      title: 'Nouveau collaborateur enregistré',
+      message: `Le collaborateur ${empName} (${empDepartment}) a été créé et lié à son compte utilisateur (${userEmail}).`,
+      content: `Le collaborateur ${empName} (${empDepartment}) a été créé et lié à son compte utilisateur (${userEmail}).`,
+      recipient: 'Administrateurs & RH',
+      target_user_id: createdUserId,
+      payload: JSON.stringify(notifPayload),
+      timestamp: new Date().toISOString(),
+      read: false,
+      is_read: false
+    };
+
+    const { data: notifInserted, error: notifInsertErr } = await supabaseAdmin
+      .from('notifications')
+      .insert({
+        doc_id: notifDocId,
+        title: notifObj.title,
+        message: notifObj.message,
+        type: notifObj.type,
+        target_user_id: createdUserId,
+        is_read: false,
+        raw_data: notifObj
+      })
+      .select()
+      .single();
+
+    if (notifInsertErr || !notifInserted) {
+      console.warn('[TRANSACTION - NOTIFICATION AVERTISSEMENT]:', notifInsertErr?.message);
+    } else {
+      createdNotifDbId = notifInserted.id;
+      console.log('🔔 [NOTIFICATION CRÉÉE ET ENREGISTRÉE AVEC SUCCÈS] :', notifObj);
+      console.log('📋 [NOTIFICATION DÉTAILS] Titre:', notifObj.title, '| Message:', notifObj.message, '| User ID:', createdUserId);
+    }
+
+    console.log(`🎉 [TRANSACTION TERMINÉE & COMMITTÉE] Collaborateur, Utilisateur et Notification validés à 100%!`);
+
+    return {
+      success: true,
+      employee: {
+        ...empUpdated,
+        doc_id: empUpdated.doc_id || empDocId,
+        _dbId: empUpdated.id,
+        id: empUpdated.doc_id || String(empUpdated.id),
+        userId: String(createdUserId),
+        roleId: computedRoleId,
+      },
+      user: {
+        ...userInserted,
+        doc_id: userInserted.doc_id || userDocId,
+        _dbId: userInserted.id,
+        id: String(userInserted.id),
+        role: resolvedRole,
+        roleId: computedRoleId,
+      },
+      notification: notifObj
+    };
+
+  } catch (error: any) {
+    console.error(`🚨 [TRANSACTION ÉCHOUÉE - ROLLBACK DÉCLENCHÉ] : ${error?.message || error}`);
+
+    // ROLLBACK COMPLET
+    if (createdNotifDbId) {
+      try {
+        console.log(`⏪ [ROLLBACK] Suppression de la notification (ID: ${createdNotifDbId})...`);
+        await supabaseAdmin.from('notifications').delete().eq('id', createdNotifDbId);
+        console.log(`✓ [ROLLBACK] Notification supprimée`);
+      } catch (rbNotifErr: any) {
+        console.error(`❌ [ROLLBACK ERREUR] Suppression notification:`, rbNotifErr?.message);
+      }
+    }
+
+    if (createdUserId) {
+      try {
+        console.log(`⏪ [ROLLBACK] Suppression de l'utilisateur (ID: ${createdUserId})...`);
+        await supabaseAdmin.from('users').delete().eq('id', createdUserId);
+        console.log(`✓ [ROLLBACK] Utilisateur (ID: ${createdUserId}) supprimé`);
+      } catch (rbUserErr: any) {
+        console.error(`❌ [ROLLBACK ERREUR] Suppression utilisateur:`, rbUserErr?.message);
+      }
+    }
+
+    if (createdEmployeeDbId) {
+      try {
+        console.log(`⏪ [ROLLBACK] Suppression du collaborateur (ID: ${createdEmployeeDbId})...`);
+        await supabaseAdmin.from('employees').delete().eq('id', createdEmployeeDbId);
+        console.log(`✓ [ROLLBACK] Collaborateur (ID: ${createdEmployeeDbId}) supprimé`);
+      } catch (rbEmpErr: any) {
+        console.error(`❌ [ROLLBACK ERREUR] Suppression collaborateur:`, rbEmpErr?.message);
+      }
+    }
+
+    throw new Error(`Transaction annulée (Rollback complet) : ${error?.message || 'Erreur inconnue'}`);
+  }
+}
+

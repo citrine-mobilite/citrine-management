@@ -7,7 +7,8 @@ import {
   getCollectionData, 
   saveDocumentData, 
   deleteDocumentData, 
-  getOrCreateUserRecord 
+  getOrCreateUserRecord,
+  executeCollaboratorCreationTransaction
 } from "./src/db/repository.ts";
 
 async function startServer() {
@@ -84,6 +85,21 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error syncing user:", error);
       res.status(500).json({ success: false, error: error.message || "Failed to sync user" });
+    }
+  });
+
+  // Transactional Collaborator Creation
+  app.post("/api/collaborators/transactional", async (req: express.Request, res: express.Response) => {
+    try {
+      const input = req.body;
+      if (!input?.name || !input?.email) {
+        return res.status(400).json({ success: false, error: "Nom et adresse email requis." });
+      }
+      const result = await executeCollaboratorCreationTransaction(input);
+      res.json(result);
+    } catch (error: any) {
+      console.error("[API Collaborator Transaction Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Échec de la transaction." });
     }
   });
 

@@ -1,19 +1,18 @@
 -- ==============================================================================
--- CITRINE MANAGEMENT - SCHÉMA COMPLET SUPABASE POSTGRESQL (39 TABLES)
--- Version : 2.0 (Post-Audit Technique de Production)
+-- CITRINE MANAGEMENT - SCHÉMA COMPLET SUPABASE POSTGRESQL (40 TABLES)
+-- Version : 3.0 (Architecture Supabase pure - Sans Firebase)
 -- Clés :
---   - id  : BIGSERIAL PRIMARY KEY (Auto-incrémenté)
---   - uid : UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL (UUID v4)
---   - Intégrité : Relations One-to-Many & Many-to-Many avec tables d'association
---   - Historique légal : ON DELETE RESTRICT sur pointages, paies, finances, audits
---   - Statuts métiers : Types TEXT avec contraintes CHECK (pas de booléen tronqué)
---   - Sécurité : RLS activée sur toutes les tables, zéro secret en clair
+--   - id     : BIGSERIAL PRIMARY KEY (Auto-incrémenté)
+--   - doc_id : TEXT UNIQUE (Identifiant chaîne unifié frontend & synchronisation)
+--   - uid    : UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL (UUID v4)
+--   - Intégrité : Relations avec ON DELETE CASCADE / SET NULL appropriés
+--   - RLS    : Politiques d'accès ouvertes pour anon, authenticated et service_role
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- DROP EXISTING TABLES IN REVERSE ORDER OF DEPENDENCY
+-- SUPPRESSION CONDITIONNELLE DES ANCIENNES TABLES
 DROP TABLE IF EXISTS public.admin_audit_logs CASCADE;
 DROP TABLE IF EXISTS public.connection_logs CASCADE;
 DROP TABLE IF EXISTS public.generic_collections CASCADE;
@@ -50,17 +49,19 @@ DROP TABLE IF EXISTS public.task_assignees CASCADE;
 DROP TABLE IF EXISTS public.tasks CASCADE;
 DROP TABLE IF EXISTS public.task_project_members CASCADE;
 DROP TABLE IF EXISTS public.task_projects CASCADE;
+DROP TABLE IF EXISTS public.leave_requests CASCADE;
 DROP TABLE IF EXISTS public.employees CASCADE;
 DROP TABLE IF EXISTS public.users CASCADE;
 DROP TABLE IF EXISTS public.roles CASCADE;
 
 -- ==============================================================================
--- SECTION 1 : MODULE COMPTES, SÉCURITÉ & ORGANISATION
+-- SECTION 1 : COMPTES, ROLES ET PERSONNEL
 -- ==============================================================================
 
 -- 1. Table des Rôles
 CREATE TABLE public.roles (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     name TEXT UNIQUE NOT NULL,
     code TEXT UNIQUE NOT NULL,
@@ -71,16 +72,17 @@ CREATE TABLE public.roles (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Table des Utilisateurs Applicatifs
+-- 2. Table des Utilisateurs
 CREATE TABLE public.users (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     name TEXT,
     role_id BIGINT REFERENCES public.roles(id) ON DELETE SET NULL,
     status BOOLEAN DEFAULT TRUE,
     department TEXT,
-    phone TEXT UNIQUE,
+    phone TEXT,
     avatar_url TEXT,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -90,6 +92,7 @@ CREATE TABLE public.users (
 -- 3. Table des Collaborateurs RH / Employés
 CREATE TABLE public.employees (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     user_id BIGINT REFERENCES public.users(id) ON DELETE SET NULL,
     role_id BIGINT REFERENCES public.roles(id) ON DELETE SET NULL,
@@ -97,45 +100,30 @@ CREATE TABLE public.employees (
     first_name TEXT,
     last_name TEXT,
     email TEXT UNIQUE,
-    phone TEXT UNIQUE,
-    role_type TEXT,
+    phone TEXT,
     department TEXT,
     position TEXT,
+    role_type TEXT DEFAULT 'Employé',
     status BOOLEAN DEFAULT TRUE,
-    employment_status TEXT DEFAULT 'en_poste',
     hire_date DATE,
-    departure_date DATE,
-    salary NUMERIC DEFAULT 0 CONSTRAINT chk_employees_salary CHECK (salary >= 0),
-    avatar_url TEXT,
-    manager_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    team TEXT,
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 4. Table des Départements
-CREATE TABLE public.departments (
-    id BIGSERIAL PRIMARY KEY,
-    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    code TEXT UNIQUE NOT NULL,
-    description TEXT,
-    manager_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    parent_department_id BIGINT REFERENCES public.departments(id) ON DELETE SET NULL,
-    status BOOLEAN DEFAULT TRUE,
+    salary NUMERIC DEFAULT 0,
+    photo_url TEXT,
+    emergency_contact TEXT,
+    work_location TEXT DEFAULT 'Douala',
+    badge_code TEXT,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ==============================================================================
--- SECTION 2 : MODULE PROJETS, TÂCHES & AFFECTATIONS MULTIPLES
+-- SECTION 2 : TÂCHES, PROJETS ET ASSIGNATIONS
 -- ==============================================================================
 
--- 5. Table des Projets de Tâches
+-- 4. Table des Projets de Tâches
 CREATE TABLE public.task_projects (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
@@ -147,57 +135,59 @@ CREATE TABLE public.task_projects (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. Table d'association : Membres de Projets (Relation N-N)
+-- 5. Membres des Projets
 CREATE TABLE public.task_project_members (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    project_id BIGINT NOT NULL REFERENCES public.task_projects(id) ON DELETE CASCADE,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+    project_id BIGINT REFERENCES public.task_projects(id) ON DELETE CASCADE,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE CASCADE,
     role_in_project TEXT DEFAULT 'membre',
-    added_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_project_employee UNIQUE (project_id, employee_id)
+    added_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. Table des Tâches Opérationnelles
+-- 6. Table des Tâches
 CREATE TABLE public.tasks (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
     date DATE,
     time TEXT,
-    status TEXT DEFAULT 'todo' CONSTRAINT chk_tasks_status CHECK (status IN ('todo', 'in_progress', 'completed', 'pending_validation', 'blocked', 'idea', 'en_cours')),
-    priority TEXT DEFAULT 'medium' CONSTRAINT chk_tasks_priority CHECK (priority IN ('low', 'medium', 'high', 'urgent', 'haut')),
+    status TEXT DEFAULT 'todo',
+    priority TEXT DEFAULT 'medium',
     assigned_to TEXT,
     employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
     department TEXT,
-    project_id BIGINT REFERENCES public.task_projects(id) ON DELETE CASCADE,
+    project_id BIGINT REFERENCES public.task_projects(id) ON DELETE SET NULL,
     due_date DATE,
     is_milestone BOOLEAN DEFAULT FALSE,
-    milestone_progress NUMERIC DEFAULT 0 CONSTRAINT chk_tasks_milestone_progress CHECK (milestone_progress >= 0 AND milestone_progress <= 100),
+    milestone_progress NUMERIC DEFAULT 0,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. Table d'association : Affectations Multiples de Tâches (Relation N-N)
+-- 7. Affectations Multiples de Tâches
 CREATE TABLE public.task_assignees (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    task_id BIGINT NOT NULL REFERENCES public.tasks(id) ON DELETE CASCADE,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+    task_id BIGINT REFERENCES public.tasks(id) ON DELETE CASCADE,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE CASCADE,
     role_in_task TEXT DEFAULT 'contributeur',
-    assigned_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_task_employee UNIQUE (task_id, employee_id)
+    assigned_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ==============================================================================
--- SECTION 3 : MODULE RAPPELS, NOTIFICATIONS & ALERTES MULTIPLES
+-- SECTION 3 : RAPPELS & NOTIFICATIONS
 -- ==============================================================================
 
--- 9. Table des Rappels
+-- 8. Table des Rappels
 CREATE TABLE public.reminders (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     title TEXT NOT NULL,
     note TEXT,
@@ -214,20 +204,21 @@ CREATE TABLE public.reminders (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 10. Table d'association : Destinataires Multiples des Rappels (Relation N-N)
+-- 9. Destinataires des Rappels
 CREATE TABLE public.reminder_recipients (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    reminder_id BIGINT NOT NULL REFERENCES public.reminders(id) ON DELETE CASCADE,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+    reminder_id BIGINT REFERENCES public.reminders(id) ON DELETE CASCADE,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE CASCADE,
     acknowledged BOOLEAN DEFAULT FALSE,
-    acknowledged_at TIMESTAMPTZ,
-    CONSTRAINT uq_reminder_employee UNIQUE (reminder_id, employee_id)
+    acknowledged_at TIMESTAMPTZ
 );
 
--- 11. Table des Notifications & Alertes Système
+-- 10. Notifications Système
 CREATE TABLE public.notifications (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     title TEXT NOT NULL,
     message TEXT NOT NULL,
@@ -241,544 +232,549 @@ CREATE TABLE public.notifications (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 12. Table d'association : Destinataires et Suivi de Lecture des Notifications (Relation N-N)
+-- 11. Destinataires des Notifications
 CREATE TABLE public.notification_recipients (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    notification_id BIGINT NOT NULL REFERENCES public.notifications(id) ON DELETE CASCADE,
-    user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-    is_read BOOLEAN DEFAULT FALSE,
-    read_at TIMESTAMPTZ,
-    CONSTRAINT uq_notification_user UNIQUE (notification_id, user_id)
+    notification_id BIGINT REFERENCES public.notifications(id) ON DELETE CASCADE,
+    user_id BIGINT REFERENCES public.users(id) ON DELETE CASCADE,
+    is_read BOOLEAN DEFAULT FALSE
 );
 
 -- ==============================================================================
--- SECTION 4 : MODULE POINTAGE, PRÉSENCES & SÉCURITÉ DE BADGE (Historique préservé)
+-- SECTION 4 : POINTAGES & PRÉSENCES
 -- ==============================================================================
 
--- 13. Table des Pointages & Présences (ON DELETE RESTRICT pour conformité légale)
+-- 12. Table des Présences
 CREATE TABLE public.presences (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE RESTRICT,
-    date DATE NOT NULL,
-    status TEXT DEFAULT 'present' CONSTRAINT chk_presences_status CHECK (status IN ('present', 'late', 'absent', 'not_tracked', 'on_leave', 'holiday')),
-    arrival_time TEXT,
-    pause_start TEXT,
-    pause_end TEXT,
-    departure_time TEXT,
-    clocking_method TEXT,
-    location TEXT,
-    site_name TEXT,
-    latitude NUMERIC,
-    longitude NUMERIC,
-    correction_reason TEXT,
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 14. Table d'Historique des Pauses de Présence
-CREATE TABLE public.presence_pauses (
-    id BIGSERIAL PRIMARY KEY,
-    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    presence_id BIGINT NOT NULL REFERENCES public.presences(id) ON DELETE CASCADE,
-    pause_start TIMESTAMPTZ NOT NULL,
-    pause_end TIMESTAMPTZ,
-    duration_minutes INTEGER,
-    reason TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 15. Table des Incidents de Pointage & Justifications (ON DELETE RESTRICT)
-CREATE TABLE public.attendance_incidents (
-    id BIGSERIAL PRIMARY KEY,
-    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE RESTRICT,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
     employee_name TEXT,
     date DATE NOT NULL,
-    time_string TEXT,
-    type TEXT NOT NULL,
-    origin TEXT,
-    reason TEXT,
-    is_declared_in_advance BOOLEAN DEFAULT FALSE,
-    is_justified BOOLEAN DEFAULT FALSE,
-    status TEXT DEFAULT 'signale',
+    arrival_time TEXT,
+    departure_time TEXT,
+    status TEXT DEFAULT 'present',
+    late_minutes INTEGER DEFAULT 0,
+    pause_minutes INTEGER DEFAULT 0,
+    motif TEXT,
+    signature TEXT,
+    gps_lat NUMERIC,
+    gps_lng NUMERIC,
+    method TEXT DEFAULT 'kiosk',
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 16. Table des Codes de Badges Sécurisés 16 Caractères
+-- 13. Pauses de Présence
+CREATE TABLE public.presence_pauses (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    presence_id BIGINT REFERENCES public.presences(id) ON DELETE CASCADE,
+    start_time TEXT NOT NULL,
+    end_time TEXT,
+    duration_minutes INTEGER DEFAULT 0,
+    motif TEXT
+);
+
+-- 14. Incidents de Présence
+CREATE TABLE public.attendance_incidents (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    date DATE NOT NULL,
+    type TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'en_attente',
+    resolved_by BIGINT REFERENCES public.users(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMPTZ,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 15. Codes Badges 16 Caractères
 CREATE TABLE public.badge_codes_16 (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    code TEXT NOT NULL UNIQUE,
-    formatted_code TEXT,
-    generated_by TEXT,
-    target_month TEXT,
+    code TEXT UNIQUE NOT NULL,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    assigned_name TEXT,
+    created_by TEXT,
+    expires_at TIMESTAMPTZ,
     is_used BOOLEAN DEFAULT FALSE,
-    used_by_employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    used_by_employee_name TEXT,
     used_at TIMESTAMPTZ,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 17. Table des Sessions QR Code Dynamiques
+-- 16. Sessions QR Dynamiques
 CREATE TABLE public.dynamic_qr_sessions (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    session_id TEXT,
-    token TEXT UNIQUE NOT NULL,
-    generated_by TEXT,
-    status BOOLEAN DEFAULT TRUE,
+    session_id TEXT UNIQUE NOT NULL,
+    created_by TEXT,
     expires_at TIMESTAMPTZ,
-    used_by_employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    action TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ==============================================================================
--- SECTION 5 : MODULE GESTION DU MATÉRIEL & INVENTAIRE
+-- SECTION 5 : INVENTAIRE, MATÉRIEL ET DISCIPLINES
 -- ==============================================================================
 
--- 18. Table de l'Inventaire & Équipements
+-- 17. Inventaire Matériel
 CREATE TABLE public.inventory (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     name TEXT NOT NULL,
-    designation TEXT,
     category TEXT,
-    quantity INTEGER DEFAULT 0 CONSTRAINT chk_inventory_quantity CHECK (quantity >= 0),
-    status BOOLEAN DEFAULT TRUE,
-    location TEXT,
-    reference TEXT,
     serial_number TEXT,
-    unit_price NUMERIC DEFAULT 0 CONSTRAINT chk_inventory_price CHECK (unit_price >= 0),
+    quantity INTEGER DEFAULT 1,
+    status TEXT DEFAULT 'disponible',
     assigned_to_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    is_donated BOOLEAN DEFAULT FALSE,
+    assigned_date DATE,
+    unit_price_xaf NUMERIC DEFAULT 0,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 19. Table des Assignations d'Inventaire
+-- 18. Affectations Inventaire
 CREATE TABLE public.inventory_assignments (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    inventory_id BIGINT NOT NULL REFERENCES public.inventory(id) ON DELETE CASCADE,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+    inventory_id BIGINT REFERENCES public.inventory(id) ON DELETE CASCADE,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE CASCADE,
     assigned_at TIMESTAMPTZ DEFAULT NOW(),
     returned_at TIMESTAMPTZ,
-    condition_on_assignment TEXT,
-    condition_on_return TEXT,
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    condition TEXT DEFAULT 'bon_etat'
 );
 
--- ==============================================================================
--- SECTION 6 : MODULE DISCIPLINE, DOCUMENTS RH & PAIE (Historique préservé)
--- ==============================================================================
-
--- 20. Table des Incidents Disciplinaires (ON DELETE RESTRICT)
+-- 19. Incidents Disciplinaires
 CREATE TABLE public.disciplinary_incidents (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE RESTRICT,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
     employee_name TEXT,
     date DATE NOT NULL,
-    severity TEXT,
-    reason TEXT,
-    description TEXT,
-    measures TEXT,
-    reported_by BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    status BOOLEAN DEFAULT TRUE,
+    severity TEXT DEFAULT 'mineure',
+    reason TEXT NOT NULL,
+    action_taken TEXT,
+    decision_by TEXT,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 21. Table des Documents RH & Administratifs (ON DELETE RESTRICT)
+-- 20. Départements
+CREATE TABLE public.departments (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    name TEXT UNIQUE NOT NULL,
+    code TEXT,
+    manager_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    budget_xaf NUMERIC DEFAULT 0,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 21. Documents RH Générés
 CREATE TABLE public.documents (
     id BIGSERIAL PRIMARY KEY,
-    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    title TEXT NOT NULL,
-    category TEXT,
-    file_url TEXT,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE RESTRICT,
-    author_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    is_confidential BOOLEAN DEFAULT FALSE,
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 22. Table des Modèles de Documents RH
-CREATE TABLE public.rh_document_templates (
-    id BIGSERIAL PRIMARY KEY,
-    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    title TEXT NOT NULL,
-    category TEXT,
-    content TEXT,
-    variables JSONB,
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 23. Table des Dettes & Avances sur Salaire (ON DELETE RESTRICT pour conformité comptable)
-CREATE TABLE public.processflow_salary_debts (
-    id BIGSERIAL PRIMARY KEY,
-    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE RESTRICT,
-    total_amount NUMERIC DEFAULT 0 CONSTRAINT chk_debt_total CHECK (total_amount >= 0),
-    monthly_deduction NUMERIC DEFAULT 0 CONSTRAINT chk_debt_deduction CHECK (monthly_deduction >= 0),
-    remaining_balance NUMERIC DEFAULT 0 CONSTRAINT chk_debt_remaining CHECK (remaining_balance >= 0),
-    reason TEXT,
-    status BOOLEAN DEFAULT TRUE,
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 24. Table des Paiements de Salaires (ON DELETE RESTRICT pour conformité fiscale)
-CREATE TABLE public.salary_payments (
-    id BIGSERIAL PRIMARY KEY,
-    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE RESTRICT,
-    period TEXT NOT NULL,
-    base_salary NUMERIC DEFAULT 0 CONSTRAINT chk_salary_base CHECK (base_salary >= 0),
-    bonuses NUMERIC DEFAULT 0 CONSTRAINT chk_salary_bonus CHECK (bonuses >= 0),
-    deductions NUMERIC DEFAULT 0 CONSTRAINT chk_salary_deductions CHECK (deductions >= 0),
-    net_salary NUMERIC DEFAULT 0 CONSTRAINT chk_salary_net CHECK (net_salary >= 0),
-    payment_status TEXT DEFAULT 'pending',
-    payment_date DATE,
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ==============================================================================
--- SECTION 7 : MODULE FINANCES, TRANSACTIONS & NOTES DE FRAIS
--- ==============================================================================
-
--- 25. Table des Transactions Financières
-CREATE TABLE public.financial_transactions (
-    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     title TEXT NOT NULL,
     type TEXT NOT NULL,
-    category TEXT,
-    amount NUMERIC DEFAULT 0 CONSTRAINT chk_financial_tx_amount CHECK (amount >= 0),
-    date DATE NOT NULL,
-    payment_method TEXT,
-    reference TEXT,
-    description TEXT,
-    status BOOLEAN DEFAULT TRUE,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    file_url TEXT,
+    content TEXT,
+    status TEXT DEFAULT 'valide',
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 26. Table des Notes de Frais
-CREATE TABLE public.expense_claims (
+-- 22. Modèles de Documents RH
+CREATE TABLE public.rh_document_templates (
     id BIGSERIAL PRIMARY KEY,
-    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    employee_id BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE RESTRICT,
-    title TEXT NOT NULL,
-    amount NUMERIC DEFAULT 0 CONSTRAINT chk_expense_claims_amount CHECK (amount >= 0),
-    category TEXT,
-    date DATE NOT NULL,
-    receipt_url TEXT,
-    status TEXT DEFAULT 'pending',
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 27. Table des Partenaires & Prestataires
-CREATE TABLE public.partners (
-    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     name TEXT NOT NULL,
-    service_type TEXT,
+    code TEXT UNIQUE NOT NULL,
+    type TEXT NOT NULL,
+    description TEXT,
+    content_template TEXT NOT NULL,
+    required_variables JSONB,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- SECTION 6 : FINANCES, PAIES ET PARTENAIRES
+-- ==============================================================================
+
+-- 23. Dettes et Avances Salariales
+CREATE TABLE public.processflow_salary_debts (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    amount NUMERIC NOT NULL,
+    reason TEXT,
+    status TEXT DEFAULT 'en_cours',
+    repaid_amount NUMERIC DEFAULT 0,
+    due_date DATE,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 24. Paiements de Salaires
+CREATE TABLE public.salary_payments (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    month TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    base_salary NUMERIC NOT NULL,
+    bonus NUMERIC DEFAULT 0,
+    deductions NUMERIC DEFAULT 0,
+    net_salary NUMERIC NOT NULL,
+    payment_date DATE,
+    payment_method TEXT DEFAULT 'virement',
+    status TEXT DEFAULT 'paye',
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 25. Transactions Financières
+CREATE TABLE public.financial_transactions (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    type TEXT NOT NULL,
+    category TEXT,
+    amount NUMERIC NOT NULL,
+    description TEXT,
+    reference TEXT,
+    date DATE NOT NULL,
+    beneficiary TEXT,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 26. Partenaires d'Affaires
+CREATE TABLE public.partners (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    name TEXT NOT NULL,
     contact_person TEXT,
     email TEXT,
     phone TEXT,
-    address TEXT,
-    status BOOLEAN DEFAULT TRUE,
-    contract_start DATE,
-    contract_end DATE,
+    service_type TEXT,
+    status TEXT DEFAULT 'actif',
+    rating NUMERIC DEFAULT 5,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ==============================================================================
--- SECTION 8 : PARAMÈTRES, COMMUNICATION, RECRUTEMENT, HSE & AUDIT
+-- SECTION 7 : CONFIGURATION, CONGÉS & OPÉRATIONS
 -- ==============================================================================
 
--- 28. Table des Paramètres de l'Entreprise
+-- 27. Paramètres d'Entreprise
 CREATE TABLE public.company_settings (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    company_name TEXT NOT NULL,
-    rccm TEXT,
-    niu TEXT,
-    address TEXT,
-    phone TEXT,
-    email TEXT,
-    website TEXT,
-    logo_url TEXT,
-    work_start_time TEXT,
-    work_end_time TEXT,
+    setting_key TEXT UNIQUE,
+    setting_value JSONB,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 29. Table des Appels Teams / WebRTC
+-- 28. Demandes de Congés et Absences
+CREATE TABLE public.leave_requests (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    employee_name TEXT,
+    type TEXT DEFAULT 'conge_paye',
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    days_count NUMERIC DEFAULT 1,
+    reason TEXT,
+    status TEXT DEFAULT 'en_attente',
+    decided_by TEXT,
+    decided_at TIMESTAMPTZ,
+    decision_reason TEXT,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 29. Appels et Communications
 CREATE TABLE public.calls (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    room_id TEXT,
     caller_id TEXT,
     caller_name TEXT,
-    recipient_id TEXT,
-    status TEXT,
-    call_type TEXT,
+    receiver_id TEXT,
+    receiver_name TEXT,
+    status TEXT DEFAULT 'initiating',
+    room_id TEXT,
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    ended_at TIMESTAMPTZ,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 30. Table des Présences Utilisateurs (Online / Offline)
+-- 30. Statuts de Présence En Ligne des Utilisateurs
 CREATE TABLE public.user_presences (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     user_id TEXT,
-    status TEXT,
-    last_seen TIMESTAMPTZ,
+    user_name TEXT,
+    status TEXT DEFAULT 'online',
+    last_active TIMESTAMPTZ DEFAULT NOW(),
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 31. Table des Offres d'Emploi
+-- 31. Offres d'Emploi
 CREATE TABLE public.job_offers (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     title TEXT NOT NULL,
     department TEXT,
-    location TEXT,
-    contract_type TEXT,
     description TEXT,
-    status BOOLEAN DEFAULT TRUE,
-    closing_date DATE,
+    requirements TEXT,
+    status TEXT DEFAULT 'ouverte',
+    deadline DATE,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 32. Table des Candidatures
+-- 32. Candidatures
 CREATE TABLE public.job_applications (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    job_offer_id TEXT,
+    job_offer_id BIGINT REFERENCES public.job_offers(id) ON DELETE CASCADE,
     candidate_name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    phone TEXT,
-    cv_url TEXT,
-    status TEXT DEFAULT 'pending',
+    candidate_email TEXT NOT NULL,
+    candidate_phone TEXT,
+    resume_url TEXT,
+    status TEXT DEFAULT 'recue',
+    notes TEXT,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 33. Table des Incidents HSE
+-- 33. Notes de Frais
+CREATE TABLE public.expense_claims (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    employee_name TEXT,
+    title TEXT NOT NULL,
+    amount NUMERIC NOT NULL,
+    date DATE NOT NULL,
+    category TEXT,
+    receipt_url TEXT,
+    status TEXT DEFAULT 'soumise',
+    approved_by TEXT,
+    approved_at TIMESTAMPTZ,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 34. Incidents HSE
 CREATE TABLE public.hse_incidents (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     title TEXT NOT NULL,
-    location TEXT,
-    severity TEXT,
+    site_location TEXT,
+    zone_precise TEXT,
+    type TEXT,
+    severity TEXT DEFAULT 'mineur',
+    date DATE NOT NULL,
+    time TEXT,
     description TEXT,
-    reported_by BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    status TEXT DEFAULT 'open',
+    reported_by TEXT,
+    victim_name TEXT,
+    days_lost INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'signale',
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 34. Table des Registres de Visiteurs
+-- 35. Registre des Visiteurs
 CREATE TABLE public.visitor_logs (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     visitor_name TEXT NOT NULL,
     visitor_company TEXT,
-    host_employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    check_in TIMESTAMPTZ,
-    check_out TIMESTAMPTZ,
+    visitor_phone TEXT,
+    id_card_number TEXT,
+    site_location TEXT,
+    purpose TEXT,
+    host_employee_id TEXT,
+    host_employee_name TEXT,
     badge_number TEXT,
+    vehicle_plate TEXT,
+    check_in_time TEXT,
+    check_in_date DATE,
+    check_out_time TEXT,
+    status TEXT DEFAULT 'sur_site',
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 35. Table des Suggestions & Boîte à Idées
+-- 36. Boîte à Idées & Suggestions
 CREATE TABLE public.idea_suggestions (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
     category TEXT,
-    author_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    status TEXT DEFAULT 'pending',
-    votes_count INTEGER DEFAULT 0,
+    is_anonymous BOOLEAN DEFAULT FALSE,
+    author_name TEXT,
+    author_department TEXT,
+    author_id TEXT,
+    status TEXT DEFAULT 'soumise',
+    likes_count INTEGER DEFAULT 0,
+    liked_user_ids JSONB DEFAULT '[]'::jsonb,
+    management_response TEXT,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 36. Table des Sondages d'Entreprise
+-- 37. Sondages d'Entreprise
 CREATE TABLE public.enterprise_surveys (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
     category TEXT,
-    status BOOLEAN DEFAULT TRUE,
+    status TEXT DEFAULT 'actif',
     deadline DATE,
-    createdBy TEXT,
-    options JSONB,
-    voted_user_ids JSONB,
+    created_by TEXT,
+    options JSONB DEFAULT '[]'::jsonb,
+    voted_user_ids JSONB DEFAULT '[]'::jsonb,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 37. Table des Collections Génériques
+-- 38. Collections Génériques (Fallback)
 CREATE TABLE public.generic_collections (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT NOT NULL,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
     collection TEXT NOT NULL,
     data JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_generic_collection_doc UNIQUE (collection, doc_id)
+);
+
+-- 39. Journal des Connexions
+CREATE TABLE public.connection_logs (
+    id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
+    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    user_id TEXT,
+    user_name TEXT,
+    user_email TEXT,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    ip_address TEXT,
+    location TEXT,
+    auth_method TEXT DEFAULT 'password',
+    status TEXT DEFAULT 'success',
+    details TEXT,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 38. Table des Journaux de Connexion & Sécurité (Immuable)
-CREATE TABLE public.connection_logs (
-    id BIGSERIAL PRIMARY KEY,
-    uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    user_id BIGINT REFERENCES public.users(id) ON DELETE SET NULL,
-    userName TEXT,
-    userEmail TEXT,
-    timestamp TEXT,
-    ip_address TEXT,
-    location TEXT,
-    auth_method TEXT,
-    status BOOLEAN DEFAULT TRUE,
-    details TEXT,
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 39. Table du Journal d'Audit des Opérations Administratives RH (Immuable)
+-- 40. Journal d'Audit Administrateur
 CREATE TABLE public.admin_audit_logs (
     id BIGSERIAL PRIMARY KEY,
+    doc_id TEXT UNIQUE,
     uid UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
-    timestamp TEXT,
-    author_name TEXT NOT NULL,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    author_name TEXT DEFAULT 'Super Admin',
     author_role TEXT,
-    target_user_id BIGINT REFERENCES public.users(id) ON DELETE SET NULL,
-    target_employee_id BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
-    target_name TEXT NOT NULL,
-    operation_type TEXT NOT NULL,
+    target_user_id TEXT,
+    target_employee_id TEXT,
+    target_name TEXT,
+    operation_type TEXT,
     operation_label TEXT,
     details TEXT,
     ip_address TEXT,
     raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ==============================================================================
--- SECTION 9 : INDEX DE PERFORMANCE & CONTRAINTES RELATIONNELLES
+-- INDEX DE PERFORMANCE & RECHERCHE RAPIDE
 -- ==============================================================================
-
--- Index sur UID (clés d'identification globale v4)
-CREATE INDEX IF NOT EXISTS idx_roles_uid ON public.roles(uid);
-CREATE INDEX IF NOT EXISTS idx_users_uid ON public.users(uid);
-CREATE INDEX IF NOT EXISTS idx_employees_uid ON public.employees(uid);
-CREATE INDEX IF NOT EXISTS idx_task_projects_uid ON public.task_projects(uid);
-CREATE INDEX IF NOT EXISTS idx_tasks_uid ON public.tasks(uid);
-CREATE INDEX IF NOT EXISTS idx_task_assignees_uid ON public.task_assignees(uid);
-CREATE INDEX IF NOT EXISTS idx_task_project_members_uid ON public.task_project_members(uid);
-CREATE INDEX IF NOT EXISTS idx_reminders_uid ON public.reminders(uid);
-CREATE INDEX IF NOT EXISTS idx_reminder_recipients_uid ON public.reminder_recipients(uid);
-CREATE INDEX IF NOT EXISTS idx_presences_uid ON public.presences(uid);
-CREATE INDEX IF NOT EXISTS idx_presence_pauses_uid ON public.presence_pauses(uid);
-CREATE INDEX IF NOT EXISTS idx_attendance_incidents_uid ON public.attendance_incidents(uid);
-CREATE INDEX IF NOT EXISTS idx_notifications_uid ON public.notifications(uid);
-CREATE INDEX IF NOT EXISTS idx_notification_recipients_uid ON public.notification_recipients(uid);
-CREATE INDEX IF NOT EXISTS idx_inventory_uid ON public.inventory(uid);
-CREATE INDEX IF NOT EXISTS idx_documents_uid ON public.documents(uid);
-CREATE INDEX IF NOT EXISTS idx_salary_payments_uid ON public.salary_payments(uid);
-CREATE INDEX IF NOT EXISTS idx_financial_transactions_uid ON public.financial_transactions(uid);
-
--- Index sur Clés Étrangères (Jointures et requêtes relationnelles)
-CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role_id);
-CREATE INDEX IF NOT EXISTS idx_employees_user ON public.employees(user_id);
-CREATE INDEX IF NOT EXISTS idx_employees_role ON public.employees(role_id);
-CREATE INDEX IF NOT EXISTS idx_employees_manager ON public.employees(manager_id);
-CREATE INDEX IF NOT EXISTS idx_employees_dept ON public.employees(department);
-CREATE INDEX IF NOT EXISTS idx_tasks_project ON public.tasks(project_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_employee ON public.tasks(employee_id);
-CREATE INDEX IF NOT EXISTS idx_task_assignees_task ON public.task_assignees(task_id);
-CREATE INDEX IF NOT EXISTS idx_task_assignees_emp ON public.task_assignees(employee_id);
-CREATE INDEX IF NOT EXISTS idx_task_members_proj ON public.task_project_members(project_id);
-CREATE INDEX IF NOT EXISTS idx_task_members_emp ON public.task_project_members(employee_id);
-CREATE INDEX IF NOT EXISTS idx_reminder_recipients_rem ON public.reminder_recipients(reminder_id);
-CREATE INDEX IF NOT EXISTS idx_reminder_recipients_emp ON public.reminder_recipients(employee_id);
-CREATE INDEX IF NOT EXISTS idx_notif_recipients_notif ON public.notification_recipients(notification_id);
-CREATE INDEX IF NOT EXISTS idx_notif_recipients_user ON public.notification_recipients(user_id);
-CREATE INDEX IF NOT EXISTS idx_presences_emp ON public.presences(employee_id);
-CREATE INDEX IF NOT EXISTS idx_presence_pauses_pres ON public.presence_pauses(presence_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_inc_emp ON public.attendance_incidents(employee_id);
-CREATE INDEX IF NOT EXISTS idx_inventory_assigned ON public.inventory(assigned_to_id);
-CREATE INDEX IF NOT EXISTS idx_inv_assign_inv ON public.inventory_assignments(inventory_id);
-CREATE INDEX IF NOT EXISTS idx_inv_assign_emp ON public.inventory_assignments(employee_id);
-CREATE INDEX IF NOT EXISTS idx_disc_inc_emp ON public.disciplinary_incidents(employee_id);
-CREATE INDEX IF NOT EXISTS idx_documents_emp ON public.documents(employee_id);
-CREATE INDEX IF NOT EXISTS idx_salary_debts_emp ON public.processflow_salary_debts(employee_id);
-CREATE INDEX IF NOT EXISTS idx_salary_payments_emp ON public.salary_payments(employee_id);
-CREATE INDEX IF NOT EXISTS idx_expense_claims_emp ON public.expense_claims(employee_id);
-
--- Index composites et partiels orientés requêtes de production
-CREATE INDEX IF NOT EXISTS idx_tasks_active_employee 
-    ON public.tasks(employee_id, status) 
-    WHERE status NOT IN ('completed');
-
-CREATE INDEX IF NOT EXISTS idx_presences_lookup 
-    ON public.presences(employee_id, date);
-
-CREATE INDEX IF NOT EXISTS idx_notifications_unread_user 
-    ON public.notification_recipients(user_id) 
-    WHERE is_read = FALSE;
-
-CREATE INDEX IF NOT EXISTS idx_reminders_pending 
-    ON public.reminders(date, time) 
-    WHERE triggered = FALSE AND stopped = FALSE;
+CREATE INDEX IF NOT EXISTS idx_users_doc_id ON public.users(doc_id);
+CREATE INDEX IF NOT EXISTS idx_employees_doc_id ON public.employees(doc_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_doc_id ON public.tasks(doc_id);
+CREATE INDEX IF NOT EXISTS idx_presences_doc_id ON public.presences(doc_id);
+CREATE INDEX IF NOT EXISTS idx_reminders_doc_id ON public.reminders(doc_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_doc_id ON public.notifications(doc_id);
+CREATE INDEX IF NOT EXISTS idx_company_settings_doc_id ON public.company_settings(doc_id);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_doc_id ON public.leave_requests(doc_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_doc_id ON public.inventory(doc_id);
+CREATE INDEX IF NOT EXISTS idx_disc_inc_doc_id ON public.disciplinary_incidents(doc_id);
+CREATE INDEX IF NOT EXISTS idx_documents_doc_id ON public.documents(doc_id);
 
 -- ==============================================================================
--- SECTION 10 : SÉCURITÉ SUPABASE & ROW LEVEL SECURITY (RLS)
+-- SÉCURITÉ & ROW LEVEL SECURITY (RLS) UNIFIÉE
 -- ==============================================================================
-
--- Activation RLS globale
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
@@ -806,6 +802,7 @@ ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notification_recipients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.calls ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_presences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.job_offers ENABLE ROW LEVEL SECURITY;
@@ -819,7 +816,7 @@ ALTER TABLE public.generic_collections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.connection_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Politiques RLS de base
+-- Attribution universelle des politiques RLS (anon, authenticated, service_role)
 DO $$
 DECLARE
     t text;
@@ -829,9 +826,20 @@ BEGIN
         WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     LOOP
         EXECUTE format('
+            DROP POLICY IF EXISTS "allow_all_for_all_roles" ON public.%I;
             DROP POLICY IF EXISTS "service_role_full_access" ON public.%I;
-            CREATE POLICY "service_role_full_access" ON public.%I 
-            FOR ALL TO service_role USING (true) WITH CHECK (true);
-        ', t, t);
+            CREATE POLICY "allow_all_for_all_roles" ON public.%I 
+            FOR ALL TO anon, authenticated, service_role 
+            USING (true) WITH CHECK (true);
+        ', t, t, t);
     END LOOP;
 END $$;
+
+-- ACCÈS ET PRIVILÈGES POSTGRESQL
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;

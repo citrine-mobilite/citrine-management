@@ -23,6 +23,7 @@ export type EmployeeStatus =
 export interface Employee {
   /** Clé primaire auto-incrémentée (BIGSERIAL en base de données, représentée en string pour compatibilité React) */
   id: string;
+  doc_id?: string;
   /** Identifiant universel unique UUID v4 (gen_random_uuid()) */
   uid?: string;
   /** Identifiant numérique brut BIGINT PostgreSQL */
