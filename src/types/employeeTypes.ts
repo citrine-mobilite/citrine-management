@@ -10,7 +10,15 @@ export type EmployeeRoleType =
   | 'finance'
   | 'Super Administrateur';
 
-export type EmployeeStatus = 'en_poste' | 'en_conge' | 'parti' | 'renvoye' | 'suspendu' | 'maladie';
+export type EmployeeStatus =
+  | 'en_poste'
+  | 'en_conge'
+  | 'en_permission'
+  | 'maladie'
+  | 'suspendu'
+  | 'demissionne'
+  | 'renvoye'
+  | 'parti';
 
 export interface Employee {
   /** Clé primaire auto-incrémentée (BIGSERIAL en base de données, représentée en string pour compatibilité React) */

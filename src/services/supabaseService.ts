@@ -54,8 +54,10 @@ function isUuid(val: any): boolean {
 // Convert App item into Supabase row format
 function itemToSupabaseRow(collectionName: string, item: any): any {
   const table = mapCollectionToTable(collectionName);
+  const docId = String(item.id || item.docId || (item as any)._id || `doc_${Date.now()}`);
 
   const base: any = {
+    doc_id: docId,
     raw_data: item,
     updated_at: new Date().toISOString(),
   };
@@ -83,34 +85,82 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
   }
 
   switch (table) {
-    case 'users':
+    case 'users': {
+      const isStatusActive = item.status === true || item.status === 'actif' || item.status === 'en_poste';
+      let roleId = 3;
+      const roleStr = String(item.role || '').toLowerCase();
+      if (item.role_id === 1 || item.roleId === 1 || roleStr.includes('admin') || roleStr === 'super_admin') {
+        roleId = 1;
+      } else if (item.role_id === 2 || item.roleId === 2 || roleStr.includes('responsable')) {
+        roleId = 2;
+      } else if (item.role_id === 3 || item.roleId === 3 || roleStr.includes('employé') || roleStr.includes('employe')) {
+        roleId = 3;
+      }
+
+      const raw = {
+        ...(item.raw_data && typeof item.raw_data === 'object' ? item.raw_data : {}),
+        name: item.name || '',
+        email: item.email || '',
+        role: item.role || (roleId === 1 ? 'administrateur' : roleId === 2 ? 'responsable' : 'employé'),
+        role_id: roleId,
+        department: item.department ? String(item.department).trim() : 'Direction Générale',
+        phone: item.phone || null,
+        status: isStatusActive ? 'actif' : 'inactif',
+        employeeId: item.employeeId || null,
+        passwordHash: item.passwordHash || (item.raw_data as any)?.passwordHash,
+      };
+
       return {
         ...base,
         ...(base.uid ? { uid: base.uid } : {}),
-        email: item.email || '',
-        name: item.name || null,
-        role: item.role || 'Employé',
-        status: item.status || 'actif',
-        department: item.department || null,
-        phone: item.phone || null,
+        email: (item.email || '').trim().toLowerCase(),
+        name: (item.name || '').trim() || null,
+        role_id: roleId,
+        status: isStatusActive,
+        department: item.department ? String(item.department).trim() : 'Direction Générale',
+        phone: item.phone ? String(item.phone).trim() : null,
         avatar_url: item.avatarUrl || null,
-        employee_id: item.employeeId || null,
+        raw_data: raw,
       };
+    }
     case 'employees': {
       const isStatusActive = item.status === true || item.status === 'en_poste' || item.status === 'actif';
       const employmentStatus = (typeof item.status === 'string' && item.status !== 'actif' && item.status !== 'inactif')
         ? item.status
         : (item.employmentStatus || (isStatusActive ? 'en_poste' : 'parti'));
       
-      const numUserId = (typeof item.userId === 'number' || (typeof item.userId === 'string' && /^\d+$/.test(item.userId)))
-        ? Number(item.userId)
-        : null;
-      const numRoleId = (typeof item.roleId === 'number' || (typeof item.roleId === 'string' && /^\d+$/.test(item.roleId)))
-        ? Number(item.roleId)
-        : null;
+      const resolvedUserId = (item.userId !== undefined && item.userId !== null && item.userId !== '')
+        ? item.userId
+        : (item.user_id !== undefined && item.user_id !== null && item.user_id !== '' ? item.user_id : null);
+
+      let resolvedRoleId: number | null = null;
+      if (item.roleId !== undefined && item.roleId !== null && item.roleId !== '') {
+        resolvedRoleId = Number(item.roleId);
+      } else if (item.role_id !== undefined && item.role_id !== null && item.role_id !== '') {
+        resolvedRoleId = Number(item.role_id);
+      } else {
+        const rLower = String(item.roleType || item.role || '').toLowerCase();
+        if (rLower.includes('admin') || rLower.includes('directeur')) {
+          resolvedRoleId = 1;
+        } else if (rLower.includes('responsable') || rLower.includes('manager')) {
+          resolvedRoleId = 2;
+        } else {
+          resolvedRoleId = 3;
+        }
+      }
+
       const numManagerId = (typeof item.managerId === 'number' || (typeof item.managerId === 'string' && /^\d+$/.test(item.managerId)))
         ? Number(item.managerId)
         : null;
+
+      const empDept = item.department ? String(item.department).trim() : 'Direction Générale';
+      const raw = {
+        ...(item.raw_data && typeof item.raw_data === 'object' ? item.raw_data : {}),
+        ...item,
+        userId: resolvedUserId,
+        roleId: resolvedRoleId,
+        department: empDept,
+      };
 
       return {
         ...base,
@@ -120,7 +170,7 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         email: item.email ? String(item.email).trim().toLowerCase() : null,
         phone: item.phone ? String(item.phone).trim() : null,
         role_type: item.roleType || item.role || null,
-        department: item.department || null,
+        department: empDept,
         position: item.position || item.role || item.roleType || null,
         status: isStatusActive,
         employment_status: employmentStatus,
@@ -128,15 +178,17 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         departure_date: item.departureDate ? String(item.departureDate).split('T')[0] : null,
         salary: Math.max(0, typeof item.salary === 'number' ? item.salary : (Number(item.salary) || 0)),
         avatar_url: item.avatarUrl || null,
-        user_id: numUserId,
-        role_id: numRoleId,
+        user_id: resolvedUserId,
+        role_id: resolvedRoleId,
         manager_id: numManagerId,
         team: item.team || null,
+        raw_data: raw,
       };
     }
     case 'tasks':
       return {
         ...base,
+        doc_id: docId,
         title: item.title || 'Sans titre',
         description: item.description || null,
         date: item.date || null,
@@ -150,6 +202,7 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         due_date: item.dueDate || null,
         is_milestone: Boolean(item.isMilestone),
         milestone_progress: item.milestoneProgress || 0,
+        raw_data: item,
       };
     case 'task_projects':
       return {
@@ -577,17 +630,95 @@ function supabaseRowToItem(collectionName: string, row: any): any {
     };
   }
 
-  if (row.raw_data && typeof row.raw_data === 'object') {
-    return { ...row.raw_data, id: String(row.id), uid: row.uid, _dbId: row.id };
+  if (table === 'users') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    let resolvedRole: 'administrateur' | 'responsable' | 'employé' = 'employé';
+    if (
+      row.role_id === 1 ||
+      String(raw.role).toUpperCase() === 'SUPER_ADMIN' ||
+      String(raw.role).toLowerCase() === 'administrateur' ||
+      String(raw.role).toLowerCase().includes('admin')
+    ) {
+      resolvedRole = 'administrateur';
+    } else if (
+      row.role_id === 2 ||
+      String(raw.role).toUpperCase() === 'RESPONSABLE' ||
+      String(raw.role).toLowerCase() === 'responsable'
+    ) {
+      resolvedRole = 'responsable';
+    } else {
+      resolvedRole = 'employé';
+    }
+
+    return {
+      ...raw,
+      id: String(row.id),
+      uid: row.uid,
+      _dbId: row.id,
+      name: row.name || raw.name || 'Utilisateur',
+      email: row.email || raw.email || '',
+      phone: row.phone || raw.phone || '',
+      role: resolvedRole,
+      roleId: row.role_id ? Number(row.role_id) : (resolvedRole === 'administrateur' ? 1 : resolvedRole === 'responsable' ? 2 : 3),
+      status: (row.status === false || row.status === 'inactif') ? 'inactif' : 'actif',
+      department: row.department || raw.department || 'Direction Générale',
+      avatarUrl: row.avatar_url || raw.avatarUrl || '',
+      passwordHash: raw.passwordHash || raw.password_hash,
+      createdAt: row.created_at || raw.createdAt,
+      updatedAt: row.updated_at || raw.updatedAt,
+    };
   }
-  return { ...row, id: String(row.id), uid: row.uid, _dbId: row.id };
+
+  if (table === 'tasks') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    const originalId = raw.id || row.doc_id || String(row.id);
+    return {
+      ...raw,
+      id: originalId,
+      docId: row.doc_id || originalId,
+      _dbId: row.id,
+      title: row.title || raw.title || 'Sans titre',
+      description: row.description || raw.description || '',
+      date: row.date || raw.date || '',
+      time: row.time || raw.time || '',
+      status: (row.status || raw.status || 'todo') as any,
+      priority: (row.priority || raw.priority || 'medium') as any,
+      assignedTo: row.assigned_to || raw.assignedTo || 'Équipe',
+      employeeId: row.employee_id || raw.employeeId || null,
+      department: row.department || raw.department || null,
+      projectId: row.project_id || raw.projectId || 'general',
+      dueDate: row.due_date || raw.dueDate || null,
+      isMilestone: row.is_milestone !== undefined ? Boolean(row.is_milestone) : Boolean(raw.isMilestone),
+      milestoneProgress: row.milestone_progress !== undefined ? Number(row.milestone_progress) : Number(raw.milestoneProgress || 0),
+      subtasks: raw.subtasks || [],
+      comments: raw.comments || [],
+      incidents: raw.incidents || [],
+      reminderPeriod: raw.reminderPeriod || 'none',
+      createdAt: row.created_at || raw.createdAt,
+      updatedAt: row.updated_at || raw.updatedAt,
+    };
+  }
+
+  if (row.raw_data && typeof row.raw_data === 'object') {
+    const raw = row.raw_data;
+    return {
+      ...raw,
+      id: raw.id || row.doc_id || String(row.id),
+      uid: row.uid || raw.uid,
+      _dbId: row.id,
+    };
+  }
+  return { ...row, id: row.doc_id || String(row.id), uid: row.uid, _dbId: row.id };
 }
+
+const getClient = () => supabaseAdmin || supabase;
 
 // Fetch collection from Supabase
 export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
   try {
     const table = mapCollectionToTable(collectionName);
-    let query = supabase.from(table).select('*');
+    const client = getClient();
+    let query = client.from(table).select('*');
     
     if (table === 'generic_collections') {
       query = query.eq('collection', collectionName);
@@ -610,26 +741,81 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
 export async function saveDocument<T extends { id: string }>(collectionName: string, item: T): Promise<T> {
   try {
     const table = mapCollectionToTable(collectionName);
+    const client = getClient();
     const row = itemToSupabaseRow(collectionName, item);
 
+    if (table === 'users') {
+      if (row.id && Number.isInteger(row.id)) {
+        const { data, error } = await client.from('users').upsert(row, { onConflict: 'id' }).select().single();
+        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      }
+      if (row.email) {
+        const { data, error } = await client.from('users').upsert(row, { onConflict: 'email' }).select().single();
+        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+        if (error) {
+          console.warn('[Supabase users upsert error]:', error.message);
+        }
+      }
+      return item;
+    }
+
+    if (table === 'employees') {
+      if (row.id && Number.isInteger(row.id)) {
+        const { data, error } = await client.from('employees').upsert(row, { onConflict: 'id' }).select().single();
+        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      }
+      if (row.email) {
+        const { data, error } = await client.from('employees').upsert(row, { onConflict: 'email' }).select().single();
+        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      }
+      if (row.uid) {
+        const { data, error } = await client.from('employees').upsert(row, { onConflict: 'uid' }).select().single();
+        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      }
+      const { data, error } = await client.from('employees').insert(row).select().single();
+      if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+      return item;
+    }
+
+    if (table === 'tasks') {
+      const taskDocId = String(item.id || row.doc_id);
+      const { data: upsertData, error: upsertErr } = await client
+        .from('tasks')
+        .upsert({ ...row, doc_id: taskDocId }, { onConflict: 'doc_id' })
+        .select()
+        .single();
+      if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
+
+      // Fallback: update if exists by doc_id, otherwise insert
+      const { data: existingRows } = await client.from('tasks').select('id').eq('doc_id', taskDocId).limit(1);
+      if (existingRows && existingRows.length > 0) {
+        const { data: updateData } = await client.from('tasks').update({ ...row, doc_id: taskDocId }).eq('doc_id', taskDocId).select().single();
+        if (updateData) return supabaseRowToItem(collectionName, updateData) as T;
+      } else {
+        const { data: insertData } = await client.from('tasks').insert({ ...row, doc_id: taskDocId }).select().single();
+        if (insertData) return supabaseRowToItem(collectionName, insertData) as T;
+      }
+      return item;
+    }
+
     if (row.id) {
-      const { data, error } = await supabase.from(table).upsert(row, { onConflict: 'id' }).select().single();
+      const { data, error } = await client.from(table).upsert(row, { onConflict: 'id' }).select().single();
       if (!error && data) return supabaseRowToItem(collectionName, data) as T;
       if (!error) return item;
     } else if (row.uid) {
-      const { data, error } = await supabase.from(table).upsert(row, { onConflict: 'uid' }).select().single();
+      const { data, error } = await client.from(table).upsert(row, { onConflict: 'uid' }).select().single();
       if (!error && data) return supabaseRowToItem(collectionName, data) as T;
       if (!error) return item;
-    } else if (table === 'users' && row.email) {
-      const { data, error } = await supabase.from(table).upsert(row, { onConflict: 'email' }).select().single();
+    } else if (row.doc_id) {
+      const { data, error } = await client.from(table).upsert(row, { onConflict: 'doc_id' }).select().single();
       if (!error && data) return supabaseRowToItem(collectionName, data) as T;
-      if (!error) return item;
-    } else if (table === 'employees' && row.email) {
-      const { data, error } = await supabase.from(table).upsert(row, { onConflict: 'email' }).select().single();
-      if (!error && data) return supabaseRowToItem(collectionName, data) as T;
-      if (!error) return item;
+      const { data: updateData } = await client.from(table).update(row).eq('doc_id', row.doc_id).select().single();
+      if (updateData) return supabaseRowToItem(collectionName, updateData) as T;
+      const { data: insertData } = await client.from(table).insert(row).select().single();
+      if (insertData) return supabaseRowToItem(collectionName, insertData) as T;
+      return item;
     } else {
-      const { data, error } = await supabase.from(table).insert(row).select().single();
+      const { data, error } = await client.from(table).insert(row).select().single();
       if (!error && data) return supabaseRowToItem(collectionName, data) as T;
       if (!error) return item;
     }
@@ -645,12 +831,16 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
 export async function deleteDocument(collectionName: string, id: string): Promise<boolean> {
   try {
     const table = mapCollectionToTable(collectionName);
+    const client = getClient();
     if (/^\d+$/.test(String(id))) {
-      await supabase.from(table).delete().eq('id', Number(id));
+      await client.from(table).delete().eq('id', Number(id));
     } else if (isUuid(String(id))) {
-      await supabase.from(table).delete().eq('uid', String(id));
+      await client.from(table).delete().eq('uid', String(id));
     } else {
-      await supabase.from(table).delete().match({ id: String(id) });
+      const res = await client.from(table).delete().eq('doc_id', String(id));
+      if (res.error) {
+        await client.from(table).delete().match({ id: String(id) });
+      }
     }
     return true;
   } catch (err) {

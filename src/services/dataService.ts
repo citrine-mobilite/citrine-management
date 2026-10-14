@@ -2,6 +2,7 @@ import { offlineService } from './offlineService';
 import { supabaseService, mapCollectionToTable } from './supabaseService';
 import { cloudSqlService } from './cloudSqlService';
 import { supabase } from '../lib/supabase';
+import { pushNotificationBridgeService } from './pushNotificationBridgeService';
 
 export const COLLECTIONS = {
   EMPLOYEES: 'employees',
@@ -193,7 +194,7 @@ export async function checkDatabaseHealth(): Promise<DatabaseHealthStatus> {
 }
 
 // Vérifie si l'utilisateur actuellement connecté est un employé
-function getActiveEmployeeActor(): { id: string; name: string; role: string } | null {
+function getActiveEmployeeActor(): { id: string; name: string; role: string; userId?: string } | null {
   try {
     if (typeof localStorage === 'undefined') return null;
     const raw = localStorage.getItem('citrine_current_user');
@@ -204,9 +205,10 @@ function getActiveEmployeeActor(): { id: string; name: string; role: string } | 
     const isEmp = role.includes('employ') || role.includes('employee') || role === 'collaborateur';
     if (isEmp) {
       return {
-        id: String(user.id || 'employee'),
+        id: String(user.employeeId || user.id || 'employee'),
         name: String(user.name || 'Employé'),
         role: String(user.role || 'Employé'),
+        userId: user.id || user.uid || undefined,
       };
     }
   } catch {}
@@ -322,6 +324,29 @@ async function triggerAutoEmployeeNotification(
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('citrine:new_unread_alert', { detail: notifItem }));
     }
+
+    // Diffusion temps réel multi-onglets (Cross-Tab Broadcast)
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('citrine_cross_tab_sync');
+        bc.postMessage({ type: 'NEW_NOTIFICATION', notification: notifItem });
+        bc.close();
+      }
+    } catch {}
+
+    // Déclenchement automatique de la notification push pour l'administrateur et la direction (sans polluer l'écran de l'employé émetteur)
+    try {
+      pushNotificationBridgeService.sendPush({
+        id: notifItem.id,
+        title: notifItem.title,
+        message: notifItem.content,
+        senderName: actorName,
+        type: 'alert',
+        timestamp: notifItem.timestamp,
+        link: 'notifications',
+        excludeUserId: employee?.id || employee?.userId || undefined,
+      });
+    } catch {}
   } catch (notifErr) {
     console.warn('Notice notification employé:', notifErr);
   } finally {

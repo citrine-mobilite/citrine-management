@@ -139,7 +139,6 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
         createdAt: now.toISOString(),
       };
 
-      await incidentService.saveIncident(newInc);
       if (onUpdateAttendanceIncidents) {
         onUpdateAttendanceIncidents([newInc, ...attendanceIncidents]);
       }
@@ -325,18 +324,21 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
                       </td>
 
                       <td className="py-3 px-4 whitespace-nowrap">
-                        {isDeclared ? (
+                        {inc.status === 'injustifie' ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 flex items-center gap-1 w-fit">
+                            <X className="h-3 w-3 text-rose-600" /> Rejeté / Non justifié
+                          </span>
+                        ) : inc.status === 'justifie' ? (
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1 w-fit">
-                            <CheckCircle2 className="h-3 w-3" /> Signalé à l'avance
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Validé & Justifié
+                          </span>
+                        ) : isDeclared ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 flex items-center gap-1 w-fit">
+                            <Clock className="h-3 w-3 text-blue-600" /> Signalé (En attente)
                           </span>
                         ) : (
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 flex items-center gap-1 w-fit">
-                            <AlertCircle className="h-3 w-3" /> Incident Automatique
-                          </span>
-                        )}
-                        {inc.status === 'justifie' && (
-                          <span className="text-[9px] text-emerald-700 font-bold block mt-0.5">
-                            ✓ Justifié par Direction
+                            <AlertCircle className="h-3 w-3 text-amber-600" /> Incident Automatique
                           </span>
                         )}
                       </td>

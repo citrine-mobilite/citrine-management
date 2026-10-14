@@ -50,3 +50,21 @@ export function getDefaultPortalForUser(user?: { role?: string | null } | null):
   // Administrateurs & Responsables
   return 'dashboard'; // Tableau de Bord & Pilotage Opérationnel
 }
+
+/**
+ * Vérifie si le profil concerne strictement un employé (et non un responsable ou admin).
+ * Seuls les employés badgent.
+ */
+export function isEmployeeOnlyRole(roleOrRoleType?: string | null): boolean {
+  if (!roleOrRoleType) return true;
+  const normalized = normalizeRoleString(roleOrRoleType);
+  if (
+    normalized.includes('admin') ||
+    normalized.includes('responsable') ||
+    normalized.includes('manager') ||
+    normalized.includes('direction')
+  ) {
+    return false;
+  }
+  return true;
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   AppUser, 
   Employee, 
@@ -118,7 +118,11 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
       const isMatch = (val?: string | null) => {
         if (!val) return false;
         const clean = String(val).trim().toLowerCase();
-        return myIds.includes(clean) || myNames.includes(clean) || myEmails.includes(clean);
+        if (clean === 'équipe' || clean === 'equipe' || clean === 'tous') return true;
+        const parts = clean.split(',').map((p) => p.trim());
+        return parts.some(
+          (p) => myIds.includes(p) || myNames.includes(p) || myEmails.includes(p)
+        );
       };
 
       let count = 0;
@@ -488,11 +492,22 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     );
   };
 
-  const handleConfirmEmergency = () => {
-    triggerConfirmEmergency(emergencyType, emergencyReason, () => {
-      setShowEmergencyModal(false);
-      setEmergencyReason('');
-    });
+  const [isSubmittingEmergency, setIsSubmittingEmergency] = useState(false);
+
+  const handleConfirmEmergency = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
+    if (isSubmittingEmergency) return;
+    setIsSubmittingEmergency(true);
+    try {
+      await triggerConfirmEmergency(emergencyType, emergencyReason, () => {
+        setShowEmergencyModal(false);
+        setEmergencyReason('');
+      });
+    } finally {
+      setIsSubmittingEmergency(false);
+    }
   };
 
   const calculateTenure = (hireDate?: string): string => {
@@ -580,6 +595,7 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     handleConfirmClocking,
     handleConfirmCustomClock,
     handleConfirmEmergency,
+    isSubmittingEmergency,
     calculateTenure,
     unreadAlertsCount,
   };

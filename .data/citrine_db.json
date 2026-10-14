@@ -134,16 +134,6 @@
       "updatedAt": "2026-10-12T23:06:39.996Z"
     },
     {
-      "id": "notif-avatar-1791846441710",
-      "type": "system",
-      "recipient": "landrymouns@gmail.com",
-      "title": "Modification de l'avatar",
-      "content": "La photo de profil / avatar de Landry Moutongo a été modifiée avec succès.",
-      "payload": "",
-      "timestamp": "2026-10-12T23:07:21.710Z",
-      "updatedAt": "2026-10-12T23:07:22.231Z"
-    },
-    {
       "id": "notif-emp-action-1791846442233-ywa62",
       "type": "system",
       "recipient": "Direction & RH",
@@ -186,26 +176,6 @@
       "timestamp": "2026-10-12T23:07:24.245Z",
       "read": false,
       "updatedAt": "2026-10-12T23:07:24.245Z"
-    },
-    {
-      "id": "notif-prof-1791846443988",
-      "type": "system",
-      "recipient": "landrymouns@gmail.com",
-      "title": "Mise à jour du profil",
-      "content": "Le profil de Landry Moutongo a été mis à jour.",
-      "payload": "",
-      "timestamp": "2026-10-12T23:07:23.988Z",
-      "updatedAt": "2026-10-12T23:07:24.267Z"
-    },
-    {
-      "id": "notif-prof-1791846448972",
-      "type": "system",
-      "recipient": "landrymouns@gmail.com",
-      "title": "Mise à jour du profil",
-      "content": "Le profil de Landry Moutongo a été mis à jour.",
-      "payload": "",
-      "timestamp": "2026-10-12T23:07:28.972Z",
-      "updatedAt": "2026-10-12T23:07:29.165Z"
     },
     {
       "id": "notif-emp-act-1791846448972-pmc3w",
@@ -260,41 +230,31 @@
       "timestamp": "2026-10-12T23:10:59.243Z",
       "read": false,
       "updatedAt": "2026-10-12T23:11:01.679Z"
+    },
+    {
+      "id": "notif-login-1791931267726",
+      "type": "email",
+      "recipient": "citrinemobilite@gmail.com",
+      "title": "Connexion réussie",
+      "content": "Connexion établie pour citrinemobilite (employé).",
+      "payload": "",
+      "timestamp": "2026-10-13T22:41:07.726Z",
+      "updatedAt": "2026-10-13T22:41:08.207Z"
     }
   ],
-  "employees": [
+  "employees": [],
+  "leave_requests": [],
+  "users": [
     {
-      "id": "emp-1785638247317",
-      "name": "Landry Moutongo",
-      "email": "landrymouns@gmail.com",
-      "phone": "+237 600 000 001",
-      "salary": 100000,
-      "status": "en_poste",
-      "hireDate": "2026-07-08",
-      "roleType": "administrateur",
-      "avatarUrl": "https://api.dicebear.com/7.x/personas/svg?seed=Landry%20Moutongo_7_s4y8h",
-      "birthDate": "2026-08-04",
-      "_dbId": 2,
-      "department": "Logistique & Terrain",
-      "updatedAt": "2026-10-12T23:07:29.168Z"
-    }
-  ],
-  "leave_requests": [
-    {
-      "id": "leave-1791846659240-mpbm4",
-      "employeeId": "emp-1785638247317",
-      "employeeName": "Landry Moutongo",
-      "employeeEmail": "landrymouns@gmail.com",
-      "employeeAvatar": "https://api.dicebear.com/7.x/personas/svg?seed=Landry%20Moutongo_7_s4y8h",
-      "department": "Logistique & Terrain",
-      "type": "recuperation",
-      "startDate": "2026-10-13",
-      "endDate": "2026-10-15",
-      "daysCount": 3,
-      "reason": "je veux me reposer",
-      "status": "pending",
-      "createdAt": "2026-10-12T23:10:59.240Z",
-      "updatedAt": "2026-10-12T23:11:00.916Z"
+      "id": "user-1791931267725",
+      "name": "citrinemobilite",
+      "email": "citrinemobilite@gmail.com",
+      "role": "employé",
+      "status": "actif",
+      "department": "Général",
+      "createdAt": "2026-10-13T22:41:07.725Z",
+      "lastLoginAt": "2026-10-13T22:41:07.725Z",
+      "updatedAt": "2026-10-13T22:41:08.208Z"
     }
   ]
 }

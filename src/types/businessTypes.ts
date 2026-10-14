@@ -7,6 +7,8 @@ export interface NotificationLog {
   payload: string;
   timestamp: string;
   read?: boolean;
+  link?: string;
+  senderName?: string;
 }
 
 export type DocumentFormatType = 'word' | 'excel';

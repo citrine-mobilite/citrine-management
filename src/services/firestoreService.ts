@@ -17,6 +17,8 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { offlineService } from './offlineService';
+import { cloudSqlService } from './cloudSqlService';
+import { supabaseService } from './supabaseService';
 import {
   Employee,
   Task,
@@ -43,8 +45,6 @@ export const COLLECTIONS = {
   FINANCIAL_TRANSACTIONS: 'financial_transactions',
   NOTIFICATIONS: 'notifications',
   INVENTORY: 'inventory_items',
-  PRICING_RECORDS: 'pricing_records',
-  PRICING_SETTINGS: 'pricing_settings',
   COMPANY_SETTINGS: 'company_settings',
   BADGE_CODES_16: 'badge_codes_16',
   DYNAMIC_QR_SESSIONS: 'dynamic_qr_sessions',
@@ -251,6 +251,13 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
     }
 
     await setDoc(ref, cleanedItem, { merge: true });
+    // Asynchronously synchronize with Cloud SQL & Supabase relational backend
+    cloudSqlService.saveDocument(collectionName, cleanedItem).catch((err) => {
+      console.warn(`[Cloud SQL Sync Notice] Could not sync ${collectionName}:${item.id}:`, err);
+    });
+    supabaseService.saveDocument(collectionName, cleanedItem).catch((err) => {
+      console.warn(`[Supabase Sync Notice] Could not sync ${collectionName}:${item.id}:`, err);
+    });
   } catch (error) {
     console.warn(`[Erreur réseau] Échec de sauvegarde Firestore pour ${collectionName}. Mise en file d'attente hors-ligne.`, error);
     await offlineService.enqueueAction(collectionName, 'save', cleanedItem);
@@ -301,6 +308,12 @@ export async function deleteDocument(collectionName: string, id: string) {
   try {
     const ref = doc(db, collectionName, id);
     await deleteDoc(ref);
+    cloudSqlService.deleteDocument(collectionName, id).catch((err) => {
+      console.warn(`[Cloud SQL Delete Notice] Could not delete ${collectionName}:${id}:`, err);
+    });
+    supabaseService.deleteDocument(collectionName, id).catch((err) => {
+      console.warn(`[Supabase Delete Notice] Could not delete ${collectionName}:${id}:`, err);
+    });
   } catch (error) {
     console.warn(`Error deleting doc ${id} from ${collectionName} online. Enqueuing offline delete:`, error);
     await offlineService.enqueueAction(collectionName, 'delete', { id });

@@ -259,7 +259,6 @@ export default function LeaveManagementPanel({
         adminComment: adminComment.trim() || `Signalement consigné manuellement par ${currentUser?.name || 'la Direction'} suite à une absence non validée.`,
       };
 
-      await incidentService.saveIncident(newIncident);
       if (onAddAttendanceIncident) {
         onAddAttendanceIncident(newIncident);
       }

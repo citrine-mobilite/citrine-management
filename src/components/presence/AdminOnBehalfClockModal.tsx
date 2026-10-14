@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { UserCheck, X, Clock, AlertCircle, ShieldAlert, Check } from 'lucide-react';
 import { Employee, Presence, AppUser, NotificationLog, AttendanceIncident, CompanyModuleConfig } from '../../types';
 import { incidentService } from '../../services/incidentService';
+import { isEmployeeOnlyRole } from '../../utils/roleUtils';
 
 interface AdminOnBehalfClockModalProps {
   isOpen: boolean;
@@ -30,7 +31,8 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
   onAddAttendanceIncident,
   moduleConfig,
 }) => {
-  const [selectedEmpId, setSelectedEmpId] = useState<string>(defaultEmployeeId || employees[0]?.id || '');
+  const eligibleEmployees = employees.filter((emp) => isEmployeeOnlyRole(emp.roleType || emp.role));
+  const [selectedEmpId, setSelectedEmpId] = useState<string>(defaultEmployeeId || eligibleEmployees[0]?.id || employees[0]?.id || '');
   const [clockAction, setClockAction] = useState<'arrival' | 'pauseStart' | 'pauseEnd' | 'departure'>('arrival');
   const [timeInput, setTimeInput] = useState<string>(() => {
     const d = new Date();
@@ -222,7 +224,7 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
               onChange={(e) => setSelectedEmpId(e.target.value)}
               className="w-full px-3 py-2 border border-stone-200 bg-stone-50 rounded-xl text-xs font-semibold focus:ring-1 focus:ring-[#2A7B76] outline-none"
             >
-              {employees.map((emp) => (
+              {eligibleEmployees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
                   {emp.name} ({emp.roleType || 'Employé'})
                 </option>

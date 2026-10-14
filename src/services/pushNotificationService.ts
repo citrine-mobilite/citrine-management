@@ -5,7 +5,7 @@
 
 export interface PushNotificationSettings {
   enabled: boolean;
-  notifyOnWhatsapp: boolean;
+  notifyOnMessage: boolean;
   notifyOnEmail: boolean;
   notifyOnSystem: boolean;
   notifyOnReminder: boolean;
@@ -15,7 +15,7 @@ const SETTINGS_KEY = 'citrine_push_settings';
 
 const DEFAULT_SETTINGS: PushNotificationSettings = {
   enabled: false,
-  notifyOnWhatsapp: true,
+  notifyOnMessage: true,
   notifyOnEmail: true,
   notifyOnSystem: true,
   notifyOnReminder: true,
@@ -116,9 +116,15 @@ export const pushNotificationService = {
   async sendNotification(title: string, options: NotificationOptions = {}): Promise<boolean> {
     if (!this.isSupported()) return false;
     
-    const settings = this.getSettings();
-    if (!settings.enabled || this.getPermissionStatus() !== 'granted') {
+    const perm = this.getPermissionStatus();
+    if (perm !== 'granted') {
       return false;
+    }
+
+    // Auto-enable in settings if browser granted permission
+    const settings = this.getSettings();
+    if (!settings.enabled) {
+      this.saveSettings({ ...settings, enabled: true });
     }
 
     try {

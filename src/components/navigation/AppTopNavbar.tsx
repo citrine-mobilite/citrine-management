@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Shield, Smartphone, Bell, Clock, UserCheck, LayoutDashboard, WifiOff } from 'lucide-react';
+import { Menu, Shield, Smartphone, Bell, Clock, UserCheck, LayoutDashboard, Trash2, WifiOff } from 'lucide-react';
 import { AppUser } from '../../types';
 import { TabType } from '../Sidebar';
 import { CMLogo } from '../CMLogo';
@@ -7,6 +7,8 @@ import { PWAInstallButton } from '../pwa/PWAInstallButton';
 import { haptic } from '../../services/hapticService';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { isEmployeeUser } from '../../utils/roleUtils';
+import { pushNotificationService } from '../../services/pushNotificationService';
+import { CachePurgeModal } from '../common/CachePurgeModal';
 
 interface AppTopNavbarProps {
   currentUser: AppUser | null;
@@ -32,6 +34,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
 }) => {
   const isEmployee = isEmployeeUser(currentUser);
   const isOnline = useOnlineStatus();
+  const [cacheModalOpen, setCacheModalOpen] = React.useState(false);
 
   return (
     <header className="h-14 sm:h-16 bg-white border-b border-stone-200/80 px-2.5 sm:px-6 flex items-center justify-between z-30 sticky top-0 backdrop-blur-md bg-white/95">
@@ -112,6 +115,23 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
           <span>{liveTimeString}</span>
         </div>
 
+        {/* Browser Push Permission Request if not yet granted */}
+        {pushNotificationService.isSupported() && pushNotificationService.getPermissionStatus() === 'default' && (
+          <button
+            onClick={async () => {
+              const res = await pushNotificationService.requestPermission();
+              if (res === 'granted') {
+                pushNotificationService.sendTestNotification();
+              }
+            }}
+            className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-xl border border-emerald-300 transition cursor-pointer"
+            data-tooltip="Activer les notifications Push du navigateur sur cet appareil"
+          >
+            <Bell className="h-3 w-3 text-emerald-600 animate-bounce" />
+            <span>Activer Push</span>
+          </button>
+        )}
+
         {/* Notifications Icon Button */}
         <button
           onClick={() => {
@@ -127,12 +147,25 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
             }
           }}
           className="p-1.5 sm:p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition relative cursor-pointer"
-          title={isEmployee ? "Mes Alertes & Notifications" : "Notifications & Alertes"}
+          data-tooltip={isEmployee ? "Mes Alertes & Notifications" : "Notifications & Alertes"}
         >
           <Bell className="h-4 w-4" />
           {unreadNotificationsCount > 0 && (
             <span className="absolute top-1 right-1 w-2 h-2 bg-[#D4A82F] rounded-full animate-ping" />
           )}
+        </button>
+
+        {/* Clear Cache Button */}
+        <button
+          onClick={() => {
+            haptic.medium();
+            setCacheModalOpen(true);
+          }}
+          className="p-1.5 sm:p-2 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition relative cursor-pointer"
+          data-tooltip="Purger tous les niveaux de cache (RAM, IndexedDB, PWA)"
+          title="Purger tous les niveaux de cache (RAM, IndexedDB, PWA)"
+        >
+          <Trash2 className="h-4 w-4" />
         </button>
 
         {/* PWA Install Button */}
@@ -168,6 +201,9 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
           </button>
         )}
       </div>
+
+      {/* Modal de purge complète du cache */}
+      <CachePurgeModal isOpen={cacheModalOpen} onClose={() => setCacheModalOpen(false)} />
     </header>
   );
 };

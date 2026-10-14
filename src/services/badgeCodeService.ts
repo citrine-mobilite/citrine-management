@@ -35,6 +35,10 @@ export class BadgeCodeService {
     return this.codesCache;
   }
 
+  public clearCache(): void {
+    this.codesCache = [];
+  }
+
   // Generate and save a new 16-character code (Action by Responsable / Admin)
   public async createBadgeCode(
     generatedBy: string,

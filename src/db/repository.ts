@@ -252,8 +252,12 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
         break;
       }
       case 'employees': {
+        const resolvedRoleId = item.roleId ? Number(item.roleId) : (item.role_id ? Number(item.role_id) : (String(item.roleType).toLowerCase().includes('admin') ? 1 : String(item.roleType).toLowerCase().includes('responsable') ? 2 : 3));
+        const resolvedUserId = item.userId || item.user_id || null;
         await db.insert(schema.employees).values({
           docId,
+          userId: resolvedUserId,
+          roleId: resolvedRoleId,
           name: item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || null,
           firstName: item.firstName || null,
           lastName: item.lastName || null,
@@ -268,9 +272,12 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
         }).onConflictDoUpdate({
           target: schema.employees.docId,
           set: {
+            userId: resolvedUserId,
+            roleId: resolvedRoleId,
             name: item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || null,
             email: item.email || null,
             phone: item.phone || null,
+            roleType: item.roleType || null,
             department: item.department || null,
             status: item.status || 'en_poste',
             salary: String(item.salary || 0),
@@ -281,30 +288,40 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
         break;
       }
       case 'tasks': {
-        await db.insert(schema.tasks).values({
-          docId,
-          title: item.title || 'Sans titre',
-          description: item.description || null,
-          date: item.date || null,
-          time: item.time || null,
-          status: item.status || 'todo',
-          priority: item.priority || 'medium',
-          assignedTo: item.assignedTo || null,
-          department: item.department || null,
-          dueDate: item.dueDate || null,
-          rawData: item,
-        }).onConflictDoUpdate({
-          target: schema.tasks.docId,
-          set: {
-            title: item.title || 'Sans titre',
-            status: item.status || 'todo',
-            priority: item.priority || 'medium',
-            assignedTo: item.assignedTo || null,
-            dueDate: item.dueDate || null,
-            rawData: item,
-            updatedAt: new Date(),
+        try {
+          const existing = await db.select().from(schema.tasks).where(eq(schema.tasks.docId, docId)).limit(1);
+          if (existing.length > 0) {
+            await db.update(schema.tasks).set({
+              title: item.title || 'Sans titre',
+              description: item.description || null,
+              date: item.date || null,
+              time: item.time || null,
+              status: String(item.status || 'todo'),
+              priority: item.priority || 'medium',
+              assignedTo: item.assignedTo || null,
+              department: item.department || null,
+              dueDate: item.dueDate || null,
+              rawData: item,
+              updatedAt: new Date(),
+            }).where(eq(schema.tasks.docId, docId));
+          } else {
+            await db.insert(schema.tasks).values({
+              docId,
+              title: item.title || 'Sans titre',
+              description: item.description || null,
+              date: item.date || null,
+              time: item.time || null,
+              status: String(item.status || 'todo'),
+              priority: item.priority || 'medium',
+              assignedTo: item.assignedTo || null,
+              department: item.department || null,
+              dueDate: item.dueDate || null,
+              rawData: item,
+            });
           }
-        });
+        } catch (sqlErr: any) {
+          console.warn('[SQL tasks insert warning]:', sqlErr?.message || sqlErr);
+        }
         break;
       }
       case 'presences': {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Employee, 
   Presence, 
@@ -23,6 +23,7 @@ import { subscribeToUsers } from '../services/userService';
 import { cloudSqlService } from '../services/cloudSqlService';
 import { safeStorage } from '../utils/safeStorage';
 import { CITRINE_DEFAULT_LOGO_BASE64 } from '../assets/citrineLogoBase64';
+import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
 
 interface CachedModuleConfig {
   config: CompanyModuleConfig;
@@ -98,7 +99,19 @@ export function useAppInitialData() {
   const [attendanceIncidents, setAttendanceIncidents] = useState<AttendanceIncident[]>(() => {
     try {
       const saved = localStorage.getItem('citrine_attendance_incidents');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: AttendanceIncident[] = JSON.parse(saved);
+        const unique: AttendanceIncident[] = [];
+        const seen = new Set<string>();
+        parsed.forEach((item) => {
+          const key = `${item.employeeId}_${item.date}_${item.type}_${item.reason?.trim().toLowerCase()}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(item);
+          }
+        });
+        return unique;
+      }
     } catch {}
     return [];
   });
@@ -119,6 +132,63 @@ export function useAppInitialData() {
     return DEFAULT_MODULE_CONFIG;
   });
 
+  const seenNotificationIdsRef = useRef<Set<string>>(new Set());
+  const isInitialNotifLoadDoneRef = useRef(false);
+
+  const handleIncomingNotifications = useCallback((newNotifs: NotificationLog[]) => {
+    if (!newNotifs || newNotifs.length === 0) return;
+
+    if (!isInitialNotifLoadDoneRef.current) {
+      newNotifs.forEach((n) => seenNotificationIdsRef.current.add(n.id));
+      isInitialNotifLoadDoneRef.current = true;
+      setNotifications(newNotifs);
+      return;
+    }
+
+    let currentUser: any = null;
+    try {
+      const uStr = localStorage.getItem('citrine_current_user');
+      if (uStr) currentUser = JSON.parse(uStr);
+    } catch {}
+
+    const isCurrentAdmin = !currentUser || currentUser.role === 'administrateur' || currentUser.role === 'responsable';
+
+    for (const notif of newNotifs) {
+      if (!seenNotificationIdsRef.current.has(notif.id)) {
+        seenNotificationIdsRef.current.add(notif.id);
+
+        const ageMs = Date.now() - new Date(notif.timestamp).getTime();
+        // Déclencher le push si la notification est récente (< 5 minutes)
+        if (ageMs < 5 * 60 * 1000) {
+          const isTarget = isCurrentAdmin || (
+            currentUser && (
+              notif.recipient === currentUser.name ||
+              notif.recipient === currentUser.email ||
+              notif.recipient === currentUser.id ||
+              notif.recipient === 'Direction & RH' ||
+              notif.recipient === 'Équipe' ||
+              notif.recipient === 'Tous'
+            )
+          );
+
+          if (isTarget) {
+            pushNotificationBridgeService.sendPush({
+              id: notif.id,
+              title: notif.title || 'Notification RH Citrine',
+              message: notif.content || '',
+              senderName: (notif as any).senderName || 'Portail RH',
+              type: (notif.type as any) || 'alert',
+              timestamp: notif.timestamp || new Date().toISOString(),
+              link: notif.link,
+            });
+          }
+        }
+      }
+    }
+
+    setNotifications(newNotifs);
+  }, []);
+
   // Subscriptions to Supabase Tables
   useEffect(() => {
     const unsubs = [
@@ -130,9 +200,17 @@ export function useAppInitialData() {
         setPresences(data);
         localStorage.setItem('citrine_presences', JSON.stringify(data));
       }),
-      subscribeToCollection<Task>(COLLECTIONS.TASKS, setTasks),
+      subscribeToCollection<Task>(COLLECTIONS.TASKS, (data) => {
+        const list = data || [];
+        setTasks(list);
+        localStorage.setItem('citrine_tasks', JSON.stringify(list));
+      }),
       subscribeToCollection<Reminder>(COLLECTIONS.REMINDERS, setReminders),
-      subscribeToCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS, setNotifications),
+      subscribeToCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS, (data) => {
+        if (data) {
+          handleIncomingNotifications(data);
+        }
+      }),
       subscribeToCollection<LeaveRequest>(COLLECTIONS.LEAVE_REQUESTS, (data) => {
         const sorted = [...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setLeaveRequests(sorted);
@@ -144,8 +222,17 @@ export function useAppInitialData() {
       subscribeToCollection<GeneratedDocument>(COLLECTIONS.DOCUMENTS, setDocuments),
       subscribeToCollection<DisciplinaryIncident>(COLLECTIONS.DISCIPLINARY_INCIDENTS, setDisciplinaryIncidents),
       subscribeToCollection<AttendanceIncident>(COLLECTIONS.ATTENDANCE_INCIDENTS, (data) => {
-        setAttendanceIncidents(data);
-        localStorage.setItem('citrine_attendance_incidents', JSON.stringify(data));
+        const unique: AttendanceIncident[] = [];
+        const seen = new Set<string>();
+        (data || []).forEach((item) => {
+          const key = `${item.employeeId}_${item.date}_${item.type}_${item.reason?.trim().toLowerCase()}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(item);
+          }
+        });
+        setAttendanceIncidents(unique);
+        localStorage.setItem('citrine_attendance_incidents', JSON.stringify(unique));
       }),
       subscribeToCollection<InventoryItem>(COLLECTIONS.INVENTORY, setInventoryItems),
       subscribeToCollection<Partner>(COLLECTIONS.PARTNERS, setPartners),
@@ -171,8 +258,79 @@ export function useAppInitialData() {
       }),
     ];
 
+    // Cross-tab synchronization via BroadcastChannel
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('citrine_cross_tab_sync');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'SYNC_TASKS' && Array.isArray(event.data.tasks)) {
+            setTasks(event.data.tasks);
+          } else if (event.data?.type === 'SYNC_NOTIFICATIONS' && Array.isArray(event.data.notifications)) {
+            handleIncomingNotifications(event.data.notifications);
+          } else if (event.data?.type === 'NEW_NOTIFICATION' && event.data.notification) {
+            handleIncomingNotifications([event.data.notification, ...notifications]);
+          }
+        };
+      }
+    } catch {}
+
+    // Storage event listener for instant multi-tab sync fallback
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'citrine_tasks' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setTasks(parsed);
+        } catch {}
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorage);
+    }
+
+    // Direct window event listener for action alerts dispatched by dataService
+    const handleWindowAlert = (e: any) => {
+      if (e.detail) {
+        const item = e.detail as NotificationLog;
+        handleIncomingNotifications([item, ...notifications]);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('citrine:new_unread_alert', handleWindowAlert);
+    }
+
+    // Fast polling interval (every 5 seconds) to ensure changes are synced across devices even if realtime websocket disconnects
+    const pollTimer = setInterval(async () => {
+      try {
+        const freshTasks = await getCollection<Task>(COLLECTIONS.TASKS);
+        if (freshTasks && freshTasks.length > 0) {
+          setTasks((prev) => {
+            if (
+              freshTasks.length !== prev.length ||
+              freshTasks.some((ft, i) => !prev[i] || prev[i].id !== ft.id || prev[i].status !== ft.status || prev[i].assignedTo !== ft.assignedTo)
+            ) {
+              localStorage.setItem('citrine_tasks', JSON.stringify(freshTasks));
+              return freshTasks;
+            }
+            return prev;
+          });
+        }
+
+        const freshNotifs = await getCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS);
+        if (freshNotifs && freshNotifs.length > 0) {
+          handleIncomingNotifications(freshNotifs);
+        }
+      } catch {}
+    }, 5000);
+
     return () => {
       unsubs.forEach((u) => typeof u === 'function' && u());
+      if (bc) bc.close();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorage);
+        window.removeEventListener('citrine:new_unread_alert', handleWindowAlert);
+      }
+      clearInterval(pollTimer);
     };
   }, []);
 
@@ -233,6 +391,18 @@ export function useAppInitialData() {
   };
 
   const handleUpdateTasks = async (updated: Task[]) => {
+    localStorage.setItem('citrine_tasks', JSON.stringify(updated));
+    setTasks(updated);
+
+    // Broadcast immediately across open tabs/windows
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bcast = new BroadcastChannel('citrine_cross_tab_sync');
+        bcast.postMessage({ type: 'SYNC_TASKS', tasks: updated });
+        bcast.close();
+      }
+    } catch {}
+
     for (const t of updated) {
       const existing = tasks.find((x) => x.id === t.id);
       if (!existing || JSON.stringify(existing) !== JSON.stringify(t)) {
@@ -244,7 +414,6 @@ export function useAppInitialData() {
         await deleteDocument(COLLECTIONS.TASKS, t.id);
       }
     }
-    setTasks(updated);
   };
 
   const handleUpdateReminders = async (updated: Reminder[]) => {
@@ -369,6 +538,20 @@ export function useAppInitialData() {
   };
 
   const handleAddAttendanceIncident = async (incident: AttendanceIncident) => {
+    // Éviter d'insérer un incident s'il en existe déjà un identique pour ce collaborateur
+    const existingDuplicate = attendanceIncidents.find(
+      (i) =>
+        i.id !== incident.id &&
+        i.employeeId === incident.employeeId &&
+        i.date === incident.date &&
+        i.type === incident.type &&
+        i.reason?.trim().toLowerCase() === incident.reason?.trim().toLowerCase()
+    );
+
+    if (existingDuplicate) {
+      return;
+    }
+
     await saveDocument(COLLECTIONS.ATTENDANCE_INCIDENTS, incident);
     const updated = [incident, ...attendanceIncidents.filter((i) => i.id !== incident.id)];
     setAttendanceIncidents(updated);

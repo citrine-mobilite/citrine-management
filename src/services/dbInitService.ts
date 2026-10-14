@@ -23,29 +23,36 @@ export interface InitDatabaseResult {
   };
 }
 
-export const INITIAL_SEEDED_COMPANY_CONFIG: CompanyModuleConfig = {
-  ...DEFAULT_MODULE_CONFIG,
-  enableFinances: true,
-  enableDocuments: true,
-  enableCommunications: true,
-  enableLogs: true,
-  enableInventory: true,
-  enablePartners: true,
-  enableDiscipline: true,
-  enableOrgChart: true,
-  enableStatistics: true,
-  enableTeamCalls: true,
-  enableCalls: true,
-  qrCodeSecret: 'CITRINE-SECURE-POINTAGE-2026',
-  workStartTime: '08:00',
-  lateThresholdTime: '08:15',
-  defaultSalary: 200000,
-  hqName: 'Siège Social Citrine Mobilité',
-  hqAddress: 'Douala - Akwa, Boulevard de la Liberté',
-  hqLatitude: 4.051056,
-  hqLongitude: 9.7678687,
-  companyName: 'Citrine',
-};
+
+export async function seedRolesInDatabase(): Promise<{ success: boolean; message: string }> {
+  try {
+    const rolesToSeed = [
+      { name: 'Super Administrateur', code: 'SUPER_ADMIN', description: 'Accès complet et gestion globale de la plateforme', permissions: { all: true } },
+      { name: 'Responsable', code: 'RESPONSABLE', description: 'Supervision des équipes, validation des présences et gestion des tâches', permissions: { manage_team: true, manage_tasks: true, validate_presences: true } },
+      { name: 'Employé', code: 'EMPLOYE', description: 'Collaborateur standard avec accès au portail employé, pointage et tâches', permissions: { clocking: true, view_tasks: true, submit_leaves: true } }
+    ];
+
+    for (const r of rolesToSeed) {
+      const { error } = await supabase
+        .from('roles')
+        .upsert(r as any, { onConflict: 'code' });
+      if (error) {
+        console.warn(`[seedRolesInDatabase] Upsert role ${r.code} warning:`, error);
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Rôles (super_admin, responsable, employe) créés/mis à jour avec succès en base de données.'
+    };
+  } catch (err: any) {
+    console.error('[seedRolesInDatabase] Error:', err);
+    return {
+      success: false,
+      message: `Erreur lors de la création des rôles: ${err.message || err}`
+    };
+  }
+}
 
 /**
  * Diagnostic et vérification de la base Supabase sans ré-injection de mocks.
@@ -68,6 +75,9 @@ export async function initDatabaseWithExport(_options?: { overwriteExisting?: bo
   };
 
   try {
+    // Seed roles first
+    await seedRolesInDatabase();
+
     const [
       { count: usersCount },
       { count: employeesCount },
@@ -88,7 +98,7 @@ export async function initDatabaseWithExport(_options?: { overwriteExisting?: bo
 
     return {
       success: true,
-      message: `Base de données Supabase vérifiée : ${counts.users} utilisateur(s), ${counts.employees} collaborateur(s) connecté(s).`,
+      message: `Base de données Supabase vérifiée & rôles initialisés : ${counts.users} utilisateur(s), ${counts.employees} collaborateur(s).`,
       counts
     };
   } catch (err: any) {

@@ -79,7 +79,25 @@ export default function EmployeePortal(props: EmployeePortalProps) {
 
   const logic = useEmployeePortalLogic(props);
 
-  const pendingTasksCount = tasks.filter(t => (t.assignedTo === logic.employeeProfile.id || t.assignedTo === logic.employeeProfile.name) && t.status !== 'completed').length;
+  const isAssignedToMe = (t: Task) => {
+    const assignedField = (t.assignedTo || '').toLowerCase();
+    const myName = (logic.employeeProfile.name || '').toLowerCase();
+    const myId = (logic.employeeProfile.id || '').toLowerCase();
+    const myEmail = (logic.employeeProfile.email || '').toLowerCase();
+    const currentName = (currentUser?.name || '').toLowerCase();
+    const currentId = (currentUser?.id || '').toLowerCase();
+    if (assignedField.includes('équipe') || assignedField.includes('equipe') || assignedField.includes('tous')) return true;
+    const parts = assignedField.split(',').map((p) => p.trim());
+    return parts.some((p) => 
+      (myName && p === myName) ||
+      (myId && p === myId) ||
+      (myEmail && p === myEmail) ||
+      (currentName && p === currentName) ||
+      (currentId && p === currentId)
+    ) || (t.employeeId && (t.employeeId === logic.employeeProfile.id || t.employeeId === currentUser?.id));
+  };
+
+  const pendingTasksCount = tasks.filter(t => isAssignedToMe(t) && t.status !== 'completed').length;
   const totalBadgeCount = (logic.unreadAlertsCount || 0) + pendingTasksCount;
 
   useEffect(() => {
@@ -105,7 +123,7 @@ export default function EmployeePortal(props: EmployeePortalProps) {
           { id: 'presences', label: 'Mes Pointages', icon: Calendar, badge: undefined },
           { id: 'leaves', label: 'Mes Congés & Permissions', icon: CalendarDays, badge: (props.leaveRequests || []).filter(l => (l.employeeId === logic.employeeProfile.id || l.employeeEmail === logic.employeeProfile.email) && l.status === 'pending').length || undefined },
           { id: 'incidents', label: 'Signalements', icon: AlertTriangle, badge: logic.myIncidents.length },
-          { id: 'tasks', label: 'Mes Tâches', icon: CheckSquare, badge: tasks.filter(t => (t.assignedTo === logic.employeeProfile.id || t.assignedTo === logic.employeeProfile.name) && t.status !== 'completed').length || undefined },
+          { id: 'tasks', label: 'Mes Tâches', icon: CheckSquare, badge: pendingTasksCount || undefined },
           { id: 'alerts', label: 'Mes Alertes', icon: Bell, badge: logic.unreadAlertsCount > 0 ? logic.unreadAlertsCount : undefined },
         ].map((tab) => {
           const TabIcon = tab.icon;
@@ -207,7 +225,7 @@ export default function EmployeePortal(props: EmployeePortalProps) {
 
       {logic.activeTab === 'tasks' && (
         <TaskPanel
-          tasks={tasks.filter(t => t.assignedTo === logic.employeeProfile.name || t.assignedTo === logic.employeeProfile.id || t.employeeId === logic.employeeProfile.id || t.assignedTo === currentUser?.name)}
+          tasks={tasks}
           onUpdateTasks={onUpdateTasks}
           onAddNotification={onAddNotification}
           currentRole="employé"
@@ -222,6 +240,8 @@ export default function EmployeePortal(props: EmployeePortalProps) {
           employeeProfile={logic.employeeProfile}
           currentUser={currentUser}
           tasks={tasks}
+          onUpdateTasks={onUpdateTasks}
+          employees={props.employees}
           incidents={props.attendanceIncidents || []}
           notifications={props.notifications || []}
           presences={props.presences || []}
@@ -277,6 +297,7 @@ export default function EmployeePortal(props: EmployeePortalProps) {
         emergencyReason={logic.emergencyReason}
         setEmergencyReason={logic.setEmergencyReason}
         onSubmit={logic.handleConfirmEmergency}
+        isSubmitting={logic.isSubmittingEmergency}
       />
 
       <EmployeeLoanRequestModal

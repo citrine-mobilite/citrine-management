@@ -117,3 +117,39 @@ export function formatMinutesToHours(minutes: number): string {
   return `${h}h ${String(m).padStart(2, '0')}m`;
 }
 
+/**
+ * Formate une date et heure à la seconde près en français
+ * Exemple : "Reçu le 12 octobre 2026 à 10h55 et 30 secondes"
+ */
+export function formatExactNotificationDate(timestampOrDate?: string | Date | number): string {
+  if (!timestampOrDate) return 'Date non spécifiée';
+  const d = new Date(timestampOrDate);
+  if (isNaN(d.getTime())) return String(timestampOrDate);
+
+  const months = [
+    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+  ];
+  const day = d.getDate();
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+
+  return `Reçu le ${day} ${month} ${year} à ${hours}h${minutes} et ${seconds} secondes`;
+}
+
+/**
+ * Formate l'heure avec les secondes (ex: "10:55:30")
+ */
+export function formatExactTimeWithSeconds(timestampOrDate?: string | Date | number): string {
+  if (!timestampOrDate) return '--:--:--';
+  const d = new Date(timestampOrDate);
+  if (isNaN(d.getTime())) return '--:--:--';
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+

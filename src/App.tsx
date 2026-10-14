@@ -21,7 +21,7 @@ import { ToastMessage } from './components/Toast';
 import { useAppInitialData } from './hooks/useAppInitialData';
 import { loadSecureSession, storeSecureSession, clearSecureSession } from './services/sessionService';
 import { subscribeToUsers } from './services/userService';
-import { getDefaultPortalForUser, isEmployeeUser } from './utils/roleUtils';
+import { getDefaultPortalForUser, isEmployeeUser, isEmployeeOnlyRole } from './utils/roleUtils';
 import Sidebar, { TabType } from './components/Sidebar';
 import { AppTopNavbar } from './components/navigation/AppTopNavbar';
 import { AppTabRouter } from './components/navigation/AppTabRouter';
@@ -33,6 +33,7 @@ import OfficeQRCodeModal from './components/OfficeQRCodeModal';
 import ToastContainer from './components/Toast';
 import { DatabaseHealthBanner } from './components/common/DatabaseHealthBanner';
 import OfflineStatusBanner from './components/OfflineStatusBanner';
+import { GlobalTooltipContainer } from './components/common/GlobalTooltipContainer';
 
 export default function App() {
   const initialData = useAppInitialData();
@@ -126,12 +127,27 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Restore authenticated session on mount
+  // Restore authenticated session on mount with database verification
   useEffect(() => {
-    loadSecureSession().then((user) => {
-      if (user) {
-        setCurrentUser(user);
-        setActiveTab(getDefaultPortalForUser(user) as TabType);
+    loadSecureSession().then(async (user) => {
+      if (user && user.email) {
+        try {
+          const { fetchDatabaseUserByEmail } = await import('./services/userService');
+          const dbUser = await fetchDatabaseUserByEmail(user.email);
+          if (dbUser && dbUser.status === 'actif') {
+            setCurrentUser(dbUser);
+            await storeSecureSession(dbUser);
+            setActiveTab(getDefaultPortalForUser(dbUser) as TabType);
+          } else {
+            // L'utilisateur n'existe plus en base de données ou est désactivé
+            clearSecureSession();
+            setCurrentUser(null);
+          }
+        } catch (err) {
+          console.warn('[App] Erreur lors de la vérification de session en base:', err);
+          clearSecureSession();
+          setCurrentUser(null);
+        }
       }
       setIsAuthLoading(false);
     }).catch(() => {
@@ -199,6 +215,28 @@ export default function App() {
     return initialData.attendanceIncidents.filter((i) => i.status === 'signale' || !i.isJustified).length;
   }, [initialData.attendanceIncidents]);
 
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+  // Décompte strict : seuls les employés badgent (les responsables et admins ne badgent pas).
+  // Affiche uniquement le nombre d'employés qui n'ont pas badgé aujourd'hui (ex: 5 employés, 3 ont badgé -> affiche 2).
+  const nonBadgedEmployeesCount = useMemo(() => {
+    const eligibleEmployees = initialData.employees.filter((emp) => {
+      if (emp.status === false || emp.status === 'parti' || emp.status === 'renvoye' || emp.status === 'demissionne' || emp.status === 'suspendu') return false;
+      return isEmployeeOnlyRole(emp.roleType || emp.role);
+    });
+
+    if (eligibleEmployees.length === 0) return 0;
+
+    const badgedIds = new Set(
+      initialData.presences
+        .filter((p) => p.date === todayStr && (Boolean(p.arrivalTime) || p.status === 'present' || p.status === 'late'))
+        .map((p) => p.employeeId)
+    );
+
+    const badgedCount = eligibleEmployees.filter((emp) => badgedIds.has(emp.id)).length;
+    return Math.max(0, eligibleEmployees.length - badgedCount);
+  }, [initialData.employees, initialData.presences, todayStr]);
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
@@ -263,6 +301,7 @@ export default function App() {
             unreadRemindersCount={initialData.reminders.filter((r) => !r.stopped && !r.triggered).length}
             pendingPresencesRequestsCount={pendingPresencesRequestsCount}
             pendingLeavesCount={pendingLeavesCount}
+            nonBadgedEmployeesCount={nonBadgedEmployeesCount}
             mobileMenuOpen={mobileMenuOpen}
             onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
             currentUser={currentUser}
@@ -378,6 +417,9 @@ export default function App() {
 
       {/* Toast Notification Container */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Global Luxury Tooltip Engine */}
+      <GlobalTooltipContainer />
     </div>
   );
 }

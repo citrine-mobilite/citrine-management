@@ -94,6 +94,46 @@ const fallbackIdb: any = {
   },
 };
 
+let activeDbInstance: IDBPDatabase<ProcessFlowDBSchema> | null = null;
+
+export function clearMemoryFallback() {
+  memoryFallback.clear();
+}
+
+export async function clearAllIdbStores(): Promise<void> {
+  clearMemoryFallback();
+  try {
+    const db = await dbPromise;
+    if (db && db.objectStoreNames) {
+      const stores = Array.from(db.objectStoreNames);
+      for (const store of stores) {
+        try {
+          const tx = db.transaction(store, 'readwrite');
+          await tx.store.clear();
+          await tx.done;
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.warn('[IDB] Erreur lors du vidage des object stores:', err);
+  }
+}
+
+export async function closeIdbDatabase(): Promise<void> {
+  try {
+    if (activeDbInstance) {
+      activeDbInstance.close();
+      activeDbInstance = null;
+    }
+    const db = await dbPromise;
+    if (db && typeof db.close === 'function') {
+      db.close();
+    }
+  } catch (err) {
+    console.warn('[IDB] Erreur fermeture connexion IndexedDB:', err);
+  }
+}
+
 async function initIdb(): Promise<IDBPDatabase<ProcessFlowDBSchema> | any> {
   if (typeof window === 'undefined' || typeof indexedDB === 'undefined') {
     return fallbackIdb;
@@ -120,6 +160,7 @@ async function initIdb(): Promise<IDBPDatabase<ProcessFlowDBSchema> | any> {
         });
       },
     });
+    activeDbInstance = db;
     return db;
   } catch (error) {
     console.warn('[IDB] IndexedDB inaccessible, using memory fallback:', error);
@@ -128,3 +169,4 @@ async function initIdb(): Promise<IDBPDatabase<ProcessFlowDBSchema> | any> {
 }
 
 export const dbPromise = initIdb();
+

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Users, Download, FileText } from 'lucide-react';
-import { AppUser, UserRole, UserStatus } from '../types';
+import { AppUser, UserRole, UserStatus, Employee, EmployeeStatus } from '../types';
 import { saveUser, deleteUser } from '../services/userService';
 import { hashPassword } from '../utils/cryptoUtils';
 import { logAdminOperation } from '../services/adminAuditService';
@@ -16,6 +16,8 @@ interface UserManagementPanelProps {
   onAddNotification: (notif: any) => void;
   currentUser: AppUser;
   onUpdateUsers?: (updated: AppUser[]) => void;
+  employees?: Employee[];
+  onUpdateEmployees?: (updated: Employee[]) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -24,6 +26,8 @@ export default function UserManagementPanel({
   onAddNotification,
   currentUser,
   onUpdateUsers,
+  employees,
+  onUpdateEmployees,
   showToast,
 }: UserManagementPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,6 +64,7 @@ export default function UserManagementPanel({
     email: string;
     role: UserRole;
     status: UserStatus;
+    employmentStatus: EmployeeStatus;
     department: string;
     password?: string;
   }) => {
@@ -75,12 +80,49 @@ export default function UserManagementPanel({
         email: data.email.trim(),
         role: data.role,
         status: data.status,
+        employmentStatus: data.employmentStatus,
         department: data.department.trim(),
         createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
         passwordHash,
       };
 
       await saveUser(userToSave);
+
+      // Mettre à jour l'état React des utilisateurs
+      if (onUpdateUsers) {
+        if (editingUser) {
+          onUpdateUsers(users.map((u) => (u.id === userToSave.id ? userToSave : u)));
+        } else {
+          onUpdateUsers([userToSave, ...users]);
+        }
+      }
+
+      // Synchroniser immédiatement le collaborateur associé dans l'état React
+      if (onUpdateEmployees && employees) {
+        const targetEmail = userToSave.email.toLowerCase();
+        const empIdx = employees.findIndex(
+          (e) => e.email.toLowerCase() === targetEmail || String(e.userId) === userToSave.id || e.id === userToSave.employeeId
+        );
+        if (empIdx >= 0) {
+          const emp = employees[empIdx];
+          const isEmpActive =
+            userToSave.status === 'actif' &&
+            data.employmentStatus !== 'renvoye' &&
+            data.employmentStatus !== 'demissionne' &&
+            data.employmentStatus !== 'suspendu' &&
+            data.employmentStatus !== 'parti';
+
+          const updatedEmp: Employee = {
+            ...emp,
+            name: userToSave.name,
+            email: userToSave.email,
+            department: userToSave.department || emp.department,
+            status: isEmpActive,
+            employmentStatus: data.employmentStatus,
+          };
+          onUpdateEmployees(employees.map((e, i) => (i === empIdx ? updatedEmp : e)));
+        }
+      }
 
       // Audit log
       if (editingUser) {

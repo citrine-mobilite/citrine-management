@@ -36,6 +36,7 @@ import { PresenceIncidentsAdminView } from './presence/PresenceIncidentsAdminVie
 import PresenceRequestsView from './PresenceRequestsView';
 import { extractPresenceRequests } from './presence/requests/presenceRequestsUtils';
 import { incidentService } from '../services/incidentService';
+import { isEmployeeOnlyRole } from '../utils/roleUtils';
 
 interface PresencePanelProps {
   employees: Employee[];
@@ -72,9 +73,14 @@ export default function PresencePanel({
 }: PresencePanelProps) {
   const todayStr = new Date().toISOString().split('T')[0];
 
+  // Les administrateurs et responsables ne badgent pas : on les exclut du pointage du jour
+  const clockableEmployees = useMemo(() => {
+    return employees.filter((e) => isEmployeeOnlyRole(e.role || e.roleType || e.position));
+  }, [employees]);
+
   // Selected date and employee for the left sidebar clocking widget
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [activeSidebarEmpId, setActiveSidebarEmpId] = useState(employees[0]?.id || '');
+  const [activeSidebarEmpId, setActiveSidebarEmpId] = useState(clockableEmployees[0]?.id || employees[0]?.id || '');
   const [sidebarTime, setSidebarTime] = useState(() => new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
 
   // Main list filters
@@ -96,8 +102,8 @@ export default function PresencePanel({
   const [mapLayer, setMapLayer] = useState<MapLayerType>('standard');
 
   const pendingRequestsCount = useMemo(() => {
-    return extractPresenceRequests(presences, employees).filter((r) => r.status === 'pending').length;
-  }, [presences, employees]);
+    return extractPresenceRequests(presences, clockableEmployees).filter((r) => r.status === 'pending').length;
+  }, [presences, clockableEmployees]);
 
   const [editForm, setEditForm] = useState({
     arrivalTime: '08:00',
@@ -110,7 +116,7 @@ export default function PresencePanel({
   });
 
   // Clock in/out logic for the selected employee on the left sidebar
-  const activeEmployee = employees.find((e) => e.id === activeSidebarEmpId) || employees[0];
+  const activeEmployee = clockableEmployees.find((e) => e.id === activeSidebarEmpId) || clockableEmployees[0] || employees[0];
   const empPresences = presences.filter((p) => p.employeeId === activeEmployee?.id);
   const currentPresence = presences.find(
     (p) => p.employeeId === activeEmployee?.id && p.date === selectedDate
@@ -133,10 +139,10 @@ export default function PresencePanel({
 
   // Sync activeEmployee changes to left sidebar
   useEffect(() => {
-    if (employees.length > 0 && !activeSidebarEmpId) {
-      setActiveSidebarEmpId(employees[0].id);
+    if (clockableEmployees.length > 0 && (!activeSidebarEmpId || !clockableEmployees.some(e => e.id === activeSidebarEmpId))) {
+      setActiveSidebarEmpId(clockableEmployees[0].id);
     }
-  }, [employees]);
+  }, [clockableEmployees]);
 
   // Determine clocking state machine step for the green button
   const getNextClockingStep = () => {
@@ -426,6 +432,8 @@ export default function PresencePanel({
           employees={employees}
           onUpdatePresences={onUpdatePresences}
           showToast={showToast}
+          attendanceIncidents={attendanceIncidents}
+          onUpdateAttendanceIncidents={onUpdateAttendanceIncidents}
         />
       ) : activePresenceTab === 'incidents' ? (
         <PresenceIncidentsAdminView
@@ -456,7 +464,7 @@ export default function PresencePanel({
               onChange={(e) => setActiveSidebarEmpId(e.target.value)}
               className="w-full px-3 py-2 border border-stone-200 bg-stone-50 rounded-xl text-xs font-semibold focus:ring-1 focus:ring-[#2A7B76] outline-none"
             >
-              {employees.map((emp) => (
+              {clockableEmployees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
                   {emp.name} ({emp.roleType || 'Employé'})
                 </option>
@@ -641,7 +649,7 @@ export default function PresencePanel({
                 className="w-full px-3 py-1.5 border border-stone-200 bg-stone-50 rounded-xl text-xs font-semibold focus:ring-1 focus:ring-[#2A7B76] outline-none"
               >
                 <option value="all">Tous les collaborateurs</option>
-                {employees.map((emp) => (
+                {clockableEmployees.map((emp) => (
                   <option key={emp.id} value={emp.id}>{emp.name}</option>
                 ))}
               </select>

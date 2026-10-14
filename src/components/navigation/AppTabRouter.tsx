@@ -327,7 +327,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
 
       {/* Fallback universel sécurisé : garantit qu'aucun onglet vide ou inconnu ne produise un écran blanc */}
       {(!activeTab || ![
-        'dashboard', 'employee_portal', 'presences', 'statistics', 'tasks',
+        'dashboard', 'employee_portal', 'presences', 'leave_requests', 'statistics', 'tasks',
         'reminders', 'logs', 'collaborators', 'discipline', 'documents',
         'communications', 'finances', 'inventory', 'partners', 'users',
         'settings', 'calls', 'recruitment', 'expense_claims', 'hse',

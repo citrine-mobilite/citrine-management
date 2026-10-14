@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, User, Mail, Lock, Building, Sparkles, UserCheck, UserPlus, Shield } from 'lucide-react';
-import { AppUser, UserRole, UserStatus } from '../../types';
+import { AppUser, UserRole, UserStatus, EmployeeStatus } from '../../types';
 import { generateStrongPassword } from '../../utils/cryptoUtils';
 
 interface UserFormModalProps {
@@ -12,6 +12,7 @@ interface UserFormModalProps {
     email: string;
     role: UserRole;
     status: UserStatus;
+    employmentStatus: EmployeeStatus;
     department: string;
     password?: string;
   }) => void;
@@ -27,6 +28,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('employé');
   const [status, setStatus] = useState<UserStatus>('actif');
+  const [employmentStatus, setEmploymentStatus] = useState<EmployeeStatus>('en_poste');
   const [department, setDepartment] = useState('');
   const [password, setPassword] = useState('');
 
@@ -37,6 +39,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       setEmail(editingUser.email || '');
       setRole(editingUser.role || 'employé');
       setStatus(editingUser.status || 'actif');
+      setEmploymentStatus(editingUser.employmentStatus || (editingUser.status === 'inactif' ? 'suspendu' : 'en_poste'));
       setDepartment(editingUser.department || '');
       setPassword('');
     } else {
@@ -44,6 +47,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       setEmail('');
       setRole('employé');
       setStatus('actif');
+      setEmploymentStatus('en_poste');
       setDepartment('');
       setPassword('');
     }
@@ -51,9 +55,18 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleEmploymentStatusChange = (newStatus: EmployeeStatus) => {
+    setEmploymentStatus(newStatus);
+    if (newStatus === 'renvoye' || newStatus === 'demissionne' || newStatus === 'suspendu' || newStatus === 'parti') {
+      setStatus('inactif');
+    } else {
+      setStatus('actif');
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ name, email, role, status, department, password });
+    onSave({ name, email, role, status, employmentStatus, department, password });
   };
 
   const isEditing = Boolean(editingUser);
@@ -138,7 +151,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="font-bold text-stone-700 block mb-1">Rôle d'accès *</label>
               <select
@@ -149,6 +162,24 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 <option value="employé">Employé (Espace personnel)</option>
                 <option value="responsable">Responsable (Gestion d'équipe)</option>
                 <option value="administrateur">Administrateur (Contrôle total)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="font-bold text-stone-700 block mb-1">Situation RH / Contrat *</label>
+              <select
+                value={employmentStatus}
+                onChange={(e) => handleEmploymentStatusChange(e.target.value as EmployeeStatus)}
+                className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#2A7B76] text-stone-800 font-medium cursor-pointer"
+              >
+                <option value="en_poste">En poste (Actif)</option>
+                <option value="en_conge">En congés</option>
+                <option value="en_permission">En permission</option>
+                <option value="maladie">Arrêt maladie</option>
+                <option value="suspendu">Suspendu</option>
+                <option value="demissionne">Démissionné</option>
+                <option value="renvoye">Renvoyé / Licencié</option>
+                <option value="parti">Départ entreprise</option>
               </select>
             </div>
 

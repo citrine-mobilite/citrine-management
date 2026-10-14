@@ -8,7 +8,8 @@ import {
   AlertCircle, 
   ShieldAlert, 
   CheckCircle,
-  Flag
+  Flag,
+  Trash2
 } from 'lucide-react';
 import { Task, TaskStatus, TaskPriority } from '../../types';
 
@@ -17,6 +18,7 @@ interface TaskKanbanBoardProps {
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
   onSelectTask: (task: Task) => void;
   onOpenCreateModal: (defaultStatus: TaskStatus) => void;
+  onDeleteTask: (taskId: string) => void;
   getPriorityBadge: (p: TaskPriority) => React.ReactNode;
 }
 
@@ -41,6 +43,7 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
   onStatusChange,
   onSelectTask,
   onOpenCreateModal,
+  onDeleteTask,
   getPriorityBadge,
 }) => {
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
@@ -139,9 +142,23 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
                       <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-[10px] text-stone-400">
                         <div className="flex items-center gap-1 text-stone-600 font-medium">
                           <User className="h-3 w-3 text-stone-400" />
-                          <span className="truncate max-w-[120px]">{task.assignedTo || 'Équipe'}</span>
+                          <span className="truncate max-w-[110px]">{task.assignedTo || 'Équipe'}</span>
                         </div>
-                        <span className="font-mono text-stone-500 font-semibold">{task.date}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-stone-500 font-semibold">{task.date}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm('Voulez-vous vraiment supprimer cette tâche ?')) {
+                                onDeleteTask(task.id);
+                              }
+                            }}
+                            className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="Supprimer la tâche"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))

@@ -85,7 +85,7 @@ export const tasks = pgTable('tasks', {
   description: text('description'),
   date: text('date'),
   time: text('time'),
-  status: boolean('status').default(true),
+  status: text('status').default('todo'),
   priority: text('priority').default('medium'),
   assignedTo: text('assigned_to'),
   employeeId: text('employee_id'),

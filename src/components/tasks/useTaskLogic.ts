@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Task, NotificationLog, Employee, TaskStatus, TaskPriority, TaskProject, AppUser } from '../../types';
 import { DEFAULT_TASK_PROJECTS } from './taskConstants';
+import { taskService } from '../../services/taskService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 
 interface UseTaskLogicProps {
@@ -92,16 +93,20 @@ export function useTaskLogic({
     if (showToast) showToast(`Projet "${newProject.name}" créé avec succès !`, 'success');
   };
 
-  const handleCreateTask = (taskData: Omit<Task, 'id' | 'subtasks' | 'comments' | 'incidents'>) => {
+  const handleCreateTask = async (taskData: Omit<Task, 'id' | 'subtasks' | 'comments' | 'incidents'>) => {
     const taskItem: Task = {
       id: `task-${Date.now()}`,
       ...taskData,
       subtasks: [],
       comments: [],
       incidents: [],
+      lastUpdatedTime: new Date().toISOString(),
     };
 
-    onUpdateTasks([taskItem, ...tasks]);
+    await taskService.saveTask(taskItem);
+    const updatedTasks = [taskItem, ...tasks];
+    onUpdateTasks(updatedTasks);
+
     onAddNotification({
       id: `notif-${Date.now()}`,
       recipient: taskItem.assignedTo || 'Équipe',
@@ -121,84 +126,91 @@ export function useTaskLogic({
     });
 
     if (showToast) {
-      showToast('Tâche créée avec succès.', 'success');
+      showToast('Tâche créée et enregistrée en base avec succès.', 'success');
     }
   };
 
-  const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
+  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     const targetTask = tasks.find((t) => t.id === taskId);
-    const updated = tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t));
+    if (!targetTask) return;
+
+    const updatedTask: Task = { ...targetTask, status: newStatus, lastUpdatedTime: new Date().toISOString() };
+    await taskService.saveTask(updatedTask);
+
+    const updated = tasks.map((t) => (t.id === taskId ? updatedTask : t));
     onUpdateTasks(updated);
+
     if (selectedTaskForDetail && selectedTaskForDetail.id === taskId) {
-      setSelectedTaskForDetail({ ...selectedTaskForDetail, status: newStatus });
+      setSelectedTaskForDetail(updatedTask);
     }
 
-    if (targetTask) {
-      const statusLabels: Record<string, string> = {
-        todo: 'À faire',
-        in_progress: 'En cours',
-        review: 'En révision',
-        completed: 'Terminée',
-      };
-      const label = statusLabels[newStatus] || newStatus;
-      const targetRecipient = targetTask.assignedTo || targetTask.employeeId || 'Collaborateur';
+    const statusLabels: Record<string, string> = {
+      todo: 'À faire',
+      in_progress: 'En cours',
+      review: 'En révision',
+      completed: 'Terminée',
+    };
+    const label = statusLabels[newStatus] || newStatus;
+    const targetRecipient = targetTask.assignedTo || targetTask.employeeId || 'Collaborateur';
 
-      // Notification non lue chez l'employé concerné
-      onAddNotification({
-        id: `notif-task-move-${Date.now()}-${taskId}`,
-        recipient: targetRecipient,
-        type: 'system',
-        title: `Mouvement de Tâche : ${targetTask.title}`,
-        content: `La tâche est passée au statut « ${label} ».`,
-        payload: JSON.stringify({
-          source: 'task_movement',
-          taskId: targetTask.id,
-          employeeId: targetRecipient,
-          newStatus,
-          previousStatus: targetTask.status,
-        }),
-        timestamp: new Date().toISOString(),
-        read: false,
-      });
+    onAddNotification({
+      id: `notif-task-move-${Date.now()}-${taskId}`,
+      recipient: targetRecipient,
+      type: 'system',
+      title: `Mouvement de Tâche : ${targetTask.title}`,
+      content: `La tâche est passée au statut « ${label} ».`,
+      payload: JSON.stringify({
+        source: 'task_movement',
+        taskId: targetTask.id,
+        employeeId: targetRecipient,
+        newStatus,
+        previousStatus: targetTask.status,
+      }),
+      timestamp: new Date().toISOString(),
+      read: false,
+    });
 
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-      }
-
-      pushNotificationBridgeService.sendPush({
-        title: 'Mise à jour de Tâche 🔄',
-        message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
-        senderName: currentRole || 'Collaborateur',
-        type: 'task_assigned',
-        link: 'tasks',
-      });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
     }
 
-    if (showToast) showToast('Statut mis à jour.', 'success');
+    pushNotificationBridgeService.sendPush({
+      title: 'Mise à jour de Tâche 🔄',
+      message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
+      senderName: currentRole || 'Collaborateur',
+      type: 'task_assigned',
+      link: 'tasks',
+    });
+
+    if (showToast) showToast('Statut mis à jour et enregistré.', 'success');
   };
 
-  const handleSaveTask = (updatedTask: Task) => {
+  const handleSaveTask = async (updatedTask: Task) => {
     const prevTask = tasks.find((t) => t.id === updatedTask.id);
-    onUpdateTasks(tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
-    setSelectedTaskForDetail(updatedTask);
+    const finalizedTask = { ...updatedTask, updatedAt: new Date().toISOString() };
 
-    if (updatedTask.assignedTo) {
-      const isStatusChanged = prevTask && prevTask.status !== updatedTask.status;
-      const isPriorityChanged = prevTask && prevTask.priority !== updatedTask.priority;
+    await taskService.saveTask(finalizedTask);
+    const updated = tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t));
+    onUpdateTasks(updated);
+    setSelectedTaskForDetail(finalizedTask);
+
+    if (finalizedTask.assignedTo) {
+      const isStatusChanged = prevTask && prevTask.status !== finalizedTask.status;
+      const isPriorityChanged = prevTask && prevTask.priority !== finalizedTask.priority;
       if (isStatusChanged || isPriorityChanged || !prevTask) {
         onAddNotification({
-          id: `notif-task-update-${Date.now()}-${updatedTask.id}`,
-          recipient: updatedTask.assignedTo,
+          id: `notif-task-update-${Date.now()}-${finalizedTask.id}`,
+          recipient: finalizedTask.assignedTo,
           type: 'system',
-          title: `Mise à jour de tâche : ${updatedTask.title}`,
+          title: `Mise à jour de tâche : ${finalizedTask.title}`,
           content: isStatusChanged 
-            ? `Statut modifié : passage à « ${updatedTask.status} »` 
+            ? `Statut modifié : passage à « ${finalizedTask.status} »` 
             : `Détails de la tâche mis à jour.`,
           payload: JSON.stringify({
             source: 'task_movement',
-            taskId: updatedTask.id,
-            employeeId: updatedTask.assignedTo,
-            newStatus: updatedTask.status,
+            taskId: finalizedTask.id,
+            employeeId: finalizedTask.assignedTo,
+            newStatus: finalizedTask.status,
           }),
           timestamp: new Date().toISOString(),
           read: false,
@@ -211,10 +223,12 @@ export function useTaskLogic({
     }
   };
 
-  const handleDeleteTask = (id: string) => {
-    onUpdateTasks(tasks.filter((t) => t.id !== id));
+  const handleDeleteTask = async (id: string) => {
+    await taskService.deleteTask(id);
+    const updated = tasks.filter((t) => t.id !== id);
+    onUpdateTasks(updated);
     setSelectedTaskForDetail(null);
-    if (showToast) showToast('Élément supprimé avec succès.');
+    if (showToast) showToast('Tâche supprimée avec succès.');
   };
 
   // Filter tasks based on search, project permissions, priority, assignee, and milestone filter

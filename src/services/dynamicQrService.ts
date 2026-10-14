@@ -11,6 +11,10 @@ export class DynamicQrService {
     });
   }
 
+  public clearCache(): void {
+    this.activeSessionsCache = [];
+  }
+
   // Create an active 30s dynamic QR session for the on-site manager
   public async createSession(managerId: string, managerName: string): Promise<DynamicQrSession> {
     const sessionId = `dynqr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;

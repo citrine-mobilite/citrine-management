@@ -1,13 +1,18 @@
+import { EmployeeStatus } from './employeeTypes';
+
 export type Role = 'Administrateur' | 'Employé' | 'Responsable';
 export type UserRole = 'administrateur' | 'responsable' | 'employé';
 export type UserStatus = 'actif' | 'inactif';
 
 export interface AppUser {
   id: string;
+  uid?: string;
   email: string;
   name: string;
   role: UserRole;
+  roleId?: number;
   status: UserStatus;
+  employmentStatus?: EmployeeStatus;
   authMethod?: 'google' | 'password';
   passwordHash?: string;
   avatarUrl?: string;

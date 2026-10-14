@@ -44,6 +44,7 @@ interface SidebarProps {
   unreadRemindersCount: number;
   pendingPresencesRequestsCount?: number;
   pendingLeavesCount?: number;
+  nonBadgedEmployeesCount?: number;
   mobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
   currentUser: AppUser | null;
@@ -58,6 +59,7 @@ export default function Sidebar({
   unreadRemindersCount,
   pendingPresencesRequestsCount = 0,
   pendingLeavesCount = 0,
+  nonBadgedEmployeesCount,
   mobileMenuOpen,
   onToggleMobileMenu,
   currentUser,
@@ -71,6 +73,7 @@ export default function Sidebar({
     unreadRemindersCount,
     pendingPresencesRequestsCount,
     pendingLeavesCount,
+    nonBadgedEmployeesCount,
   });
 
   return (

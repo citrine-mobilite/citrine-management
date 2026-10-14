@@ -23,6 +23,7 @@ import {
   KeyRound,
   Sparkles,
   Camera,
+  AlertCircle,
   ShieldAlert,
   History,
   UserCheck,
@@ -44,6 +45,7 @@ import { getEmployeeSoftColor } from '../utils/colorUtils';
 import { downloadPayslipPdf } from '../services/pdfExportService';
 import { saveUser } from '../services/userService';
 import { generateUuidV4 } from '../services/employeeService';
+import { supabaseAdmin } from '../lib/supabase';
 import { CollaboratorAvatarPickerModal } from './collaborators/CollaboratorAvatarPickerModal';
 import { CollaboratorStatusReasonModal } from './collaborators/CollaboratorStatusReasonModal';
 import { disciplinaryReasonsService } from '../services/disciplinaryReasonsService';
@@ -154,16 +156,18 @@ export default function CollaboratorPanel({
     email: '',
     phone: '',
     roleType: 'employé' as Employee['roleType'],
-    department: '',
+    department: 'Informatique & IT',
     managerId: '',
-    team: '',
+    team: 'Équipe IT & Développement',
     hireDate: new Date().toISOString().split('T')[0],
     birthDate: '',
-    salary: 0,
+    salary: 200000,
     status: 'en_poste' as EmployeeStatus,
     departureReason: '',
     suspensionReason: '',
     avatarUrl: '',
+    userId: '',
+    roleId: 3 as number | string,
     createUserAccount: true,
     userPassword: '',
     userRole: 'employé' as UserRole,
@@ -176,16 +180,18 @@ export default function CollaboratorPanel({
       email: '',
       phone: '',
       roleType: 'employé',
-      department: '',
+      department: 'Informatique & IT',
       managerId: '',
-      team: '',
+      team: 'Équipe IT & Développement',
       hireDate: new Date().toISOString().split('T')[0],
       birthDate: '',
-      salary: 0,
+      salary: 200000,
       status: 'en_poste',
       departureReason: '',
       suspensionReason: '',
       avatarUrl: '',
+      userId: '',
+      roleId: 3,
       createUserAccount: true,
       userPassword: '',
       userRole: 'employé',
@@ -195,24 +201,50 @@ export default function CollaboratorPanel({
 
   const handleOpenEdit = (emp: Employee) => {
     setEditingEmployee(emp);
+    const linkedUser = users?.find(u => 
+      (emp.userId && (u.id === String(emp.userId) || u.uid === String(emp.userId))) || 
+      (u.employeeId && u.employeeId === emp.id) || 
+      (emp.email && u.email && u.email.toLowerCase() === emp.email.toLowerCase())
+    );
+
+    let resolvedRoleId: number = 3;
+    if (emp.roleId !== undefined && emp.roleId !== null && emp.roleId !== '') {
+      resolvedRoleId = Number(emp.roleId);
+    } else if (linkedUser?.roleId) {
+      resolvedRoleId = Number(linkedUser.roleId);
+    } else {
+      const rLower = String(emp.roleType || '').toLowerCase();
+      if (rLower.includes('admin') || rLower.includes('directeur')) {
+        resolvedRoleId = 1;
+      } else if (rLower.includes('responsable') || rLower.includes('manager')) {
+        resolvedRoleId = 2;
+      } else {
+        resolvedRoleId = 3;
+      }
+    }
+
+    const resolvedUserRole: UserRole = resolvedRoleId === 1 ? 'administrateur' : resolvedRoleId === 2 ? 'responsable' : 'employé';
+
     setFormData({
       name: emp.name || '',
       email: emp.email || '',
       phone: emp.phone || '',
       roleType: emp.roleType || 'employé',
-      department: emp.department || 'Citrine Management',
-      managerId: emp.managerId || '',
+      department: emp.department || 'Informatique & IT',
+      managerId: String(emp.managerId || ''),
       team: emp.team || 'Équipe IT & Développement',
       hireDate: emp.hireDate || new Date().toISOString().split('T')[0],
       birthDate: emp.birthDate || '2000-01-05',
       salary: emp.salary || 200000,
-      status: emp.status || 'en_poste',
+      status: (typeof emp.status === 'string' ? emp.status : 'en_poste') as any,
       departureReason: emp.departureReason || '',
       suspensionReason: emp.suspensionReason || '',
       avatarUrl: emp.avatarUrl || '',
-      createUserAccount: false,
+      userId: emp.userId ? String(emp.userId) : (linkedUser ? linkedUser.id : ''),
+      roleId: resolvedRoleId,
+      createUserAccount: !linkedUser,
       userPassword: '',
-      userRole: 'employé',
+      userRole: resolvedUserRole,
     });
     setIsModalOpen(true);
   };
@@ -223,6 +255,8 @@ export default function CollaboratorPanel({
       if (showToast) showToast('Le nom du collaborateur est requis.', 'error');
       return;
     }
+
+    const empDepartment = formData.department.trim() || 'Direction Générale';
 
     if (editingEmployee) {
       // Détecter et consigner les opérations administratives
@@ -260,26 +294,111 @@ export default function CollaboratorPanel({
         });
       }
 
+      const resolvedRoleId = formData.roleId ? Number(formData.roleId) : (formData.userRole === 'administrateur' ? 1 : formData.userRole === 'responsable' ? 2 : 3);
+      const targetUserId = formData.userId || editingEmployee.userId || '';
+
       const updated = employees.map((emp) =>
-        emp.id === editingEmployee.id ? { ...emp, ...formData } : emp
+        emp.id === editingEmployee.id
+          ? {
+              ...emp,
+              ...formData,
+              userId: targetUserId || undefined,
+              roleId: resolvedRoleId,
+              department: empDepartment,
+            }
+          : emp
       );
       onUpdateEmployees(updated);
+
+      // Synchroniser le compte utilisateur correspondant si existant
+      if (formData.email || editingEmployee.email || targetUserId) {
+        const targetEmail = (formData.email || editingEmployee.email || '').trim().toLowerCase();
+        const existingUser = users?.find(
+          (u) =>
+            (targetUserId && (u.id === targetUserId || u.uid === targetUserId)) ||
+            (targetEmail && u.email && u.email.toLowerCase() === targetEmail) ||
+            (u.employeeId && u.employeeId === editingEmployee.id)
+        );
+
+        if (existingUser) {
+          const updatedUser: AppUser = {
+            ...existingUser,
+            name: formData.name.trim(),
+            role: formData.userRole,
+            roleId: resolvedRoleId,
+            department: empDepartment,
+            phone: formData.phone || existingUser.phone,
+            employeeId: editingEmployee.id,
+          };
+          saveUser(updatedUser).catch(() => {});
+          if (onUpdateUsers && users) {
+            onUpdateUsers(users.map((u) => (u.id === existingUser.id ? updatedUser : u)));
+          }
+        }
+      }
+
       setAuditOpsList(getAdminAuditOperations());
-      if (showToast) showToast('Collaborateur mis à jour avec succès.', 'success');
+      if (showToast) showToast(`Fiche collaborateur mise à jour (Rôle ID: ${resolvedRoleId}).`, 'success');
     } else {
       const empUid = generateUuidV4();
       const empId = `emp-${Date.now()}`;
-      const userId = `user-${Date.now()}`;
+      const userUid = generateUuidV4();
+      const userId = userUid;
+      const userEmail = formData.email.trim() ? formData.email.trim().toLowerCase() : `collab_${Date.now()}@citrinemgmt.cm`;
+      const initialPassword = formData.userPassword.trim() || 'Collab@2026';
+      const computedRoleId = formData.userRole === 'administrateur' ? 1 : formData.userRole === 'responsable' ? 2 : 3;
+
+      // 1. Enregistrement préalable du compte utilisateur associé
+      let createdUserAccount: AppUser | null = null;
+      try {
+        if (supabaseAdmin) {
+          try {
+            await supabaseAdmin.auth.admin.createUser({
+              email: userEmail,
+              password: initialPassword,
+              email_confirm: true,
+            });
+          } catch (authErr) {
+            console.warn('[CollaboratorPanel] Notice création compte Auth Supabase:', authErr);
+          }
+        }
+
+        createdUserAccount = {
+          id: userId,
+          uid: userUid,
+          name: formData.name.trim(),
+          email: userEmail,
+          role: formData.userRole,
+          roleId: computedRoleId,
+          status: 'actif',
+          department: empDepartment,
+          phone: formData.phone || '',
+          employeeId: empId,
+          createdAt: new Date().toISOString(),
+          passwordHash: initialPassword,
+          authMethod: 'password',
+        };
+
+        await saveUser(createdUserAccount);
+        if (onUpdateUsers && users) {
+          onUpdateUsers([createdUserAccount, ...users]);
+        }
+      } catch (userErr) {
+        console.warn('Erreur création compte utilisateur initial:', userErr);
+      }
+
+      // 2. Création de la fiche collaborateur avec userId et roleId déjà reliés
       const newEmp: Employee = {
         id: empId,
         uid: empUid,
         userId: userId,
+        roleId: computedRoleId,
         avatarUrl: formData.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(formData.name)}`,
         name: formData.name.trim(),
-        email: formData.email.trim(),
+        email: userEmail,
         phone: formData.phone,
         roleType: formData.roleType,
-        department: formData.department,
+        department: empDepartment,
         managerId: formData.managerId,
         team: formData.team,
         hireDate: formData.hireDate,
@@ -290,6 +409,8 @@ export default function CollaboratorPanel({
         departureReason: formData.departureReason,
         suspensionReason: formData.suspensionReason,
       };
+
+      // 3. Sauvegarder immédiatement l'employé avec userId et roleId
       onUpdateEmployees([newEmp, ...employees]);
 
       // Consigner l'opération de création
@@ -300,7 +421,7 @@ export default function CollaboratorPanel({
         targetName: formData.name.trim(),
         operationType: 'creation',
         operationLabel: 'Création du collaborateur',
-        details: `Ajout dans "${formData.team}" sous statut "${formData.status}"`,
+        details: `Ajout dans "${formData.team}" sous statut "${formData.status}" | User ID: ${userId} | Rôle ID: ${computedRoleId}`,
       });
 
       if (formData.managerId) {
@@ -315,46 +436,11 @@ export default function CollaboratorPanel({
         });
       }
 
-      // Création automatique et obligatoire du compte utilisateur associé
-      try {
-        const userEmail = formData.email.trim() ? formData.email.trim().toLowerCase() : `collab_${Date.now()}@citrinemgmt.cm`;
-        const userAccount: AppUser = {
-          id: userId,
-          name: formData.name.trim(),
-          email: userEmail,
-          role: formData.userRole,
-          status: 'actif',
-          department: formData.department || 'Citrine Management',
-          phone: formData.phone || '',
-          employeeId: empId,
-          createdAt: new Date().toISOString(),
-          passwordHash: formData.userPassword.trim() || 'Collab@2026',
-          authMethod: 'password',
-        };
-        await saveUser(userAccount);
-        if (onUpdateUsers && users) {
-          onUpdateUsers([userAccount, ...users]);
-        }
-
-        logAdminOperation({
-          authorName: 'Administrateur',
-          targetUserId: userId,
-          targetEmployeeId: empId,
-          targetName: formData.name.trim(),
-          operationType: 'role_change',
-          operationLabel: 'Création obligatoire du compte utilisateur',
-          details: `Accès système : ${formData.userRole} | Identifiant : ${userEmail}`,
-        });
-
-        if (showToast) {
-          showToast(
-            `Collaborateur et compte utilisateur créés avec succès ! Identifiant: ${userEmail} | MDP: ${formData.userPassword}`,
-            'success'
-          );
-        }
-      } catch (err) {
-        console.warn('Erreur création compte utilisateur:', err);
-        if (showToast) showToast('Collaborateur créé mais échec de création du compte utilisateur.', 'error');
+      if (showToast) {
+        showToast(
+          `Collaborateur et compte créés et liés avec succès ! User ID: ${userId.slice(0, 8)}... | Rôle ID: ${computedRoleId}`,
+          'success'
+        );
       }
 
       setAuditOpsList(getAdminAuditOperations());
@@ -1125,21 +1211,25 @@ export default function CollaboratorPanel({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block mb-1.5 text-stone-500">👔 Responsable Hiérarchique Direct</label>
-                  <select
-                    value={formData.managerId}
-                    onChange={(e) => setFormData({ ...formData, managerId: e.target.value })}
+                  <label className="block mb-1.5 text-stone-500">🏢 Département d'affectation *</label>
+                  <input
+                    type="text"
+                    list="departments-suggested"
+                    required
+                    placeholder="Ex: Informatique & IT, RH & Paie..."
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800 text-xs font-semibold"
-                  >
-                    <option value="">-- Aucun / Direction Générale --</option>
-                    {employees
-                      .filter((e) => !editingEmployee || e.id !== editingEmployee.id)
-                      .map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.name} ({e.roleType || 'Collaborateur'})
-                        </option>
-                      ))}
-                  </select>
+                  />
+                  <datalist id="departments-suggested">
+                    <option value="Informatique & IT" />
+                    <option value="Ressources Humaines" />
+                    <option value="Finance & Comptabilité" />
+                    <option value="Opérations & Logistique" />
+                    <option value="Commercial & Partenariats" />
+                    <option value="Direction Générale & Stratégie" />
+                    <option value="Sécurité & HSE" />
+                  </datalist>
                 </div>
 
                 <div>
@@ -1165,6 +1255,24 @@ export default function CollaboratorPanel({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
+                  <label className="block mb-1.5 text-stone-500">👔 Responsable Hiérarchique Direct</label>
+                  <select
+                    value={formData.managerId}
+                    onChange={(e) => setFormData({ ...formData, managerId: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800 text-xs font-semibold"
+                  >
+                    <option value="">-- Aucun / Direction Générale --</option>
+                    {employees
+                      .filter((e) => !editingEmployee || e.id !== editingEmployee.id)
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name} ({e.roleType || 'Collaborateur'})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="block mb-1.5 text-stone-500">Statut Actuel *</label>
                   <select
                     value={formData.status}
@@ -1179,6 +1287,9 @@ export default function CollaboratorPanel({
                     <option value="renvoye">Renvoyé</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1.5 text-stone-500">Adresse E-mail</label>
                   <input
@@ -1186,6 +1297,16 @@ export default function CollaboratorPanel({
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800 text-xs font-medium lowercase"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-stone-500">Téléphone (WhatsApp)</label>
+                  <input
+                    type="text"
+                    placeholder="+237 655500443"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800 text-xs font-mono font-medium"
                   />
                 </div>
               </div>
@@ -1243,16 +1364,6 @@ export default function CollaboratorPanel({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block mb-1.5 text-stone-500">Téléphone (WhatsApp)</label>
-                  <input
-                    type="text"
-                    placeholder="+237 655500443"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800 text-xs font-mono font-medium"
-                  />
-                </div>
-                <div>
                   <label className="block mb-1.5 text-stone-500">Date d'arrivée</label>
                   <input
                     type="date"
@@ -1261,9 +1372,6 @@ export default function CollaboratorPanel({
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800 text-xs font-mono font-medium"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1.5 text-stone-500">Date d'anniversaire</label>
                   <input
@@ -1273,6 +1381,9 @@ export default function CollaboratorPanel({
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800 text-xs font-mono font-medium"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1.5 text-stone-500">Salaire Mensuel Brut (XAF)</label>
                   <input
@@ -1284,20 +1395,20 @@ export default function CollaboratorPanel({
                 </div>
               </div>
 
-              {/* Compte Utilisateur Associé (Création obligatoire) */}
-              {!editingEmployee && (
+              {/* Compte Utilisateur Associé & Rôle Système (Création et Modification) */}
+              {!editingEmployee ? (
                 <div className="bg-emerald-50/60 border border-[#2A7B76]/30 rounded-2xl p-4 space-y-3 normal-case">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-[#2A7B76]" />
                     <h4 className="font-serif font-bold text-xs text-stone-900">
-                      Création obligatoire du Compte Utilisateur de Connexion
+                      Création obligatoire du Compte Utilisateur & Rôle Système
                     </h4>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <div>
                       <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
-                        Mot de passe initial pour se connecter *
+                        Mot de passe initial de connexion *
                       </label>
                       <div className="relative">
                         <input
@@ -1323,22 +1434,138 @@ export default function CollaboratorPanel({
 
                     <div>
                       <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
-                        Rôle du compte utilisateur *
+                        Rôle & Niveau d'Accès (Role ID) *
                       </label>
                       <select
                         value={formData.userRole}
-                        onChange={(e) => setFormData({ ...formData, userRole: e.target.value as any })}
+                        onChange={(e) => {
+                          const r = e.target.value as UserRole;
+                          const rId = r === 'administrateur' ? 1 : r === 'responsable' ? 2 : 3;
+                          setFormData({ ...formData, userRole: r, roleId: rId, roleType: r });
+                        }}
                         className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-bold text-stone-800 focus:ring-2 focus:ring-[#2A7B76] outline-none"
                       >
-                        <option value="employé">Employé (peut badger & voir son espace)</option>
-                        <option value="responsable">Responsable (génération QR code 30s & badgeage)</option>
-                        <option value="administrateur">Administrateur (contrôle global)</option>
+                        <option value="employé">Employé — Role ID 3 (Portail & Badgeage)</option>
+                        <option value="responsable">Responsable — Role ID 2 (Gestion & Validation)</option>
+                        <option value="administrateur">Administrateur — Role ID 1 (Contrôle total)</option>
                       </select>
                     </div>
 
-                    <div className="sm:col-span-2 text-[11px] text-stone-600 bg-white/80 p-2.5 rounded-xl border border-stone-200/80">
-                      💡 <strong>Création obligatoire :</strong> Chaque nouveau collaborateur se voit attribuer automatiquement un compte de connexion (email: <strong>{formData.email || 'généré automatiquement'}</strong>) pour se connecter au portail et effectuer ses pointages.
+                    <div className="sm:col-span-2 text-[11px] text-stone-600 bg-white/80 p-2.5 rounded-xl border border-stone-200/80 flex items-center justify-between gap-2">
+                      <span>
+                        💡 <strong>Liaison automatique :</strong> Le compte utilisateur (email: <strong>{formData.email || 'auto'}</strong>) sera créé avec <strong>User ID (UUID)</strong> et <strong>Role ID ({formData.userRole === 'administrateur' ? 1 : formData.userRole === 'responsable' ? 2 : 3})</strong> immédiatement rattachés à la fiche collaborateur.
+                      </span>
                     </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 space-y-3 normal-case">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4 text-[#2A7B76]" />
+                      <h4 className="font-serif font-bold text-xs text-stone-900">
+                        Compte Utilisateur Associé & Rôle Système (User ID & Role ID)
+                      </h4>
+                    </div>
+                    {formData.userId ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        <Check className="h-3 w-3" /> Compte Lié
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                        <AlertCircle className="h-3 w-3" /> Non Lié
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
+                        Identifiant Utilisateur (User ID)
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={formData.userId}
+                          onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
+                          placeholder="Ex: 82b0325a-... ou ID compte"
+                          className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-mono font-medium text-stone-800 focus:ring-2 focus:ring-[#2A7B76] outline-none truncate"
+                        />
+                        {users && users.length > 0 && (
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                const matched = users.find(u => u.id === e.target.value || u.uid === e.target.value);
+                                if (matched) {
+                                  const rId = matched.roleId || (matched.role === 'administrateur' ? 1 : matched.role === 'responsable' ? 2 : 3);
+                                  setFormData({
+                                    ...formData,
+                                    userId: matched.id,
+                                    roleId: rId,
+                                    userRole: matched.role || 'employé',
+                                    email: formData.email || matched.email,
+                                  });
+                                }
+                              }
+                            }}
+                            className="px-2 py-2 rounded-xl border border-stone-200 bg-white text-[10px] text-stone-600 cursor-pointer"
+                            title="Choisir parmi les comptes existants"
+                          >
+                            <option value="">Lier...</option>
+                            {users.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name} ({u.email})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
+                        Rôle & Niveau d'Accès (Role ID) *
+                      </label>
+                      <select
+                        value={formData.roleId}
+                        onChange={(e) => {
+                          const rId = Number(e.target.value);
+                          const r: UserRole = rId === 1 ? 'administrateur' : rId === 2 ? 'responsable' : 'employé';
+                          setFormData({ ...formData, roleId: rId, userRole: r, roleType: r });
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-bold text-stone-800 focus:ring-2 focus:ring-[#2A7B76] outline-none"
+                      >
+                        <option value={3}>3 — Employé (Espace Personnel & Pointage)</option>
+                        <option value={2}>2 — Responsable (Génération QR 30s & Validation)</option>
+                        <option value={1}>1 — Administrateur (Accès et Contrôle Total)</option>
+                      </select>
+                    </div>
+
+                    {!formData.userId && (
+                      <div className="sm:col-span-2 flex items-center justify-between gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200">
+                        <span className="text-[11px] text-amber-800">
+                          Ce collaborateur n'a pas encore de compte utilisateur lié. Vous pouvez en générer un immédiatement.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newUid = generateUuidV4();
+                            const rId = formData.roleId ? Number(formData.roleId) : 3;
+                            const r: UserRole = rId === 1 ? 'administrateur' : rId === 2 ? 'responsable' : 'employé';
+                            setFormData({
+                              ...formData,
+                              userId: newUid,
+                              roleId: rId,
+                              userRole: r,
+                            });
+                          }}
+                          className="px-3 py-1.5 bg-[#2A7B76] text-white rounded-lg text-xs font-bold whitespace-nowrap hover:bg-[#23635f] transition cursor-pointer"
+                        >
+                          Auto-Générer User ID
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

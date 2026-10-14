@@ -20,6 +20,7 @@ import { NotificationLog, AppUser, Employee } from '../types';
 import { getAdminAuditOperations, AdminAccountOperation } from '../services/adminAuditService';
 import { NotificationStatsCards } from './notifications/NotificationStatsCards';
 import { NotificationListItem } from './notifications/NotificationListItem';
+import { NotificationDetailModal } from './notifications/NotificationDetailModal';
 import { exportToExcel } from '../services/excelExportService';
 import { exportElementToPdf } from '../services/pdfExportService';
 
@@ -234,6 +235,7 @@ export default function SystemLogsPanel({
   // 3. Notifications State (Paginated par 10)
   const [notifFilter, setNotifFilter] = useState<'all' | 'read' | 'unread'>('all');
   const [notifPage, setNotifPage] = useState(1);
+  const [selectedDetailNotif, setSelectedDetailNotif] = useState<NotificationLog | null>(null);
   const NOTIFS_PER_PAGE = 25;
 
   const filteredNotifs = useMemo(() => {
@@ -846,7 +848,7 @@ export default function SystemLogsPanel({
 
           <div className="space-y-2">
             {paginatedNotifs.map((log) => (
-              <NotificationListItem key={log.id} notification={log} onSelect={() => {}} />
+              <NotificationListItem key={log.id} notification={log} onSelect={(item) => setSelectedDetailNotif(item)} />
             ))}
             {paginatedNotifs.length === 0 && (
               <div className="p-8 text-center bg-white rounded-2xl border border-stone-200 text-stone-400 text-xs">
@@ -910,6 +912,13 @@ export default function SystemLogsPanel({
             </div>
           )}
         </div>
+      )}
+
+      {selectedDetailNotif && (
+        <NotificationDetailModal
+          notification={selectedDetailNotif}
+          onClose={() => setSelectedDetailNotif(null)}
+        />
       )}
     </div>
   );

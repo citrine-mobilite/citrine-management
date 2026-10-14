@@ -268,9 +268,17 @@ export const EmployeeIncidentsTab: React.FC<EmployeeIncidentsTabProps> = ({
                         <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-100 text-amber-900">
                           {getTypeLabel(incident.type)}
                         </span>
-                        {isDeclared ? (
+                        {incident.status === 'injustifie' ? (
+                          <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-100 text-rose-800 flex items-center gap-1 shadow-2xs">
+                            ❌ Rejeté / Non justifié
+                          </span>
+                        ) : incident.status === 'justifie' ? (
                           <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-100 text-emerald-800 flex items-center gap-1 shadow-2xs">
-                            <CheckCircle2 className="h-3 w-3" /> Justifié (Signalé en avance)
+                            <CheckCircle2 className="h-3 w-3" /> Validé & Justifié
+                          </span>
+                        ) : isDeclared ? (
+                          <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-blue-100 text-blue-800 flex items-center gap-1 shadow-2xs">
+                            ⏳ En attente de validation
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-100 text-amber-800 flex items-center gap-1 shadow-2xs">
@@ -282,6 +290,11 @@ export const EmployeeIncidentsTab: React.FC<EmployeeIncidentsTabProps> = ({
                       <p className={`text-stone-700 ${viewDensity === 'compact' ? 'truncate max-w-2xl' : ''}`}>
                         {incident.reason || 'Aucun motif renseigné pour cet événement.'}
                       </p>
+                      {incident.adminComment && (
+                        <p className="text-[10px] text-stone-500 italic">
+                          Observation Direction : {incident.adminComment}
+                        </p>
+                      )}
 
                       {isExpanded && (
                         <div className="mt-3 p-3 bg-white rounded-2xl border border-stone-200 space-y-2 text-[11px] text-stone-600 shadow-inner">

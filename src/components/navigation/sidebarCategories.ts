@@ -48,6 +48,7 @@ interface GetSidebarCategoriesOptions {
   unreadRemindersCount: number;
   pendingPresencesRequestsCount: number;
   pendingLeavesCount?: number;
+  nonBadgedEmployeesCount?: number;
 }
 
 export function getSidebarCategories({
@@ -56,6 +57,7 @@ export function getSidebarCategories({
   unreadRemindersCount,
   pendingPresencesRequestsCount,
   pendingLeavesCount = 0,
+  nonBadgedEmployeesCount,
 }: GetSidebarCategoriesOptions): SidebarCategory[] {
   const categories: SidebarCategory[] = [];
   const normalizedRole = normalizeRoleString(userRole);
@@ -131,7 +133,9 @@ export function getSidebarCategories({
         label: 'Gestion des Présences',
         description: '',
         icon: Clock,
-        badge: pendingPresencesRequestsCount > 0 ? pendingPresencesRequestsCount : undefined,
+        badge: typeof nonBadgedEmployeesCount === 'number'
+          ? (nonBadgedEmployeesCount > 0 ? nonBadgedEmployeesCount : undefined)
+          : (pendingPresencesRequestsCount > 0 ? pendingPresencesRequestsCount : undefined),
       });
 
       pilotageItems.push({

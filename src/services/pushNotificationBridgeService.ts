@@ -1,5 +1,6 @@
 import { soundService } from './soundService';
 import { pushNotificationService } from './pushNotificationService';
+import { formatExactNotificationDate } from '../utils/dateUtils';
 
 export interface PushNotificationPayload {
   id?: string;
@@ -10,6 +11,7 @@ export interface PushNotificationPayload {
   type?: 'task_assigned' | 'task_comment' | 'alert' | 'reminder' | 'general' | 'attendance' | 'expense' | 'incident';
   link?: string;
   timestamp?: string;
+  exactReceivedTime?: string;
   excludeUserId?: string;
 }
 
@@ -18,6 +20,7 @@ type PushListener = (payload: PushNotificationPayload) => void;
 class PushNotificationBridgeService {
   private listeners: PushListener[] = [];
   private history: PushNotificationPayload[] = [];
+  private bc: BroadcastChannel | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -25,6 +28,18 @@ class PushNotificationBridgeService {
         const saved = localStorage.getItem('citrine_push_bridge_history');
         if (saved) {
           this.history = JSON.parse(saved);
+        }
+      } catch {}
+
+      // Cross-tab broadcast channel
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          this.bc = new BroadcastChannel('citrine_push_bridge_channel');
+          this.bc.onmessage = (event) => {
+            if (event.data?.type === 'INCOMING_PUSH' && event.data.payload) {
+              this.handleIncomingPush(event.data.payload, false);
+            }
+          };
         }
       } catch {}
     }
@@ -48,13 +63,7 @@ class PushNotificationBridgeService {
     } catch {}
   }
 
-  public sendPush(payload: Omit<PushNotificationPayload, 'id' | 'timestamp'>): void {
-    const fullPayload: PushNotificationPayload = {
-      id: `push-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      timestamp: new Date().toISOString(),
-      ...payload,
-    };
-
+  private handleIncomingPush(fullPayload: PushNotificationPayload, broadcast = true): void {
     let currentUserId = '';
     if (typeof window !== 'undefined') {
       try {
@@ -128,6 +137,25 @@ class PushNotificationBridgeService {
     } catch (e) {
       console.warn('Native push failed:', e);
     }
+
+    // Broadcast to other tabs if requested
+    if (broadcast && this.bc) {
+      try {
+        this.bc.postMessage({ type: 'INCOMING_PUSH', payload: fullPayload });
+      } catch {}
+    }
+  }
+
+  public sendPush(payload: Omit<PushNotificationPayload, 'id' | 'timestamp'> & { id?: string; timestamp?: string }): void {
+    const rawTimestamp = payload.timestamp || new Date().toISOString();
+    const fullPayload: PushNotificationPayload = {
+      id: payload.id || `push-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: rawTimestamp,
+      exactReceivedTime: formatExactNotificationDate(rawTimestamp),
+      ...payload,
+    };
+
+    this.handleIncomingPush(fullPayload, true);
   }
 }
 

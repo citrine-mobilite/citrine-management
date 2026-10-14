@@ -1,5 +1,5 @@
 import { Employee, EmployeeStatus, AppUser } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseAdmin } from '../lib/supabase';
 import { supabaseService } from './supabaseService';
 import { offlineService } from './offlineService';
 import { saveUser } from './userService';
@@ -15,19 +15,53 @@ export function isUuidV4(val: unknown): boolean {
          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
 }
 
+
 /**
- * Génère un UUID v4 garanti
+ * Génère un UUID version 4 conforme au format RFC 4122.
+ *
+ * Priorité :
+ * 1. crypto.randomUUID()
+ * 2. crypto.getRandomValues()
+ * 3. Erreur explicite si aucune source cryptographique n'est disponible.
  */
 export function generateUuidV4(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+  const cryptoApi = globalThis.crypto;
+
+  // Méthode native, privilégiée.
+  if (typeof cryptoApi?.randomUUID === 'function') {
+    return cryptoApi.randomUUID();
   }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+
+  // Solution de secours cryptographiquement sécurisée.
+  if (typeof cryptoApi?.getRandomValues === 'function') {
+    const bytes = cryptoApi.getRandomValues(new Uint8Array(16));
+
+    // Version 4 : les 4 bits de poids fort du 7e octet valent 0100.
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+
+    // Variante RFC : les 2 bits de poids fort du 9e octet valent 10.
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, '0')
+    );
+
+    return [
+      hex.slice(0, 4).join(''),
+      hex.slice(4, 6).join(''),
+      hex.slice(6, 8).join(''),
+      hex.slice(8, 10).join(''),
+      hex.slice(10, 16).join(''),
+    ].join('-');
+  }
+
+  // Ne jamais revenir silencieusement à Math.random().
+  throw new Error(
+    'Impossible de générer un UUID sécurisé : ' +
+    'crypto.randomUUID() et crypto.getRandomValues() sont indisponibles.'
+  );
 }
+
 
 /**
  * Vérifie si un identifiant est un entier (clé primaire BIGSERIAL)
@@ -44,7 +78,16 @@ export function isIntegerId(val: unknown): boolean {
 export function normalizeEmployeeStatus(status: unknown): EmployeeStatus {
   if (status === true || status === 'actif') return 'en_poste';
   if (status === false || status === 'inactif') return 'parti';
-  const validStatuses: EmployeeStatus[] = ['en_poste', 'en_conge', 'parti', 'renvoye', 'suspendu', 'maladie'];
+  const validStatuses: EmployeeStatus[] = [
+    'en_poste',
+    'en_conge',
+    'en_permission',
+    'maladie',
+    'suspendu',
+    'demissionne',
+    'renvoye',
+    'parti'
+  ];
   if (typeof status === 'string' && validStatuses.includes(status as EmployeeStatus)) {
     return status as EmployeeStatus;
   }
@@ -58,7 +101,7 @@ export function isEmployeeActive(emp?: Partial<Employee> | null): boolean {
   if (!emp) return false;
   if (emp.status === false) return false;
   const s = normalizeEmployeeStatus(emp.status || emp.employmentStatus);
-  return s === 'en_poste' || s === 'en_conge';
+  return s === 'en_poste' || s === 'en_conge' || s === 'en_permission' || s === 'maladie';
 }
 
 /**
@@ -175,6 +218,68 @@ export async function saveEmployee(employee: Employee): Promise<Employee> {
     console.warn('[employeeService] Erreur mise à jour cache local:', err);
   }
 
+  // 3. Synchronisation bidirectionnelle : Mise à jour du compte utilisateur associé dans la table 'users'
+  try {
+    const client = supabaseAdmin || supabase;
+    const userEmail = cleanEmployee.email;
+    const employeeUserId = cleanEmployee.userId ? String(cleanEmployee.userId) : null;
+    
+    // Rechercher l'utilisateur associé par email ou userId
+    let userQuery = client.from('users').select('*');
+    if (employeeUserId && /^\d+$/.test(employeeUserId)) {
+      userQuery = userQuery.or(`email.ilike.${userEmail},id.eq.${employeeUserId}`);
+    } else {
+      userQuery = userQuery.ilike('email', userEmail);
+    }
+    const { data: matchedUser } = await userQuery.maybeSingle();
+
+    if (matchedUser) {
+      const isUserActive =
+        isActive &&
+        String(employmentStatus) !== 'renvoye' &&
+        String(employmentStatus) !== 'demissionne' &&
+        String(employmentStatus) !== 'parti' &&
+        String(employmentStatus) !== 'suspendu';
+
+      const existingRaw = matchedUser.raw_data && typeof matchedUser.raw_data === 'object' ? matchedUser.raw_data : {};
+      const updatedUserPayload: AppUser = {
+        id: String(matchedUser.id),
+        uid: matchedUser.uid,
+        name: cleanEmployee.name,
+        email: cleanEmployee.email,
+        phone: cleanEmployee.phone || matchedUser.phone || '',
+        department: cleanEmployee.department || matchedUser.department || 'Direction Générale',
+        role: matchedUser.role_id === 1 ? 'administrateur' : matchedUser.role_id === 2 ? 'responsable' : 'employé',
+        status: isUserActive ? 'actif' : 'inactif',
+        employmentStatus: employmentStatus,
+        avatarUrl: cleanEmployee.avatarUrl || matchedUser.avatar_url || '',
+        employeeId: String(saved.id),
+        createdAt: matchedUser.created_at || existingRaw.createdAt || new Date().toISOString(),
+        passwordHash: existingRaw.passwordHash || existingRaw.password_hash || '',
+      };
+
+      // Mettre à jour dans Supabase users
+      await supabaseService.saveDocument('users', updatedUserPayload);
+
+      // Mettre à jour dans le cache local users
+      try {
+        const cachedUsers = localStorage.getItem('citrine_users');
+        if (cachedUsers) {
+          let uList: AppUser[] = JSON.parse(cachedUsers);
+          if (Array.isArray(uList)) {
+            const uIdx = uList.findIndex(u => u.id === updatedUserPayload.id || u.email === updatedUserPayload.email);
+            if (uIdx >= 0) uList[uIdx] = updatedUserPayload;
+            else uList.push(updatedUserPayload);
+            localStorage.setItem('citrine_users', JSON.stringify(uList));
+            window.dispatchEvent(new CustomEvent('citrine:user_updated', { detail: updatedUserPayload }));
+          }
+        }
+      } catch {}
+    }
+  } catch (syncErr) {
+    console.warn('[employeeService] Notice synchronisation user associé:', syncErr);
+  }
+
   return saved;
 }
 
@@ -214,17 +319,33 @@ export async function createCollaboratorWithAccount(params: {
   if (createAccount) {
     try {
       const userEmail = savedEmployee.email;
-      const userUid = generateUuidV4();
+      const initialPassword = userPassword.trim() || 'Collab@2026';
+      const empDept = savedEmployee.department ? savedEmployee.department.trim() : 'Direction Générale';
+
+      // 3.1 Création dans Supabase Auth
+      try {
+        if (supabaseAdmin) {
+          await supabaseAdmin.auth.admin.createUser({
+            email: userEmail,
+            password: initialPassword,
+            email_confirm: true,
+          });
+        }
+      } catch (authErr) {
+        console.warn('[employeeService] Notice Auth creation:', authErr);
+      }
+
+      // 3.2 Création dans la table users
       const userAccount: AppUser = {
         id: `user-${Date.now()}`,
         name: savedEmployee.name,
         email: userEmail,
         role: (userRole.toLowerCase() as any) || 'employé',
         status: 'actif',
-        department: savedEmployee.department || 'Opérations',
+        department: empDept,
         phone: savedEmployee.phone,
         employeeId: String(savedEmployee.id),
-        passwordHash: userPassword.trim() || 'Collab@2026',
+        passwordHash: initialPassword,
         authMethod: 'password',
         createdAt: new Date().toISOString(),
       };
@@ -235,6 +356,7 @@ export async function createCollaboratorWithAccount(params: {
       // Associer l'userId au collaborateur si possible
       if (userAccount.id) {
         savedEmployee.userId = userAccount.id;
+        savedEmployee.department = empDept;
         await saveEmployee(savedEmployee).catch(() => {});
       }
     } catch (err) {

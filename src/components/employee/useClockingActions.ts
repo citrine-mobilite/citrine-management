@@ -88,73 +88,101 @@ export function useClockingActions({
       if (pendingClockAction === 'arrival') {
         isLateArrival = isLate(timeStr, lateThreshold);
         if (isLateArrival) {
-          // Badger en retard crée la présence avec mention RETARD
           status = 'late';
 
-          // Création automatique de l'incident Retard
-          const autoIncident: AttendanceIncident = {
-            id: `inc-${Date.now()}`,
-            employeeId: employeeProfile.id,
-            employeeName: employeeProfile.name,
-            date: todayStr,
-            timeString: timeStr,
-            type: 'retard',
-            origin: 'automatique_pointage',
-            reason: declaredRetard
-              ? `Retard automatique constaté à ${timeStr} (seuil: ${lateThreshold}) - Signalé : ${declaredRetard.reason}`
-              : `Retard automatique constaté à ${timeStr} (seuil: ${lateThreshold})`,
-            isDeclaredInAdvance: !!declaredRetard,
-            isJustified: !!declaredRetard,
-            status: declaredRetard ? 'justifie' : 'automatique',
-            createdAt: new Date().toISOString(),
-          };
-
-          incidentService.saveIncident(autoIncident);
-          onAddAttendanceIncident?.(autoIncident);
-
           if (declaredRetard) {
+            // Mettre à jour le signalement déjà consigné pour éviter de créer un doublon
+            const updatedRetard: AttendanceIncident = {
+              ...declaredRetard,
+              timeString: declaredRetard.timeString || timeStr,
+              isJustified: true,
+              status: 'justifie',
+              reason: declaredRetard.reason.includes('Constaté à')
+                ? declaredRetard.reason
+                : `${declaredRetard.reason} (Constaté au pointage à ${timeStr})`,
+            };
+            incidentService.saveIncident(updatedRetard);
+            onAddAttendanceIncident?.(updatedRetard);
+
             showToast(
               'Arrivée en Retard Enregistrée',
-              `Présence marquée "En retard" à ${timeStr} et incident de retard consigné (justifié suite à votre signalement préalable).`,
+              `Présence marquée "En retard" à ${timeStr}. Votre signalement préalable a été rattaché et justifié.`,
               'warning'
             );
           } else {
+            // Création automatique de l'incident Retard (uniquement s'il n'existait pas)
+            const autoIncident: AttendanceIncident = {
+              id: `inc-${Date.now()}`,
+              employeeId: employeeProfile.id,
+              employeeName: employeeProfile.name,
+              date: todayStr,
+              timeString: timeStr,
+              type: 'retard',
+              origin: 'automatique_pointage',
+              reason: `Retard automatique constaté à ${timeStr} (seuil: ${lateThreshold})`,
+              isDeclaredInAdvance: false,
+              isJustified: false,
+              status: 'automatique',
+              createdAt: new Date().toISOString(),
+            };
+
+            incidentService.saveIncident(autoIncident);
+            onAddAttendanceIncident?.(autoIncident);
+
             showToast(
               'Retard Détecté',
-              `Vous avez badgé à ${timeStr} avec la mention En retard (seuil: ${lateThreshold}). Un incident de retard a été automatiquement créé.`,
+              `Vous avez badgé à ${timeStr} avec la mention En retard (seuil: ${lateThreshold}). Un incident de retard a été consigné.`,
               'warning'
             );
           }
         }
       } else if (pendingClockAction === 'departure') {
-        // Badger le départ avant 16h30 enregistre le départ et crée automatiquement un incident "Sortie prématurée"
         const isEarlyDeparture = timeStr < plannedDeparture;
         if (isEarlyDeparture) {
-          const autoIncident: AttendanceIncident = {
-            id: `inc-${Date.now()}`,
-            employeeId: employeeProfile.id,
-            employeeName: employeeProfile.name,
-            date: todayStr,
-            timeString: timeStr,
-            type: 'sortie_prematuree',
-            origin: 'automatique_pointage',
-            reason: declaredEarlyDept
-              ? `Sortie prématurée constatée à ${timeStr} avant 16h30 - Signalée : ${declaredEarlyDept.reason}`
-              : `Sortie prématurée constatée à ${timeStr} avant 16h30 (horaire de référence: ${plannedDeparture})`,
-            isDeclaredInAdvance: !!declaredEarlyDept,
-            isJustified: !!declaredEarlyDept,
-            status: declaredEarlyDept ? 'justifie' : 'automatique',
-            createdAt: new Date().toISOString(),
-          };
+          if (declaredEarlyDept) {
+            // Mettre à jour le départ anticipé déjà consigné pour éviter de créer un doublon
+            const updatedEarly: AttendanceIncident = {
+              ...declaredEarlyDept,
+              timeString: declaredEarlyDept.timeString || timeStr,
+              isJustified: true,
+              status: 'justifie',
+              reason: declaredEarlyDept.reason.includes('Départ à')
+                ? declaredEarlyDept.reason
+                : `${declaredEarlyDept.reason} (Départ effectif à ${timeStr})`,
+            };
+            incidentService.saveIncident(updatedEarly);
+            onAddAttendanceIncident?.(updatedEarly);
 
-          incidentService.saveIncident(autoIncident);
-          onAddAttendanceIncident?.(autoIncident);
+            showToast(
+              'Sortie Prématurée Enregistrée',
+              `Départ badgé à ${timeStr}. Votre signalement préalable a été rattaché et validé.`,
+              'warning'
+            );
+          } else {
+            const autoIncident: AttendanceIncident = {
+              id: `inc-${Date.now()}`,
+              employeeId: employeeProfile.id,
+              employeeName: employeeProfile.name,
+              date: todayStr,
+              timeString: timeStr,
+              type: 'sortie_prematuree',
+              origin: 'automatique_pointage',
+              reason: `Sortie prématurée constatée à ${timeStr} avant ${plannedDeparture}`,
+              isDeclaredInAdvance: false,
+              isJustified: false,
+              status: 'automatique',
+              createdAt: new Date().toISOString(),
+            };
 
-          showToast(
-            'Sortie Prématurée Enregistrée',
-            `Départ badgé à ${timeStr} (avant 16h30). Un incident "Sortie prématurée" a été créé automatiquement.`,
-            'warning'
-          );
+            incidentService.saveIncident(autoIncident);
+            onAddAttendanceIncident?.(autoIncident);
+
+            showToast(
+              'Sortie Prématurée Enregistrée',
+              `Départ badgé à ${timeStr} (avant ${plannedDeparture}). Un incident "Sortie prématurée" a été créé automatiquement.`,
+              'warning'
+            );
+          }
         } else {
           showToast(
             'Départ Enregistré',
@@ -349,7 +377,22 @@ export function useClockingActions({
     const now = new Date();
     const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // 1. Create and save official AttendanceIncident
+    // Anti-doublon : vérifier si ce signalement identique a déjà été consigné aujourd'hui
+    const isDuplicate = attendanceIncidents.some(
+      (i) =>
+        i.employeeId === employeeProfile.id &&
+        i.date === todayStr &&
+        i.type === emergencyType &&
+        i.reason.trim().toLowerCase() === emergencyReason.trim().toLowerCase()
+    );
+
+    if (isDuplicate) {
+      onSuccess();
+      showToast('Signalement Existant', 'Cette déclaration est déjà enregistrée dans votre dossier.', 'info');
+      return;
+    }
+
+    // 1. Créer et sauvegarder l'AttendanceIncident officiel
     const newIncident: AttendanceIncident = {
       id: `inc-${Date.now()}`,
       employeeId: employeeProfile.id,
@@ -411,40 +454,6 @@ export function useClockingActions({
     }
 
     onUpdatePresences(updatedPresences);
-
-    if (onAddNotification) {
-      const emergencyLabels: Record<string, string> = {
-        sortie_professionnelle: 'Sortie professionnelle',
-        retour_sortie_professionnelle: 'Retour de mission pro',
-        permission: 'Demande de permission',
-        retard: 'Déclaration de retard',
-        depart_anticipe: 'Départ anticipé',
-        arret_maladie: 'Arrêt maladie',
-        urgence_personnelle: 'Urgence personnelle',
-      };
-      const label = emergencyLabels[emergencyType] || 'Signalement RH';
-
-      onAddNotification({
-        id: `notif-signalement-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        type: 'system',
-        recipient: employeeProfile.id,
-        title: `Signalement : ${label}`,
-        content: `Votre déclaration (${label}) a été enregistrée à ${timeString}. Motif : ${emergencyReason.trim() || 'N/A'}.`,
-        payload: JSON.stringify({ 
-          source: 'signalement', 
-          employeeId: employeeProfile.id, 
-          type: emergencyType,
-          reason: emergencyReason.trim(),
-          date: todayStr 
-        }),
-        timestamp: new Date().toISOString(),
-        read: false,
-      });
-
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-      }
-    }
 
     onSuccess();
 

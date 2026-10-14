@@ -24,11 +24,14 @@ import {
 } from 'lucide-react';
 import { Employee, AppUser, Task, AttendanceIncident, NotificationLog, Presence } from '../../types';
 import { soundService } from '../../services/soundService';
+import { AlertCreateModal } from './AlertCreateModal';
 
 interface EmployeeAlertsTabProps {
   employeeProfile: Employee;
   currentUser?: AppUser | null;
   tasks: Task[];
+  onUpdateTasks?: (tasks: Task[]) => void;
+  employees?: Employee[];
   incidents: AttendanceIncident[];
   notifications?: NotificationLog[];
   presences?: Presence[];
@@ -45,7 +48,7 @@ export interface PersonalAlert {
   timestamp: string;
   read: boolean;
   actionUrl?: string;
-  category: 'Tâche' | 'Pointage' | 'Sécurité' | 'Note' | 'Congés';
+  category: 'Tâche' | 'Pointage' | 'Sécurité' | 'Alerte' | 'Note' | 'Congés';
 }
 
 const STORAGE_KEY_READ_ALERTS = 'citrine_read_alerts_ids';
@@ -73,6 +76,8 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
   employeeProfile,
   currentUser,
   tasks,
+  onUpdateTasks,
+  employees,
   incidents,
   notifications = [],
   presences = [],
@@ -178,7 +183,7 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
       if (!deletedAlertIds.has(notif.id) && !seenIds.has(notif.id)) {
         seenIds.add(notif.id);
 
-        let cat: PersonalAlert['category'] = 'Note';
+        let cat: PersonalAlert['category'] = 'Alerte';
         let actionUrl = '#employee/alerts';
         let alertType: PersonalAlert['type'] = 'info';
 
@@ -322,7 +327,7 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
         type: 'info',
         timestamp: 'En service',
         read: true,
-        category: 'Note',
+        category: 'Alerte',
       });
     }
 
@@ -441,21 +446,24 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
     }
   };
 
-  // Create personal alert
-  const handleCreatePersonalAlert = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim()) return;
-
+  // Create alert from AlertCreateModal
+  const handleCreateAlertFromModal = (alertData: {
+    title: string;
+    message: string;
+    type: 'urgent' | 'warning' | 'info';
+    category: 'Alerte' | 'Pointage' | 'Sécurité' | 'Congés';
+  }) => {
+    const nowIso = new Date().toISOString();
     const alertItem: PersonalAlert = {
       id: `custom-alert-${Date.now()}`,
-      title: newTitle.trim(),
-      message: newMessage.trim() || 'Rappel personnel.',
-      type: newType,
-      timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      title: alertData.title,
+      message: alertData.message,
+      type: alertData.type,
+      timestamp: nowIso,
       read: false,
-      category: 'Note',
+      category: alertData.category,
+      actionUrl: '#employee/alerts',
     };
-
     const updated = [alertItem, ...userCreatedAlerts];
     setUserCreatedAlerts(updated);
     try {
@@ -470,12 +478,16 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
         title: alertItem.title,
         content: alertItem.message,
         payload: JSON.stringify({ source: 'personal_alert' }),
-        timestamp: new Date().toISOString(),
+        timestamp: nowIso,
       });
     }
 
-    setNewTitle('');
-    setNewMessage('');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('citrine:push_notification', {
+        detail: { title: alertItem.title, message: alertItem.message, type: alertItem.type, timestamp: nowIso }
+      }));
+    }
+
     setShowCreateModal(false);
   };
 
@@ -601,7 +613,7 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
             className="bg-[#2A7B76] hover:bg-[#20615d] text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95 shrink-0"
           >
             <Plus className="h-4 w-4" />
-            <span>Ajouter note</span>
+            <span>Créer une alerte</span>
           </button>
         </div>
       </div>
@@ -849,100 +861,11 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
         </div>
       )}
 
-      {/* Modal for creating custom personal alert */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-stone-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 border border-stone-200 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-              <h3 className="font-bold text-stone-800 text-base flex items-center gap-2">
-                <Bell className="h-5 w-5 text-[#2A7B76]" />
-                Ajouter une Note ou Alerte
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="p-1 text-stone-400 hover:text-stone-700 rounded-lg cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreatePersonalAlert} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">Titre du rappel</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Confirmer le départ en mission à 14h"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs focus:ring-2 focus:ring-[#2A7B76] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">Message / Détails</label>
-                <textarea
-                  rows={3}
-                  placeholder="Notes complémentaires ou consignes..."
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs focus:ring-2 focus:ring-[#2A7B76] outline-none resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">Niveau d'importance</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNewType('info')}
-                    className={`py-2 text-xs font-bold rounded-xl border transition cursor-pointer ${
-                      newType === 'info' ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs' : 'text-stone-600 border-stone-200'
-                    }`}
-                  >
-                    Information
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewType('warning')}
-                    className={`py-2 text-xs font-bold rounded-xl border transition cursor-pointer ${
-                      newType === 'warning' ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs' : 'text-stone-600 border-stone-200'
-                    }`}
-                  >
-                    Important
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewType('urgent')}
-                    className={`py-2 text-xs font-bold rounded-xl border transition cursor-pointer ${
-                      newType === 'urgent' ? 'bg-red-50 text-red-800 border-red-300 shadow-2xs' : 'text-stone-600 border-stone-200'
-                    }`}
-                  >
-                    Urgent
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl transition cursor-pointer"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#2A7B76] hover:bg-[#20615d] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
-                >
-                  Enregistrer l'alerte
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <AlertCreateModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreateAlert={handleCreateAlertFromModal}
+      />
 
       {/* Modal for viewing complete alert details */}
       {selectedAlertModal && (

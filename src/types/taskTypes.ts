@@ -68,6 +68,7 @@ export interface Task {
   attachments?: Attachment[];
   incidents?: Incident[];
   subtasks?: Subtask[];
+  reminderPeriod?: string;
   lastUpdatedByRole?: Role;
   lastUpdatedTime?: string;
 }

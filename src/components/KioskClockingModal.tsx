@@ -7,6 +7,7 @@ import { KioskPinBanner } from './kiosk/KioskPinBanner';
 import { KioskEmployeeCard } from './kiosk/KioskEmployeeCard';
 import { incidentService } from '../services/incidentService';
 import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
+import { isEmployeeOnlyRole } from '../utils/roleUtils';
 
 interface KioskClockingModalProps {
   isOpen: boolean;
@@ -42,9 +43,10 @@ export default function KioskClockingModal({
 
   const filteredEmployees = employees.filter(
     (emp) =>
-      emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (emp.department && emp.department.toLowerCase().includes(searchQuery.toLowerCase()))
+      isEmployeeOnlyRole(emp.roleType || emp.role) &&
+      (emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+       emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+       (emp.department && emp.department.toLowerCase().includes(searchQuery.toLowerCase())))
   );
 
   const handleClockAction = (

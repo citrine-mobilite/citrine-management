@@ -6,6 +6,7 @@
 import React from 'react';
 import { Bell, Mail, MessageSquare, Clock, CheckCircle2, Circle } from 'lucide-react';
 import { NotificationLog } from '../../types';
+import { formatExactNotificationDate } from '../../utils/dateUtils';
 
 interface NotificationListItemProps {
   notification: NotificationLog;
@@ -54,14 +55,19 @@ export const NotificationListItem: React.FC<NotificationListItemProps> = ({ noti
       </div>
 
       <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-stone-100">
-        <div className="flex items-center gap-1.5 text-[11px] text-stone-400 font-mono">
-          <Clock className="h-3 w-3" />
+        <div
+          className="flex items-center gap-1.5 text-[11px] text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded-lg border border-stone-200/60"
+          data-tooltip={formatExactNotificationDate(notification.timestamp)}
+        >
+          <Clock className="h-3 w-3 text-[#2A7B76]" />
           <span>
             {new Date(notification.timestamp).toLocaleString('fr-FR', {
               day: '2-digit',
               month: '2-digit',
+              year: 'numeric',
               hour: '2-digit',
               minute: '2-digit',
+              second: '2-digit',
             })}
           </span>
         </div>

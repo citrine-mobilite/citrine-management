@@ -3,18 +3,21 @@ import { Bell, Search, CheckCircle } from 'lucide-react';
 import { NotificationLog, AppUser } from '../types';
 import { NotificationStatsCards } from './notifications/NotificationStatsCards';
 import { NotificationListItem } from './notifications/NotificationListItem';
+import { NotificationDetailModal } from './notifications/NotificationDetailModal';
 
 interface NotificationConsoleProps {
   notifications: NotificationLog[];
   currentUser: AppUser;
   onUpdateNotifications?: (newNotifs: NotificationLog[]) => void;
   onAddNotification?: (log: NotificationLog) => void;
+  onNavigateTab?: (tab: string) => void;
 }
 
-export default function NotificationConsole({ notifications, currentUser, onUpdateNotifications }: NotificationConsoleProps) {
+export default function NotificationConsole({ notifications, currentUser, onUpdateNotifications, onNavigateTab }: NotificationConsoleProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'read' | 'unread'>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedDetail, setSelectedDetail] = useState<NotificationLog | null>(null);
   const ITEMS_PER_PAGE = 25;
 
   const isAdmin = currentUser.role === 'administrateur' || (currentUser.role as string) === 'super_administrateur' || currentUser.role === 'responsable';
@@ -115,7 +118,12 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
       {/* List */}
       <div className="space-y-3">
         {paginatedNotifications.map((log) => (
-          <NotificationListItem key={log.id} notification={log} onSelect={() => {}} onToggleRead={handleToggleRead} />
+          <NotificationListItem
+            key={log.id}
+            notification={log}
+            onSelect={(item) => setSelectedDetail(item)}
+            onToggleRead={handleToggleRead}
+          />
         ))}
         {paginatedNotifications.length === 0 && (
           <div className="text-center py-10 text-stone-500 text-sm">Aucune notification trouvée.</div>
@@ -141,6 +149,16 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
             Suivant
           </button>
         </div>
+      )}
+
+      {/* Modal Détail avec date et heure certifiée à la seconde près */}
+      {selectedDetail && (
+        <NotificationDetailModal
+          notification={selectedDetail}
+          onClose={() => setSelectedDetail(null)}
+          onToggleRead={handleToggleRead}
+          onNavigate={onNavigateTab}
+        />
       )}
     </div>
   );

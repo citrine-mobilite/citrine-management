@@ -7,6 +7,12 @@ export const haptic = {
       try { navigator.vibrate(10); } catch { /* ignore */ }
     }
   },
+  // Medium tap for important actions
+  medium: () => {
+    if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
+      try { navigator.vibrate(25); } catch { /* ignore */ }
+    }
+  },
   // Success pattern for clocking or task completion
   success: () => {
     if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {

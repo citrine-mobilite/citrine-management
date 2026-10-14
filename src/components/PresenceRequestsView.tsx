@@ -1,16 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
-import { Presence, Employee } from '../types';
+import { Presence, Employee, AttendanceIncident } from '../types';
 import { extractPresenceRequests, RequestItem } from './presence/requests/presenceRequestsUtils';
 import { PresenceDecisionModal } from './presence/requests/PresenceDecisionModal';
 import { PresenceRequestItemCard } from './presence/requests/PresenceRequestItemCard';
 import { SearchableSelect } from './common/SearchableSelect';
+import { incidentService } from '../services/incidentService';
 
 interface PresenceRequestsViewProps {
   presences: Presence[];
   employees: Employee[];
   onUpdatePresences: (updated: Presence[]) => void;
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  attendanceIncidents?: AttendanceIncident[];
+  onUpdateAttendanceIncidents?: (incidents: AttendanceIncident[]) => void;
 }
 
 export default function PresenceRequestsView({
@@ -18,6 +21,8 @@ export default function PresenceRequestsView({
   employees,
   onUpdatePresences,
   showToast,
+  attendanceIncidents = [],
+  onUpdateAttendanceIncidents,
 }: PresenceRequestsViewProps) {
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,6 +70,29 @@ export default function PresenceRequestsView({
             ? { ...emg, status: decisionAction }
             : emg
         );
+
+        // Mettre à jour le signalement officiel dans attendanceIncidents
+        if (attendanceIncidents && attendanceIncidents.length > 0) {
+          const matchingIdx = attendanceIncidents.findIndex(
+            (inc) =>
+              inc.employeeId === decisionModalItem.employeeId &&
+              inc.date === decisionModalItem.date &&
+              (inc.type === decisionModalItem.subType || inc.reason === decisionModalItem.reason)
+          );
+
+          if (matchingIdx >= 0) {
+            const updatedInc: AttendanceIncident = {
+              ...attendanceIncidents[matchingIdx],
+              status: decisionAction === 'approved' ? 'justifie' : 'injustifie',
+              isJustified: decisionAction === 'approved',
+              adminComment: decisionComment.trim() || (decisionAction === 'approved' ? 'Validé par la direction.' : 'Signalement rejeté par la direction.'),
+            };
+            incidentService.saveIncident(updatedInc);
+            onUpdateAttendanceIncidents?.(
+              attendanceIncidents.map((item, idx) => (idx === matchingIdx ? updatedInc : item))
+            );
+          }
+        }
       } else if (decisionModalItem.type === 'correction') {
         presence.correctionReasonStatus = decisionAction;
       } else if (decisionModalItem.type === 'departure') {
@@ -74,7 +102,7 @@ export default function PresenceRequestsView({
       updatedPresences[pIdx] = presence;
       onUpdatePresences(updatedPresences);
       showToast?.(
-        decisionAction === 'approved' ? 'Demande validée avec succès' : 'Demande rejetée',
+        decisionAction === 'approved' ? 'Demande validée avec succès' : 'Demande rejetée avec mise à jour du statut',
         decisionAction === 'approved' ? 'success' : 'info'
       );
     }

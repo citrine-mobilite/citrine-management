@@ -105,6 +105,7 @@ export default function TaskPanel({
             logic.setCreateModalDefaultStatus(status);
             logic.setIsCreateModalOpen(true);
           }}
+          onDeleteTask={logic.handleDeleteTask}
           getPriorityBadge={getPriorityBadge}
         />
       )}
