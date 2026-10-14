@@ -60,9 +60,12 @@ export function useClockingActions({
           latitude = loc.latitude;
           longitude = loc.longitude;
         } catch {
-          showToast('Pointage Refusé', 'La géolocalisation GPS est obligatoire et refusée ou indisponible sur cet appareil. Le badgeage est refusé.', 'warning');
-          setIsLocating(false);
-          return;
+          // If GPS fails and method strictly requires GPS, throw error
+          const requireDoorGps = moduleConfig?.doorQrRequireGps === true;
+          if ((method === 'qr_code_door' && requireDoorGps) || method === 'badge_code_16') {
+            showToast('Pointage Bloqué', 'Votre position GPS est obligatoire pour cette méthode.', 'warning');
+            return;
+          }
         }
       }
 
@@ -88,6 +91,7 @@ export function useClockingActions({
           status = 'late';
 
           if (declaredRetard) {
+            // Mettre à jour le signalement déjà consigné pour éviter de créer un doublon
             const updatedRetard: AttendanceIncident = {
               ...declaredRetard,
               timeString: declaredRetard.timeString || timeStr,
@@ -97,9 +101,16 @@ export function useClockingActions({
                 ? declaredRetard.reason
                 : `${declaredRetard.reason} (Constaté au pointage à ${timeStr})`,
             };
-            await incidentService.saveIncident(updatedRetard);
+            incidentService.saveIncident(updatedRetard);
             onAddAttendanceIncident?.(updatedRetard);
+
+            showToast(
+              'Arrivée en Retard Enregistrée',
+              `Présence marquée "En retard" à ${timeStr}. Votre signalement préalable a été rattaché et justifié.`,
+              'warning'
+            );
           } else {
+            // Création automatique de l'incident Retard (uniquement s'il n'existait pas)
             const autoIncident: AttendanceIncident = {
               id: `inc-${Date.now()}`,
               employeeId: employeeProfile.id,
@@ -115,14 +126,21 @@ export function useClockingActions({
               createdAt: new Date().toISOString(),
             };
 
-            await incidentService.saveIncident(autoIncident);
+            incidentService.saveIncident(autoIncident);
             onAddAttendanceIncident?.(autoIncident);
+
+            showToast(
+              'Retard Détecté',
+              `Vous avez badgé à ${timeStr} avec la mention En retard (seuil: ${lateThreshold}). Un incident de retard a été consigné.`,
+              'warning'
+            );
           }
         }
       } else if (pendingClockAction === 'departure') {
         const isEarlyDeparture = timeStr < plannedDeparture;
         if (isEarlyDeparture) {
           if (declaredEarlyDept) {
+            // Mettre à jour le départ anticipé déjà consigné pour éviter de créer un doublon
             const updatedEarly: AttendanceIncident = {
               ...declaredEarlyDept,
               timeString: declaredEarlyDept.timeString || timeStr,
@@ -132,8 +150,14 @@ export function useClockingActions({
                 ? declaredEarlyDept.reason
                 : `${declaredEarlyDept.reason} (Départ effectif à ${timeStr})`,
             };
-            await incidentService.saveIncident(updatedEarly);
+            incidentService.saveIncident(updatedEarly);
             onAddAttendanceIncident?.(updatedEarly);
+
+            showToast(
+              'Sortie Prématurée Enregistrée',
+              `Départ badgé à ${timeStr}. Votre signalement préalable a été rattaché et validé.`,
+              'warning'
+            );
           } else {
             const autoIncident: AttendanceIncident = {
               id: `inc-${Date.now()}`,
@@ -150,9 +174,21 @@ export function useClockingActions({
               createdAt: new Date().toISOString(),
             };
 
-            await incidentService.saveIncident(autoIncident);
+            incidentService.saveIncident(autoIncident);
             onAddAttendanceIncident?.(autoIncident);
+
+            showToast(
+              'Sortie Prématurée Enregistrée',
+              `Départ badgé à ${timeStr} (avant ${plannedDeparture}). Un incident "Sortie prématurée" a été créé automatiquement.`,
+              'warning'
+            );
           }
+        } else {
+          showToast(
+            'Départ Enregistré',
+            `Départ badgé avec succès à ${timeStr}. Bonne fin de journée !`,
+            'success'
+          );
         }
       }
 
@@ -163,7 +199,6 @@ export function useClockingActions({
 
       if (existingIdx >= 0) {
         const existing = { ...updatedPresences[existingIdx] };
-        existing.employeeId = employeeProfile.id;
         existing.employeeName = employeeProfile.name || existing.employeeName;
         if (pendingClockAction === 'arrival') {
           existing.arrivalTime = timeStr;
@@ -205,7 +240,7 @@ export function useClockingActions({
         updatedPresences.push(newPresence);
       }
 
-      await onUpdatePresences(updatedPresences);
+      onUpdatePresences(updatedPresences);
 
       if (onAddNotification) {
         const actionLabels: Record<string, string> = {
@@ -218,6 +253,7 @@ export function useClockingActions({
         };
         const actionLabel = actionLabels[pendingClockAction] || 'Pointage';
 
+        // Garantir STRICTEMENT une seule notification claire et exhaustive par action (pas de doublon)
         let notifTitle = `Pointage enregistré : ${actionLabel}`;
         let notifContent = `Votre pointage (${actionLabel}) a été validé à ${timeStr} sur le site ${locationName}.`;
         let notifPayload: any = {
@@ -243,7 +279,6 @@ export function useClockingActions({
           id: `notif-clock-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           type: 'system',
           recipient: employeeProfile.id,
-          targetUserId: employeeProfile.id,
           title: notifTitle,
           content: notifContent,
           message: notifContent,

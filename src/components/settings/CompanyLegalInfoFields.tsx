@@ -27,7 +27,7 @@ export const CompanyLegalInfoFields: React.FC<CompanyLegalInfoFieldsProps> = ({
           </label>
           <input
             type="text"
-            value={formData.companyName || formData.hqName || 'Citrine SARL'}
+            value={formData.companyName || formData.hqName || 'Citrine Entreprise SARL'}
             onChange={(e) => {
               onChange('companyName', e.target.value);
               onChange('hqName', e.target.value);

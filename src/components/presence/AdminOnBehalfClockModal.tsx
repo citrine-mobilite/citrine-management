@@ -81,8 +81,6 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
 
     if (existingIdx >= 0) {
       const existing = { ...updatedPresences[existingIdx] };
-      existing.employeeId = targetEmployee.id;
-      existing.employeeName = targetEmployee.name;
       if (clockAction === 'arrival') {
         existing.arrivalTime = nowTime;
         existing.status = isLateNow ? 'late' : 'present';
@@ -105,7 +103,6 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
       const newPresence: Presence = {
         id: `pres-${Date.now()}`,
         employeeId: targetEmployee.id,
-        employeeName: targetEmployee.name,
         date: todayStr,
         status: isLateNow ? 'late' : 'present',
         arrivalTime: clockAction === 'arrival' ? nowTime : null,
@@ -172,12 +169,9 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         id: `notif-clock-admin-${Date.now()}-${targetEmployee.id}`,
         title: `Pointage par Responsable : ${actionLabels[clockAction]}`,
         content: `${adminName} a validé votre pointage (${actionLabels[clockAction]}) à ${nowTime}. Motif : ${reasonInput.trim() || 'N/A'}`,
-        targetUserId: targetEmployee.id,
-        recipient: targetEmployee.id,
         payload: JSON.stringify({
           source: 'admin_on_behalf',
           employeeId: targetEmployee.id,
-          employeeName: targetEmployee.name,
           action: clockAction,
           time: nowTime,
           date: todayStr,

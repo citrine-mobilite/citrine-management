@@ -1087,7 +1087,7 @@ export default function PresencePanel({
           isOpen={isOfficeQrModalOpen}
           onClose={() => setIsOfficeQrModalOpen(false)}
           managerName={currentUser?.name || 'Responsable'}
-          companyName={moduleConfig?.companyName || 'Citrine SARL'}
+          companyName={moduleConfig?.companyName || 'Citrine Entreprise'}
           showToast={showToast}
         />
       )}

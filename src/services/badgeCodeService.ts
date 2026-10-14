@@ -87,10 +87,13 @@ export class BadgeCodeService {
       };
     }
 
-    // Pas de blocage ni de coordonnées de secours forcées
-    // Si latitude/longitude sont absentes, on les laisse undefined pour ne pas fausser la position
-    if (latitude === 0 || isNaN(latitude!)) latitude = undefined;
-    if (longitude === 0 || isNaN(longitude!)) longitude = undefined;
+    // GPS is mandatory for the 16-character code as per business specifications
+    if (latitude === undefined || longitude === undefined || latitude === 0) {
+      return {
+        success: false,
+        error: "Pointage bloqué : Votre position GPS est obligatoire pour valider ce code temporaire à 16 caractères."
+      };
+    }
 
     // Load fresh cached collection or offline list
     let list = this.codesCache;
