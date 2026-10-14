@@ -188,37 +188,30 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
     let locationLabel = officialSiteName;
 
     try {
-      // Acquisition de la VRAIE position GPS de l'appareil (smartphone/ordinateur)
+      // Acquisition de la VRAIE position GPS (max 5 secondes)
       const locPromise = getCurrentUserLocation();
       const timeoutPromise = new Promise<{ latitude: number; longitude: number; zoneName?: string } | null>((resolve) => {
-        setTimeout(() => resolve(null), 6000); // 6s pour laisser le temps au capteur GPS de fixer
+        setTimeout(() => resolve(null), 5000); // 5 secondes max
       });
 
       const locResult = await Promise.race([locPromise, timeoutPromise]);
       if (locResult && typeof locResult.latitude === 'number' && typeof locResult.longitude === 'number') {
-        // VRAIES coordonnées captées en direct
         capturedLat = locResult.latitude;
         capturedLng = locResult.longitude;
         locationLabel = locResult.zoneName 
           ? `${officialSiteName} • ${locResult.zoneName}` 
           : `${officialSiteName} (GPS certifié)`;
-      } else if (requireGpsStrict) {
-        setIsCapturingGps(false);
-        setIsProcessingDetection(false);
-        setActionError("⛔ La configuration de l'entreprise exige un signal GPS réel. Veuillez activer la localisation sur votre appareil.");
-        return;
       } else {
-        // GPS non disponible sur cet appareil : on ne met pas de fausse coordonnée
-        locationLabel = `${officialSiteName} (Pointage Borne Entrée)`;
-      }
-    } catch (gpsErr) {
-      if (requireGpsStrict) {
         setIsCapturingGps(false);
         setIsProcessingDetection(false);
-        setActionError("⛔ Impossible d'acquérir votre position GPS réelle. Veuillez autoriser la localisation.");
+        setActionError("⏳ Délai GPS dépassé (5 secondes). Impossible d'enregistrer le badge sans position GPS réelle. Veuillez réessayer.");
         return;
       }
-      locationLabel = `${officialSiteName} (Pointage Borne Entrée)`;
+    } catch (gpsErr: any) {
+      setIsCapturingGps(false);
+      setIsProcessingDetection(false);
+      setActionError(gpsErr?.message || "❌ Impossible d'acquérir votre position GPS. Le badgeage a été annulé.");
+      return;
     } finally {
       setIsCapturingGps(false);
     }
