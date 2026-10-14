@@ -104,7 +104,7 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
 
   const handleDownloadPoster = () => {
     generateAndDownloadQrPoster(currentToken, {
-      companyName: moduleConfig?.companyName || 'Citrine Entreprise SARL',
+      companyName: moduleConfig?.companyName || 'Citrine SARL',
       siteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
       title: 'BORNE OFFICIELLE DE POINTAGE',
       subtitle: 'Scannez ce QR Code avec l’application Citrine pour valider votre badgeage.',
@@ -158,7 +158,7 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
           <div className="lg:col-span-5 flex flex-col items-center bg-stone-50 p-6 rounded-3xl border border-stone-200 text-center space-y-4">
             <div className="space-y-1">
               <span className="text-[11px] font-bold text-[#2A7B76] uppercase tracking-wider block">
-                {moduleConfig?.companyName || 'Citrine Entreprise SARL'}
+                {moduleConfig?.companyName || 'Citrine SARL'}
               </span>
               <h4 className="font-serif font-bold text-stone-900 text-sm">
                 Aperçu de la Borne d'Entrée

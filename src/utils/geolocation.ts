@@ -133,11 +133,8 @@ export async function getCurrentUserLocation(): Promise<GeolocationResult> {
         const lon = position.coords.longitude;
         const accuracy = position.coords.accuracy;
 
-        // Force a maximum accuracy radius of 500 meters
-        if (accuracy > 1000) {
-          reject(new Error(`Précision GPS insuffisante (${Math.round(accuracy)}m). Le pointage requiert une précision maximale de 1000m. Veuillez activer la localisation Haute Précision (GPS/Wi-Fi) sur votre appareil.`));
-          return;
-        }
+        // Aucune restriction de précision GPS : position acceptée directement
+        console.log(`Position GPS acquise : ${lat}, ${lon} (Précision: ${accuracy || 'inconnue'}m)`);
 
         try {
           // Attempt reverse geocoding via OpenStreetMap Nominatim API with 3.5s timeout
@@ -209,7 +206,7 @@ export async function getCurrentUserLocation(): Promise<GeolocationResult> {
       {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 0
+        maximumAge: 30000
       }
     );
   });

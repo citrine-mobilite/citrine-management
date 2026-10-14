@@ -59,6 +59,8 @@ export const PointageMap: React.FC<PointageMapProps> = ({
       const map = L.map(mapContainerRef.current, {
         center: defaultCenter,
         zoom: 13,
+        minZoom: 2,
+        maxZoom: 19,
         zoomControl: false,
         attributionControl: false,
       });

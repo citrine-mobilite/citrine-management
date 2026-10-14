@@ -64,6 +64,8 @@ export default function KioskClockingModal({
 
     if (existingIdx >= 0) {
       const existing = { ...updatedPresences[existingIdx] };
+      existing.employeeId = emp.id;
+      existing.employeeName = emp.name;
       if (action === 'arrival') {
         existing.arrivalTime = timeStr;
         existing.status = late ? 'late' : 'present';
@@ -81,6 +83,7 @@ export default function KioskClockingModal({
       updatedPresences.push({
         id: `pr-${Date.now()}`,
         employeeId: emp.id,
+        employeeName: emp.name,
         date: todayStr,
         status: late ? 'late' : 'present',
         arrivalTime: action === 'arrival' ? timeStr : null,
@@ -143,11 +146,13 @@ export default function KioskClockingModal({
         id: `notif-kiosk-${Date.now()}-${emp.id}`,
         type: 'system',
         recipient: emp.id,
+        targetUserId: emp.id,
         title: `Pointage sur Borne : ${actionLabels[action] || action}`,
         content: `Pointage (${actionLabels[action] || action}) validé sur la borne d'accueil à ${timeStr}.`,
         payload: JSON.stringify({
           source: 'kiosk',
           employeeId: emp.id,
+          employeeName: emp.name,
           action,
           time: timeStr,
           date: todayStr,

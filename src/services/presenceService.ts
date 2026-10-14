@@ -20,9 +20,9 @@ export class PresenceService {
     }
   ): Promise<{ success: boolean; error?: string }> {
     
-    // Logique métier commune : validation GPS si nécessaire
-    if (['qr_code_door', 'badge_code_16'].includes(method) && (!metadata.gps)) {
-      return { success: false, error: "La position GPS est requise pour ce type de pointage." };
+    // Si le GPS ne donne pas pour le QR de porte ou le code 16 : aucun badge n'est enregistré
+    if (['qr_code_door', 'badge_code_16'].includes(method) && (!metadata.gps || typeof metadata.gps.lat !== 'number')) {
+      return { success: false, error: "Position GPS obligatoire introuvable. Le badge n'a pas été enregistré." };
     }
 
     const empName = metadata.employeeName || 'Employé';

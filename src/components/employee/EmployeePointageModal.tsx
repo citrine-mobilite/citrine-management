@@ -188,37 +188,31 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
     let locationLabel = officialSiteName;
 
     try {
-      // Acquisition de la VRAIE position GPS de l'appareil (smartphone/ordinateur)
+      // Acquisition de la position GPS réelle (max 15 secondes)
       const locPromise = getCurrentUserLocation();
-      const timeoutPromise = new Promise<{ latitude: number; longitude: number; zoneName?: string } | null>((resolve) => {
-        setTimeout(() => resolve(null), 6000); // 6s pour laisser le temps au capteur GPS de fixer
+      const timeoutPromise = new Promise<{ latitude: number; longitude: number; zoneName?: string } | null>((_, reject) => {
+        setTimeout(() => reject(new Error("Délai GPS de 15s dépassé : impossible d'obtenir votre position.")), 15000);
       });
 
       const locResult = await Promise.race([locPromise, timeoutPromise]);
-      if (locResult && typeof locResult.latitude === 'number' && typeof locResult.longitude === 'number') {
-        // VRAIES coordonnées captées en direct
-        capturedLat = locResult.latitude;
-        capturedLng = locResult.longitude;
-        locationLabel = locResult.zoneName 
-          ? `${officialSiteName} • ${locResult.zoneName}` 
-          : `${officialSiteName} (GPS certifié)`;
-      } else if (requireGpsStrict) {
-        setIsCapturingGps(false);
-        setIsProcessingDetection(false);
-        setActionError("⛔ La configuration de l'entreprise exige un signal GPS réel. Veuillez activer la localisation sur votre appareil.");
-        return;
-      } else {
-        // GPS non disponible sur cet appareil : on ne met pas de fausse coordonnée
-        locationLabel = `${officialSiteName} (Pointage Borne Entrée)`;
+      if (!locResult || typeof locResult.latitude !== 'number' || typeof locResult.longitude !== 'number') {
+        throw new Error("Signal GPS introuvable sur votre appareil.");
       }
-    } catch (gpsErr) {
-      if (requireGpsStrict) {
-        setIsCapturingGps(false);
-        setIsProcessingDetection(false);
-        setActionError("⛔ Impossible d'acquérir votre position GPS réelle. Veuillez autoriser la localisation.");
-        return;
+
+      capturedLat = locResult.latitude;
+      capturedLng = locResult.longitude;
+      locationLabel = locResult.zoneName 
+        ? `${officialSiteName} • ${locResult.zoneName}` 
+        : `${officialSiteName} (GPS certifié)`;
+    } catch (gpsErr: any) {
+      setIsCapturingGps(false);
+      setIsProcessingDetection(false);
+      const reason = gpsErr?.message || "Signal GPS introuvable ou accès refusé.";
+      setActionError(`Pointage Échoué : ${reason}`);
+      if (showToast) {
+        showToast('Pointage Échoué', `Raison : ${reason}`, 'warning');
       }
-      locationLabel = `${officialSiteName} (Pointage Borne Entrée)`;
+      return; // Si le GPS ne donne pas : aucun badge n'est enregistré !
     } finally {
       setIsCapturingGps(false);
     }
@@ -373,12 +367,14 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
       let userLocation: any = null;
       try {
         userLocation = await getCurrentUserLocation();
-      } catch {
-        // Repli coordonnées siège si GPS inaccessible
-        userLocation = {
-          latitude: moduleConfig?.companyLatitude || 4.051056,
-          longitude: moduleConfig?.companyLongitude || 9.7678687
-        };
+      } catch (gpsErr: any) {
+        const reason = gpsErr?.message || "Signal GPS obligatoire introuvable ou accès refusé.";
+        setActionError(`Pointage Échoué : ${reason}`);
+        if (showToast) {
+          showToast('Pointage Échoué', `Raison : ${reason}`, 'warning');
+        }
+        setIsValidatingCode16(false);
+        return; // Si le GPS ne donne pas : aucun badge n'est enregistré !
       }
 
       const res = await badgeCodeService.validateAndConsumeCode(

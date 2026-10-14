@@ -2,6 +2,7 @@ export interface NotificationLog {
   id: string;
   type: 'whatsapp' | 'email' | 'system';
   recipient: string;
+  targetUserId?: string;
   title: string;
   content: string;
   message?: string;
@@ -389,9 +390,9 @@ export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
   breakStartTime: '12:00',
   breakEndTime: '15:00',
   departureActiveStartTime: '16:00',
-  companyName: 'Citrine Entreprise SARL',
-  companyLatitude: 4.051056,
-  companyLongitude: 9.7678687,
+  companyName: 'Citrine SARL',
+  companyLatitude: 4.016246,
+  companyLongitude: 9.8203514,
   qrCodeSecret: 'CITRINE_SECRET_2026',
   doorQrCodeToken: 'CITRINE_DOOR_HQ_MAIN_2026',
   doorQrCodeGeneratedAt: '2026-03-01T08:00:00.000Z',
@@ -403,8 +404,8 @@ export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
   siteLocations: [],
   hqName: 'Siège Principal Citrine - Douala',
   hqAddress: 'Akwa - Boulevard de la Liberté, Douala',
-  hqLatitude: 4.051056,
-  hqLongitude: 9.7678687,
+  hqLatitude: 4.016246,
+  hqLongitude: 9.8203514,
   workStartTime: '08:00',
   lateThresholdTime: '08:30',
   defaultSalary: 200000,

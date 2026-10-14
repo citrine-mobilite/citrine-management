@@ -87,11 +87,11 @@ export class BadgeCodeService {
       };
     }
 
-    // GPS is mandatory for the 16-character code as per business specifications
-    if (latitude === undefined || longitude === undefined || latitude === 0) {
+    // Si le GPS ne donne pas : aucun badge n'est enregistré
+    if (latitude === undefined || longitude === undefined || latitude === 0 || isNaN(latitude) || isNaN(longitude)) {
       return {
         success: false,
-        error: "Pointage bloqué : Votre position GPS est obligatoire pour valider ce code temporaire à 16 caractères."
+        error: "Pointage Échoué : Position GPS obligatoire non détectée. Aucun badge enregistré."
       };
     }
 
