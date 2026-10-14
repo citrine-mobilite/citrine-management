@@ -255,8 +255,8 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
       return {
         ...base,
         employee_id: item.employeeId || null,
-        employee_name: item.employeeName || null,
-        date: item.date || null,
+        employee_name: item.employeeName || item.employee_name || null,
+        date: item.date || new Date().toISOString().split('T')[0],
         arrival_time: item.arrivalTime || null,
         departure_time: item.departureTime || null,
         status: item.status || 'present',
@@ -264,8 +264,8 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         pause_minutes: Number(item.pauseMinutes || 0),
         motif: item.motif || item.adminBadgeReason || null,
         signature: item.signature || null,
-        gps_lat: item.latitude || item.gpsLat || null,
-        gps_lng: item.longitude || item.gpsLng || null,
+        gps_lat: typeof item.latitude === 'number' ? item.latitude : (typeof item.gpsLat === 'number' ? item.gpsLat : null),
+        gps_lng: typeof item.longitude === 'number' ? item.longitude : (typeof item.gpsLng === 'number' ? item.gpsLng : null),
         method: item.clockingMethod || item.method || 'kiosk',
         raw_data: item,
       };
@@ -274,27 +274,22 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
       return {
         ...base,
         employee_id: item.employeeId || null,
-        employee_name: item.employeeName || null,
-        date: item.date || null,
-        time_string: item.timeString || null,
-        type: item.type || null,
-        origin: item.origin || null,
-        reason: item.reason || null,
-        is_declared_in_advance: Boolean(item.isDeclaredInAdvance),
-        is_justified: Boolean(item.isJustified),
-        status: item.status || 'signale',
+        date: item.date || new Date().toISOString().split('T')[0],
+        type: item.type || 'retard',
+        description: item.reason || item.description || item.origin || 'Incident de présence',
+        status: item.status || 'en_attente',
+        raw_data: item,
       };
     case 'badge_codes_16':
       return {
         ...base,
         code: item.code || '',
-        formatted_code: item.formattedCode || null,
-        generated_by: item.generatedBy || null,
-        target_month: item.targetMonth || null,
+        assigned_name: item.assignedName || item.employeeName || null,
+        created_by: item.createdBy || item.generatedBy || 'Responsable',
+        expires_at: item.expiresAt || null,
         is_used: Boolean(item.isUsed),
-        used_by_employee_id: item.usedByEmployeeId || null,
-        used_by_employee_name: item.usedByEmployeeName || null,
         used_at: item.usedAt || null,
+        raw_data: item,
       };
     case 'dynamic_qr_sessions':
       return {

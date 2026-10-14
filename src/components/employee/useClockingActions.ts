@@ -199,6 +199,7 @@ export function useClockingActions({
 
       if (existingIdx >= 0) {
         const existing = { ...updatedPresences[existingIdx] };
+        existing.employeeName = employeeProfile.name || existing.employeeName;
         if (pendingClockAction === 'arrival') {
           existing.arrivalTime = timeStr;
           existing.status = status;
@@ -222,6 +223,7 @@ export function useClockingActions({
         const newPresence: Presence = {
           id: `pr-${Date.now()}`,
           employeeId: employeeProfile.id,
+          employeeName: employeeProfile.name,
           date: todayStr,
           status,
           arrivalTime: pendingClockAction === 'arrival' ? timeStr : null,
@@ -257,6 +259,7 @@ export function useClockingActions({
         let notifPayload: any = {
           source: 'pointage',
           employeeId: employeeProfile.id,
+          employeeName: employeeProfile.name,
           action: pendingClockAction,
           time: timeStr,
           date: todayStr,
@@ -278,6 +281,7 @@ export function useClockingActions({
           recipient: employeeProfile.id,
           title: notifTitle,
           content: notifContent,
+          message: notifContent,
           payload: JSON.stringify(notifPayload),
           timestamp: new Date().toISOString(),
           read: false,

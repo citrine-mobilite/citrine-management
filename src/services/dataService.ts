@@ -222,6 +222,13 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
     }
   }
 
+  // Garantir que pour les présences, la date est toujours définie
+  if (collectionName === 'presences' || collectionName === COLLECTIONS.PRESENCES) {
+    if (!cleanedItem.date) {
+      cleanedItem.date = new Date().toISOString().split('T')[0];
+    }
+  }
+
   // 1. Toujours mettre à jour le cache local IndexedDB immédiatement (0ms de latence)
   await offlineService.cacheLocally(collectionName, cleanedItem);
 

@@ -29,6 +29,7 @@ interface UseEmployeePortalLogicProps {
   moduleConfig?: CompanyModuleConfig;
   attendanceIncidents?: AttendanceIncident[];
   onAddAttendanceIncident?: (incident: AttendanceIncident) => void;
+  onAddNotification?: (log: NotificationLog) => void;
   initialSubTab?: string;
   showToast?: (titleOrMessage: string, descOrType?: any, type?: any) => void;
 }
@@ -39,6 +40,7 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     employees,
     presences,
     onUpdatePresences,
+    onAddNotification,
     moduleConfig,
     attendanceIncidents = [],
     onAddAttendanceIncident,
@@ -288,6 +290,7 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     moduleConfig,
     attendanceIncidents,
     onAddAttendanceIncident,
+    onAddNotification,
   });
 
   const myIncidents = attendanceIncidents.filter((i) => i.employeeId === employeeProfile.id);

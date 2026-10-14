@@ -67,14 +67,22 @@ export async function getCollectionData(collectionName: string): Promise<any[]> 
     }
 
     return (data || []).map((row: any) => {
-      const raw = row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : row;
-      const content = raw.content || row.message || raw.message || raw.description || raw.title || 'Notification';
-      const message = row.message || raw.message || raw.content || raw.description || raw.title || 'Notification';
+      const raw = row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {};
+      if (table === 'notifications') {
+        const textMsg = row.message || raw.message || raw.content || raw.description || raw.title || 'Notification système';
+        return {
+          ...raw,
+          ...row,
+          title: row.title || raw.title || 'Notification',
+          message: textMsg,
+          content: raw.content || textMsg,
+          id: row.doc_id || row.id || raw.id,
+          _dbId: row.id,
+        };
+      }
       return {
         ...raw,
         ...row,
-        content,
-        message,
         id: row.doc_id || row.id || raw.id,
         _dbId: row.id,
       };
@@ -123,20 +131,6 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
       updated_at: new Date().toISOString(),
     };
 
-    if (item.title !== undefined) rowData.title = item.title;
-    if (item.description !== undefined) rowData.description = item.description;
-    if (item.status !== undefined) rowData.status = item.status;
-    if (item.email !== undefined) rowData.email = item.email;
-    if (item.name !== undefined) rowData.name = item.name;
-    if (item.type !== undefined) rowData.type = item.type;
-    if (item.priority !== undefined) rowData.priority = item.priority;
-    if (item.department !== undefined) rowData.department = item.department;
-    if (item.message !== undefined && item.message !== null) {
-      rowData.message = String(item.message);
-    } else if (item.content !== undefined && item.content !== null) {
-      rowData.message = String(item.content);
-    }
-
     if (table === 'notifications') {
       rowData.title = item.title || 'Notification';
       rowData.message = item.message || item.content || item.description || item.payload || item.title || 'Notification système';
@@ -149,32 +143,15 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
           rowData.target_user_id = Number(item.targetUserId);
         }
       }
-      if (item.targetUserIds) {
+      if (item.targetUserIds && Array.isArray(item.targetUserIds)) {
         rowData.target_user_ids = item.targetUserIds;
       }
-      if (item.targetEmployeeIds) {
+      if (item.targetEmployeeIds && Array.isArray(item.targetEmployeeIds)) {
         rowData.target_employee_ids = item.targetEmployeeIds;
       }
-    } else if (table === 'tasks') {
-      rowData.title = item.title || 'Tâche';
-      rowData.status = item.status || 'todo';
-      rowData.priority = item.priority || 'medium';
-    } else if (table === 'reminders') {
-      rowData.title = item.title || 'Rappel';
-    } else if (table === 'departments') {
-      rowData.name = item.name || 'Département';
-    } else if (table === 'inventory') {
-      rowData.name = item.name || item.designation || 'Matériel';
-    } else if (table === 'documents') {
-      rowData.title = item.title || 'Document';
-    } else if (table === 'users') {
-      rowData.name = item.name || item.email || 'Utilisateur';
-      if (item.email) rowData.email = String(item.email).trim().toLowerCase();
-    } else if (table === 'employees') {
-      rowData.name = item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || 'Collaborateur';
     } else if (table === 'presences') {
-      rowData.employee_name = item.employeeName || null;
-      rowData.date = item.date || null;
+      rowData.employee_name = item.employeeName || item.employee_name || null;
+      rowData.date = item.date || new Date().toISOString().split('T')[0];
       rowData.arrival_time = item.arrivalTime || null;
       rowData.departure_time = item.departureTime || null;
       rowData.status = item.status || 'present';
@@ -182,23 +159,121 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
       rowData.pause_minutes = Number(item.pauseMinutes || 0);
       rowData.motif = item.motif || item.adminBadgeReason || null;
       rowData.signature = item.signature || null;
-      rowData.gps_lat = item.latitude || item.gpsLat || null;
-      rowData.gps_lng = item.longitude || item.gpsLng || null;
+      rowData.gps_lat = typeof item.latitude === 'number' ? item.latitude : (typeof item.gpsLat === 'number' ? item.gpsLat : null);
+      rowData.gps_lng = typeof item.longitude === 'number' ? item.longitude : (typeof item.gpsLng === 'number' ? item.gpsLng : null);
       rowData.method = item.clockingMethod || item.method || 'kiosk';
       if (item.employeeId) {
         const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
         if (resolvedId) rowData.employee_id = resolvedId;
       }
     } else if (table === 'attendance_incidents') {
-      rowData.employee_name = item.employeeName || null;
+      rowData.date = item.date || new Date().toISOString().split('T')[0];
+      rowData.type = item.type || 'retard';
+      rowData.description = item.reason || item.description || item.origin || 'Incident de présence';
+      rowData.status = item.status || 'en_attente';
+      if (item.employeeId) {
+        const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
+        if (resolvedId) rowData.employee_id = resolvedId;
+      }
+    } else if (table === 'badge_codes_16') {
+      rowData.code = item.code || '';
+      rowData.assigned_name = item.assignedName || item.employeeName || null;
+      rowData.created_by = item.createdBy || item.generatedBy || 'Responsable';
+      rowData.expires_at = item.expiresAt || null;
+      rowData.is_used = Boolean(item.isUsed);
+      rowData.used_at = item.usedAt || null;
+      if (item.employeeId || item.usedByEmployeeId) {
+        const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId || item.usedByEmployeeId);
+        if (resolvedId) rowData.employee_id = resolvedId;
+      }
+    } else if (table === 'dynamic_qr_sessions') {
+      rowData.session_id = item.sessionId || item.id || `dyn_${Date.now()}`;
+      rowData.created_by = item.createdBy || item.generatedBy || 'Responsable';
+      rowData.expires_at = item.expiresAt || null;
+      rowData.is_active = item.isActive !== false;
+    } else if (table === 'tasks') {
+      rowData.title = item.title || 'Tâche';
+      rowData.description = item.description || null;
       rowData.date = item.date || null;
-      rowData.time_string = item.timeString || null;
-      rowData.type = item.type || null;
-      rowData.origin = item.origin || null;
-      rowData.reason = item.reason || null;
-      rowData.is_declared_in_advance = Boolean(item.isDeclaredInAdvance);
-      rowData.is_justified = Boolean(item.isJustified);
-      rowData.status = item.status || 'signale';
+      rowData.time = item.time || null;
+      rowData.status = item.status || 'todo';
+      rowData.priority = item.priority || 'medium';
+      rowData.assigned_to = item.assignedTo || null;
+      rowData.department = item.department || null;
+      rowData.due_date = item.dueDate || null;
+      rowData.is_milestone = Boolean(item.isMilestone);
+      rowData.milestone_progress = Number(item.milestoneProgress || 0);
+      if (item.employeeId) {
+        const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
+        if (resolvedId) rowData.employee_id = resolvedId;
+      }
+      if (item.projectId && /^\d+$/.test(String(item.projectId))) {
+        rowData.project_id = Number(item.projectId);
+      }
+    } else if (table === 'reminders') {
+      rowData.title = item.title || 'Rappel';
+      rowData.note = item.note || item.description || null;
+      rowData.date = item.date || null;
+      rowData.time = item.time || null;
+      rowData.location = item.location || null;
+      rowData.all_employees = Boolean(item.allEmployees);
+      rowData.trigger_before = item.triggerBefore || null;
+      rowData.triggered = Boolean(item.triggered);
+      rowData.stopped = Boolean(item.stopped);
+      if (item.employeeId) {
+        const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
+        if (resolvedId) rowData.employee_id = resolvedId;
+      }
+    } else if (table === 'departments') {
+      rowData.name = item.name || 'Département';
+      rowData.code = item.code || null;
+      rowData.budget_xaf = Number(item.budgetXaf || item.budget || 0);
+    } else if (table === 'inventory') {
+      rowData.name = item.name || item.designation || 'Matériel';
+      rowData.category = item.category || null;
+      rowData.serial_number = item.serialNumber || null;
+      rowData.quantity = Number(item.quantity || 1);
+      rowData.status = item.status || 'disponible';
+      rowData.unit_price_xaf = Number(item.unitPriceXaf || item.price || 0);
+    } else if (table === 'documents') {
+      rowData.title = item.title || 'Document';
+      rowData.type = item.type || item.documentType || 'general';
+    } else if (table === 'users') {
+      rowData.name = item.name || item.email || 'Utilisateur';
+      if (item.email) rowData.email = String(item.email).trim().toLowerCase();
+      rowData.phone = item.phone || null;
+      rowData.department = item.department || 'Direction Générale';
+      rowData.avatar_url = item.avatarUrl || item.photoUrl || null;
+      rowData.status = item.status !== false && item.status !== 'inactif';
+      if (item.roleId) rowData.role_id = Number(item.roleId);
+    } else if (table === 'employees') {
+      rowData.name = item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || 'Collaborateur';
+      rowData.first_name = item.firstName || null;
+      rowData.last_name = item.lastName || null;
+      if (item.email) rowData.email = String(item.email).trim().toLowerCase();
+      rowData.phone = item.phone || null;
+      rowData.department = item.department || 'Direction Générale';
+      rowData.position = item.position || item.role || item.roleType || null;
+      rowData.role_type = item.roleType || item.role || 'Employé';
+      rowData.status = item.status === true || item.status === 'en_poste';
+      rowData.hire_date = item.hireDate ? String(item.hireDate).split('T')[0] : null;
+      rowData.salary = Number(item.salary || 0);
+      rowData.photo_url = item.photoUrl || item.avatarUrl || null;
+      rowData.emergency_contact = item.emergencyContact || null;
+      rowData.work_location = item.workLocation || 'Douala';
+      rowData.badge_code = item.badgeCode || null;
+      if (item.userId) {
+        if (typeof item.userId === 'number') rowData.user_id = item.userId;
+        else if (typeof item.userId === 'string' && /^\d+$/.test(item.userId)) rowData.user_id = Number(item.userId);
+      }
+      if (item.roleId) rowData.role_id = Number(item.roleId);
+    } else if (table === 'disciplinary_incidents') {
+      rowData.employee_name = item.employeeName || null;
+      rowData.date = item.date || new Date().toISOString().split('T')[0];
+      rowData.severity = item.severity || 'mineure';
+      rowData.reason = item.reason || 'Incident disciplinaire';
+      rowData.action_taken = item.actionTaken || null;
+      rowData.decision_by = item.decisionBy || null;
       if (item.employeeId) {
         const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
         if (resolvedId) rowData.employee_id = resolvedId;
@@ -208,6 +283,13 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
     const { error: saveErr } = await supabaseAdmin.from(table).upsert(rowData, { onConflict: 'doc_id' });
     if (saveErr) {
       console.error(`Database save error for table ${table}:`, saveErr.message);
+      // Fallback: update by doc_id if exists, otherwise insert
+      const { data: existingRows } = await supabaseAdmin.from(table).select('id').eq('doc_id', docId).limit(1);
+      if (existingRows && existingRows.length > 0) {
+        await supabaseAdmin.from(table).update(rowData).eq('doc_id', docId);
+      } else {
+        await supabaseAdmin.from(table).insert(rowData);
+      }
     }
   } catch (error) {
     console.error(`Database save failed for ${collectionName}/${docId}:`, error);

@@ -135,4 +135,5 @@ export interface Presence {
     departure?: { latitude: number; longitude: number; zoneName: string; time: string; method?: ClockingMethod; siteName?: string };
   };
   updatedAt?: string;
+  employeeName?: string;
 }
