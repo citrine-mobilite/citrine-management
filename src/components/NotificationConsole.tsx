@@ -24,8 +24,11 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
 
   // Filter notifications for the current user or show all for admin/responsable
   const userNotifications = isAdmin ? notifications : notifications.filter(
-    (n) => n.recipient === currentUser.name || 
+    (n) => (n.targetUserId && (String(n.targetUserId) === String(currentUser.id) || String(n.targetUserId) === String(currentUser.email))) ||
+           n.recipient === currentUser.name || 
            n.recipient === currentUser.email || 
+           n.recipient === 'Tous' ||
+           n.recipient === 'Broadcast' ||
            (currentUser.phone && n.recipient.includes(currentUser.phone))
   );
 

@@ -2,6 +2,7 @@ export interface NotificationLog {
   id: string;
   type: 'whatsapp' | 'email' | 'system';
   recipient: string;
+  targetUserId?: string;
   title: string;
   content: string;
   message?: string;

@@ -282,17 +282,19 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
 
     const { error: saveErr } = await supabaseAdmin.from(table).upsert(rowData, { onConflict: 'doc_id' });
     if (saveErr) {
-      console.error(`Database save error for table ${table}:`, saveErr.message);
-      // Fallback: update by doc_id if exists, otherwise insert
+      console.warn(`Database upsert error for table ${table}, trying fallback:`, saveErr.message);
       const { data: existingRows } = await supabaseAdmin.from(table).select('id').eq('doc_id', docId).limit(1);
       if (existingRows && existingRows.length > 0) {
-        await supabaseAdmin.from(table).update(rowData).eq('doc_id', docId);
+        const { error: updateErr } = await supabaseAdmin.from(table).update(rowData).eq('doc_id', docId);
+        if (updateErr) throw updateErr;
       } else {
-        await supabaseAdmin.from(table).insert(rowData);
+        const { error: insertErr } = await supabaseAdmin.from(table).insert(rowData);
+        if (insertErr) throw insertErr;
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Database save failed for ${collectionName}/${docId}:`, error);
+    throw error;
   }
 
   return savedItem;

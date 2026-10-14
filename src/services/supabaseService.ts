@@ -425,7 +425,7 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         title: item.title || 'Notification',
         message: item.message || item.content || item.description || item.payload || item.title || 'Notification système',
         type: item.type || 'system',
-        target_user_id: (typeof item.targetUserId === 'number' || (typeof item.targetUserId === 'string' && /^\d+$/.test(item.targetUserId))) ? Number(item.targetUserId) : null,
+        target_user_id: item.targetUserId || item.target_user_id || item.recipient || null,
         is_read: Boolean(item.isRead || item.read),
       };
     case 'company_settings':

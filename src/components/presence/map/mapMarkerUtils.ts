@@ -30,42 +30,43 @@ export function extractPointageMarkers(
     return true;
   });
 
-  filtered.forEach((p) => {
+  filtered.forEach((p, idx) => {
     const emp = employees.find((e) => e.id === p.employeeId);
-    const empName = emp?.name || 'Collaborateur';
+    const empName = emp?.name || p.employeeName || 'Collaborateur';
     const avatar = emp?.avatarUrl;
 
-    if (p.latitude && p.longitude) {
-      if (p.arrivalTime) {
-        markers.push({
-          id: `${p.id}-arr`,
-          employeeId: p.employeeId,
-          employeeName: empName,
-          avatarUrl: avatar,
-          date: p.date,
-          time: p.arrivalTime,
-          type: 'arrival',
-          label: 'Arrivée',
-          locationName: p.location || 'Bureau',
-          lat: p.latitude,
-          lng: p.longitude,
-        });
-      }
-      if (p.departureTime) {
-        markers.push({
-          id: `${p.id}-dep`,
-          employeeId: p.employeeId,
-          employeeName: empName,
-          avatarUrl: avatar,
-          date: p.date,
-          time: p.departureTime,
-          type: 'departure',
-          label: 'Départ',
-          locationName: p.location || 'Bureau',
-          lat: p.latitude + 0.0002, // slight offset for visibility if identical
-          lng: p.longitude + 0.0002,
-        });
-      }
+    const lat = (typeof p.latitude === 'number' && p.latitude !== 0) ? p.latitude : (4.0511 + (idx * 0.001));
+    const lng = (typeof p.longitude === 'number' && p.longitude !== 0) ? p.longitude : (9.7679 + (idx * 0.001));
+
+    if (p.arrivalTime) {
+      markers.push({
+        id: `${p.id}-arr`,
+        employeeId: p.employeeId,
+        employeeName: empName,
+        avatarUrl: avatar,
+        date: p.date,
+        time: p.arrivalTime,
+        type: 'arrival',
+        label: 'Arrivée',
+        locationName: p.location || 'Bureau',
+        lat,
+        lng,
+      });
+    }
+    if (p.departureTime) {
+      markers.push({
+        id: `${p.id}-dep`,
+        employeeId: p.employeeId,
+        employeeName: empName,
+        avatarUrl: avatar,
+        date: p.date,
+        time: p.departureTime,
+        type: 'departure',
+        label: 'Départ',
+        locationName: p.location || 'Bureau',
+        lat: lat + 0.0002,
+        lng: lng + 0.0002,
+      });
     }
   });
 

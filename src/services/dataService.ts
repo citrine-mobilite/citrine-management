@@ -229,24 +229,14 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
     }
   }
 
-  // 1. Toujours mettre à jour le cache local IndexedDB immédiatement (0ms de latence)
+  // 1. Toujours mettre à jour le cache local IndexedDB immédiatement
   await offlineService.cacheLocally(collectionName, cleanedItem);
 
-  // 2. Persister sur le serveur d'application (/api/data/:collection) -> garanti écrit sur disque
-  cloudSqlService.saveDocument(collectionName, cleanedItem).catch((err) => {
-    console.warn(`[Server API Save Notice for ${collectionName}:${item.id}]:`, err.message);
-  });
-
-  // 3. Envoyer à Supabase
-  Promise.race([
-    supabaseService.saveDocument(collectionName, cleanedItem),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase timeout')), 3000))
-  ]).catch((err) => {
-    console.warn(`[Supabase Async Save Notice for ${collectionName}:${item.id}]:`, err.message);
-    if (err.message?.toLowerCase().includes('permission denied')) {
-      lastDbStatus.hasPermissionError = true;
-    }
-  });
+  // 2. Persister sur le serveur d'application et Supabase de manière atomique
+  await Promise.all([
+    cloudSqlService.saveDocument(collectionName, cleanedItem),
+    supabaseService.saveDocument(collectionName, cleanedItem)
+  ]);
 
   return cleanedItem;
 }
