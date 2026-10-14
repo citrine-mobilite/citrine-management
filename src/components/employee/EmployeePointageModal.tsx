@@ -188,10 +188,10 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
     let locationLabel = officialSiteName;
 
     try {
-      // Acquisition de la VRAIE position GPS (max 5 secondes)
+      // Acquisition de la position GPS (max 15 secondes, sans aucune position de secours si indisponible)
       const locPromise = getCurrentUserLocation();
       const timeoutPromise = new Promise<{ latitude: number; longitude: number; zoneName?: string } | null>((resolve) => {
-        setTimeout(() => resolve(null), 5000); // 5 secondes max
+        setTimeout(() => resolve(null), 15000);
       });
 
       const locResult = await Promise.race([locPromise, timeoutPromise]);
@@ -202,16 +202,14 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
           ? `${officialSiteName} • ${locResult.zoneName}` 
           : `${officialSiteName} (GPS certifié)`;
       } else {
-        setIsCapturingGps(false);
-        setIsProcessingDetection(false);
-        setActionError("⏳ Délai GPS dépassé (5 secondes). Impossible d'enregistrer le badge sans position GPS réelle. Veuillez réessayer.");
-        return;
+        capturedLat = undefined;
+        capturedLng = undefined;
+        locationLabel = `${officialSiteName} (Pointage sans GPS)`;
       }
-    } catch (gpsErr: any) {
-      setIsCapturingGps(false);
-      setIsProcessingDetection(false);
-      setActionError(gpsErr?.message || "❌ Impossible d'acquérir votre position GPS. Le badgeage a été annulé.");
-      return;
+    } catch {
+      capturedLat = undefined;
+      capturedLng = undefined;
+      locationLabel = `${officialSiteName} (Pointage sans GPS)`;
     } finally {
       setIsCapturingGps(false);
     }
