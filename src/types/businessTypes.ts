@@ -4,6 +4,7 @@ export interface NotificationLog {
   recipient: string;
   title: string;
   content: string;
+  message?: string;
   payload: string;
   timestamp: string;
   read?: boolean;

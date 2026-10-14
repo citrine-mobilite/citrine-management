@@ -428,7 +428,7 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
       return {
         ...base,
         title: item.title || 'Notification',
-        message: item.message || item.content || 'Notification système',
+        message: item.message || item.content || item.description || item.payload || item.title || 'Notification système',
         type: item.type || 'system',
         target_user_id: (typeof item.targetUserId === 'number' || (typeof item.targetUserId === 'string' && /^\d+$/.test(item.targetUserId))) ? Number(item.targetUserId) : null,
         is_read: Boolean(item.isRead || item.read),
@@ -719,6 +719,23 @@ function supabaseRowToItem(collectionName: string, row: any): any {
       reminderPeriod: raw.reminderPeriod || 'none',
       createdAt: row.created_at || raw.createdAt,
       updatedAt: row.updated_at || raw.updatedAt,
+    };
+  }
+
+  if (table === 'notifications') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    const textMsg = row.message || raw.message || raw.content || raw.description || raw.title || 'Notification système';
+    return {
+      ...raw,
+      id: raw.id || row.doc_id || String(row.id),
+      uid: row.uid || raw.uid,
+      _dbId: row.id,
+      title: row.title || raw.title || 'Notification',
+      message: textMsg,
+      content: raw.content || textMsg,
+      type: row.type || raw.type || 'system',
+      read: Boolean(row.is_read ?? raw.read ?? false),
+      timestamp: row.created_at || raw.timestamp || new Date().toISOString(),
     };
   }
 

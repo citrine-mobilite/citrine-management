@@ -68,9 +68,13 @@ export async function getCollectionData(collectionName: string): Promise<any[]> 
 
     return (data || []).map((row: any) => {
       const raw = row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : row;
+      const content = raw.content || row.message || raw.message || raw.description || raw.title || 'Notification';
+      const message = row.message || raw.message || raw.content || raw.description || raw.title || 'Notification';
       return {
         ...raw,
         ...row,
+        content,
+        message,
         id: row.doc_id || row.id || raw.id,
         _dbId: row.id,
       };
@@ -127,8 +131,48 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
     if (item.type !== undefined) rowData.type = item.type;
     if (item.priority !== undefined) rowData.priority = item.priority;
     if (item.department !== undefined) rowData.department = item.department;
+    if (item.message !== undefined && item.message !== null) {
+      rowData.message = String(item.message);
+    } else if (item.content !== undefined && item.content !== null) {
+      rowData.message = String(item.content);
+    }
 
-    if (table === 'presences') {
+    if (table === 'notifications') {
+      rowData.title = item.title || 'Notification';
+      rowData.message = item.message || item.content || item.description || item.payload || item.title || 'Notification système';
+      rowData.type = item.type || 'system';
+      rowData.is_read = Boolean(item.isRead ?? item.read ?? false);
+      if (item.targetUserId) {
+        if (typeof item.targetUserId === 'number') {
+          rowData.target_user_id = item.targetUserId;
+        } else if (typeof item.targetUserId === 'string' && /^\d+$/.test(item.targetUserId)) {
+          rowData.target_user_id = Number(item.targetUserId);
+        }
+      }
+      if (item.targetUserIds) {
+        rowData.target_user_ids = item.targetUserIds;
+      }
+      if (item.targetEmployeeIds) {
+        rowData.target_employee_ids = item.targetEmployeeIds;
+      }
+    } else if (table === 'tasks') {
+      rowData.title = item.title || 'Tâche';
+      rowData.status = item.status || 'todo';
+      rowData.priority = item.priority || 'medium';
+    } else if (table === 'reminders') {
+      rowData.title = item.title || 'Rappel';
+    } else if (table === 'departments') {
+      rowData.name = item.name || 'Département';
+    } else if (table === 'inventory') {
+      rowData.name = item.name || item.designation || 'Matériel';
+    } else if (table === 'documents') {
+      rowData.title = item.title || 'Document';
+    } else if (table === 'users') {
+      rowData.name = item.name || item.email || 'Utilisateur';
+      if (item.email) rowData.email = String(item.email).trim().toLowerCase();
+    } else if (table === 'employees') {
+      rowData.name = item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || 'Collaborateur';
+    } else if (table === 'presences') {
       rowData.employee_name = item.employeeName || null;
       rowData.date = item.date || null;
       rowData.arrival_time = item.arrivalTime || null;

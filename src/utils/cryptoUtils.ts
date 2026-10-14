@@ -129,18 +129,29 @@ export async function verifyPassword(
  * Génère une signature d'intégrité de session pour empêcher la modification arbitraire
  * du rôle ou de l'ID utilisateur dans le localStorage.
  */
-export async function createSessionChecksum(userId: string, role: string, email: string): Promise<string> {
-  const payload = `${userId}:${role}:${email}:citrine-salt-2026`;
+export async function createSessionChecksum(userId: string | number, role: string, email: string): Promise<string> {
+  const normId = String(userId || '').trim();
+  const normRole = String(role || '').trim().toLowerCase();
+  const normEmail = String(email || '').trim().toLowerCase();
+  const payload = `${normId}:${normRole}:${normEmail}:citrine-salt-2026`;
   const encoder = new TextEncoder();
   const data = encoder.encode(payload);
   const hashBuffer = await getCrypto().subtle.digest('SHA-256', data);
   return bytesToHex(new Uint8Array(hashBuffer));
 }
 
-export async function verifySessionChecksum(userId: string, role: string, email: string, signature: string): Promise<boolean> {
+export async function verifySessionChecksum(userId: string | number, role: string, email: string, signature: string): Promise<boolean> {
   if (!signature) return false;
   const expected = await createSessionChecksum(userId, role, email);
-  return expected === signature;
+  if (expected === signature) return true;
+  // Also check non-lowercased role fallback for backward-compatibility:
+  try {
+    const rawPayload = `${String(userId).trim()}:${String(role).trim()}:${String(email).trim()}:citrine-salt-2026`;
+    const encoder = new TextEncoder();
+    const hashBuffer = await getCrypto().subtle.digest('SHA-256', encoder.encode(rawPayload));
+    if (bytesToHex(new Uint8Array(hashBuffer)) === signature) return true;
+  } catch {}
+  return false;
 }
 
 function bytesToHex(bytes: Uint8Array): string {

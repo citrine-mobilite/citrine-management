@@ -19,7 +19,8 @@ import {
 } from './types';
 import { ToastMessage } from './components/Toast';
 import { useAppInitialData } from './hooks/useAppInitialData';
-import { loadSecureSession, storeSecureSession, clearSecureSession } from './services/sessionService';
+import { loadSecureSession, storeSecureSession, clearSecureSession, canAccessTab } from './services/sessionService';
+import { safeStorage } from './utils/safeStorage';
 import { subscribeToUsers } from './services/userService';
 import { getDefaultPortalForUser, isEmployeeUser, isEmployeeOnlyRole } from './utils/roleUtils';
 import Sidebar, { TabType } from './components/Sidebar';
@@ -41,7 +42,11 @@ export default function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // Navigation & UI States
-  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [activeTab, setActiveTabState] = useState<TabType>(() => (safeStorage.getItem('citrine_active_tab') as TabType) || 'dashboard');
+  const setActiveTab = (tab: TabType) => {
+    setActiveTabState(tab);
+    safeStorage.setItem('citrine_active_tab', tab);
+  };
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -141,7 +146,13 @@ export default function App() {
       if (user && user.email) {
         // Restaurer immédiatement l'utilisateur depuis la session locale sécurisée pour éviter toute déconnexion au rafraîchissement
         setCurrentUser(user);
-        setActiveTab(getDefaultPortalForUser(user) as TabType);
+        const savedTab = safeStorage.getItem('citrine_active_tab') as TabType;
+        const defaultTab = getDefaultPortalForUser(user) as TabType;
+        if (savedTab && canAccessTab(user.role, savedTab)) {
+          setActiveTabState(savedTab);
+        } else {
+          setActiveTabState(defaultTab);
+        }
 
         // Vérification en arrière-plan non bloquante en base de données
         try {
@@ -152,6 +163,7 @@ export default function App() {
             await storeSecureSession(dbUser);
           } else if (dbUser && dbUser.status !== 'actif') {
             clearSecureSession();
+            safeStorage.removeItem('citrine_active_tab');
             setCurrentUser(null);
           }
         } catch (err) {
@@ -189,12 +201,14 @@ export default function App() {
   const handleLoginSuccess = async (user: AppUser) => {
     setCurrentUser(user);
     await storeSecureSession(user);
-    setActiveTab(getDefaultPortalForUser(user) as TabType);
+    const defaultTab = getDefaultPortalForUser(user) as TabType;
+    setActiveTab(defaultTab);
     showToast(`Bienvenue, ${user.name} !`);
   };
 
   const handleLogout = () => {
     clearSecureSession();
+    safeStorage.removeItem('citrine_active_tab');
     setCurrentUser(null);
     setProfileModalOpen(false);
     showToast('Vous avez été déconnecté.');

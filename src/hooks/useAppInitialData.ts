@@ -519,12 +519,14 @@ export function useAppInitialData() {
   };
 
   const handleAddNotification = async (notif: any) => {
+    const text = notif.content || notif.message || notif.title || 'Notification';
     const n: NotificationLog = {
       id: notif.id || `notif-${Date.now()}`,
       type: notif.type || 'system',
       recipient: notif.recipient || 'Général',
       title: notif.title || 'Notification',
-      content: notif.content || '',
+      content: text,
+      message: text,
       payload: notif.payload || '',
       timestamp: notif.timestamp || new Date().toISOString(),
     };

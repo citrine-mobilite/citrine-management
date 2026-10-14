@@ -205,9 +205,22 @@ export async function getCollection<T>(collectionName: string): Promise<T[]> {
   }
 }
 
-// Save or update item with instant cache, server persistence and Supabase backend
 export async function saveDocument<T extends { id: string }>(collectionName: string, item: T): Promise<T> {
-  const cleanedItem = removeUndefined(item);
+  const cleanedItem: any = removeUndefined(item);
+
+  // Garantir que pour les notifications, message et content sont toujours définis et non-nuls
+  if (collectionName === 'notifications' || collectionName === COLLECTIONS.NOTIFICATIONS) {
+    const fallbackText = cleanedItem.content || cleanedItem.message || cleanedItem.description || cleanedItem.title || 'Notification système';
+    if (!cleanedItem.message) {
+      cleanedItem.message = fallbackText;
+    }
+    if (!cleanedItem.content) {
+      cleanedItem.content = fallbackText;
+    }
+    if (!cleanedItem.title) {
+      cleanedItem.title = 'Notification';
+    }
+  }
 
   // 1. Toujours mettre à jour le cache local IndexedDB immédiatement (0ms de latence)
   await offlineService.cacheLocally(collectionName, cleanedItem);
