@@ -53,19 +53,10 @@ export default function DocumentGeneratorPanel({
   const [isResettingTemplates, setIsResettingTemplates] = useState(false);
 
   // Commutateur de vue : Cards (Grille) vs DataTable (Tableau)
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
-    try {
-      const saved = localStorage.getItem('citrine_documents_view_mode');
-      if (saved === 'grid' || saved === 'table') return saved;
-    } catch {}
-    return 'table'; // Vue DataTable par défaut pour une ergonomie optimale
-  });
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
 
   const handleToggleViewMode = (mode: 'grid' | 'table') => {
     setViewMode(mode);
-    try {
-      localStorage.setItem('citrine_documents_view_mode', mode);
-    } catch {}
   };
 
   // Synchronisation des modèles de documents RH depuis la base Firestore

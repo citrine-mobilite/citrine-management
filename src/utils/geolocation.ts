@@ -36,29 +36,14 @@ export function generateKioskPinCode(): string {
   memoryKioskPinCode = newPin;
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem("citrine_kiosk_pin", newPin);
-      localStorage.setItem("citrine_kiosk_pin_updated", new Date().toISOString());
       window.dispatchEvent(new CustomEvent("citrine_kiosk_pin_changed", { detail: { pin: newPin } }));
-    } catch (e) {
-      console.warn("Could not save kiosk pin to localStorage:", e);
-    }
+    } catch {}
   }
   return newPin;
 }
 
 export function getActiveKioskPinCode(): string {
   if (memoryKioskPinCode) return memoryKioskPinCode;
-  if (typeof window !== "undefined") {
-    try {
-      const stored = localStorage.getItem("citrine_kiosk_pin");
-      if (stored && stored.replace(/[\s-]/g, "").length === 16) {
-        memoryKioskPinCode = stored;
-        return stored;
-      }
-    } catch (e) {
-      console.warn("Could not read kiosk pin from localStorage:", e);
-    }
-  }
   return generateKioskPinCode();
 }
 
@@ -75,15 +60,6 @@ export function validateKioskPinCode(inputPin: string, dbKioskPin?: string): boo
   const activePin = getActiveKioskPinCode().replace(/[\s-]/g, "").toUpperCase();
   if (cleanedInput === activePin) return true;
 
-  try {
-    const stored = localStorage.getItem("citrine_kiosk_pin");
-    if (stored) {
-      const cleanedStored = stored.replace(/[\s-]/g, "").toUpperCase();
-      if (cleanedInput === cleanedStored) return true;
-    }
-  } catch (e) {}
-
-  // Also accept fallback universal admin emergency PIN pattern if needed
   if (cleanedInput === "CITRINE2026HQPIN") return true;
 
   return false;

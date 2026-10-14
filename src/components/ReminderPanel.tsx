@@ -35,6 +35,8 @@ export default function ReminderPanel({
   onUpdateReminders,
   currentTime,
   employees = [],
+  currentRole = 'admin',
+  connectedEmployee = null,
   showToast,
 }: ReminderPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -365,6 +367,8 @@ export default function ReminderPanel({
         onSaveReminder={handleSaveReminder}
         initialReminder={editingReminder}
         employees={employees}
+        isEmployee={currentRole === 'employé'}
+        currentEmployee={connectedEmployee}
       />
     </div>
   );

@@ -17,8 +17,6 @@ export interface DisciplinaryReason {
   updatedAt?: string;
 }
 
-const LOCAL_STORAGE_KEY = 'citrine_disciplinary_reasons';
-
 export const INITIAL_DISCIPLINARY_REASONS: DisciplinaryReason[] = [
   {
     id: 'reason-1',
@@ -129,15 +127,6 @@ export const INITIAL_DISCIPLINARY_REASONS: DisciplinaryReason[] = [
 
 class DisciplinaryReasonsService {
   getAllReasons(): DisciplinaryReason[] {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch {
-      // fallback
-    }
-    this.saveReasons(INITIAL_DISCIPLINARY_REASONS);
     return INITIAL_DISCIPLINARY_REASONS;
   }
 
@@ -151,59 +140,40 @@ class DisciplinaryReasonsService {
   }
 
   saveReasons(reasons: DisciplinaryReason[]): void {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(reasons));
-    } catch {
-      // ignore
-    }
+    // No-op (database authority)
   }
 
-  addCustomReason(label: string, category: DisciplinaryCategory = 'commun'): DisciplinaryReason {
-    const reasons = this.getAllReasons();
-    const existing = reasons.find((r) => r.label.toLowerCase() === label.trim().toLowerCase());
-    if (existing) {
-      if (!existing.isActive) {
-        existing.isActive = true;
-        this.saveReasons(reasons);
-      }
-      return existing;
-    }
-
+  addCustomReason(label: string, category: DisciplinaryCategory): DisciplinaryReason {
     const newReason: DisciplinaryReason = {
       id: `reason-${Date.now()}`,
-      label: label.trim(),
+      label,
       category,
       isActive: true,
       isCustom: true,
       createdAt: new Date().toISOString(),
     };
-
-    const updated = [newReason, ...reasons];
-    this.saveReasons(updated);
+    INITIAL_DISCIPLINARY_REASONS.push(newReason);
     return newReason;
   }
 
-  updateReason(id: string, updates: Partial<Omit<DisciplinaryReason, 'id'>>): DisciplinaryReason[] {
-    const reasons = this.getAllReasons();
-    const updated = reasons.map((r) =>
-      r.id === id ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
-    );
-    this.saveReasons(updated);
-    return updated;
+  toggleReasonActive(id: string): DisciplinaryReason[] {
+    const r = INITIAL_DISCIPLINARY_REASONS.find(item => item.id === id);
+    if (r) r.isActive = !r.isActive;
+    return [...INITIAL_DISCIPLINARY_REASONS];
   }
 
-  toggleReasonActive(id: string): DisciplinaryReason[] {
-    const reasons = this.getAllReasons();
-    const updated = reasons.map((r) => (r.id === id ? { ...r, isActive: !r.isActive } : r));
-    this.saveReasons(updated);
-    return updated;
+  updateReason(id: string, updates: Partial<DisciplinaryReason>): DisciplinaryReason[] {
+    const r = INITIAL_DISCIPLINARY_REASONS.find(item => item.id === id);
+    if (r) {
+      Object.assign(r, updates, { updatedAt: new Date().toISOString() });
+    }
+    return [...INITIAL_DISCIPLINARY_REASONS];
   }
 
   deleteReason(id: string): DisciplinaryReason[] {
-    const reasons = this.getAllReasons();
-    const updated = reasons.filter((r) => r.id !== id);
-    this.saveReasons(updated);
-    return updated;
+    const idx = INITIAL_DISCIPLINARY_REASONS.findIndex(item => item.id === id);
+    if (idx >= 0) INITIAL_DISCIPLINARY_REASONS.splice(idx, 1);
+    return [...INITIAL_DISCIPLINARY_REASONS];
   }
 }
 

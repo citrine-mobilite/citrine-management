@@ -1,11 +1,8 @@
-// Device fingerprinting & anti-fraud utility for QR code clocking
+// Device fingerprinting & anti-fraud utility for QR code clocking (Zero LocalStorage)
+let memoryDeviceId = `dev-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
 export function getOrCreateDeviceId(): string {
-  let deviceId = localStorage.getItem('processflow_device_id');
-  if (!deviceId) {
-    deviceId = `dev-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    localStorage.setItem('processflow_device_id', deviceId);
-  }
-  return deviceId;
+  return memoryDeviceId;
 }
 
 export function checkForAntiFraudViolation(
@@ -14,7 +11,6 @@ export function checkForAntiFraudViolation(
   todayStr: string,
   deviceId: string
 ): { isFraud: boolean; previousEmpName?: string } {
-  // Find if another employee used this exact device ID today
   const existingRecordForOtherEmp = presences.find(
     (p) =>
       p.date === todayStr &&

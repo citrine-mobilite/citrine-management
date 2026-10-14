@@ -11,7 +11,8 @@ import {
   NotificationLog,
   CompanyModuleConfig,
   AttendanceIncident,
-  LeaveRequest 
+  LeaveRequest,
+  Reminder 
 } from '../types';
 import OfficeQRCodeModal from './OfficeQRCodeModal';
 import RhReportModal from './RhReportModal';
@@ -54,6 +55,8 @@ interface EmployeePortalProps {
   onAddAttendanceIncident?: (incident: AttendanceIncident) => void;
   notifications?: NotificationLog[];
   onUpdateNotifications?: (logs: NotificationLog[]) => void;
+  reminders?: Reminder[];
+  onUpdateReminders?: (updated: Reminder[]) => void;
   leaveRequests?: LeaveRequest[];
   initialSubTab?: string;
   onUpdateUser?: (updated: AppUser) => void;
@@ -245,6 +248,8 @@ export default function EmployeePortal(props: EmployeePortalProps) {
           incidents={props.attendanceIncidents || []}
           notifications={props.notifications || []}
           presences={props.presences || []}
+          reminders={props.reminders || []}
+          onUpdateReminders={props.onUpdateReminders}
           onAddNotification={onAddNotification}
           onUpdateNotifications={props.onUpdateNotifications}
         />

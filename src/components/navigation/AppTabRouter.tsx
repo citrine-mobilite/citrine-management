@@ -135,6 +135,8 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           salaryPayments={salaryPayments} financialTransactions={financialTransactions}
           salaryDebts={salaryDebts} onUpdatePresences={onUpdatePresences} onUpdateTasks={onUpdateTasks}
           onAddNotification={onAddNotification} currentTime={currentTime}
+          reminders={reminders}
+          onUpdateReminders={onUpdateReminders}
           notifications={notifications}
           onUpdateNotifications={onUpdateNotifications}
           onOpenProfileModal={onOpenProfileModal} moduleConfig={moduleConfig}

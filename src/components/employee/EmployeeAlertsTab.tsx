@@ -22,9 +22,10 @@ import {
   EyeOff,
   Trash2
 } from 'lucide-react';
-import { Employee, AppUser, Task, AttendanceIncident, NotificationLog, Presence } from '../../types';
+import { Employee, AppUser, Task, AttendanceIncident, NotificationLog, Presence, Reminder } from '../../types';
 import { soundService } from '../../services/soundService';
 import { AlertCreateModal } from './AlertCreateModal';
+import { saveDocument, deleteDocument, COLLECTIONS } from '../../services/dataService';
 
 interface EmployeeAlertsTabProps {
   employeeProfile: Employee;
@@ -35,6 +36,8 @@ interface EmployeeAlertsTabProps {
   incidents: AttendanceIncident[];
   notifications?: NotificationLog[];
   presences?: Presence[];
+  reminders?: Reminder[];
+  onUpdateReminders?: (reminders: Reminder[]) => void;
   onAddNotification?: (log: NotificationLog) => void;
   onUpdateNotifications?: (logs: NotificationLog[]) => void;
   onAlertsReadChange?: (unreadCount: number) => void;
@@ -81,6 +84,8 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
   incidents,
   notifications = [],
   presences = [],
+  reminders = [],
+  onUpdateReminders,
   onAddNotification,
   onUpdateNotifications,
   onAlertsReadChange,
@@ -92,43 +97,14 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
   const [isRinging, setIsRinging] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedAlertModal, setSelectedAlertModal] = useState<PersonalAlert | null>(null);
-  
-  // Form fields
-  const [newTitle, setNewTitle] = useState('');
-  const [newMessage, setNewMessage] = useState('');
-  const [newType, setNewType] = useState<'urgent' | 'warning' | 'info'>('warning');
 
   // Persistent Set of read alert IDs
-  const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_READ_ALERTS);
-      return saved ? new Set(JSON.parse(saved)) : new Set<string>();
-    } catch {
-      return new Set<string>();
-    }
-  });
-
-  // Custom user-created alerts persisted in localStorage
-  const [userCreatedAlerts, setUserCreatedAlerts] = useState<PersonalAlert[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_CUSTOM_ALERTS);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => new Set<string>());
 
   // Deleted alerts IDs blacklist
-  const [deletedAlertIds, setDeletedAlertIds] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('citrine_deleted_alerts_ids');
-      return saved ? new Set(JSON.parse(saved)) : new Set<string>();
-    } catch {
-      return new Set<string>();
-    }
-  });
+  const [deletedAlertIds, setDeletedAlertIds] = useState<Set<string>>(() => new Set<string>());
 
-  // Employee identification matching (includes broadcast or personal notifications)
+  // Employee identification matching (strictly matches this employee profile or current user)
   const isEmployeeMatch = (val?: string | null): boolean => {
     if (!val) return true;
     const clean = String(val).trim().toLowerCase();
@@ -154,12 +130,45 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
     return myIds.includes(clean) || myNames.includes(clean) || myEmails.includes(clean);
   };
 
-  // Build the unified list of alerts from notifications, presences, tasks, incidents, and custom items
+  // Build the list of alerts strictly from real database items (Reminders and Notifications)
   const allAlerts: PersonalAlert[] = useMemo(() => {
     const list: PersonalAlert[] = [];
     const seenIds = new Set<string>();
 
-    // 1. PERSISTED NOTIFICATION LOGS (Strictly filtered for this employee)
+    // 1. RAPPELS & ALERTES PROGRAMMÉES (Table reminders en Base de Données)
+    reminders.forEach((r) => {
+      const isForMe = r.allEmployees ||
+        (r.employeeId && isEmployeeMatch(r.employeeId)) ||
+        (r.employeeIds && r.employeeIds.some(id => isEmployeeMatch(id)));
+
+      if (!isForMe) return;
+      if (deletedAlertIds.has(r.id) || seenIds.has(r.id)) return;
+      seenIds.add(r.id);
+
+      const periodsLabels: Record<string, string> = {
+        exact: "À l'heure exacte",
+        '5m': '5 min avant',
+        '15m': '15 min avant',
+        '30m': '30 min avant',
+        '1h': '1h avant',
+      };
+      const periodsText = r.triggerPeriods && r.triggerPeriods.length > 0
+        ? r.triggerPeriods.map(p => periodsLabels[p] || p).join(', ')
+        : "À l'heure exacte";
+
+      list.push({
+        id: r.id,
+        title: r.title || 'Alerte Programmée',
+        message: `${r.note || 'Alerte'}${r.date && r.time ? ` • Prévue le ${r.date} à ${r.time}` : ''} • Périodes: ${periodsText}`,
+        type: 'warning',
+        timestamp: r.date && r.time ? `${r.date} ${r.time}` : (r.createdAt ? r.createdAt.slice(0, 10) : 'Programmé'),
+        read: readAlertIds.has(r.id) || !!r.stopped,
+        actionUrl: '#employee/alerts',
+        category: 'Alerte',
+      });
+    });
+
+    // 2. NOTIFICATIONS SYSTÈME PERSISTÉES (Table notifications en Base de Données)
     notifications.forEach((notif) => {
       let isForMe = isEmployeeMatch(notif.recipient);
 
@@ -177,7 +186,6 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
         } catch {}
       }
 
-      // If this notification is addressed to someone else, do NOT display it to this employee!
       if (!isForMe) return;
 
       if (!deletedAlertIds.has(notif.id) && !seenIds.has(notif.id)) {
@@ -193,7 +201,6 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
         if (
           payloadObj?.source === 'pointage' || 
           payloadObj?.source === 'kiosk' || 
-          payloadObj?.source === 'admin_on_behalf' ||
           titleLower.includes('pointage')
         ) {
           cat = 'Pointage';
@@ -208,17 +215,6 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
           cat = 'Tâche';
           actionUrl = '#employee/tasks';
           alertType = titleLower.includes('urgent') || contentLower.includes('haute') ? 'urgent' : 'task';
-        } else if (
-          payloadObj?.source === 'attendance_incident' || 
-          payloadObj?.source === 'incident_auto' || 
-          payloadObj?.source === 'incident_declaration' || 
-          payloadObj?.source === 'incident_manual' ||
-          titleLower.includes('signalement') || 
-          titleLower.includes('incident')
-        ) {
-          cat = 'Pointage';
-          actionUrl = '#employee/incidents';
-          alertType = 'incident';
         } else if (
           payloadObj?.source === 'leave_decision' || 
           payloadObj?.source === 'leave_request' || 
@@ -244,95 +240,8 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
       }
     });
 
-    // 2. ATTENDANCE INCIDENTS (Uniquement si aucun log de notification n'a déjà couvert cet incident)
-    incidents
-      .filter((inc) => isEmployeeMatch(inc.employeeId) || isEmployeeMatch(inc.employeeName))
-      .forEach((inc) => {
-        // Vérifier si un log de notification pour cet incident existe déjà dans la liste
-        const alreadyCoveredInNotifs = list.some((item) => {
-          return item.id.includes(inc.id) || 
-            (item.message && item.message.includes(inc.id)) ||
-            (inc.date && item.message && item.message.includes(inc.date) && item.category === 'Pointage');
-        });
-
-        if (alreadyCoveredInNotifs) return;
-
-        const id = `inc-alert-${inc.id}`;
-        if (!deletedAlertIds.has(id) && !seenIds.has(id)) {
-          seenIds.add(id);
-          const typeLabel = 
-            inc.type === 'retard' ? 'Retard constaté' :
-            inc.type === 'sortie_prematuree' || inc.type === 'depart_anticipe' ? 'Sortie prématurée' :
-            (inc.type as string) === 'absence_injustifiee' ? 'Absence constatée' :
-            'Signalement RH';
-
-          list.push({
-            id,
-            title: `Signalement RH : ${typeLabel}`,
-            message: `${inc.reason || 'Anomalie de présence consignée'}. Statut : ${inc.status || 'Enregistré'}.`,
-            type: 'incident',
-            timestamp: inc.timeString ? `${inc.date || ''} ${inc.timeString}` : (inc.date || 'Récent'),
-            read: readAlertIds.has(id),
-            actionUrl: '#employee/incidents',
-            category: 'Pointage',
-          });
-        }
-      });
-
-    // 3. TÂCHES ASSIGNÉES (Uniquement si pas déjà notifiée dans les notifications système)
-    tasks
-      .filter((t) => isEmployeeMatch(t.assignedTo) || isEmployeeMatch(t.employeeId))
-      .forEach((t) => {
-        const alreadyCoveredInNotifs = list.some((item) => {
-          return item.id.includes(t.id) || (item.title && item.title.includes(t.title));
-        });
-
-        if (alreadyCoveredInNotifs) return;
-
-        const id = `task-alert-${t.id}`;
-        if (!deletedAlertIds.has(id) && !seenIds.has(id)) {
-          seenIds.add(id);
-          const isUrgent = t.priority === 'urgent' || t.priority === 'high';
-          const statusText = t.status === 'completed' ? 'Terminée ✓' : t.status === 'in_progress' ? 'En cours' : 'À faire';
-          list.push({
-            id,
-            title: `Tâche [${statusText}] : ${t.title}`,
-            message: `Échéance : ${t.date || 'Non définie'} ${t.time || ''}. ${t.description || 'Suivi et mouvement de tâche.'}`,
-            type: isUrgent ? 'urgent' : 'task',
-            timestamp: t.time || (t.date || 'Aujourd\'hui'),
-            read: readAlertIds.has(id),
-            actionUrl: '#employee/tasks',
-            category: 'Tâche',
-          });
-        }
-      });
-
-    // 5. Notes & Alertes personnelles créées par l'employé
-    userCreatedAlerts.forEach((a) => {
-      if (!deletedAlertIds.has(a.id) && !seenIds.has(a.id)) {
-        seenIds.add(a.id);
-        list.push({
-          ...a,
-          read: readAlertIds.has(a.id),
-        });
-      }
-    });
-
-    // 6. Message d'accueil par défaut si aucune alerte n'existe
-    if (list.length === 0) {
-      list.push({
-        id: 'system-welcome-1',
-        title: 'Bienvenue dans votre Espace Collaborateur',
-        message: 'Vos alertes de pointage, mouvements de tâches et signalements apparaîtront ici dès leur survenue.',
-        type: 'info',
-        timestamp: 'En service',
-        read: true,
-        category: 'Alerte',
-      });
-    }
-
     return list;
-  }, [notifications, incidents, tasks, presences, employeeProfile, currentUser, userCreatedAlerts, readAlertIds, deletedAlertIds]);
+  }, [reminders, notifications, employeeProfile, currentUser, readAlertIds, deletedAlertIds]);
 
   // Compute unread count
   const unreadCount = useMemo(() => {
@@ -349,12 +258,8 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
     }
   }, [unreadCount, onAlertsReadChange]);
 
-  // Save read alert IDs to localStorage
   const saveReadIds = (newSet: Set<string>) => {
     setReadAlertIds(newSet);
-    try {
-      localStorage.setItem(STORAGE_KEY_READ_ALERTS, JSON.stringify(Array.from(newSet)));
-    } catch {}
   };
 
   // Helper to add all variant presence IDs so all listeners stay in sync
@@ -446,46 +351,81 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
     }
   };
 
-  // Create alert from AlertCreateModal
-  const handleCreateAlertFromModal = (alertData: {
-    title: string;
-    message: string;
-    type: 'urgent' | 'warning' | 'info';
-    category: 'Alerte' | 'Pointage' | 'Sécurité' | 'Congés';
-  }) => {
-    const nowIso = new Date().toISOString();
-    const alertItem: PersonalAlert = {
-      id: `custom-alert-${Date.now()}`,
-      title: alertData.title,
-      message: alertData.message,
-      type: alertData.type,
-      timestamp: nowIso,
-      read: false,
-      category: alertData.category,
-      actionUrl: '#employee/alerts',
-    };
-    const updated = [alertItem, ...userCreatedAlerts];
-    setUserCreatedAlerts(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY_CUSTOM_ALERTS, JSON.stringify(updated));
-    } catch {}
+  // Delete single alert from database
+  const handleDeleteAlert = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const nextDeleted = new Set<string>(deletedAlertIds);
+    nextDeleted.add(id);
+    setDeletedAlertIds(nextDeleted);
 
-    if (onAddNotification) {
-      onAddNotification({
-        id: alertItem.id,
-        type: 'system',
-        recipient: employeeProfile.email || currentUser?.email || 'Collaborateur',
-        title: alertItem.title,
-        content: alertItem.message,
-        payload: JSON.stringify({ source: 'personal_alert' }),
-        timestamp: nowIso,
-      });
+    // Supprimer de la table reminders en BD
+    if (id.startsWith('rem-') || reminders.some((r) => r.id === id)) {
+      await deleteDocument(COLLECTIONS.REMINDERS, id);
+      if (onUpdateReminders) {
+        onUpdateReminders(reminders.filter((r) => r.id !== id));
+      }
     }
 
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('citrine:push_notification', {
-        detail: { title: alertItem.title, message: alertItem.message, type: alertItem.type, timestamp: nowIso }
-      }));
+    // Supprimer de la table notifications en BD
+    if (notifications.some((n) => n.id === id)) {
+      await deleteDocument(COLLECTIONS.NOTIFICATIONS, id);
+      if (onUpdateNotifications) {
+        onUpdateNotifications(notifications.filter((n) => n.id !== id));
+      }
+    }
+
+    if (selectedAlertModal?.id === id) {
+      setSelectedAlertModal(null);
+    }
+  };
+
+  // Create alert from AlertCreateModal directly persisted in Database
+  const handleCreateAlertFromModal = async (alertData: {
+    title: string;
+    note: string;
+    date: string;
+    time: string;
+    triggerPeriods: string[];
+    employeeId: string;
+  }) => {
+    const targetId = employeeProfile.id || currentUser?.id || alertData.employeeId;
+    const nowIso = new Date().toISOString();
+
+    const newReminderItem: Reminder = {
+      id: `rem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      title: alertData.title.trim(),
+      note: alertData.note.trim(),
+      date: alertData.date,
+      time: alertData.time,
+      triggerPeriods: alertData.triggerPeriods && alertData.triggerPeriods.length > 0 ? alertData.triggerPeriods : ['exact'],
+      triggeredPeriods: [],
+      allEmployees: false,
+      employeeIds: [targetId],
+      employeeId: targetId,
+      stopped: false,
+      createdAt: nowIso,
+    };
+
+    // 1. Sauvegarder dans la table REMINDERS en Base de Données
+    await saveDocument(COLLECTIONS.REMINDERS, newReminderItem);
+    if (onUpdateReminders) {
+      onUpdateReminders([newReminderItem, ...reminders]);
+    }
+
+    // 2. Enregistrer une notification officielle en Base de Données
+    const notifLog: NotificationLog = {
+      id: `notif-rem-${Date.now()}`,
+      type: 'system',
+      recipient: employeeProfile.name || currentUser?.name || 'Moi',
+      title: `Alerte programmée : ${newReminderItem.title}`,
+      content: `${newReminderItem.note} (Date: ${newReminderItem.date} à ${newReminderItem.time})`,
+      timestamp: nowIso,
+      read: false,
+      payload: JSON.stringify({ source: 'personal_alert', reminderId: newReminderItem.id }),
+    };
+    await saveDocument(COLLECTIONS.NOTIFICATIONS, notifLog);
+    if (onAddNotification) {
+      onAddNotification(notifLog);
     }
 
     setShowCreateModal(false);
@@ -864,6 +804,8 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
       <AlertCreateModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
+        employeeProfile={employeeProfile}
+        currentUser={currentUser}
         onCreateAlert={handleCreateAlertFromModal}
       />
 
@@ -908,24 +850,35 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
-              {selectedAlertModal.actionUrl && (
-                <a
-                  href={selectedAlertModal.actionUrl}
-                  onClick={() => setSelectedAlertModal(null)}
-                  className="px-4 py-2 bg-[#2A7B76] hover:bg-[#20615d] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
-                >
-                  <span>Consulter l'élément</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              )}
+            <div className="flex items-center justify-between gap-2 pt-3 border-t border-stone-100">
               <button
                 type="button"
-                onClick={() => setSelectedAlertModal(null)}
-                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                onClick={(e) => handleDeleteAlert(selectedAlertModal.id, e)}
+                className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5"
               >
-                Fermer
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Supprimer</span>
               </button>
+
+              <div className="flex items-center gap-2">
+                {selectedAlertModal.actionUrl && (
+                  <a
+                    href={selectedAlertModal.actionUrl}
+                    onClick={() => setSelectedAlertModal(null)}
+                    className="px-4 py-2 bg-[#2A7B76] hover:bg-[#20615d] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
+                  >
+                    <span>Consulter l'élément</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedAlertModal(null)}
+                  className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
           </div>
         </div>

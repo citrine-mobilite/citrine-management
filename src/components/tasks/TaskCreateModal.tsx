@@ -34,7 +34,6 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   const [projectId, setProjectId] = useState(defaultProjectId !== 'all' ? defaultProjectId : 'general');
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>('medium');
-  const [reminderPeriod, setReminderPeriod] = useState<string>('none');
   const [assignedList, setAssignedList] = useState<string[]>(isEmployee ? [defaultAssigneeName] : ['Équipe']);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState('09:00');
@@ -65,12 +64,12 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
       title: title.trim(),
       description: description.trim(),
       date,
-      time,
+      time: isEmployee ? '' : time,
       priority,
       status,
       assignedTo: finalAssigned,
       projectId: projectId || 'general',
-      reminderPeriod,
+      reminderPeriod: 'none',
     });
 
     onClose();
@@ -90,7 +89,9 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
               <h3 className="font-serif font-bold text-base text-stone-900">
                 Créer une Nouvelle Tâche
               </h3>
-              <p className="text-[11px] text-stone-400">Action opérationnelle rattachée à un projet d'entreprise</p>
+              <p className="text-[11px] text-stone-400">
+                {isEmployee ? "Tâche assignée directement à votre espace personnel" : "Action opérationnelle rattachée à un projet d'entreprise"}
+              </p>
             </div>
           </div>
           <button
@@ -127,26 +128,40 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* Date d'échéance : sur les tâches pas d'heure de rappel ni de période de rappel */}
+          {isEmployee ? (
             <div>
-              <label className="block font-bold text-stone-700 mb-1">Date d'échéance</label>
+              <label className="block font-bold text-stone-700 mb-1">Date d'échéance *</label>
               <input
                 type="date"
+                required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-bold text-stone-800"
               />
             </div>
-            <div>
-              <label className="block font-bold text-stone-700 mb-1">Heure de sonnerie / rappel</label>
-              <input
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-bold text-stone-800"
-              />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">Date d'échéance</label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-bold text-stone-800"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">Heure limite</label>
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-bold text-stone-800"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -178,33 +193,18 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold text-stone-700 mb-1">Priorité</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-bold"
-              >
-                <option value="low">🟢 Basse</option>
-                <option value="medium">🟡 Moyenne</option>
-                <option value="high">🔴 Haute</option>
-              </select>
-            </div>
-            <div>
-              <label className="block font-bold text-stone-700 mb-1">Période de rappel</label>
-              <select
-                value={reminderPeriod}
-                onChange={(e) => setReminderPeriod(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-bold text-stone-800"
-              >
-                <option value="none">Aucun rappel</option>
-                <option value="1h">1 heure avant</option>
-                <option value="1d">1 jour avant</option>
-                <option value="morning">Le matin de l'échéance</option>
-                <option value="every_day">Rappel quotidien</option>
-              </select>
-            </div>
+          {/* Priorité (les tâches ne contiennent pas de période de rappel) */}
+          <div>
+            <label className="block font-bold text-stone-700 mb-1">Priorité</label>
+            <select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as TaskPriority)}
+              className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-bold"
+            >
+              <option value="low">🟢 Basse</option>
+              <option value="medium">🟡 Moyenne</option>
+              <option value="high">🔴 Haute</option>
+            </select>
           </div>
           <div>
             <label className="block font-bold text-stone-700 mb-1">Assigné à</label>

@@ -68,26 +68,11 @@ function setCachedModuleConfig(config: CompanyModuleConfig): void {
   } catch {}
 }
 
+// (Zero localStorage architecture)
+
 export function useAppInitialData() {
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    try {
-      const saved = localStorage.getItem('citrine_employees');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return [];
-  });
-
-  const [presences, setPresences] = useState<Presence[]>(() => {
-    try {
-      const saved = localStorage.getItem('citrine_presences');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [];
-  });
-
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [presences, setPresences] = useState<Presence[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [notifications, setNotifications] = useState<NotificationLog[]>([]);
@@ -96,41 +81,13 @@ export function useAppInitialData() {
   const [salaryDebts, setSalaryDebts] = useState<EmployeeSalaryDebt[]>([]);
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
   const [disciplinaryIncidents, setDisciplinaryIncidents] = useState<DisciplinaryIncident[]>([]);
-  const [attendanceIncidents, setAttendanceIncidents] = useState<AttendanceIncident[]>(() => {
-    try {
-      const saved = localStorage.getItem('citrine_attendance_incidents');
-      if (saved) {
-        const parsed: AttendanceIncident[] = JSON.parse(saved);
-        const unique: AttendanceIncident[] = [];
-        const seen = new Set<string>();
-        parsed.forEach((item) => {
-          const key = `${item.employeeId}_${item.date}_${item.type}_${item.reason?.trim().toLowerCase()}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            unique.push(item);
-          }
-        });
-        return unique;
-      }
-    } catch {}
-    return [];
-  });
+  const [attendanceIncidents, setAttendanceIncidents] = useState<AttendanceIncident[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
-    try {
-      const saved = localStorage.getItem('citrine_leave_requests');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [];
-  });
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
 
-  const [moduleConfig, setModuleConfig] = useState<CompanyModuleConfig>(() => {
-    const cached = getCachedModuleConfig();
-    if (cached) return cached;
-    return DEFAULT_MODULE_CONFIG;
-  });
+  const [moduleConfig, setModuleConfig] = useState<CompanyModuleConfig>(DEFAULT_MODULE_CONFIG);
 
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
   const isInitialNotifLoadDoneRef = useRef(false);
@@ -147,7 +104,7 @@ export function useAppInitialData() {
 
     let currentUser: any = null;
     try {
-      const uStr = localStorage.getItem('citrine_current_user');
+      const uStr = safeStorage.getItem('citrine_current_user');
       if (uStr) currentUser = JSON.parse(uStr);
     } catch {}
 
@@ -192,19 +149,9 @@ export function useAppInitialData() {
   // Subscriptions to Supabase Tables
   useEffect(() => {
     const unsubs = [
-      subscribeToCollection<Employee>(COLLECTIONS.EMPLOYEES, (data) => {
-        setEmployees(data);
-        localStorage.setItem('citrine_employees', JSON.stringify(data));
-      }),
-      subscribeToCollection<Presence>(COLLECTIONS.PRESENCES, (data) => {
-        setPresences(data);
-        localStorage.setItem('citrine_presences', JSON.stringify(data));
-      }),
-      subscribeToCollection<Task>(COLLECTIONS.TASKS, (data) => {
-        const list = data || [];
-        setTasks(list);
-        localStorage.setItem('citrine_tasks', JSON.stringify(list));
-      }),
+      subscribeToCollection<Employee>(COLLECTIONS.EMPLOYEES, setEmployees),
+      subscribeToCollection<Presence>(COLLECTIONS.PRESENCES, setPresences),
+      subscribeToCollection<Task>(COLLECTIONS.TASKS, (data) => setTasks(data || [])),
       subscribeToCollection<Reminder>(COLLECTIONS.REMINDERS, setReminders),
       subscribeToCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS, (data) => {
         if (data) {
@@ -212,9 +159,8 @@ export function useAppInitialData() {
         }
       }),
       subscribeToCollection<LeaveRequest>(COLLECTIONS.LEAVE_REQUESTS, (data) => {
-        const sorted = [...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const sorted = [...(data || [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setLeaveRequests(sorted);
-        localStorage.setItem('citrine_leave_requests', JSON.stringify(sorted));
       }),
       subscribeToCollection<SalaryPayment>(COLLECTIONS.SALARY_PAYMENTS, setSalaryPayments),
       subscribeToCollection<FinancialTransaction>(COLLECTIONS.FINANCIAL_TRANSACTIONS, setFinancialTransactions),
@@ -232,7 +178,6 @@ export function useAppInitialData() {
           }
         });
         setAttendanceIncidents(unique);
-        localStorage.setItem('citrine_attendance_incidents', JSON.stringify(unique));
       }),
       subscribeToCollection<InventoryItem>(COLLECTIONS.INVENTORY, setInventoryItems),
       subscribeToCollection<Partner>(COLLECTIONS.PARTNERS, setPartners),
@@ -246,7 +191,6 @@ export function useAppInitialData() {
             companyLogoBase64: data.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
           };
           setModuleConfig(configWithLogo);
-          setCachedModuleConfig(configWithLogo);
         } else {
           // Premier démarrage : initialisation de l'image de marque officielle en BD
           const initialConfig: CompanyModuleConfig = {
@@ -268,52 +212,17 @@ export function useAppInitialData() {
             setTasks(event.data.tasks);
           } else if (event.data?.type === 'SYNC_NOTIFICATIONS' && Array.isArray(event.data.notifications)) {
             handleIncomingNotifications(event.data.notifications);
-          } else if (event.data?.type === 'NEW_NOTIFICATION' && event.data.notification) {
-            handleIncomingNotifications([event.data.notification, ...notifications]);
           }
         };
       }
     } catch {}
 
-    // Storage event listener for instant multi-tab sync fallback
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'citrine_tasks' && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) setTasks(parsed);
-        } catch {}
-      }
-    };
-    if (typeof window !== 'undefined') {
-      window.addEventListener('storage', handleStorage);
-    }
-
-    // Direct window event listener for action alerts dispatched by dataService
-    const handleWindowAlert = (e: any) => {
-      if (e.detail) {
-        const item = e.detail as NotificationLog;
-        handleIncomingNotifications([item, ...notifications]);
-      }
-    };
-    if (typeof window !== 'undefined') {
-      window.addEventListener('citrine:new_unread_alert', handleWindowAlert);
-    }
-
-    // Fast polling interval (every 5 seconds) to ensure changes are synced across devices even if realtime websocket disconnects
+    // Polling interval strictly on database
     const pollTimer = setInterval(async () => {
       try {
         const freshTasks = await getCollection<Task>(COLLECTIONS.TASKS);
-        if (freshTasks && freshTasks.length > 0) {
-          setTasks((prev) => {
-            if (
-              freshTasks.length !== prev.length ||
-              freshTasks.some((ft, i) => !prev[i] || prev[i].id !== ft.id || prev[i].status !== ft.status || prev[i].assignedTo !== ft.assignedTo)
-            ) {
-              localStorage.setItem('citrine_tasks', JSON.stringify(freshTasks));
-              return freshTasks;
-            }
-            return prev;
-          });
+        if (freshTasks) {
+          setTasks(freshTasks);
         }
 
         const freshNotifs = await getCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS);
@@ -321,24 +230,16 @@ export function useAppInitialData() {
           handleIncomingNotifications(freshNotifs);
         }
       } catch {}
-    }, 5000);
+    }, 6000);
 
     return () => {
       unsubs.forEach((u) => typeof u === 'function' && u());
       if (bc) bc.close();
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('storage', handleStorage);
-        window.removeEventListener('citrine:new_unread_alert', handleWindowAlert);
-      }
       clearInterval(pollTimer);
     };
   }, []);
 
   const handleUpdateEmployees = async (updated: Employee[]) => {
-    try {
-      localStorage.setItem('citrine_employees', JSON.stringify(updated));
-    } catch {}
-
     for (const emp of updated) {
       const existing = employees.find((e) => e.id === emp.id || (e.uid && emp.uid && e.uid === emp.uid));
       if (!existing || JSON.stringify(existing) !== JSON.stringify(emp)) {
@@ -387,11 +288,9 @@ export function useAppInitialData() {
       }
     }
     setPresences(updated);
-    localStorage.setItem('citrine_presences', JSON.stringify(updated));
   };
 
   const handleUpdateTasks = async (updated: Task[]) => {
-    localStorage.setItem('citrine_tasks', JSON.stringify(updated));
     setTasks(updated);
 
     // Broadcast immediately across open tabs/windows
@@ -534,7 +433,6 @@ export function useAppInitialData() {
       }
     }
     setAttendanceIncidents(updated);
-    localStorage.setItem('citrine_attendance_incidents', JSON.stringify(updated));
   };
 
   const handleAddAttendanceIncident = async (incident: AttendanceIncident) => {
@@ -555,11 +453,7 @@ export function useAppInitialData() {
     await saveDocument(COLLECTIONS.ATTENDANCE_INCIDENTS, incident);
     const updated = [incident, ...attendanceIncidents.filter((i) => i.id !== incident.id)];
     setAttendanceIncidents(updated);
-    localStorage.setItem('citrine_attendance_incidents', JSON.stringify(updated));
 
-    // Si l'incident provient d'un pointage automatique (retard ou sortie prématurée),
-    // le module de pointage émet déjà UNE notification exhaustive et claire.
-    // Ne pas en générer une deuxième ici pour respecter la règle stricte "1 action = 1 notification".
     if ((incident.employeeId || incident.employeeName) && incident.origin !== 'automatique_pointage') {
       const typeLabels: Record<string, string> = {
         retard: 'Retard constaté',
@@ -587,9 +481,6 @@ export function useAppInitialData() {
       };
       await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
       setNotifications((prev) => [notif, ...prev.filter((n) => n.id !== notifId)]);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-      }
     }
   };
 
@@ -653,12 +544,10 @@ export function useAppInitialData() {
       }
     }
     setLeaveRequests(updated);
-    localStorage.setItem('citrine_leave_requests', JSON.stringify(updated));
   };
 
   const handleUpdateModuleConfig = (newConfig: CompanyModuleConfig) => {
     setModuleConfig(newConfig);
-    setCachedModuleConfig(newConfig);
     saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...newConfig, id: 'main_config' });
   };
 
@@ -680,29 +569,24 @@ export function useAppInitialData() {
         getCollection<AttendanceIncident>(COLLECTIONS.ATTENDANCE_INCIDENTS),
       ]);
 
-      if (freshUsers && freshUsers.length > 0) {
+      if (freshUsers) {
         setUsers(freshUsers);
-        try { localStorage.setItem('citrine_users', JSON.stringify(freshUsers)); } catch {}
       }
-      if (freshEmployees && freshEmployees.length > 0) {
+      if (freshEmployees) {
         setEmployees(freshEmployees);
-        try { localStorage.setItem('citrine_employees', JSON.stringify(freshEmployees)); } catch {}
       }
-      if (freshPresences && freshPresences.length > 0) {
+      if (freshPresences) {
         setPresences(freshPresences);
-        try { localStorage.setItem('citrine_presences', JSON.stringify(freshPresences)); } catch {}
       }
-      if (freshLeaves && freshLeaves.length > 0) {
+      if (freshLeaves) {
         const sorted = [...freshLeaves].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setLeaveRequests(sorted);
-        try { localStorage.setItem('citrine_leave_requests', JSON.stringify(sorted)); } catch {}
       }
-      if (freshNotifs && freshNotifs.length > 0) {
+      if (freshNotifs) {
         setNotifications(freshNotifs);
       }
-      if (freshIncidents && freshIncidents.length > 0) {
+      if (freshIncidents) {
         setAttendanceIncidents(freshIncidents);
-        try { localStorage.setItem('citrine_attendance_incidents', JSON.stringify(freshIncidents)); } catch {}
       }
     } catch (e) {
       console.warn('Erreur lors du rafraîchissement global:', e);

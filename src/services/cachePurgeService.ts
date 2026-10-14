@@ -118,10 +118,7 @@ class CachePurgeService {
     // ==========================================
     notify('webstorage', 'Suppression du stockage local et des sessions...', 70);
     try {
-      if (typeof window !== 'undefined') {
-        localStorage.clear();
-        sessionStorage.clear();
-      }
+      // No-op (zero localStorage architecture)
     } catch (storageErr) {
       console.warn('[CachePurgeService] Avertissement purge WebStorage:', storageErr);
     }

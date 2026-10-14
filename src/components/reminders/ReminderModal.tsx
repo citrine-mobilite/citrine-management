@@ -8,14 +8,16 @@ interface ReminderModalProps {
   onSaveReminder: (reminderData: Omit<Reminder, 'id' | 'createdAt'> & { id?: string }) => void;
   initialReminder?: Reminder | null;
   employees: Employee[];
+  isEmployee?: boolean;
+  currentEmployee?: Employee | null;
 }
 
 const AVAILABLE_PERIODS = [
-  { id: '1h', label: '1 heure avant' },
-  { id: '30m', label: '30 minutes avant' },
-  { id: '15m', label: '15 minutes avant' },
+  { id: 'exact', label: "À l'heure exacte (par défaut)" },
   { id: '5m', label: '5 minutes avant' },
-  { id: 'exact', label: "Uniquement à l'heure exacte" },
+  { id: '15m', label: '15 minutes avant' },
+  { id: '30m', label: '30 minutes avant' },
+  { id: '1h', label: '1h avant' },
 ];
 
 export const ReminderModal: React.FC<ReminderModalProps> = ({
@@ -24,6 +26,8 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
   onSaveReminder,
   initialReminder,
   employees,
+  isEmployee = false,
+  currentEmployee = null,
 }) => {
   const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
@@ -32,7 +36,6 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
   const [selectedPeriods, setSelectedPeriods] = useState<string[]>(['exact']);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [allEmployees, setAllEmployees] = useState(true);
-  const [recurrence, setRecurrence] = useState<'once' | 'daily' | 'weekdays' | 'weekends'>('once');
 
   // Pre-fill fields when initialReminder changes (editing mode vs creating mode)
   useEffect(() => {
@@ -48,18 +51,21 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
       );
       setAllEmployees(initialReminder.allEmployees ?? true);
       setSelectedEmployeeIds(initialReminder.employeeIds || []);
-      setRecurrence(initialReminder.recurrence || 'once');
     } else {
       setTitle('');
       setNote('');
       setDate(new Date().toISOString().split('T')[0]);
       setTime('09:00');
       setSelectedPeriods(['exact']);
-      setSelectedEmployeeIds([]);
-      setAllEmployees(true);
-      setRecurrence('once');
+      if (isEmployee && currentEmployee) {
+        setSelectedEmployeeIds([currentEmployee.id]);
+        setAllEmployees(false);
+      } else {
+        setSelectedEmployeeIds([]);
+        setAllEmployees(true);
+      }
     }
-  }, [initialReminder, isOpen]);
+  }, [initialReminder, isOpen, isEmployee, currentEmployee]);
 
   if (!isOpen) return null;
 
@@ -95,6 +101,11 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
     e.preventDefault();
     if (!title.trim()) return;
 
+    const finalAllEmployees = isEmployee ? false : allEmployees;
+    const finalEmployeeIds = isEmployee
+      ? (currentEmployee?.id ? [currentEmployee.id] : [])
+      : (allEmployees ? employees.map((e) => e.id) : selectedEmployeeIds);
+
     onSaveReminder({
       ...(initialReminder ? { id: initialReminder.id } : {}),
       title: title.trim(),
@@ -102,9 +113,8 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
       date,
       time,
       triggerPeriods: selectedPeriods.length > 0 ? selectedPeriods : ['exact'],
-      allEmployees,
-      employeeIds: allEmployees ? employees.map((e) => e.id) : selectedEmployeeIds,
-      recurrence,
+      allEmployees: finalAllEmployees,
+      employeeIds: finalEmployeeIds,
       triggeredPeriods: initialReminder?.triggeredPeriods || [],
       stopped: false,
     });
@@ -125,9 +135,7 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
                 {isEditing ? "Modifier l'Alerte Programmée" : "Créer une Nouvelle Alerte"}
               </h3>
               <p className="text-[11px] text-stone-500">
-                {isEditing
-                  ? "Mettez à jour les paramètres de réveil, la date ou les cibles."
-                  : "Programmez plusieurs sonneries en continu et ciblez votre équipe."}
+                Titre, détail, heure de rappel et périodes de sonnerie multiples.
               </p>
             </div>
           </div>
@@ -149,33 +157,34 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
             <input
               type="text"
               required
-              placeholder="Ex: Clôture paie mensuelle, Point d'étape..."
+              placeholder="Ex: Clôture paie mensuelle, Point d'étape, Rappel urgent..."
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 font-bold text-stone-900 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none"
             />
           </div>
 
-          {/* Note / Consigne */}
+          {/* Note / Détail */}
           <div>
             <label className="block font-bold text-stone-700 mb-1">
-              Description / Consignes détaillées
+              Détail de l'alerte *
             </label>
             <textarea
+              required
               rows={2}
-              placeholder="Ordre du jour, lien de visioconférence, actions urgentes..."
+              placeholder="Spécifications, consignes détaillées, ordre du jour..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none"
+              className="w-full px-3.5 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800"
             />
           </div>
 
-          {/* Date & Heure */}
+          {/* Date & Heure de rappel */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5 text-[#2A7B76]" />
-                Date d'échéance
+                Date de rappel *
               </label>
               <input
                 type="date"
@@ -189,7 +198,7 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
             <div>
               <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5 text-[#2A7B76]" />
-                Heure exacte de l'événement
+                Heure de rappel *
               </label>
               <input
                 type="time"
@@ -204,10 +213,10 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
           {/* Multi-Alarm Trigger Periods */}
           <div className="space-y-2 bg-emerald-50/50 p-3.5 rounded-2xl border border-emerald-100">
             <label className="block font-bold text-stone-800">
-              Périodes de sonnerie multiples (Plusieurs réveils d'avertissement)
+              Périodes de rappel (une alerte peut sonner plusieurs fois)
             </label>
             <p className="text-[11px] text-stone-500">
-              La sonnerie retentira en continu à chacun de ces moments jusqu'à ce qu'un utilisateur l'arrête.
+              Cochez les moments où l'alerte doit sonner (par défaut à l'heure exacte).
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
               {AVAILABLE_PERIODS.map((period) => {
@@ -237,62 +246,61 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
             </div>
           </div>
 
-          {/* Récurrence */}
-          <div>
-            <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
-              <Repeat className="h-3.5 w-3.5 text-[#2A7B76]" />
-              Fréquence / Récurrence
-            </label>
-            <select
-              value={recurrence}
-              onChange={(e) => setRecurrence(e.target.value as any)}
-              className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-medium"
-            >
-              <option value="once">Une seule fois (Ponctuelle)</option>
-              <option value="daily">Tous les jours (Quotidienne)</option>
-              <option value="weekdays">Jours ouvrés (Du lundi au vendredi)</option>
-              <option value="weekends">Week-ends (Samedi et Dimanche)</option>
-            </select>
-          </div>
-
-          {/* Collaborateurs ciblés */}
-          <div className="space-y-2 bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80">
-            <div className="flex items-center justify-between">
-              <label className="font-bold text-stone-800 flex items-center gap-1.5">
+          {/* Personnes à qui c'est destiné */}
+          {isEmployee ? (
+            <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/80">
+              <label className="font-bold text-stone-800 flex items-center gap-1.5 mb-1">
                 <Users className="h-3.5 w-3.5 text-[#2A7B76]" />
-                Collaborateurs ciblés
+                Personnes à qui c'est destiné
               </label>
-              <label className="flex items-center gap-2 text-[11px] text-[#2A7B76] font-bold cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allEmployees}
-                  onChange={(e) => handleToggleAllEmployees(e.target.checked)}
-                  className="rounded text-[#2A7B76] focus:ring-[#2A7B76]"
-                />
-                Tous les collaborateurs
-              </label>
-            </div>
-
-            {!allEmployees && (
-              <div className="max-h-32 overflow-y-auto space-y-1.5 pt-2 border-t border-stone-200">
-                {employees.map((emp) => (
-                  <label
-                    key={emp.id}
-                    className="flex items-center gap-2 p-1.5 hover:bg-white rounded-lg cursor-pointer transition text-[11px]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedEmployeeIds.includes(emp.id)}
-                      onChange={() => handleToggleEmployee(emp.id)}
-                      className="rounded text-[#2A7B76] focus:ring-[#2A7B76]"
-                    />
-                    <span className="font-semibold text-stone-800">{emp.name}</span>
-                    <span className="text-stone-400 text-[10px]">({emp.role || 'Employé'})</span>
-                  </label>
-                ))}
+              <div className="text-xs text-stone-700 bg-white p-2.5 rounded-xl border border-stone-200 flex items-center justify-between">
+                <span className="font-bold text-[#2A7B76]">
+                  {currentEmployee?.name || 'Votre compte'}
+                </span>
+                <span className="text-[11px] text-stone-400 italic">
+                  Assignation directe automatique
+                </span>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-2 bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-stone-800 flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-[#2A7B76]" />
+                  Personnes à qui c'est destiné
+                </label>
+                <label className="flex items-center gap-2 text-[11px] text-[#2A7B76] font-bold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allEmployees}
+                    onChange={(e) => handleToggleAllEmployees(e.target.checked)}
+                    className="rounded text-[#2A7B76] focus:ring-[#2A7B76]"
+                  />
+                  Toute l'entreprise
+                </label>
+              </div>
+
+              {!allEmployees && (
+                <div className="max-h-32 overflow-y-auto space-y-1.5 pt-2 border-t border-stone-200">
+                  {employees.map((emp) => (
+                    <label
+                      key={emp.id}
+                      className="flex items-center gap-2 p-1.5 hover:bg-white rounded-lg cursor-pointer transition text-[11px]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployeeIds.includes(emp.id)}
+                        onChange={() => handleToggleEmployee(emp.id)}
+                        className="rounded text-[#2A7B76] focus:ring-[#2A7B76]"
+                      />
+                      <span className="font-semibold text-stone-800">{emp.name}</span>
+                      <span className="text-stone-400 text-[10px]">({emp.role || 'Employé'})</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100">

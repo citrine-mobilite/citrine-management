@@ -73,29 +73,26 @@ export interface CustomHoliday {
   name: string;
 }
 
+let memoryCustomHolidays: CustomHoliday[] = [];
+
 export function getCustomHolidays(): CustomHoliday[] {
-  try {
-    const stored = localStorage.getItem('citrine_custom_holidays');
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {}
-  return [];
+  return memoryCustomHolidays;
 }
 
 export function addCustomHoliday(date: string, name: string): void {
-  const current = getCustomHolidays();
-  const filtered = current.filter(h => h.date !== date);
+  const filtered = memoryCustomHolidays.filter(h => h.date !== date);
   filtered.push({ date, name });
-  localStorage.setItem('citrine_custom_holidays', JSON.stringify(filtered));
-  window.dispatchEvent(new CustomEvent('citrine_custom_holidays_changed'));
+  memoryCustomHolidays = filtered;
+  try {
+    window.dispatchEvent(new CustomEvent('citrine_custom_holidays_changed'));
+  } catch {}
 }
 
 export function removeCustomHoliday(date: string): void {
-  const current = getCustomHolidays();
-  const filtered = current.filter(h => h.date !== date);
-  localStorage.setItem('citrine_custom_holidays', JSON.stringify(filtered));
-  window.dispatchEvent(new CustomEvent('citrine_custom_holidays_changed'));
+  memoryCustomHolidays = memoryCustomHolidays.filter(h => h.date !== date);
+  try {
+    window.dispatchEvent(new CustomEvent('citrine_custom_holidays_changed'));
+  } catch {}
 }
 
 export function isWeekend(dateStr: string): boolean {

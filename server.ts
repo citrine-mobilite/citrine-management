@@ -36,57 +36,6 @@ async function startServer() {
     }
   });
 
-  // Helper pour créer une notification sur chaque action employé (hors GET)
-  async function triggerEmployeeNotification(
-    method: 'POST' | 'DELETE',
-    collection: string,
-    docId: string,
-    payload: any,
-    user?: any
-  ) {
-    if (collection === 'notifications') return;
-    try {
-      const empName = user?.user_metadata?.name || user?.name || payload?.employeeName || payload?.name || payload?.userName || 'Collaborateur';
-      const role = user?.user_metadata?.role || user?.role || payload?.role;
-      const isEmployee = (role && /employ/i.test(role)) || Boolean(payload?.employeeId);
-
-      const targetCollections = [
-        'presences', 
-        'attendance_incidents', 
-        'leave_requests', 
-        'expense_claims', 
-        'tasks', 
-        'reminders', 
-        'hse_incidents', 
-        'idea_suggestions',
-        'processflow_salary_debts'
-      ];
-
-      if (isEmployee || targetCollections.includes(collection)) {
-        const verb = method === 'DELETE' ? 'Suppression' : 'Mise à jour / Enregistrement';
-        const notifItem = {
-          id: `notif-emp-action-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          type: 'system',
-          recipient: 'Direction & RH',
-          title: `Action employé : ${empName}`,
-          content: `${empName} a validé une action (${verb}) sur le module [${collection}].`,
-          payload: JSON.stringify({
-            source: 'employee_action',
-            method,
-            collection,
-            docId,
-            empName,
-            timestamp: new Date().toISOString(),
-          }),
-          timestamp: new Date().toISOString(),
-          read: false,
-        };
-        await saveDocumentData('notifications', notifItem);
-      }
-    } catch (err) {
-      console.warn('Erreur lors de la notification automatique employé:', err);
-    }
-  }
 
   // Cloud SQL Data Routes
   app.get("/api/data/:collection", requireAuth, async (req: AuthRequest, res) => {

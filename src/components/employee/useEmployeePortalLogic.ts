@@ -10,7 +10,8 @@ import {
   AttendanceIncident,
   EmergencyType,
   Task,
-  NotificationLog
+  NotificationLog,
+  Reminder
 } from '../../types';
 import { getCurrentUserLocation } from '../../utils/geolocation';
 import { buildMonthlyAttendanceReport, AttendanceMonthlyReport } from '../../services/rhReportService';
@@ -23,6 +24,7 @@ interface UseEmployeePortalLogicProps {
   onUpdatePresences: (updated: Presence[]) => void;
   tasks?: Task[];
   notifications?: NotificationLog[];
+  reminders?: Reminder[];
   salaryDebts?: EmployeeSalaryDebt[];
   moduleConfig?: CompanyModuleConfig;
   attendanceIncidents?: AttendanceIncident[];
@@ -96,12 +98,11 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     };
   }, []);
 
-  // Calcul dynamique et réactif du nombre de notifications/alertes non lues strictement pour cet employé
+  // Calcul dynamique et réactif du nombre de notifications/alertes non lues strictement pour cet employé depuis la BD
   const unreadAlertsCount = useMemo(() => {
     try {
-      const readSet = new Set(JSON.parse(localStorage.getItem('citrine_read_alerts_ids') || '[]'));
-      const deletedSet = new Set(JSON.parse(localStorage.getItem('citrine_deleted_alerts_ids') || '[]'));
-      const customAlerts = JSON.parse(localStorage.getItem('citrine_custom_alerts_list') || '[]');
+      const readSet = new Set<string>();
+      const deletedSet = new Set<string>();
       
       const myIds = [
         employeeProfile.id,
@@ -128,7 +129,7 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
       let count = 0;
       const seenIds = new Set<string>();
 
-      // 1. Notifications persistées
+      // 1. Notifications persistées en Base de Données
       if (props.notifications) {
         props.notifications.forEach((n) => {
           let isForMe = isMatch(n.recipient);
@@ -147,80 +148,25 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
         });
       }
 
-      // 2. Tâches
-      if (props.tasks) {
-        props.tasks
-          .filter((t) => isMatch(t.assignedTo) || isMatch(t.employeeId))
-          .forEach((t) => {
-            const id = `task-alert-${t.id}`;
-            if (!deletedSet.has(id) && !seenIds.has(id)) {
-              seenIds.add(id);
-              if (!readSet.has(id)) count++;
-            }
-          });
+      // 2. Rappels / Alertes programmées persistées en Base de Données
+      if (props.reminders) {
+        props.reminders.forEach((r) => {
+          const isTargeted = r.allEmployees || 
+            (r.employeeId && myIds.includes(String(r.employeeId).toLowerCase())) ||
+            (r.employeeIds && r.employeeIds.some(id => myIds.includes(String(id).toLowerCase())));
+
+          if (isTargeted && !deletedSet.has(r.id) && !seenIds.has(r.id)) {
+            seenIds.add(r.id);
+            if (!readSet.has(r.id) && !r.stopped) count++;
+          }
+        });
       }
-
-      // 3. Incidents
-      if (attendanceIncidents) {
-        attendanceIncidents
-          .filter((i) => isMatch(i.employeeId) || isMatch(i.employeeName))
-          .forEach((i) => {
-            const id = `inc-alert-${i.id}`;
-            if (!deletedSet.has(id) && !seenIds.has(id)) {
-              seenIds.add(id);
-              if (!readSet.has(id)) count++;
-            }
-          });
-      }
-
-      // 4. Presences
-      if (props.presences) {
-        props.presences
-          .filter((p) => isMatch(p.employeeId))
-          .forEach((p) => {
-            const clockMappings: { key: keyof Presence; shortId: string; longId: string }[] = [
-              { key: 'arrivalTime', shortId: `clock-arr-${p.id}`, longId: `clock-arrivalTime-${p.id}` },
-              { key: 'pauseStart', shortId: `clock-pstart-${p.id}`, longId: `clock-pauseStart-${p.id}` },
-              { key: 'pauseEnd', shortId: `clock-pend-${p.id}`, longId: `clock-pauseEnd-${p.id}` },
-              { key: 'departureTime', shortId: `clock-dept-${p.id}`, longId: `clock-departureTime-${p.id}` },
-            ];
-
-            clockMappings.forEach(({ key, shortId, longId }) => {
-              if (p[key]) {
-                if (!deletedSet.has(shortId) && !deletedSet.has(longId) && !seenIds.has(shortId)) {
-                  seenIds.add(shortId);
-                  const isRead = readSet.has(shortId) || readSet.has(longId);
-                  if (!isRead) count++;
-                }
-              }
-            });
-
-            if (p.sortieProStart || p.sortieProEnd) {
-              const proId = `clock-pro-${p.id}`;
-              if (!deletedSet.has(proId) && !seenIds.has(proId)) {
-                seenIds.add(proId);
-                if (!readSet.has(proId)) count++;
-              }
-            }
-          });
-      }
-
-      // 5. Custom alerts
-      customAlerts.forEach((a: any) => {
-        if (!deletedSet.has(a.id) && !seenIds.has(a.id)) {
-          seenIds.add(a.id);
-          if (!readSet.has(a.id)) count++;
-        }
-      });
-
-      // 6. System welcome (Ne jamais compter le message d'accueil comme alerte non lue)
-      // Aucun incrément pour le message d'accueil par défaut
 
       return count;
     } catch {
       return 0;
     }
-  }, [props.notifications, props.tasks, attendanceIncidents, props.presences, employeeProfile, currentUser, readVersion]);
+  }, [props.notifications, props.reminders, employeeProfile, currentUser, readVersion]);
 
   const getInitialEmployeeSubTab = (): EmployeeSubTab => {
     if (typeof window !== 'undefined' && window.location.hash) {
@@ -233,14 +179,6 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     if (initialSubTab && VALID_EMPLOYEE_SUBTABS.includes(initialSubTab as EmployeeSubTab)) {
       return initialSubTab as EmployeeSubTab;
     }
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('citrine_employee_subtab');
-        if (saved && VALID_EMPLOYEE_SUBTABS.includes(saved as EmployeeSubTab)) {
-          return saved as EmployeeSubTab;
-        }
-      } catch {}
-    }
     return 'clocking';
   };
 
@@ -250,7 +188,6 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     setActiveTabState(tab);
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('citrine_employee_subtab', tab);
         window.history.replaceState(null, '', `#employee/${tab}`);
       } catch {}
     }
@@ -262,7 +199,6 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
       setActiveTabState(initialSubTab as EmployeeSubTab);
       if (typeof window !== 'undefined') {
         try {
-          localStorage.setItem('citrine_employee_subtab', initialSubTab);
           window.history.replaceState(null, '', `#employee/${initialSubTab}`);
         } catch {}
       }
@@ -278,9 +214,6 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
       const sub = hash.startsWith('employee/') ? hash.replace('employee/', '') : hash;
       if (VALID_EMPLOYEE_SUBTABS.includes(sub as EmployeeSubTab)) {
         setActiveTabState(sub as EmployeeSubTab);
-        try {
-          localStorage.setItem('citrine_employee_subtab', sub);
-        } catch {}
       }
     };
 
@@ -291,7 +224,6 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
         if (VALID_EMPLOYEE_SUBTABS.includes(target as EmployeeSubTab)) {
           setActiveTabState(target as EmployeeSubTab);
           try {
-            localStorage.setItem('citrine_employee_subtab', target);
             window.history.replaceState(null, '', `#employee/${target}`);
           } catch {}
         }

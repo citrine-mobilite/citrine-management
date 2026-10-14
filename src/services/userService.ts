@@ -8,22 +8,12 @@ export const USERS_COLLECTION = 'users';
 
 export const INITIAL_DEFAULT_USERS: AppUser[] = [];
 
-// Client Supabase avec contournement RLS automatique si la clé service_role est présente
 const getClient = () => supabaseAdmin || supabase;
 
-// Récupère les utilisateurs locaux mis en cache
 export function getStoredUsers(): AppUser[] {
-  try {
-    const saved = localStorage.getItem('citrine_users');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch {}
   return [];
 }
 
-// Synchronise la liste des comptes depuis Supabase
 export async function syncUsersFromDatabase(): Promise<AppUser[]> {
   try {
     const client = getClient();
@@ -61,28 +51,18 @@ export async function syncUsersFromDatabase(): Promise<AppUser[]> {
           createdAt: u.created_at || raw.createdAt || new Date().toISOString()
         };
       });
-
-      try {
-        localStorage.setItem('citrine_users', JSON.stringify(mapped));
-      } catch {}
       return mapped;
     }
-    return getStoredUsers();
+    return [];
   } catch (err) {
     console.warn('[userService] Récupération utilisateurs depuis BD:', err);
-    return getStoredUsers();
+    return [];
   }
 }
 
 export const seedUsersIfEmpty = syncUsersFromDatabase;
 
-// Subscribe to real-time users collection via Supabase Realtime & LocalStorage
 export function subscribeToUsers(callback: (users: AppUser[]) => void) {
-  const localList = getStoredUsers();
-  if (localList.length > 0) {
-    callback(localList);
-  }
-
   syncUsersFromDatabase().then((dbUsers) => {
     if (dbUsers && dbUsers.length > 0) {
       callback(dbUsers);
@@ -91,9 +71,6 @@ export function subscribeToUsers(callback: (users: AppUser[]) => void) {
 
   supabaseService.fetchCollection<AppUser>(USERS_COLLECTION).then((items) => {
     if (items && items.length > 0) {
-      try {
-        localStorage.setItem('citrine_users', JSON.stringify(items));
-      } catch {}
       callback(items);
     }
   }).catch(() => {});
@@ -107,9 +84,6 @@ export function subscribeToUsers(callback: (users: AppUser[]) => void) {
       async () => {
         const updated = await supabaseService.fetchCollection<AppUser>(USERS_COLLECTION);
         if (updated && updated.length > 0) {
-          try {
-            localStorage.setItem('citrine_users', JSON.stringify(updated));
-          } catch {}
           callback(updated);
         }
       }
@@ -121,7 +95,6 @@ export function subscribeToUsers(callback: (users: AppUser[]) => void) {
   };
 }
 
-// Save or update user
 export async function saveUser(user: AppUser): Promise<void> {
   try {
     const cleanUser: AppUser = {
@@ -135,24 +108,9 @@ export async function saveUser(user: AppUser): Promise<void> {
       cleanUser.passwordHash = await hashPassword(cleanUser.passwordHash);
     }
 
-    try {
-      const saved = localStorage.getItem('citrine_users');
-      let currentUsers: AppUser[] = saved ? JSON.parse(saved) : [];
-      if (Array.isArray(currentUsers)) {
-        const idx = currentUsers.findIndex(u => u.id === cleanUser.id || u.email === cleanUser.email);
-        if (idx >= 0) {
-          currentUsers[idx] = cleanUser;
-        } else {
-          currentUsers.push(cleanUser);
-        }
-        localStorage.setItem('citrine_users', JSON.stringify(currentUsers));
-      }
-    } catch {}
-
     cloudSqlService.saveDocument('users', cleanUser).catch(() => {});
     await supabaseService.saveDocument('users', cleanUser).catch(() => {});
 
-    // Synchronisation bidirectionnelle : Mise à jour du collaborateur associé dans la table 'employees'
     try {
       const client = getClient();
       const userEmail = cleanUser.email;
@@ -204,21 +162,7 @@ export async function saveUser(user: AppUser): Promise<void> {
         };
 
         await supabaseService.saveDocument('employees', updatedEmp);
-
-        // Mettre à jour le cache local employees
-        try {
-          const cachedEmps = localStorage.getItem('citrine_employees');
-          if (cachedEmps) {
-            let eList: Employee[] = JSON.parse(cachedEmps);
-            if (Array.isArray(eList)) {
-              const eIdx = eList.findIndex(e => e.id === updatedEmp.id || e.email === updatedEmp.email);
-              if (eIdx >= 0) eList[eIdx] = updatedEmp;
-              else eList.push(updatedEmp);
-              localStorage.setItem('citrine_employees', JSON.stringify(eList));
-              window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
-            }
-          }
-        } catch {}
+        window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
       }
     } catch (syncErr) {
       console.warn('[userService] Notice synchronisation collaborateur associé:', syncErr);
@@ -234,7 +178,6 @@ export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser |
   const client = getClient();
 
   try {
-    // 1. Chercher dans la table 'users' de Supabase
     const { data: dbUser, error: userErr } = await client
       .from('users')
       .select('*')
@@ -244,7 +187,6 @@ export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser |
     if (!userErr && dbUser) {
       const raw = dbUser.raw_data && typeof dbUser.raw_data === 'object' ? dbUser.raw_data : {};
       
-      // Récupérer la situation contractuelle et RH du collaborateur associé
       const { data: dbEmp } = await client
         .from('employees')
         .select('*')
@@ -256,7 +198,6 @@ export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser |
         raw.employmentStatus ||
         (dbEmp?.status === false ? 'parti' : 'en_poste');
 
-      // Un compte est bloqué si la situation RH est renvoyé, démissionné, parti ou suspendu
       const isBlockedBySituation =
         empStatus === 'renvoye' ||
         empStatus === 'demissionne' ||
@@ -312,7 +253,6 @@ export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser |
       };
     }
 
-    // 2. Chercher dans la table 'employees' de Supabase si non présent dans users
     const { data: dbEmp, error: empErr } = await client
       .from('employees')
       .select('*')
@@ -376,12 +316,9 @@ export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser |
 export async function fetchFreshUser(emailOrId: string): Promise<AppUser | null> {
   try {
     const norm = emailOrId.trim().toLowerCase();
-
-    // 1. Priorité absolue : vérifier la base de données réelle
     const dbUser = await fetchDatabaseUserByEmail(norm);
     if (dbUser) return dbUser;
 
-    // 2. Si c'est un identifiant numérique ou UUID
     try {
       const client = getClient();
       const { data: idUser } = await client
@@ -402,17 +339,6 @@ export async function fetchFreshUser(emailOrId: string): Promise<AppUser | null>
 
 export async function deleteUser(userId: string): Promise<void> {
   try {
-    try {
-      const saved = localStorage.getItem('citrine_users');
-      if (saved) {
-        const currentUsers: AppUser[] = JSON.parse(saved);
-        if (Array.isArray(currentUsers)) {
-          const filtered = currentUsers.filter(u => u.id !== userId);
-          localStorage.setItem('citrine_users', JSON.stringify(filtered));
-        }
-      }
-    } catch {}
-
     await supabaseService.deleteDocument('users', userId).catch(() => {});
   } catch (error) {
     console.error('Error deleting user:', error);
@@ -422,10 +348,7 @@ export async function deleteUser(userId: string): Promise<void> {
 export function findUserByEmail(users: AppUser[], email?: string | null): AppUser | undefined {
   if (!email) return undefined;
   const normalized = email.trim().toLowerCase();
-
-  // Seuls les utilisateurs réels validés sont pris en compte
   const found = users?.find((u) => (u?.email || '').trim().toLowerCase() === normalized);
   if (found) return found;
-
   return undefined;
 }

@@ -9,7 +9,7 @@ import {
 import { pushNotificationBridgeService } from './pushNotificationBridgeService';
 import { soundService } from './soundService';
 
-export const STORAGE_KEY_LEAVE_REQUESTS = 'citrine_leave_requests';
+// (Zero localStorage architecture)
 
 /**
  * Calcul du nombre de jours entre deux dates (inclusif)
@@ -28,25 +28,10 @@ export function calculateDaysBetween(startDate: string, endDate: string): number
  * Souscription temps réel aux demandes de congés
  */
 export function subscribeToLeaveRequests(callback: (leaves: LeaveRequest[]) => void) {
-  // 1. Délivrer le cache local immédiatement
-  if (typeof window !== 'undefined') {
-    try {
-      const cached = localStorage.getItem(STORAGE_KEY_LEAVE_REQUESTS);
-      if (cached) {
-        callback(JSON.parse(cached));
-      }
-    } catch {}
-  }
-
-  // 2. Écoute Firestore temps réel
   return subscribeToCollection<LeaveRequest>(COLLECTIONS.LEAVE_REQUESTS, (list) => {
-    // Trier par date de création décroissante
-    const sorted = [...list].sort(
+    const sorted = [...(list || [])].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-    try {
-      localStorage.setItem(STORAGE_KEY_LEAVE_REQUESTS, JSON.stringify(sorted));
-    } catch {}
     callback(sorted);
   });
 }

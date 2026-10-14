@@ -24,16 +24,7 @@ export function useTaskLogic({
   showToast,
 }: UseTaskLogicProps) {
   // Project & View Tabs
-  const [projects, setProjects] = useState<TaskProject[]>(() => {
-    try {
-      const stored = localStorage.getItem('citrine_task_projects_v2');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return DEFAULT_TASK_PROJECTS;
-  });
+  const [projects, setProjects] = useState<TaskProject[]>(DEFAULT_TASK_PROJECTS);
 
   const [activeProjectId, setActiveProjectId] = useState<string>('all');
   const [activeView, setActiveView] = useState<'kanban' | 'table'>('kanban');
@@ -81,9 +72,6 @@ export function useTaskLogic({
 
   const saveProjects = (updatedProjects: TaskProject[]) => {
     setProjects(updatedProjects);
-    try {
-      localStorage.setItem('citrine_task_projects_v2', JSON.stringify(updatedProjects));
-    } catch {}
   };
 
   const handleCreateProject = (newProject: TaskProject) => {
