@@ -221,7 +221,7 @@ export const CompanyHoursAndGeneralSettings: React.FC<CompanyHoursAndGeneralSett
               <input
                 type="number"
                 step="0.000001"
-                value={formData.companyLatitude ?? formData.hqLatitude ?? 4.051056}
+                value={formData.companyLatitude ?? formData.hqLatitude ?? 4.016246}
                 onChange={(e) => {
                   const val = parseFloat(e.target.value);
                   handleChange('companyLatitude', val);
@@ -236,7 +236,7 @@ export const CompanyHoursAndGeneralSettings: React.FC<CompanyHoursAndGeneralSett
               <input
                 type="number"
                 step="0.000001"
-                value={formData.companyLongitude ?? formData.hqLongitude ?? 9.7678687}
+                value={formData.companyLongitude ?? formData.hqLongitude ?? 9.8203514}
                 onChange={(e) => {
                   const val = parseFloat(e.target.value);
                   handleChange('companyLongitude', val);

@@ -376,8 +376,8 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
       } catch {
         // Repli coordonnées siège si GPS inaccessible
         userLocation = {
-          latitude: moduleConfig?.companyLatitude || 4.051056,
-          longitude: moduleConfig?.companyLongitude || 9.7678687
+          latitude: moduleConfig?.companyLatitude || 4.016246,
+          longitude: moduleConfig?.companyLongitude || 9.8203514
         };
       }
 
