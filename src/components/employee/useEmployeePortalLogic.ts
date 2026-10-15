@@ -418,9 +418,11 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     method: ClockingMethod,
     customLocation?: { latitude?: number; longitude?: number; locationName?: string }
   ) => {
-    triggerConfirmClocking(pendingClockAction, method, () => {
+    const effectiveAction = pendingClockAction || (!todayPresence?.arrivalTime ? 'arrival' : !todayPresence?.departureTime ? 'departure' : 'arrival');
+    triggerConfirmClocking(effectiveAction, method, () => {
       stopCameraScan();
       setShowClockingModal(false);
+      setPendingClockAction(null);
     }, customLocation);
   };
 

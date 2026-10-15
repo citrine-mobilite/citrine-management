@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Employee, Presence, Task, Reminder, AppUser } from '../types';
 import { TabType } from './Sidebar';
+import { isEmployeeOnlyRole } from '../utils/roleUtils';
 
 interface AdminDashboardOverviewProps {
   currentUser: AppUser | null;
@@ -53,9 +54,16 @@ export default function AdminDashboardOverview({
     return () => clearInterval(timer);
   }, []);
 
+  // Les administrateurs et responsables ne badgent pas : on les exclut du pointage du jour
+  const clockableEmployees = useMemo(() => {
+    return employees.filter((e) => isEmployeeOnlyRole(e.roleType || e.role || e.position));
+  }, [employees]);
+
+  const clockableEmployeeIds = useMemo(() => new Set(clockableEmployees.map((e) => String(e.id))), [clockableEmployees]);
+
   // Filter values based on today's date
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayPresences = presences.filter((p) => p.date === todayStr);
+  const todayPresences = presences.filter((p) => p.date === todayStr && clockableEmployeeIds.has(String(p.employeeId)));
   const presentCount = todayPresences.filter((p) => p.status === 'present').length;
   const lateCount = todayPresences.filter((p) => p.status === 'late').length;
   
@@ -63,8 +71,8 @@ export default function AdminDashboardOverview({
   const pendingTasks = tasks.filter((t) => t.status !== 'completed');
   const activeRemindersCount = reminders.length;
 
-  const attendanceRate = employees.length > 0 
-    ? Math.round((presentCount / employees.length) * 100) 
+  const attendanceRate = clockableEmployees.length > 0 
+    ? Math.round((presentCount / clockableEmployees.length) * 100) 
     : 0;
 
   return (
@@ -210,7 +218,7 @@ export default function AdminDashboardOverview({
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {employees.slice(0, 5).map((emp) => {
+                {clockableEmployees.slice(0, 5).map((emp) => {
                   const p = todayPresences.find((x) => x.employeeId === emp.id);
                   return (
                     <tr key={emp.id} className="hover:bg-stone-50/50 transition">

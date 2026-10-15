@@ -37,6 +37,7 @@ import PresenceRequestsView from './PresenceRequestsView';
 import { extractPresenceRequests } from './presence/requests/presenceRequestsUtils';
 import { incidentService } from '../services/incidentService';
 import { isEmployeeOnlyRole } from '../utils/roleUtils';
+import { realtimeSyncService } from '../services/realtimeSyncService';
 
 interface PresencePanelProps {
   employees: Employee[];
@@ -129,6 +130,29 @@ export default function PresencePanel({
   const totalActDays = presentCount + lateCount + absentCount || 1;
   const punctualityRate = Math.round((presentCount / totalActDays) * 100);
   const attendanceRate = Math.round(((presentCount + lateCount) / (totalActDays + 1)) * 100) || 50;
+
+  // Notification visuelle instantanée lors d'un pointage en direct
+  const [recentPunchId, setRecentPunchId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = realtimeSyncService.subscribeToPresenceUpdates((eventData) => {
+      const p = eventData.presence;
+      if (p) {
+        const empId = String(p.employeeId || p.id);
+        setRecentPunchId(empId);
+        setTimeout(() => {
+          setRecentPunchId((curr) => (curr === empId ? null : curr));
+        }, 6000);
+
+        if (showToast && p.employeeName) {
+          const actionText = p.departureTime ? 'Départ' : p.pauseEnd ? 'Retour Pause' : p.pauseStart ? 'Pause' : 'Arrivée';
+          showToast(`⚡ Pointage direct : ${p.employeeName} (${actionText})`, 'success');
+        }
+      }
+    });
+
+    return () => unsub();
+  }, [showToast]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -303,10 +327,21 @@ export default function PresencePanel({
     }
 
     onUpdatePresences(updatedPresences);
+
+    // Diffusion temps réel multi-onglets / multi-appareils
+    const targetedPres = updatedPresences.find(p => p.employeeId === activeEmployee.id && p.date === selectedDate);
+    if (targetedPres) {
+      realtimeSyncService.broadcastPresencePunch({
+        presence: targetedPres,
+      });
+    }
   };
+
+  const clockableEmployeeIds = useMemo(() => new Set(clockableEmployees.map((e) => String(e.id))), [clockableEmployees]);
 
   // Filter list rows based on collaborator select and date/period select (strictly restricted to today)
   const filteredPresences = presences.filter((p) => {
+    if (!clockableEmployeeIds.has(String(p.employeeId))) return false;
     const matchesEmp = collaboratorFilter === 'all' || p.employeeId === collaboratorFilter;
     const matchesPeriod = p.date === todayStr;
     return matchesEmp && matchesPeriod;
@@ -699,9 +734,15 @@ export default function PresencePanel({
         {/* Registers Table list */}
         <div className="bg-white rounded-3xl border border-stone-200/80 shadow-sm overflow-hidden space-y-3">
           <div className="p-4 bg-stone-50/50 border-b border-stone-100 flex items-center justify-between">
-            <h4 className="font-serif font-bold text-xs text-stone-900 uppercase tracking-wide">
-              Pointages de la Journée
-            </h4>
+            <div className="flex items-center gap-2.5">
+              <h4 className="font-serif font-bold text-xs text-stone-900 uppercase tracking-wide">
+                Pointages de la Journée
+              </h4>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-3xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                <span>En direct</span>
+              </span>
+            </div>
             <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-lg border border-emerald-200">
               {filteredPresences.length} fiches trouvées
             </span>
@@ -732,11 +773,18 @@ export default function PresencePanel({
                     const emp = employees.find((e) => e.id === p.employeeId);
                     const softTheme = getEmployeeSoftColor(emp?.name || 'Collaborateur');
                     const isActive = p.employeeId === activeSidebarEmpId;
+                    const isRecent = recentPunchId && (recentPunchId === String(p.employeeId) || recentPunchId === String(p.id));
                     return (
                       <tr 
                         key={p.id} 
                         onClick={() => setActiveSidebarEmpId(p.employeeId)}
-                        className={`hover:bg-stone-50/30 transition cursor-pointer border-2 ${isActive ? 'border-red-500 bg-red-50/50' : 'border-transparent'}`}
+                        className={`transition cursor-pointer border-2 ${
+                          isRecent
+                            ? 'bg-emerald-50/80 border-emerald-400 animate-in fade-in duration-300'
+                            : isActive
+                            ? 'border-red-500 bg-red-50/50 hover:bg-stone-50/30'
+                            : 'border-transparent hover:bg-stone-50/30'
+                        }`}
                       >
                         {/* Employe Info & GPS location badge conforming exactly to Image 2 */}
                         <td className="p-3 pl-4">
@@ -753,7 +801,14 @@ export default function PresencePanel({
                               )}
                             </div>
                             <div className="min-w-0">
-                              <span className="block font-bold text-stone-900 text-[11px] leading-tight">{emp?.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="block font-bold text-stone-900 text-[11px] leading-tight">{emp?.name}</span>
+                                {isRecent && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[8px] font-extrabold bg-emerald-600 text-white animate-bounce shadow-xs">
+                                    Nouveau ⚡
+                                  </span>
+                                )}
+                              </div>
                               <span className="block text-[9px] text-stone-400 font-mono leading-none truncate max-w-[140px]">{emp?.email}</span>
                               <div className="flex flex-wrap items-center gap-1 mt-0.5">
                                 <span className={`inline-flex items-center gap-0.5 text-[8px] rounded px-1.5 py-0.5 font-bold cursor-pointer border ${softTheme.badge}`}>

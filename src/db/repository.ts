@@ -109,6 +109,46 @@ async function resolveEmployeeDbId(client: any, empIdVal: any): Promise<number |
   return null;
 }
 
+export async function resolveUserDbId(client: any, candidateUserIdVal: any, recipientEmailOrName?: string): Promise<number | null> {
+  if (!candidateUserIdVal && !recipientEmailOrName) return null;
+
+  try {
+    if (candidateUserIdVal) {
+      if (typeof candidateUserIdVal === 'number' && Number.isInteger(candidateUserIdVal)) {
+        const { data: directUser } = await client.from('users').select('id').eq('id', candidateUserIdVal).maybeSingle();
+        if (directUser?.id) return Number(directUser.id);
+      }
+      const strVal = String(candidateUserIdVal).trim();
+      if (/^\d+$/.test(strVal)) {
+        const num = Number(strVal);
+        const { data: directUser } = await client.from('users').select('id').eq('id', num).maybeSingle();
+        if (directUser?.id) return Number(directUser.id);
+
+        const { data: empLinked } = await client.from('employees').select('user_id').eq('id', num).maybeSingle();
+        if (empLinked?.user_id) {
+          const { data: linkedUser } = await client.from('users').select('id').eq('id', empLinked.user_id).maybeSingle();
+          if (linkedUser?.id) return Number(linkedUser.id);
+        }
+      }
+
+      const { data: byDoc } = await client.from('employees').select('user_id').eq('doc_id', strVal).maybeSingle();
+      if (byDoc?.user_id) {
+        const { data: linkedUser } = await client.from('users').select('id').eq('id', byDoc.user_id).maybeSingle();
+        if (linkedUser?.id) return Number(linkedUser.id);
+      }
+    }
+
+    if (recipientEmailOrName && recipientEmailOrName.includes('@')) {
+      const { data: byEmail } = await client.from('users').select('id').eq('email', recipientEmailOrName.trim().toLowerCase()).maybeSingle();
+      if (byEmail?.id) return Number(byEmail.id);
+    }
+  } catch (e) {
+    console.warn('[resolveUserDbId error]:', e);
+  }
+
+  return null;
+}
+
 export async function saveDocumentData(collectionName: string, item: any): Promise<any> {
   const table = mapCollectionToTable(collectionName);
   const docId = String(item.id || item.docId || `doc_${Date.now()}`);
@@ -136,18 +176,23 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
       rowData.message = item.message || item.content || item.description || item.payload || item.title || 'Notification système';
       rowData.type = item.type || 'system';
       rowData.is_read = Boolean(item.isRead ?? item.read ?? false);
-      if (item.targetUserId) {
-        if (typeof item.targetUserId === 'number') {
-          rowData.target_user_id = item.targetUserId;
-        } else if (typeof item.targetUserId === 'string' && /^\d+$/.test(item.targetUserId)) {
-          rowData.target_user_id = Number(item.targetUserId);
-        }
-      }
+
+      // Safe Foreign Key resolution for target_user_id
+      const resolvedUserId = await resolveUserDbId(
+        supabaseAdmin,
+        item.targetUserId || item.target_user_id || item.recipient,
+        item.recipient
+      );
+      rowData.target_user_id = resolvedUserId || null;
+
       if (item.targetUserIds && Array.isArray(item.targetUserIds)) {
         rowData.target_user_ids = item.targetUserIds;
       }
       if (item.targetEmployeeIds && Array.isArray(item.targetEmployeeIds)) {
         rowData.target_employee_ids = item.targetEmployeeIds;
+      } else if (item.employeeId || item.targetEmployeeId) {
+        const empDbId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId || item.targetEmployeeId);
+        if (empDbId) rowData.target_employee_ids = [empDbId];
       }
     } else if (table === 'presences') {
       rowData.employee_name = item.employeeName || item.employee_name || null;
@@ -652,5 +697,182 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
 
     throw new Error(`Transaction annulée (Rollback complet) : ${error?.message || 'Erreur inconnue'}`);
   }
+}
+
+export interface AtomicClockingTransactionInput {
+  presence: any;
+  incident?: any | null;
+  notification?: any | null;
+}
+
+export async function executeAtomicClockingTransaction(input: AtomicClockingTransactionInput) {
+  const { presence, incident, notification } = input;
+  if (!presence) {
+    throw new Error('Données de présence obligatoires pour la transaction atomique.');
+  }
+
+  let presenceCreatedDbId: number | null = null;
+  let incidentCreatedDbId: number | null = null;
+  let notificationCreatedDbId: number | null = null;
+
+  console.log(`🚀 [TRANSACTION POINTAGE INITIALISÉE] Collaborateur: ${presence.employeeName || presence.employeeId} - Date: ${presence.date}`);
+
+  try {
+    // 1. Résolution de l'identifiant employé en base
+    const empIdVal = presence.employeeId || presence.employee_id;
+    const resolvedEmpDbId = await resolveEmployeeDbId(supabaseAdmin, empIdVal);
+
+    // 2. Persistance de la Présence
+    const presDocId = String(presence.id || presence.docId || `pr-${Date.now()}`);
+    const presenceRow: any = {
+      doc_id: presDocId,
+      employee_id: resolvedEmpDbId || null,
+      employee_name: presence.employeeName || presence.employee_name || null,
+      date: presence.date || new Date().toISOString().split('T')[0],
+      arrival_time: presence.arrivalTime || null,
+      departure_time: presence.departureTime || null,
+      status: presence.status || 'present',
+      late_minutes: Number(presence.lateMinutes || 0),
+      pause_minutes: Number(presence.pauseMinutes || 0),
+      motif: presence.motif || presence.adminBadgeReason || null,
+      signature: presence.signature || null,
+      gps_lat: typeof presence.latitude === 'number' ? presence.latitude : (typeof presence.gpsLat === 'number' ? presence.gpsLat : null),
+      gps_lng: typeof presence.longitude === 'number' ? presence.longitude : (typeof presence.gpsLng === 'number' ? presence.gpsLng : null),
+      method: presence.clockingMethod || presence.method || 'qr_code_door',
+      raw_data: { ...presence, id: presDocId },
+      updated_at: new Date().toISOString(),
+    };
+
+    console.log(`📌 [TRANSACTION POINTAGE - ÉTAPE 1/3] Enregistrement présence (${presenceRow.doc_id})...`);
+    const { data: savedPresence, error: presErr } = await supabaseAdmin
+      .from('presences')
+      .upsert(presenceRow, { onConflict: 'doc_id' })
+      .select()
+      .single();
+
+    if (presErr) {
+      console.error('[Atomic Clocking] Presence upsert error:', presErr.message);
+      throw new Error(`Échec de sauvegarde de la présence: ${presErr.message}`);
+    }
+    presenceCreatedDbId = savedPresence.id;
+    console.log(`✓ [TRANSACTION POINTAGE - ÉTAPE 1/3] Présence enregistrée (DB ID: ${presenceCreatedDbId})`);
+
+    // 3. Persistance de l'Incident de pointage (ex: retard ou départ anticipé)
+    let savedIncident: any = null;
+    if (incident) {
+      console.log(`📌 [TRANSACTION POINTAGE - ÉTAPE 2/3] Enregistrement incident (${incident.type})...`);
+      const incDocId = String(incident.id || incident.docId || `inc-${Date.now()}`);
+      const incEmpId = await resolveEmployeeDbId(supabaseAdmin, incident.employeeId || empIdVal);
+      const incidentRow: any = {
+        doc_id: incDocId,
+        employee_id: incEmpId || resolvedEmpDbId || null,
+        date: incident.date || presenceRow.date,
+        type: incident.type || 'retard',
+        description: incident.reason || incident.description || incident.origin || 'Incident de présence',
+        status: incident.status || 'automatique',
+        raw_data: { ...incident, id: incDocId },
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data: incData, error: incErr } = await supabaseAdmin
+        .from('attendance_incidents')
+        .upsert(incidentRow, { onConflict: 'doc_id' })
+        .select()
+        .single();
+
+      if (incErr) {
+        console.error('[Atomic Clocking] Incident upsert error:', incErr.message);
+        throw new Error(`Échec de sauvegarde de l'incident: ${incErr.message}`);
+      }
+      savedIncident = incData;
+      incidentCreatedDbId = incData.id;
+      console.log(`✓ [TRANSACTION POINTAGE - ÉTAPE 2/3] Incident consigné (DB ID: ${incidentCreatedDbId})`);
+    }
+
+    // 4. Persistance de la Notification système
+    let savedNotification: any = null;
+    if (notification) {
+      console.log(`📌 [TRANSACTION POINTAGE - ÉTAPE 3/3] Enregistrement notification système...`);
+      const notifDocId = String(notification.id || notification.docId || `notif-clock-${Date.now()}`);
+      const resolvedUserId = await resolveUserDbId(
+        supabaseAdmin,
+        notification.targetUserId || notification.recipient || empIdVal,
+        notification.recipient
+      );
+
+      const notifText = notification.message || notification.content || notification.description || notification.title || 'Pointage validé';
+      const notificationRow: any = {
+        doc_id: notifDocId,
+        title: notification.title || 'Pointage enregistré',
+        message: notifText,
+        type: notification.type || 'system',
+        is_read: Boolean(notification.isRead ?? notification.read ?? false),
+        target_user_id: resolvedUserId || null,
+        target_employee_ids: resolvedEmpDbId ? [resolvedEmpDbId] : null,
+        raw_data: { ...notification, id: notifDocId },
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data: notifData, error: notifErr } = await supabaseAdmin
+        .from('notifications')
+        .upsert(notificationRow, { onConflict: 'doc_id' })
+        .select()
+        .single();
+
+      if (notifErr) {
+        console.error('[Atomic Clocking] Notification upsert error:', notifErr.message);
+        throw new Error(`Échec de sauvegarde de la notification: ${notifErr.message}`);
+      }
+      savedNotification = notifData;
+      notificationCreatedDbId = notifData.id;
+      console.log(`✓ [TRANSACTION POINTAGE - ÉTAPE 3/3] Notification émise (DB ID: ${notificationCreatedDbId})`);
+    }
+
+    console.log(`🎉 [TRANSACTION POINTAGE RÉUSSIE] Présence, incident et notification validés atomiquement !`);
+    return {
+      success: true,
+      presence: { ...presence, id: presDocId, _dbId: presenceCreatedDbId },
+      incident: savedIncident ? { ...incident, id: incidentRowDoc(savedIncident), _dbId: incidentCreatedDbId } : null,
+      notification: savedNotification ? { ...notification, id: notifRowDoc(savedNotification), _dbId: notificationCreatedDbId } : null,
+    };
+  } catch (error: any) {
+    console.error(`🚨 [TRANSACTION POINTAGE ÉCHOUÉE - ROLLBACK INTÉGRAL] : ${error?.message || error}`);
+
+    // ROLLBACK ATOMIQUE COMPLET
+    if (notificationCreatedDbId) {
+      try {
+        console.log(`⏪ [ROLLBACK POINTAGE] Annulation notification (ID: ${notificationCreatedDbId})...`);
+        await supabaseAdmin.from('notifications').delete().eq('id', notificationCreatedDbId);
+      } catch (rbErr: any) {
+        console.error(`❌ [ROLLBACK ERREUR] Suppression notification:`, rbErr?.message);
+      }
+    }
+    if (incidentCreatedDbId) {
+      try {
+        console.log(`⏪ [ROLLBACK POINTAGE] Annulation incident (ID: ${incidentCreatedDbId})...`);
+        await supabaseAdmin.from('attendance_incidents').delete().eq('id', incidentCreatedDbId);
+      } catch (rbErr: any) {
+        console.error(`❌ [ROLLBACK ERREUR] Suppression incident:`, rbErr?.message);
+      }
+    }
+    if (presenceCreatedDbId) {
+      try {
+        console.log(`⏪ [ROLLBACK POINTAGE] Annulation présence (ID: ${presenceCreatedDbId})...`);
+        await supabaseAdmin.from('presences').delete().eq('id', presenceCreatedDbId);
+      } catch (rbErr: any) {
+        console.error(`❌ [ROLLBACK ERREUR] Suppression présence:`, rbErr?.message);
+      }
+    }
+
+    throw new Error(`Transaction de pointage atomique annulée : ${error?.message || 'Erreur inconnue'}`);
+  }
+}
+
+function incidentRowDoc(row: any): string {
+  return row?.doc_id || row?.id || `inc-${Date.now()}`;
+}
+
+function notifRowDoc(row: any): string {
+  return row?.doc_id || row?.id || `notif-${Date.now()}`;
 }
 

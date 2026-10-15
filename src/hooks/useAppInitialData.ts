@@ -24,6 +24,7 @@ import { cloudSqlService } from '../services/cloudSqlService';
 import { safeStorage } from '../utils/safeStorage';
 import { CITRINE_DEFAULT_LOGO_BASE64 } from '../assets/citrineLogoBase64';
 import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
+import { realtimeSyncService } from '../services/realtimeSyncService';
 
 interface CachedModuleConfig {
   config: CompanyModuleConfig;
@@ -203,6 +204,51 @@ export function useAppInitialData() {
       }),
     ];
 
+    // 🚀 Écouteur Temps Réel Ultra-Rapide (SSE + Event Bus) pour Responsables & Administrateurs
+    const unsubRealtime = realtimeSyncService.subscribeToPresenceUpdates(async (eventData) => {
+      console.log('⚡ [REALTIME SYNC] Nouveau pointage reçu en direct :', eventData.presence?.employeeName || eventData.presence?.employeeId);
+
+      if (eventData.presence) {
+        const newPres = eventData.presence;
+        setPresences((prev) => {
+          const index = prev.findIndex(
+            (p) => p.id === newPres.id || (String(p.employeeId) === String(newPres.employeeId) && p.date === newPres.date)
+          );
+          if (index >= 0) {
+            const copy = [...prev];
+            copy[index] = { ...copy[index], ...newPres };
+            return copy;
+          }
+          return [newPres, ...prev];
+        });
+      }
+
+      if (eventData.incident) {
+        const newInc = eventData.incident;
+        setAttendanceIncidents((prev) => {
+          const index = prev.findIndex((i) => i.id === newInc.id || (String(i.employeeId) === String(newInc.employeeId) && i.date === newInc.date && i.type === newInc.type));
+          if (index >= 0) {
+            const copy = [...prev];
+            copy[index] = { ...copy[index], ...newInc };
+            return copy;
+          }
+          return [newInc, ...prev];
+        });
+      }
+
+      if (eventData.notification) {
+        handleIncomingNotifications([eventData.notification]);
+      }
+
+      // Re-fetch silencieux pour garantir une cohérence intégrale avec la base
+      try {
+        const freshPresences = await getCollection<Presence>(COLLECTIONS.PRESENCES);
+        if (freshPresences && Array.isArray(freshPresences)) {
+          setPresences(freshPresences);
+        }
+      } catch {}
+    });
+
     // Cross-tab synchronization via BroadcastChannel
     let bc: BroadcastChannel | null = null;
     try {
@@ -213,14 +259,42 @@ export function useAppInitialData() {
             setTasks(event.data.tasks);
           } else if (event.data?.type === 'SYNC_NOTIFICATIONS' && Array.isArray(event.data.notifications)) {
             handleIncomingNotifications(event.data.notifications);
+          } else if (event.data?.type === 'SYNC_PRESENCES' && Array.isArray(event.data.presences)) {
+            setPresences(event.data.presences);
+          } else if (event.data?.type === 'SYNC_INCIDENTS' && Array.isArray(event.data.incidents)) {
+            setAttendanceIncidents(event.data.incidents);
           }
         };
       }
     } catch {}
 
-    // Polling interval strictly on database
+    // Polling interval adaptatif (sécurité de synchronisation BD toutes les 3.5s)
+    let lastPresencesHash = '';
+    let lastIncidentsHash = '';
+
     const pollTimer = setInterval(async () => {
       try {
+        // 1. Synchronisation Présences en arrière-plan
+        const freshPres = await getCollection<Presence>(COLLECTIONS.PRESENCES);
+        if (freshPres && Array.isArray(freshPres)) {
+          const currentHash = `${freshPres.length}_${freshPres.map(p => `${p.id}:${p.arrivalTime || ''}:${p.departureTime || ''}`).join(',')}`;
+          if (currentHash !== lastPresencesHash) {
+            lastPresencesHash = currentHash;
+            setPresences(freshPres);
+          }
+        }
+
+        // 2. Synchronisation Incidents en arrière-plan
+        const freshIncs = await getCollection<AttendanceIncident>(COLLECTIONS.ATTENDANCE_INCIDENTS);
+        if (freshIncs && Array.isArray(freshIncs)) {
+          const incHash = `${freshIncs.length}_${freshIncs.map(i => `${i.id}:${i.status}`).join(',')}`;
+          if (incHash !== lastIncidentsHash) {
+            lastIncidentsHash = incHash;
+            setAttendanceIncidents(freshIncs);
+          }
+        }
+
+        // 3. Tâches et Notifications
         const freshTasks = await getCollection<Task>(COLLECTIONS.TASKS);
         if (freshTasks) {
           setTasks(freshTasks);
@@ -231,10 +305,11 @@ export function useAppInitialData() {
           handleIncomingNotifications(freshNotifs);
         }
       } catch {}
-    }, 6000);
+    }, 3500);
 
     return () => {
       unsubs.forEach((u) => typeof u === 'function' && u());
+      unsubRealtime();
       if (bc) bc.close();
       clearInterval(pollTimer);
     };

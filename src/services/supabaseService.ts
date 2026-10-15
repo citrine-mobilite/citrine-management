@@ -991,6 +991,24 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
       return item;
     }
 
+    if (table === 'notifications') {
+      try {
+        if (row.target_user_id) {
+          const { data: u } = await client.from('users').select('id').eq('id', row.target_user_id).maybeSingle();
+          if (!u?.id) {
+            const { data: emp } = await client.from('employees').select('user_id').eq('id', row.target_user_id).maybeSingle();
+            if (emp?.user_id) {
+              row.target_user_id = emp.user_id;
+            } else {
+              delete row.target_user_id;
+            }
+          }
+        }
+      } catch {
+        delete row.target_user_id;
+      }
+    }
+
     if (row.id) {
       const { data, error } = await client.from(table).upsert(row, { onConflict: 'id' }).select().single();
       if (!error && data) return supabaseRowToItem(collectionName, data) as T;

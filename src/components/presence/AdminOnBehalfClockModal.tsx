@@ -1,4 +1,5 @@
 import { savePresenceAtomic } from '../../services/dataService';
+import { realtimeSyncService } from '../../services/realtimeSyncService';
 import React, { useState } from 'react';
 import { UserCheck, X, Clock, AlertCircle, ShieldAlert, Check } from 'lucide-react';
 import { Employee, Presence, AppUser, NotificationLog, AttendanceIncident, CompanyModuleConfig } from '../../types';
@@ -197,6 +198,13 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
       }
     }
+
+    // Diffusion temps réel immédiate multi-appareils
+    realtimeSyncService.broadcastPresencePunch({
+      presence: targetPresence,
+      incident: targetIncident,
+      notification: targetNotification,
+    });
 
     if (showToast) {
       showToast(`Pointage validé avec succès pour ${targetEmployee.name} par ${adminName}.`, 'success');

@@ -8,7 +8,8 @@ import {
   saveDocumentData, 
   deleteDocumentData, 
   getOrCreateUserRecord,
-  executeCollaboratorCreationTransaction
+  executeCollaboratorCreationTransaction,
+  executeAtomicClockingTransaction
 } from "./src/db/repository.ts";
 
 async function startServer() {
@@ -100,6 +101,82 @@ async function startServer() {
     } catch (error: any) {
       console.error("[API Collaborator Transaction Error]:", error);
       res.status(500).json({ success: false, error: error.message || "Échec de la transaction." });
+    }
+  });
+
+  // Realtime Server-Sent Events (SSE) Hub for instant real-time sync (Presences, Incidents, Notifs)
+  const sseClients: Map<string, express.Response> = new Map();
+
+  function broadcastRealtimeEvent(event: string, data: any) {
+    const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const [id, clientRes] of sseClients.entries()) {
+      try {
+        clientRes.write(payload);
+      } catch {
+        sseClients.delete(id);
+      }
+    }
+  }
+
+  // SSE Stream endpoint for real-time frontend listener (Manager dashboard, Employee portal, etc.)
+  app.get("/api/realtime/events", (req: express.Request, res: express.Response) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    const clientId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    sseClients.set(clientId, res);
+
+    res.write(`event: connected\ndata: ${JSON.stringify({ clientId, timestamp: Date.now() })}\n\n`);
+
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(": keepalive\n\n");
+      } catch {
+        clearInterval(keepAlive);
+        sseClients.delete(clientId);
+      }
+    }, 25000);
+
+    req.on("close", () => {
+      clearInterval(keepAlive);
+      sseClients.delete(clientId);
+    });
+  });
+
+  // Client broadcast trigger (allows any client action to notify all other open windows/sessions)
+  app.post("/api/realtime/broadcast", (req: express.Request, res: express.Response) => {
+    const { event, data } = req.body;
+    if (event && data) {
+      broadcastRealtimeEvent(event, data);
+    }
+    res.json({ success: true, clientsNotified: sseClients.size });
+  });
+
+  // Transactional Atomic Clocking (Presence + Incident + Notification)
+  app.post("/api/clocking/atomic", async (req: express.Request, res: express.Response) => {
+    try {
+      const input = req.body;
+      if (!input?.presence) {
+        return res.status(400).json({ success: false, error: "Données de présence manquantes." });
+      }
+      const result = await executeAtomicClockingTransaction(input);
+
+      // DIFFUSION INSTANTANÉE TEMPS RÉEL (Vers le Responsable, l'Admin, etc.)
+      if (result.success) {
+        broadcastRealtimeEvent("presence_update", {
+          presence: result.presence,
+          incident: result.incident,
+          notification: result.notification,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[API Atomic Clocking Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Échec du pointage atomique." });
     }
   });
 

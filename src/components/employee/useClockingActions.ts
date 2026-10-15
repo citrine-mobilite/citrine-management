@@ -15,6 +15,7 @@ import { isLate } from '../../utils/dateUtils';
 import { incidentService } from '../../services/incidentService';
 import { savePresenceAtomic } from '../../services/dataService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
+import { realtimeSyncService } from '../../services/realtimeSyncService';
 
 interface UseClockingActionsProps {
   employeeProfile: Employee;
@@ -86,11 +87,24 @@ export function useClockingActions({
         (i) => isSameEmp(i.employeeId) && i.date === todayStr && (i.type === 'depart_anticipe' || i.type === 'sortie_prematuree')
       );
 
+      const existingToday = presences.find(
+        (p) => isSameEmp(p.employeeId) && p.date === todayStr
+      );
+
+      // Détermination résiliente de l'action de pointage (ne jamais laisser null)
+      const action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure' | 'sortieProStart' | 'sortieProEnd' =
+        pendingClockAction ||
+        (!existingToday?.arrivalTime
+          ? 'arrival'
+          : !existingToday?.departureTime
+          ? 'departure'
+          : 'arrival');
+
       let status: PresenceStatus = 'present';
       let isLateArrival = false;
       let targetIncident: AttendanceIncident | null = null;
 
-      if (pendingClockAction === 'arrival') {
+      if (action === 'arrival') {
         isLateArrival = isLate(timeStr, lateThreshold);
         if (isLateArrival) {
           status = 'late';
@@ -127,7 +141,7 @@ export function useClockingActions({
             }
           }
         }
-      } else if (pendingClockAction === 'departure') {
+      } else if (action === 'departure') {
         const isEarlyDeparture = timeStr < plannedDeparture;
         if (isEarlyDeparture) {
           if (declaredEarlyDept) {
@@ -175,18 +189,18 @@ export function useClockingActions({
         const existing = { ...updatedPresences[existingIdx] };
         existing.employeeId = employeeProfile.id;
         existing.employeeName = employeeProfile.name || existing.employeeName;
-        if (pendingClockAction === 'arrival') {
+        if (action === 'arrival') {
           existing.arrivalTime = timeStr;
           existing.status = status;
-        } else if (pendingClockAction === 'pauseStart') {
+        } else if (action === 'pauseStart') {
           existing.pauseStart = timeStr;
-        } else if (pendingClockAction === 'pauseEnd') {
+        } else if (action === 'pauseEnd') {
           existing.pauseEnd = timeStr;
-        } else if (pendingClockAction === 'departure') {
+        } else if (action === 'departure') {
           existing.departureTime = timeStr;
-        } else if (pendingClockAction === 'sortieProStart') {
+        } else if (action === 'sortieProStart') {
           existing.sortieProStart = timeStr;
-        } else if (pendingClockAction === 'sortieProEnd') {
+        } else if (action === 'sortieProEnd') {
           existing.sortieProEnd = timeStr;
         }
         existing.location = locationName;
@@ -202,12 +216,12 @@ export function useClockingActions({
           employeeName: employeeProfile.name,
           date: todayStr,
           status,
-          arrivalTime: pendingClockAction === 'arrival' ? timeStr : null,
-          pauseStart: pendingClockAction === 'pauseStart' ? timeStr : null,
-          pauseEnd: pendingClockAction === 'pauseEnd' ? timeStr : null,
-          departureTime: pendingClockAction === 'departure' ? timeStr : null,
-          sortieProStart: pendingClockAction === 'sortieProStart' ? timeStr : null,
-          sortieProEnd: pendingClockAction === 'sortieProEnd' ? timeStr : null,
+          arrivalTime: action === 'arrival' ? timeStr : null,
+          pauseStart: action === 'pauseStart' ? timeStr : null,
+          pauseEnd: action === 'pauseEnd' ? timeStr : null,
+          departureTime: action === 'departure' ? timeStr : null,
+          sortieProStart: action === 'sortieProStart' ? timeStr : null,
+          sortieProEnd: action === 'sortieProEnd' ? timeStr : null,
           location: locationName,
           latitude,
           longitude,
@@ -226,22 +240,22 @@ export function useClockingActions({
           sortieProStart: 'Mission pro (Départ)',
           sortieProEnd: 'Mission pro (Retour)',
         };
-        const actionLabel = actionLabels[pendingClockAction] || 'Pointage';
+        const actionLabel = actionLabels[action] || 'Pointage';
         let notifTitle = `Pointage enregistré : ${actionLabel}`;
         let notifContent = `Votre pointage (${actionLabel}) a été validé à ${timeStr} sur le site ${locationName}.`;
         let notifPayload: any = {
           source: 'pointage',
           employeeId: employeeProfile.id,
           employeeName: employeeProfile.name,
-          action: pendingClockAction,
+          action,
           time: timeStr,
           date: todayStr,
         };
-        if (isLateArrival) {
+        if (isLateArrival && action === 'arrival') {
           notifTitle = 'Pointage validé : Arrivée (Retard constaté)';
           notifContent = `Votre arrivée a été validée à ${timeStr} sur le site ${locationName}. Un incident de retard (après ${lateThreshold}) a été consigné automatiquement.`;
           notifPayload.incidentType = 'retard';
-        } else if (pendingClockAction === 'departure' && timeStr < plannedDeparture) {
+        } else if (action === 'departure' && timeStr < plannedDeparture) {
           notifTitle = 'Pointage validé : Départ (Sortie prématurée)';
           notifContent = `Départ badgé à ${timeStr} sur le site ${locationName} avant ${plannedDeparture}. Un incident de sortie anticipée a été consigné automatiquement.`;
           notifPayload.incidentType = 'sortie_prematuree';
@@ -249,8 +263,8 @@ export function useClockingActions({
         targetNotification = {
           id: `notif-clock-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           type: 'system',
-          recipient: employeeProfile.id,
-          targetUserId: employeeProfile.id,
+          recipient: employeeProfile.name || employeeProfile.email || employeeProfile.id,
+          targetUserId: employeeProfile.userId ? String(employeeProfile.userId) : employeeProfile.id,
           title: notifTitle,
           content: notifContent,
           message: notifContent,
@@ -260,7 +274,7 @@ export function useClockingActions({
         };
       }
 
-      // ATOMIC TRANSACTION: Save presence, incident, and notification together
+      // TRANSACTION ATOMIQUE : Sauvegarde unifiée présence, incident et notification
       const atomicResult = await savePresenceAtomic(targetPresence, targetIncident, targetNotification);
       if (!atomicResult.success) {
         throw new Error(atomicResult.error || 'Erreur lors de la transaction atomique de pointage.');
@@ -277,10 +291,17 @@ export function useClockingActions({
         }
       }
 
+      // Diffusion temps réel immédiate multi-appareils (Responsable, Admin, etc.)
+      realtimeSyncService.broadcastPresencePunch({
+        presence: targetPresence,
+        incident: targetIncident,
+        notification: targetNotification,
+      });
+
       try {
         pushNotificationBridgeService.sendPush({
           title: `Pointage de ${employeeProfile.name}`,
-          message: `${employeeProfile.name} a effectué un pointage (${pendingClockAction}) à ${timeStr} sur le site ${locationName}.`,
+          message: `${employeeProfile.name} a effectué un pointage (${action}) à ${timeStr} sur le site ${locationName}.`,
           senderName: employeeProfile.name,
           type: 'attendance',
           link: 'presences',
@@ -289,14 +310,24 @@ export function useClockingActions({
         console.warn('Failed to send push notification:', e);
       }
 
-      if (!isLateArrival && pendingClockAction === 'arrival') {
-        showToast('Pointage Réussi', `Arrivée à lheure badgée avec succès (${timeStr}).`, 'success');
-      } else if (pendingClockAction === 'sortieProStart') {
+      if (action === 'arrival') {
+        if (isLateArrival) {
+          showToast('Arrivée Enregistrée', `Pointage validé à ${timeStr} (retard automatique consigné).`, 'warning');
+        } else {
+          showToast('Pointage Réussi', `Arrivée à l'heure badgée avec succès (${timeStr}).`, 'success');
+        }
+      } else if (action === 'departure') {
+        showToast('Départ Validé', `Départ badgé avec succès à ${timeStr}.`, 'success');
+      } else if (action === 'pauseStart') {
+        showToast('Début de Pause', `Pause enregistrée à ${timeStr}.`, 'info');
+      } else if (action === 'pauseEnd') {
+        showToast('Retour de Pause', `Reprise de poste enregistrée à ${timeStr}.`, 'success');
+      } else if (action === 'sortieProStart') {
         showToast('Sortie Pro Badgée', `Départ en mission extérieure enregistré à ${timeStr}.`, 'success');
-      } else if (pendingClockAction === 'sortieProEnd') {
+      } else if (action === 'sortieProEnd') {
         showToast('Retour Pro Badgé', `Retour de mission professionnelle enregistré à ${timeStr}.`, 'success');
-      } else if (pendingClockAction !== 'arrival') {
-        showToast('Pointage Validé', `Votre action (${pendingClockAction}) a été enregistrée.`, 'success');
+      } else {
+        showToast('Pointage Validé', `Votre action (${action}) a été enregistrée.`, 'success');
       }
 
       onSuccess();

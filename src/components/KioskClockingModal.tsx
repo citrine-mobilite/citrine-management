@@ -1,4 +1,5 @@
 import { savePresenceAtomic } from '../services/dataService';
+import { realtimeSyncService } from '../services/realtimeSyncService';
 import React, { useState } from 'react';
 import { X, Search, Tablet, CheckCircle2 } from 'lucide-react';
 import { Employee, Presence, NotificationLog, CompanyModuleConfig, AttendanceIncident } from '../types';
@@ -179,6 +180,13 @@ export default function KioskClockingModal({
         window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
       }
     }
+
+    // Diffusion temps réel immédiate multi-appareils (Responsable, Admin, etc.)
+    realtimeSyncService.broadcastPresencePunch({
+      presence: targetPresence,
+      incident: targetIncident,
+      notification: targetNotification,
+    });
 
     pushNotificationBridgeService.sendPush({
       title: 'Pointage Enregistré ⏱️',
