@@ -201,11 +201,13 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
         if (
           payloadObj?.source === 'pointage' || 
           payloadObj?.source === 'kiosk' || 
-          titleLower.includes('pointage')
+          payloadObj?.source === 'attendance_incident' ||
+          titleLower.includes('pointage') ||
+          titleLower.includes('signalement rh')
         ) {
           cat = 'Pointage';
-          actionUrl = '#employee/presences';
-          alertType = titleLower.includes('retard') ? 'urgent' : 'info';
+          actionUrl = '#employee/incidents';
+          alertType = (titleLower.includes('retard') || titleLower.includes('absence') || titleLower.includes('manquement')) ? 'urgent' : 'info';
         } else if (
           payloadObj?.source === 'task_movement' || 
           payloadObj?.source === 'task_created' || 

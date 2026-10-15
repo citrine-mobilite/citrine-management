@@ -111,8 +111,11 @@ export default function KioskClockingModal({
         status: 'automatique',
         createdAt: new Date().toISOString(),
       };
-      incidentService.saveIncident(autoIncident);
-      onAddAttendanceIncident?.(autoIncident);
+      if (onAddAttendanceIncident) {
+        onAddAttendanceIncident(autoIncident);
+      } else {
+        incidentService.saveIncident(autoIncident);
+      }
     } else if (action === 'departure' && timeStr < plannedDeparture) {
       const autoIncident: AttendanceIncident = {
         id: `inc-${Date.now()}`,
@@ -128,8 +131,11 @@ export default function KioskClockingModal({
         status: 'automatique',
         createdAt: new Date().toISOString(),
       };
-      incidentService.saveIncident(autoIncident);
-      onAddAttendanceIncident?.(autoIncident);
+      if (onAddAttendanceIncident) {
+        onAddAttendanceIncident(autoIncident);
+      } else {
+        incidentService.saveIncident(autoIncident);
+      }
     }
 
     onUpdatePresences(updatedPresences);

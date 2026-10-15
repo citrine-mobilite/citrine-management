@@ -171,7 +171,8 @@ export function useAppInitialData() {
         const unique: AttendanceIncident[] = [];
         const seen = new Set<string>();
         (data || []).forEach((item) => {
-          const key = `${item.employeeId}_${item.date}_${item.type}_${item.reason?.trim().toLowerCase()}`;
+          const reasonStr = (item.reason || (item as any).description || '').trim().toLowerCase();
+          const key = `${item.employeeId}_${item.date}_${item.type}_${reasonStr}`;
           if (!seen.has(key)) {
             seen.add(key);
             unique.push(item);
@@ -436,14 +437,17 @@ export function useAppInitialData() {
   };
 
   const handleAddAttendanceIncident = async (incident: AttendanceIncident) => {
+    const incidentEmpIdStr = String(incident.employeeId || '');
+    const incidentReasonStr = (incident.reason || (incident as any).description || '').trim().toLowerCase();
+
     // Éviter d'insérer un incident s'il en existe déjà un identique pour ce collaborateur
     const existingDuplicate = attendanceIncidents.find(
       (i) =>
         i.id !== incident.id &&
-        i.employeeId === incident.employeeId &&
+        String(i.employeeId || '') === incidentEmpIdStr &&
         i.date === incident.date &&
         i.type === incident.type &&
-        i.reason?.trim().toLowerCase() === incident.reason?.trim().toLowerCase()
+        (i.reason || (i as any).description || '').trim().toLowerCase() === incidentReasonStr
     );
 
     if (existingDuplicate) {
@@ -463,10 +467,12 @@ export function useAppInitialData() {
       };
       const label = typeLabels[incident.type] || 'Signalement RH';
       const notifId = `notif-inc-${incident.id}`;
+
       const notif: NotificationLog = {
         id: notifId,
         type: 'system',
-        recipient: incident.employeeId || incident.employeeName || 'Collaborateur',
+        recipient: incident.employeeName || incident.employeeId || 'Collaborateur',
+        targetUserId: incident.employeeId ? String(incident.employeeId) : undefined,
         title: `Signalement RH : ${label}`,
         content: incident.reason || `Incident enregistré pour la date du ${incident.date}.`,
         payload: JSON.stringify({
@@ -479,8 +485,12 @@ export function useAppInitialData() {
         timestamp: incident.createdAt || new Date().toISOString(),
         read: false,
       };
-      await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
-      setNotifications((prev) => [notif, ...prev.filter((n) => n.id !== notifId)]);
+      try {
+        await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
+        setNotifications((prev) => [notif, ...prev.filter((n) => n.id !== notifId)]);
+      } catch (e) {
+        console.warn('Notice saving notification for incident:', e);
+      }
     }
   };
 

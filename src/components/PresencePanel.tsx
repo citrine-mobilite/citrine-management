@@ -211,25 +211,36 @@ export default function PresencePanel({
       };
       updatedPresences.unshift(newPresence);
 
-      // Création automatique de l'incident Retard
+      // Création automatique de l'incident Retard (avec anti-doublon)
       if (isLateNow) {
-        const autoIncident: AttendanceIncident = {
-          id: `inc-${Date.now()}`,
-          employeeId: activeEmployee.id,
-          employeeName: activeEmployee.name,
-          date: selectedDate,
-          timeString: timeNow,
-          type: 'retard',
-          origin: 'signale_par_responsable',
-          reason: `Retard automatique constaté à ${timeNow} (seuil: ${lateThreshold})`,
-          isDeclaredInAdvance: false,
-          isJustified: false,
-          status: 'automatique',
-          createdAt: new Date().toISOString(),
-        };
-        incidentService.saveIncident(autoIncident);
-        if (onAddAttendanceIncident) onAddAttendanceIncident(autoIncident);
-        else if (onUpdateAttendanceIncidents) onUpdateAttendanceIncidents([autoIncident, ...attendanceIncidents]);
+        const empIdStr = String(activeEmployee.id || '');
+        const alreadyHasIncident = attendanceIncidents.some(
+          (i) => String(i.employeeId) === empIdStr && i.date === selectedDate && i.type === 'retard'
+        );
+
+        if (!alreadyHasIncident) {
+          const autoIncident: AttendanceIncident = {
+            id: `inc-${Date.now()}`,
+            employeeId: empIdStr,
+            employeeName: activeEmployee.name,
+            date: selectedDate,
+            timeString: timeNow,
+            type: 'retard',
+            origin: 'automatique_pointage',
+            reason: `Retard automatique constaté à ${timeNow} (seuil: ${lateThreshold})`,
+            isDeclaredInAdvance: false,
+            isJustified: false,
+            status: 'automatique',
+            createdAt: new Date().toISOString(),
+          };
+          if (onAddAttendanceIncident) {
+            onAddAttendanceIncident(autoIncident);
+          } else if (onUpdateAttendanceIncidents) {
+            onUpdateAttendanceIncidents([autoIncident, ...attendanceIncidents]);
+          } else {
+            incidentService.saveIncident(autoIncident);
+          }
+        }
       }
 
       if (showToast) showToast(`Arrivée pointée à ${timeNow} pour ${activeEmployee.name}.`, isLateNow ? 'error' : 'success');
@@ -255,24 +266,35 @@ export default function PresencePanel({
               status: 'approved'
             });
 
-            // Création automatique de l'incident Sortie prématurée
-            const autoIncident: AttendanceIncident = {
-              id: `inc-${Date.now()}`,
-              employeeId: activeEmployee.id,
-              employeeName: activeEmployee.name,
-              date: selectedDate,
-              timeString: timeNow,
-              type: 'sortie_prematuree',
-              origin: 'signale_par_responsable',
-              reason: `Sortie prématurée constatée à ${timeNow} avant 16h30`,
-              isDeclaredInAdvance: false,
-              isJustified: false,
-              status: 'automatique',
-              createdAt: new Date().toISOString(),
-            };
-            incidentService.saveIncident(autoIncident);
-            if (onAddAttendanceIncident) onAddAttendanceIncident(autoIncident);
-            else if (onUpdateAttendanceIncidents) onUpdateAttendanceIncidents([autoIncident, ...attendanceIncidents]);
+            // Création automatique de l'incident Sortie prématurée (avec anti-doublon)
+            const empIdStr = String(activeEmployee.id || '');
+            const alreadyHasEarly = attendanceIncidents.some(
+              (i) => String(i.employeeId) === empIdStr && i.date === selectedDate && (i.type === 'sortie_prematuree' || i.type === 'depart_anticipe')
+            );
+
+            if (!alreadyHasEarly) {
+              const autoIncident: AttendanceIncident = {
+                id: `inc-${Date.now()}`,
+                employeeId: empIdStr,
+                employeeName: activeEmployee.name,
+                date: selectedDate,
+                timeString: timeNow,
+                type: 'sortie_prematuree',
+                origin: 'automatique_pointage',
+                reason: `Sortie prématurée constatée à ${timeNow} avant 16h30 (référence: ${plannedDeparture})`,
+                isDeclaredInAdvance: false,
+                isJustified: false,
+                status: 'automatique',
+                createdAt: new Date().toISOString(),
+              };
+              if (onAddAttendanceIncident) {
+                onAddAttendanceIncident(autoIncident);
+              } else if (onUpdateAttendanceIncidents) {
+                onUpdateAttendanceIncidents([autoIncident, ...attendanceIncidents]);
+              } else {
+                incidentService.saveIncident(autoIncident);
+              }
+            }
           }
         }
         updatedPresences[existingIndex] = updatedObj;

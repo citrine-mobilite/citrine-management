@@ -175,7 +175,7 @@ export const attendanceIncidents = pgTable('attendance_incidents', {
   reason: text('reason'),
   isDeclaredInAdvance: boolean('is_declared_in_advance').default(false),
   isJustified: boolean('is_justified').default(false),
-  status: boolean('status').default(true),
+  status: text('status').default('en_attente'),
   rawData: jsonb('raw_data'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),

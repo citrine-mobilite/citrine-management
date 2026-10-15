@@ -293,7 +293,14 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     onAddNotification,
   });
 
-  const myIncidents = attendanceIncidents.filter((i) => i.employeeId === employeeProfile.id);
+  const myIncidents = attendanceIncidents.filter((i) => {
+    const iEmpId = String(i.employeeId || '');
+    return (
+      iEmpId === String(employeeProfile.id || '') ||
+      (employeeProfile.uid && iEmpId === String(employeeProfile.uid)) ||
+      (employeeProfile._dbId && iEmpId === String(employeeProfile._dbId))
+    );
+  });
 
   // Sensor diagnostic
   const [sensorsDiagnostic, setSensorsDiagnostic] = useState<{

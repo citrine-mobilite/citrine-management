@@ -270,16 +270,27 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         raw_data: item,
       };
     }
-    case 'attendance_incidents':
+    case 'attendance_incidents': {
+      const empIdVal = item.employeeId || item.employee_id;
+      const numEmpId = (typeof empIdVal === 'number' && Number.isInteger(empIdVal))
+        ? empIdVal
+        : (typeof empIdVal === 'string' && /^\d+$/.test(empIdVal))
+          ? Number(empIdVal)
+          : null;
+
+      const dateStr = item.date ? String(item.date).split('T')[0] : new Date().toISOString().split('T')[0];
+      const descStr = item.reason || item.description || item.origin || 'Incident de présence';
+
       return {
         ...base,
-        employee_id: item.employeeId || null,
-        date: item.date || new Date().toISOString().split('T')[0],
+        employee_id: numEmpId,
+        date: dateStr,
         type: item.type || 'retard',
-        description: item.reason || item.description || item.origin || 'Incident de présence',
-        status: item.status || 'en_attente',
+        description: descStr,
+        status: typeof item.status === 'string' ? item.status : 'automatique',
         raw_data: item,
       };
+    }
     case 'badge_codes_16':
       return {
         ...base,
@@ -425,7 +436,9 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         title: item.title || 'Notification',
         message: item.message || item.content || item.description || item.payload || item.title || 'Notification système',
         type: item.type || 'system',
-        target_user_id: item.targetUserId || item.target_user_id || item.recipient || null,
+        target_user_id: (typeof item.targetUserId === 'number' || (typeof item.targetUserId === 'string' && /^\d+$/.test(item.targetUserId)))
+          ? Number(item.targetUserId)
+          : null,
         is_read: Boolean(item.isRead || item.read),
       };
     case 'company_settings':
@@ -731,6 +744,67 @@ function supabaseRowToItem(collectionName: string, row: any): any {
       type: row.type || raw.type || 'system',
       read: Boolean(row.is_read ?? raw.read ?? false),
       timestamp: row.created_at || raw.timestamp || new Date().toISOString(),
+    };
+  }
+
+  if (table === 'presences') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    const originalId = raw.id || row.doc_id || String(row.id);
+    return {
+      ...raw,
+      id: originalId,
+      docId: row.doc_id || originalId,
+      uid: row.uid || raw.uid,
+      _dbId: row.id,
+      employeeId: raw.employeeId || (row.employee_id ? String(row.employee_id) : ''),
+      employeeName: row.employee_name || raw.employeeName || '',
+      date: row.date ? String(row.date).split('T')[0] : (raw.date || new Date().toISOString().split('T')[0]),
+      arrivalTime: row.arrival_time || raw.arrivalTime || null,
+      departureTime: row.departure_time || raw.departureTime || null,
+      pauseStart: raw.pauseStart || null,
+      pauseEnd: raw.pauseEnd || null,
+      sortieProStart: raw.sortieProStart || null,
+      sortieProEnd: raw.sortieProEnd || null,
+      status: row.status || raw.status || 'present',
+      lateMinutes: Number(row.late_minutes ?? raw.lateMinutes ?? 0),
+      pauseMinutes: Number(row.pause_minutes ?? raw.pauseMinutes ?? 0),
+      motif: row.motif || raw.motif || null,
+      signature: row.signature || raw.signature || null,
+      location: raw.location || 'Bureau Principal - Douala III',
+      latitude: typeof row.gps_lat === 'number' ? row.gps_lat : (raw.latitude ?? null),
+      longitude: typeof row.gps_lng === 'number' ? row.gps_lng : (raw.longitude ?? null),
+      clockingMethod: row.method || raw.clockingMethod || 'kiosk',
+      emergencies: raw.emergencies || [],
+      createdAt: row.created_at || raw.createdAt,
+      updatedAt: row.updated_at || raw.updatedAt,
+    };
+  }
+
+  if (table === 'attendance_incidents') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    const originalId = raw.id || row.doc_id || String(row.id);
+    const empId = raw.employeeId || (row.employee_id ? String(row.employee_id) : '');
+    const dateVal = raw.date || (row.date ? String(row.date).split('T')[0] : new Date().toISOString().split('T')[0]);
+    const reasonVal = raw.reason || row.description || raw.motif || 'Incident de présence';
+    return {
+      ...raw,
+      id: originalId,
+      docId: row.doc_id || originalId,
+      uid: row.uid || raw.uid,
+      _dbId: row.id,
+      employeeId: String(empId),
+      employeeName: raw.employeeName || raw.employee_name || '',
+      date: dateVal,
+      timeString: raw.timeString || raw.time || '08:30',
+      type: raw.type || row.type || 'retard',
+      origin: raw.origin || (raw.status === 'automatique' || row.status === 'automatique' ? 'automatique_pointage' : 'signale_par_responsable'),
+      reason: reasonVal,
+      description: reasonVal,
+      isDeclaredInAdvance: Boolean(raw.isDeclaredInAdvance),
+      isJustified: Boolean(raw.isJustified || row.status === 'justifie'),
+      status: raw.status || row.status || 'automatique',
+      createdAt: row.created_at || raw.createdAt || new Date().toISOString(),
+      adminComment: raw.adminComment || raw.admin_comment || undefined,
     };
   }
 

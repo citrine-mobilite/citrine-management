@@ -77,12 +77,21 @@ export function useClockingActions({
       const lateThreshold = moduleConfig?.lateThresholdTime || '08:30';
       const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
 
-      // Check for declared incidents for today
+      // Check for declared incidents for today with flexible ID matching
+      const empIdStr = String(employeeProfile.id || '');
+      const empUidStr = employeeProfile.uid ? String(employeeProfile.uid) : '';
+      const empDbIdStr = employeeProfile._dbId ? String(employeeProfile._dbId) : '';
+
+      const isSameEmp = (iEmpId: any) => {
+        const str = String(iEmpId || '');
+        return str === empIdStr || (empUidStr && str === empUidStr) || (empDbIdStr && str === empDbIdStr);
+      };
+
       const declaredRetard = attendanceIncidents.find(
-        (i) => i.employeeId === employeeProfile.id && i.date === todayStr && i.type === 'retard'
+        (i) => isSameEmp(i.employeeId) && i.date === todayStr && i.type === 'retard'
       );
       const declaredEarlyDept = attendanceIncidents.find(
-        (i) => i.employeeId === employeeProfile.id && i.date === todayStr && (i.type === 'depart_anticipe' || i.type === 'sortie_prematuree')
+        (i) => isSameEmp(i.employeeId) && i.date === todayStr && (i.type === 'depart_anticipe' || i.type === 'sortie_prematuree')
       );
 
       let status: PresenceStatus = 'present';
@@ -94,70 +103,97 @@ export function useClockingActions({
           status = 'late';
 
           if (declaredRetard) {
+            const reasonBase = declaredRetard.reason || 'Retard';
             const updatedRetard: AttendanceIncident = {
               ...declaredRetard,
               timeString: declaredRetard.timeString || timeStr,
               isJustified: true,
               status: 'justifie',
-              reason: declaredRetard.reason.includes('Constaté à')
-                ? declaredRetard.reason
-                : `${declaredRetard.reason} (Constaté au pointage à ${timeStr})`,
+              reason: reasonBase.includes('Constaté à')
+                ? reasonBase
+                : `${reasonBase} (Constaté au pointage à ${timeStr})`,
             };
-            await incidentService.saveIncident(updatedRetard);
-            onAddAttendanceIncident?.(updatedRetard);
+            if (onAddAttendanceIncident) {
+              await onAddAttendanceIncident(updatedRetard);
+            } else {
+              await incidentService.saveIncident(updatedRetard);
+            }
           } else {
-            const autoIncident: AttendanceIncident = {
-              id: `inc-${Date.now()}`,
-              employeeId: employeeProfile.id,
-              employeeName: employeeProfile.name,
-              date: todayStr,
-              timeString: timeStr,
-              type: 'retard',
-              origin: 'automatique_pointage',
-              reason: `Retard automatique constaté à ${timeStr} (seuil: ${lateThreshold})`,
-              isDeclaredInAdvance: false,
-              isJustified: false,
-              status: 'automatique',
-              createdAt: new Date().toISOString(),
-            };
+            // Vérifier si un retard automatique a déjà été consigné aujourd'hui
+            const existingAutoRetard = attendanceIncidents.find(
+              (i) => isSameEmp(i.employeeId) && i.date === todayStr && i.type === 'retard'
+            );
 
-            await incidentService.saveIncident(autoIncident);
-            onAddAttendanceIncident?.(autoIncident);
+            if (!existingAutoRetard) {
+              const autoIncident: AttendanceIncident = {
+                id: `inc-${Date.now()}`,
+                employeeId: empIdStr,
+                employeeName: employeeProfile.name,
+                date: todayStr,
+                timeString: timeStr,
+                type: 'retard',
+                origin: 'automatique_pointage',
+                reason: `Retard automatique constaté à ${timeStr} (seuil: ${lateThreshold})`,
+                isDeclaredInAdvance: false,
+                isJustified: false,
+                status: 'automatique',
+                createdAt: new Date().toISOString(),
+              };
+
+              if (onAddAttendanceIncident) {
+                await onAddAttendanceIncident(autoIncident);
+              } else {
+                await incidentService.saveIncident(autoIncident);
+              }
+            }
           }
         }
       } else if (pendingClockAction === 'departure') {
         const isEarlyDeparture = timeStr < plannedDeparture;
         if (isEarlyDeparture) {
           if (declaredEarlyDept) {
+            const reasonBase = declaredEarlyDept.reason || 'Sortie prématurée';
             const updatedEarly: AttendanceIncident = {
               ...declaredEarlyDept,
               timeString: declaredEarlyDept.timeString || timeStr,
               isJustified: true,
               status: 'justifie',
-              reason: declaredEarlyDept.reason.includes('Départ à')
-                ? declaredEarlyDept.reason
-                : `${declaredEarlyDept.reason} (Départ effectif à ${timeStr})`,
+              reason: reasonBase.includes('Départ à')
+                ? reasonBase
+                : `${reasonBase} (Départ effectif à ${timeStr})`,
             };
-            await incidentService.saveIncident(updatedEarly);
-            onAddAttendanceIncident?.(updatedEarly);
+            if (onAddAttendanceIncident) {
+              await onAddAttendanceIncident(updatedEarly);
+            } else {
+              await incidentService.saveIncident(updatedEarly);
+            }
           } else {
-            const autoIncident: AttendanceIncident = {
-              id: `inc-${Date.now()}`,
-              employeeId: employeeProfile.id,
-              employeeName: employeeProfile.name,
-              date: todayStr,
-              timeString: timeStr,
-              type: 'sortie_prematuree',
-              origin: 'automatique_pointage',
-              reason: `Sortie prématurée constatée à ${timeStr} avant ${plannedDeparture}`,
-              isDeclaredInAdvance: false,
-              isJustified: false,
-              status: 'automatique',
-              createdAt: new Date().toISOString(),
-            };
+            const existingAutoEarly = attendanceIncidents.find(
+              (i) => isSameEmp(i.employeeId) && i.date === todayStr && (i.type === 'sortie_prematuree' || i.type === 'depart_anticipe')
+            );
 
-            await incidentService.saveIncident(autoIncident);
-            onAddAttendanceIncident?.(autoIncident);
+            if (!existingAutoEarly) {
+              const autoIncident: AttendanceIncident = {
+                id: `inc-${Date.now()}`,
+                employeeId: empIdStr,
+                employeeName: employeeProfile.name,
+                date: todayStr,
+                timeString: timeStr,
+                type: 'sortie_prematuree',
+                origin: 'automatique_pointage',
+                reason: `Sortie prématurée constatée à ${timeStr} avant ${plannedDeparture}`,
+                isDeclaredInAdvance: false,
+                isJustified: false,
+                status: 'automatique',
+                createdAt: new Date().toISOString(),
+              };
+
+              if (onAddAttendanceIncident) {
+                await onAddAttendanceIncident(autoIncident);
+              } else {
+                await incidentService.saveIncident(autoIncident);
+              }
+            }
           }
         }
       }
@@ -362,13 +398,22 @@ export function useClockingActions({
     const now = new Date();
     const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+    const empIdStr = String(employeeProfile.id || '');
+    const empUidStr = employeeProfile.uid ? String(employeeProfile.uid) : '';
+    const empDbIdStr = employeeProfile._dbId ? String(employeeProfile._dbId) : '';
+
+    const isSameEmp = (iEmpId: any) => {
+      const str = String(iEmpId || '');
+      return str === empIdStr || (empUidStr && str === empUidStr) || (empDbIdStr && str === empDbIdStr);
+    };
+
     // Anti-doublon : vérifier si ce signalement identique a déjà été consigné aujourd'hui
     const isDuplicate = attendanceIncidents.some(
       (i) =>
-        i.employeeId === employeeProfile.id &&
+        isSameEmp(i.employeeId) &&
         i.date === todayStr &&
         i.type === emergencyType &&
-        i.reason.trim().toLowerCase() === emergencyReason.trim().toLowerCase()
+        (i.reason || '').trim().toLowerCase() === emergencyReason.trim().toLowerCase()
     );
 
     if (isDuplicate) {
@@ -380,7 +425,7 @@ export function useClockingActions({
     // 1. Créer et sauvegarder l'AttendanceIncident officiel
     const newIncident: AttendanceIncident = {
       id: `inc-${Date.now()}`,
-      employeeId: employeeProfile.id,
+      employeeId: empIdStr,
       employeeName: employeeProfile.name,
       date: todayStr,
       timeString,
@@ -393,8 +438,11 @@ export function useClockingActions({
       createdAt: now.toISOString(),
     };
 
-    await incidentService.saveIncident(newIncident);
-    onAddAttendanceIncident?.(newIncident);
+    if (onAddAttendanceIncident) {
+      await onAddAttendanceIncident(newIncident);
+    } else {
+      await incidentService.saveIncident(newIncident);
+    }
 
     // 2. Also register into presence emergencies for backward compatibility and badge display
     const newEmergency: EmergencyDeclaration = {

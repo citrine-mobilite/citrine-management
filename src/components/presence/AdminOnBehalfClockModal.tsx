@@ -137,8 +137,11 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         status: 'automatique',
         createdAt: new Date().toISOString(),
       };
-      incidentService.saveIncident(autoIncident);
-      onAddAttendanceIncident?.(autoIncident);
+      if (onAddAttendanceIncident) {
+        onAddAttendanceIncident(autoIncident);
+      } else {
+        incidentService.saveIncident(autoIncident);
+      }
     } else if (clockAction === 'departure' && nowTime < plannedDeparture) {
       const autoIncident: AttendanceIncident = {
         id: `inc-${Date.now()}`,
@@ -154,8 +157,11 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         status: 'automatique',
         createdAt: new Date().toISOString(),
       };
-      incidentService.saveIncident(autoIncident);
-      onAddAttendanceIncident?.(autoIncident);
+      if (onAddAttendanceIncident) {
+        onAddAttendanceIncident(autoIncident);
+      } else {
+        incidentService.saveIncident(autoIncident);
+      }
     }
 
     onUpdatePresences(updatedPresences);

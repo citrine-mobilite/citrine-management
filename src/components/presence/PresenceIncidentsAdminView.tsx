@@ -48,10 +48,14 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
   const [isCreating, setIsCreating] = useState(false);
 
   const filtered = attendanceIncidents.filter((inc) => {
+    const empName = inc.employeeName || employees.find((e) => String(e.id) === String(inc.employeeId))?.name || '';
+    const reasonText = inc.reason || inc.description || '';
+    const dateText = inc.date || '';
+
     const matchesSearch = 
-      inc.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inc.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inc.date.includes(searchTerm);
+      empName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reasonText.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      dateText.includes(searchTerm);
     const matchesType = 
       typeFilter === 'all' || 
       inc.type === typeFilter || 
@@ -309,12 +313,14 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
                     <tr key={inc.id} className="hover:bg-stone-50/60 transition">
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="font-bold text-stone-900">{inc.date}</div>
-                        <span className="font-mono text-[11px] text-stone-500">[{inc.timeString}]</span>
+                        <span className="font-mono text-[11px] text-stone-500">[{inc.timeString || '08:30'}]</span>
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className="font-bold text-stone-900 block">{inc.employeeName}</span>
-                        <span className="text-[10px] text-stone-400 font-mono">ID: {inc.employeeId}</span>
+                        <span className="font-bold text-stone-900 block">
+                          {inc.employeeName || employees.find((e) => String(e.id) === String(inc.employeeId))?.name || 'Collaborateur'}
+                        </span>
+                        <span className="text-[10px] text-stone-400 font-mono">ID: {inc.employeeId || inc.id}</span>
                       </td>
 
                       <td className="py-3 px-4 whitespace-nowrap">
@@ -344,7 +350,7 @@ export const PresenceIncidentsAdminView: React.FC<PresenceIncidentsAdminViewProp
                       </td>
 
                       <td className="py-3 px-4 min-w-[220px]">
-                        <p className="text-stone-800 text-xs">{inc.reason}</p>
+                        <p className="text-stone-800 text-xs">{inc.reason || inc.description || 'Incident consigné'}</p>
                         {inc.adminComment && (
                           <p className="text-[10px] text-[#2A7B76] italic mt-0.5">
                             Observation RH : {inc.adminComment}
