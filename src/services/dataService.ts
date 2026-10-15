@@ -269,3 +269,26 @@ export async function deleteDocument(collectionName: string, id: string): Promis
 export async function seedDatabaseIfEmpty() {
   return;
 }
+
+export async function savePresenceAtomic(presence: any, incident?: any | null, notification?: any | null): Promise<{ success: boolean; error?: string }> {
+  let presenceSaved = false;
+  let incidentSaved = false;
+  try {
+    await saveDocument(COLLECTIONS.PRESENCES, presence);
+    presenceSaved = true;
+    if (incident) {
+      await saveDocument(COLLECTIONS.ATTENDANCE_INCIDENTS, incident);
+      incidentSaved = true;
+    }
+    if (notification) {
+      await saveDocument(COLLECTIONS.NOTIFICATIONS, notification);
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error("Atomic presence transaction failed:", err);
+    if (presenceSaved && !incidentSaved && incident) {
+      try { await deleteDocument(COLLECTIONS.PRESENCES, presence.id); } catch {}
+    }
+    return { success: false, error: err.message || "Erreur lors de la transaction atomique de pointage" };
+  }
+}
