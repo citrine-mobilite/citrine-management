@@ -41,21 +41,28 @@ export function useClockingActions({
 }: UseClockingActionsProps) {
   const [isLocating, setIsLocating] = useState<boolean>(false);
 
-  const handleConfirmClocking = async (method: ClockingMethod, onSuccess: () => void) => {
+  const handleConfirmClocking = async (
+    pendingClockAction: "arrival" | "pauseStart" | "pauseEnd" | "departure" | "sortieProStart" | "sortieProEnd" | null,
+    method: ClockingMethod,
+    onSuccess: () => void,
+    customLocation?: { latitude?: number; longitude?: number; locationName?: string }
+  ) => {
     setIsLocating(true);
     try {
-      let latitude: number | undefined;
-      let longitude: number | undefined;
-      let locationName = 'Bureau / Site principal';
+      let latitude: number | undefined = customLocation?.latitude;
+      let longitude: number | undefined = customLocation?.longitude;
+      let locationName = customLocation?.locationName || 'Bureau / Site principal';
 
-      if (navigator.geolocation) {
-        try {
-          const pos = await getCurrentUserLocation();
-          latitude = pos.latitude;
-          longitude = pos.longitude;
-          locationName = `GPS (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
-        } catch (geoErr) {
-          console.warn('Geolocation unavailable:', geoErr);
+      if (latitude === undefined || longitude === undefined) {
+        if (navigator.geolocation) {
+          try {
+            const pos = await getCurrentUserLocation();
+            latitude = pos.latitude;
+            longitude = pos.longitude;
+            locationName = `GPS (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+          } catch (geoErr) {
+            console.warn('Geolocation unavailable:', geoErr);
+          }
         }
       }
 
