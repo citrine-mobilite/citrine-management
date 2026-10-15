@@ -140,6 +140,7 @@ export default function EmployeePortal(props: EmployeePortalProps) {
                   ? 'bg-[#2A7B76] text-white shadow-xs ring-2 ring-emerald-200/50'
                   : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100/70'
               }`}
+              title={`Accéder à l'onglet ${tab.label}`}
             >
               <TabIcon className={`h-4 w-4 ${isActive ? 'text-emerald-200' : 'text-stone-400'}`} />
               <span>{tab.label}</span>

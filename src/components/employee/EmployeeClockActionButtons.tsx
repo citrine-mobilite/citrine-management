@@ -69,6 +69,7 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
                 ? 'bg-stone-100 text-stone-400 border border-stone-200 cursor-not-allowed shadow-none'
                 : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-98'
             }`}
+            title={hasArrived ? "Votre arrivée a déjà été enregistrée" : "Pointer votre arrivée au bureau"}
           >
             {hasArrived ? (
               <>
@@ -105,6 +106,7 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
                   ? 'bg-stone-100 text-stone-400 border border-stone-200 cursor-not-allowed shadow-none'
                   : 'bg-amber-600 hover:bg-amber-700 text-white cursor-pointer active:scale-98'
               }`}
+              title={hasStartedPause ? "Votre pause a déjà débuté" : "Signaler votre départ en pause"}
             >
               {hasStartedPause ? (
                 <>
@@ -132,6 +134,7 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
                   ? 'bg-stone-100 text-stone-400 border border-stone-200 cursor-not-allowed shadow-none'
                   : 'bg-teal-600 hover:bg-teal-700 text-white cursor-pointer active:scale-98'
               }`}
+              title={hasEndedPause ? "Votre reprise a déjà été enregistrée" : "Signaler votre retour de pause"}
             >
               {hasEndedPause ? (
                 <>
@@ -158,6 +161,7 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
                 ? 'bg-stone-100 text-stone-400 border border-stone-200 cursor-not-allowed shadow-none'
                 : 'bg-[#2A7B76] hover:bg-[#20635F] text-white cursor-pointer active:scale-98'
             }`}
+            title={hasDeparted ? "Votre départ a déjà été enregistré" : "Pointer votre fin de journée et votre départ"}
           >
             {hasDeparted ? (
               <>

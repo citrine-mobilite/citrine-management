@@ -407,6 +407,7 @@ export default function PresencePanel({
           <button
             onClick={() => setIsDynamicQrModalOpen(true)}
             className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#2A7B76] to-emerald-700 hover:from-[#20635F] hover:to-emerald-800 text-white font-extrabold text-xs shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
+            title="Générer un QR code dynamique renouvelé toutes les 30 secondes pour le pointage des employés"
           >
             <QrCode className="h-4 w-4 text-emerald-200 animate-pulse shrink-0" />
             <span>QR Code Dynamique (30s)</span>
@@ -416,6 +417,7 @@ export default function PresencePanel({
           <button
             onClick={() => setIsStaticDoorQrOpen(true)}
             className="w-full py-3 px-4 rounded-2xl bg-teal-50 hover:bg-teal-100 text-[#2A7B76] font-bold text-xs border border-teal-200 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
+            title="Afficher ou configurer le QR code statique de porte ou d'entrée fixe"
           >
             <DoorClosed className="h-4 w-4 text-[#2A7B76] shrink-0" />
             <span>QR Code Statique (Porte / Bureau)</span>
@@ -425,6 +427,7 @@ export default function PresencePanel({
           <button
             onClick={() => setIsAdminClockModalOpen(true)}
             className="w-full py-3 px-4 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs border border-stone-200 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
+            title="Effectuer un pointage administratif pour le compte d'un collaborateur"
           >
             <UserCheck className="h-4 w-4 text-[#2A7B76] shrink-0" />
             <span>Badger pour un Collaborateur</span>
@@ -434,6 +437,7 @@ export default function PresencePanel({
           <button
             onClick={() => setIsOfficeQrModalOpen(true)}
             className="w-full py-3 px-4 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs border border-stone-200 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
+            title="Générer une clé d'accès sécurisée de 16 caractères valide 3 minutes"
           >
             <KeyRound className="h-4 w-4 text-amber-600 shrink-0" />
             <span>Clé d'Accès Personnelle (16 Car.)</span>
@@ -450,6 +454,7 @@ export default function PresencePanel({
               ? 'bg-white text-stone-900 shadow-xs'
               : 'text-stone-600 hover:text-stone-900'
           }`}
+          title="Afficher la feuille des pointages du jour"
         >
           <Clock className="h-4 w-4 text-[#2A7B76]" />
           <span>Feuille des Pointages du Jour</span>
@@ -461,6 +466,7 @@ export default function PresencePanel({
               ? 'bg-white text-stone-900 shadow-xs'
               : 'text-stone-600 hover:text-stone-900'
           }`}
+          title="Consulter et valider les demandes et justificatifs de présence"
         >
           <FileText className="h-4 w-4 text-emerald-600" />
           <span>Demandes & Justificatifs</span>
@@ -477,6 +483,7 @@ export default function PresencePanel({
               ? 'bg-white text-stone-900 shadow-xs'
               : 'text-stone-600 hover:text-stone-900'
           }`}
+          title="Consulter le registre des incidents et retards"
         >
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <span>Registre des Incidents & Retards ({attendanceIncidents.length})</span>

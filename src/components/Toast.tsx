@@ -31,7 +31,7 @@ export default function ToastContainer({ toasts, onDismiss }: ToastProps) {
 }
 
 const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void }> = ({ toast, onDismiss }) => {
-  const duration = toast.duration || 4500;
+  const duration = toast.duration || 5000;
   const [progress, setProgress] = useState(100);
 
   useEffect(() => {

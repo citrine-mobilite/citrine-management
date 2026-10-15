@@ -38,6 +38,18 @@ import { GlobalTooltipContainer } from './components/common/GlobalTooltipContain
 
 export default function App() {
   const initialData = useAppInitialData();
+
+  // Dynamic Favicon and App Icon sync with Company Logo settings
+  useEffect(() => {
+    const logoBase64 = initialData.moduleConfig?.companyLogoBase64;
+    if (logoBase64) {
+      const links = document.querySelectorAll("link[rel*='icon'], link[rel='apple-touch-icon']");
+      links.forEach((link) => {
+        (link as HTMLLinkElement).href = logoBase64;
+      });
+    }
+  }, [initialData.moduleConfig?.companyLogoBase64]);
+
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
@@ -113,8 +125,8 @@ export default function App() {
     }
 
     const now = Date.now();
-    if (lastToastRef.current.message === resolvedMessage && now - lastToastRef.current.time < 600) {
-      return; // Ignore duplicate toast within 600ms for the same action
+    if (lastToastRef.current.message === resolvedMessage && now - lastToastRef.current.time < 5000) {
+      return; // Ignore duplicate toast within 5 seconds for the same action
     }
     lastToastRef.current = { message: resolvedMessage, time: now };
 

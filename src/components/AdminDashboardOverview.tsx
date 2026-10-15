@@ -99,6 +99,7 @@ export default function AdminDashboardOverview({
         <div 
           onClick={() => onSelectTab('presences')}
           className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
+          title="Afficher le registre des présences et la feuille du jour"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Présences du Jour</span>
@@ -125,6 +126,7 @@ export default function AdminDashboardOverview({
         <div 
           onClick={() => onSelectTab('presences')}
           className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-amber-300 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
+          title="Consulter les anomalies et retards consignés"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Anomalies & Retards</span>
@@ -137,6 +139,7 @@ export default function AdminDashboardOverview({
             <button 
               onClick={(e) => { e.stopPropagation(); onSelectTab('statistics'); }}
               className="text-[11px] text-[#2A7B76] font-bold hover:underline mt-2 inline-flex items-center gap-1 cursor-pointer"
+              title="Voir l'analyse détaillée d'assiduité"
             >
               Analyse d'assiduité &gt;
             </button>
@@ -147,6 +150,7 @@ export default function AdminDashboardOverview({
         <div 
           onClick={() => onSelectTab('tasks')}
           className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-blue-300 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
+          title="Ouvrir le module de gestion des tâches"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Tâches en Cours</span>
@@ -337,6 +341,7 @@ export default function AdminDashboardOverview({
             <button
               onClick={() => onSelectTab('tasks')}
               className="w-full py-2 border border-stone-200 text-stone-700 hover:bg-stone-50 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
+              title="Voir la liste complète des tâches"
             >
               Accéder aux tâches &gt;
             </button>
@@ -355,6 +360,7 @@ export default function AdminDashboardOverview({
           <button 
             onClick={() => onSelectTab('settings')}
             className="text-[10px] font-bold text-[#2A7B76] hover:underline flex items-center gap-1 cursor-pointer"
+            title="Ouvrir la configuration des paramètres et modules"
           >
             Paramètres & Modules &rarr;
           </button>
@@ -365,6 +371,7 @@ export default function AdminDashboardOverview({
           <div 
             onClick={() => onSelectTab('collaborators')}
             className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
+            title="Ouvrir l'annuaire des collaborateurs"
           >
             <div className="p-2 rounded-xl bg-blue-50 text-blue-600 shrink-0">
               <Users className="h-4 w-4" />
@@ -376,6 +383,7 @@ export default function AdminDashboardOverview({
           <div 
             onClick={() => onSelectTab('presences')}
             className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
+            title="Ouvrir le module de pointage"
           >
             <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
               <Clock className="h-4 w-4" />
@@ -387,6 +395,7 @@ export default function AdminDashboardOverview({
           <div 
             onClick={() => onSelectTab('tasks')}
             className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
+            title="Ouvrir le module des tâches"
           >
             <div className="p-2 rounded-xl bg-purple-50 text-purple-600 shrink-0">
               <CheckSquare className="h-4 w-4" />
@@ -398,6 +407,7 @@ export default function AdminDashboardOverview({
           <div 
             onClick={() => onSelectTab('settings')}
             className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
+            title="Ouvrir les paramètres"
           >
             <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
               <Settings className="h-4 w-4" />

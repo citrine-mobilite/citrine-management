@@ -45,6 +45,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
             onClick={onToggleMobileMenu}
             className="p-1.5 sm:p-2 -ml-1 sm:-ml-2 rounded-xl text-stone-600 hover:bg-stone-100 md:hidden transition cursor-pointer shrink-0"
             aria-label="Ouvrir le menu de navigation"
+            title="Ouvrir le menu de navigation"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -53,6 +54,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
         <div
           onClick={() => setActiveTab(isEmployee ? 'employee_portal' : 'dashboard')}
           className="flex items-center gap-1.5 sm:gap-2 cursor-pointer select-none min-w-0"
+          title="Accueil / Tableau de bord"
         >
           <CMLogo size="sm" />
           <div className="flex items-center gap-1.5 min-w-0">
@@ -75,7 +77,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
       <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
         {/* Offline Indicator */}
         {!isOnline && (
-          <div className="flex items-center gap-1 bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg text-[10px] font-bold text-red-700">
+          <div className="flex items-center gap-1 bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg text-[10px] font-bold text-red-700" title="Mode hors-ligne actif">
             <WifiOff className="h-3 w-3" />
             <span className="hidden sm:inline">Hors ligne</span>
           </div>
@@ -110,7 +112,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
         )}
 
         {/* Live Clock Badge (Desktop) */}
-        <div className="hidden md:flex items-center gap-1.5 bg-stone-50 border border-stone-200 px-3 py-1 rounded-xl text-xs font-mono font-bold text-stone-700">
+        <div className="hidden md:flex items-center gap-1.5 bg-stone-50 border border-stone-200 px-3 py-1 rounded-xl text-xs font-mono font-bold text-stone-700" title="Heure locale actuelle">
           <Clock className="h-3.5 w-3.5 text-[#2A7B76]" />
           <span>{liveTimeString}</span>
         </div>
@@ -125,35 +127,29 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
               }
             }}
             className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-xl border border-emerald-300 transition cursor-pointer"
-            data-tooltip="Activer les notifications Push du navigateur sur cet appareil"
+            title="Activer les notifications Push du navigateur sur cet appareil"
           >
             <Bell className="h-3 w-3 text-emerald-600 animate-bounce" />
             <span>Activer Push</span>
           </button>
         )}
 
-        {/* Notifications Icon Button */}
-        <button
-          onClick={() => {
-            haptic.light();
-            if (isEmployee) {
-              if (onOpenEmployeeAlerts) {
-                onOpenEmployeeAlerts();
-              } else {
-                setActiveTab('employee_portal');
-              }
-            } else {
+        {/* Notifications Icon Button (Admin / Responsable only, hidden for employees as requested) */}
+        {!isEmployee && (
+          <button
+            onClick={() => {
+              haptic.light();
               setActiveTab('logs');
-            }
-          }}
-          className="p-1.5 sm:p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition relative cursor-pointer"
-          data-tooltip={isEmployee ? "Mes Alertes & Notifications" : "Notifications & Alertes"}
-        >
-          <Bell className="h-4 w-4" />
-          {unreadNotificationsCount > 0 && (
-            <span className="absolute top-1 right-1 w-2 h-2 bg-[#D4A82F] rounded-full animate-ping" />
-          )}
-        </button>
+            }}
+            className="p-1.5 sm:p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition relative cursor-pointer"
+            title="Notifications & Alertes"
+          >
+            <Bell className="h-4 w-4" />
+            {unreadNotificationsCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-[#D4A82F] rounded-full animate-ping" />
+            )}
+          </button>
+        )}
 
         {/* Clear Cache Button */}
         <button
@@ -162,7 +158,6 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
             setCacheModalOpen(true);
           }}
           className="p-1.5 sm:p-2 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition relative cursor-pointer"
-          data-tooltip="Purger tous les niveaux de cache (RAM, IndexedDB, PWA)"
           title="Purger tous les niveaux de cache (RAM, IndexedDB, PWA)"
         >
           <Trash2 className="h-4 w-4" />

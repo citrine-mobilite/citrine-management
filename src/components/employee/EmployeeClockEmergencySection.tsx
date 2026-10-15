@@ -29,6 +29,7 @@ export const EmployeeClockEmergencySection: React.FC<EmployeeClockEmergencySecti
         <button
           onClick={onOpenCustomClockModal}
           className="text-stone-600 hover:text-[#2A7B76] font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+          title="Ajuster l'horaire manuellement (Horloge 24h)"
         >
           <Clock className="h-3.5 w-3.5 text-[#2A7B76]" />
           Ajuster l'horaire manuellement (Horloge 24h)
