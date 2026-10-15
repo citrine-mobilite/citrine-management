@@ -1,3 +1,4 @@
+import { savePresenceAtomic } from '../../services/dataService';
 import React, { useState } from 'react';
 import { UserCheck, X, Clock, AlertCircle, ShieldAlert, Check } from 'lucide-react';
 import { Employee, Presence, AppUser, NotificationLog, AttendanceIncident, CompanyModuleConfig } from '../../types';
@@ -54,18 +55,16 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
     'Pointage sur place validé par responsable'
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reasonInput.trim()) {
       setErrorMessage('Le motif administratif est obligatoire pour badger à la place d’un employé.');
       return;
     }
-
     if (!targetEmployee) {
       setErrorMessage('Veuillez sélectionner un collaborateur.');
       return;
     }
-
     const adminName = currentUser?.name || 'Responsable';
     const adminId = currentUser?.id || 'admin';
     const nowTime = timeInput || new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -76,9 +75,9 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
     const existingIdx = updatedPresences.findIndex(
       (p) => p.employeeId === targetEmployee.id && p.date === todayStr
     );
-
     const isLateNow = clockAction === 'arrival' && nowTime > lateThreshold;
 
+    let targetPresence: Presence;
     if (existingIdx >= 0) {
       const existing = { ...updatedPresences[existingIdx] };
       existing.employeeId = targetEmployee.id;
@@ -93,16 +92,15 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
       } else if (clockAction === 'departure') {
         existing.departureTime = nowTime;
       }
-
       existing.clockingMethod = 'admin_on_behalf';
       existing.badgedByAdminId = adminId;
       existing.badgedByAdminName = adminName;
       existing.adminBadgeReason = reasonInput.trim();
       existing.location = `Bureau (Pointé par ${adminName})`;
-
+      targetPresence = existing;
       updatedPresences[existingIdx] = existing;
     } else {
-      const newPresence: Presence = {
+      targetPresence = {
         id: `pres-${Date.now()}`,
         employeeId: targetEmployee.id,
         employeeName: targetEmployee.name,
@@ -118,12 +116,12 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         adminBadgeReason: reasonInput.trim(),
         location: `Bureau (Pointé par ${adminName})`,
       };
-      updatedPresences.unshift(newPresence);
+      updatedPresences.unshift(targetPresence);
     }
 
-    // Gestion automatique des incidents : Retard ou Sortie prématurée
+    let targetIncident: AttendanceIncident | null = null;
     if (clockAction === 'arrival' && isLateNow) {
-      const autoIncident: AttendanceIncident = {
+      targetIncident = {
         id: `inc-${Date.now()}`,
         employeeId: targetEmployee.id,
         employeeName: targetEmployee.name,
@@ -137,13 +135,8 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         status: 'automatique',
         createdAt: new Date().toISOString(),
       };
-      if (onAddAttendanceIncident) {
-        onAddAttendanceIncident(autoIncident);
-      } else {
-        incidentService.saveIncident(autoIncident);
-      }
     } else if (clockAction === 'departure' && nowTime < plannedDeparture) {
-      const autoIncident: AttendanceIncident = {
+      targetIncident = {
         id: `inc-${Date.now()}`,
         employeeId: targetEmployee.id,
         employeeName: targetEmployee.name,
@@ -157,27 +150,21 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         status: 'automatique',
         createdAt: new Date().toISOString(),
       };
-      if (onAddAttendanceIncident) {
-        onAddAttendanceIncident(autoIncident);
-      } else {
-        incidentService.saveIncident(autoIncident);
-      }
     }
 
-    onUpdatePresences(updatedPresences);
-
-    // Notification Log
+    let targetNotification: NotificationLog | null = null;
     if (onAddNotification) {
-      const actionLabels = {
-        arrival: 'l\'Arrivée',
+      const actionLabels: Record<string, string> = {
+        arrival: 'lArrivée',
         pauseStart: 'le Début de Pause',
         pauseEnd: 'la Reprise de Pause',
         departure: 'le Départ'
       };
-      onAddNotification({
+      targetNotification = {
         id: `notif-clock-admin-${Date.now()}-${targetEmployee.id}`,
-        title: `Pointage par Responsable : ${actionLabels[clockAction]}`,
-        content: `${adminName} a validé votre pointage (${actionLabels[clockAction]}) à ${nowTime}. Motif : ${reasonInput.trim() || 'N/A'}`,
+        title: `Pointage par Responsable : ${actionLabels[clockAction] || clockAction}`,
+        content: `${adminName} a validé votre pointage (${actionLabels[clockAction] || clockAction}) à ${nowTime}. Motif : ${reasonInput.trim() || 'N/A'}`,
+        message: `${adminName} a validé votre pointage (${actionLabels[clockAction] || clockAction}) à ${nowTime}. Motif : ${reasonInput.trim() || 'N/A'}`,
         targetUserId: targetEmployee.id,
         recipient: targetEmployee.id,
         payload: JSON.stringify({
@@ -191,9 +178,22 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         timestamp: new Date().toISOString(),
         type: 'system',
         read: false,
-      });
+      };
+    }
 
-      if (typeof window !== 'undefined') {
+    const atomicRes = await savePresenceAtomic(targetPresence, targetIncident, targetNotification);
+    if (!atomicRes.success) {
+      setErrorMessage(`Erreur denregistrement atomique: ${atomicRes.error}`);
+      return;
+    }
+
+    onUpdatePresences(updatedPresences);
+    if (targetIncident && onAddAttendanceIncident) {
+      onAddAttendanceIncident(targetIncident);
+    }
+    if (targetNotification && onAddNotification) {
+      onAddNotification(targetNotification);
+      if (typeof window !== undefined) {
         window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
       }
     }
@@ -201,11 +201,10 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
     if (showToast) {
       showToast(`Pointage validé avec succès pour ${targetEmployee.name} par ${adminName}.`, 'success');
     }
-
     onClose();
   };
 
-  return (
+    return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}

@@ -13,6 +13,7 @@ import {
 import { getCurrentUserLocation } from '../../utils/geolocation';
 import { isLate } from '../../utils/dateUtils';
 import { incidentService } from '../../services/incidentService';
+import { savePresenceAtomic } from '../../services/dataService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 
 interface UseClockingActionsProps {
@@ -40,35 +41,21 @@ export function useClockingActions({
 }: UseClockingActionsProps) {
   const [isLocating, setIsLocating] = useState<boolean>(false);
 
-  const handleConfirmClocking = async (
-    pendingClockAction: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure' | 'sortieProStart' | 'sortieProEnd' | null,
-    method: ClockingMethod,
-    onSuccess: () => void,
-    customLocation?: { latitude?: number; longitude?: number; locationName?: string }
-  ) => {
-    if (!pendingClockAction) return;
+  const handleConfirmClocking = async (method: ClockingMethod, onSuccess: () => void) => {
     setIsLocating(true);
     try {
-      let locationName = customLocation?.locationName || 'Bureau';
-      let latitude = customLocation?.latitude;
-      let longitude = customLocation?.longitude;
+      let latitude: number | undefined;
+      let longitude: number | undefined;
+      let locationName = 'Bureau / Site principal';
 
-      // Si les coordonnées GPS ne sont pas encore fournies, tenter l'acquisition (si échec => AUCUN BADGE ENREGISTRÉ)
-      if (latitude === undefined && method !== 'qr_code_dynamic' && method !== 'admin_on_behalf') {
+      if (navigator.geolocation) {
         try {
-          const loc = await getCurrentUserLocation();
-          if (loc && typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
-            latitude = loc.latitude;
-            longitude = loc.longitude;
-            if (loc.zoneName) locationName = loc.zoneName;
-          } else {
-            throw new Error("Signal GPS introuvable sur votre appareil.");
-          }
-        } catch (gpsErr: any) {
-          const reason = gpsErr?.message || "Signal GPS introuvable ou accès refusé.";
-          showToast('Pointage Échoué', `Raison : ${reason}`, 'warning');
-          setIsLocating(false);
-          return; // Si le GPS ne donne pas : on n'enregistre pas le badge !
+          const pos = await getCurrentUserLocation();
+          latitude = pos.latitude;
+          longitude = pos.longitude;
+          locationName = `GPS (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+        } catch (geoErr) {
+          console.warn('Geolocation unavailable:', geoErr);
         }
       }
 
@@ -77,11 +64,9 @@ export function useClockingActions({
       const lateThreshold = moduleConfig?.lateThresholdTime || '08:30';
       const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
 
-      // Check for declared incidents for today with flexible ID matching
       const empIdStr = String(employeeProfile.id || '');
       const empUidStr = employeeProfile.uid ? String(employeeProfile.uid) : '';
       const empDbIdStr = employeeProfile._dbId ? String(employeeProfile._dbId) : '';
-
       const isSameEmp = (iEmpId: any) => {
         const str = String(iEmpId || '');
         return str === empIdStr || (empUidStr && str === empUidStr) || (empDbIdStr && str === empDbIdStr);
@@ -96,15 +81,15 @@ export function useClockingActions({
 
       let status: PresenceStatus = 'present';
       let isLateArrival = false;
+      let targetIncident: AttendanceIncident | null = null;
 
       if (pendingClockAction === 'arrival') {
         isLateArrival = isLate(timeStr, lateThreshold);
         if (isLateArrival) {
           status = 'late';
-
           if (declaredRetard) {
             const reasonBase = declaredRetard.reason || 'Retard';
-            const updatedRetard: AttendanceIncident = {
+            targetIncident = {
               ...declaredRetard,
               timeString: declaredRetard.timeString || timeStr,
               isJustified: true,
@@ -113,19 +98,12 @@ export function useClockingActions({
                 ? reasonBase
                 : `${reasonBase} (Constaté au pointage à ${timeStr})`,
             };
-            if (onAddAttendanceIncident) {
-              await onAddAttendanceIncident(updatedRetard);
-            } else {
-              await incidentService.saveIncident(updatedRetard);
-            }
           } else {
-            // Vérifier si un retard automatique a déjà été consigné aujourd'hui
             const existingAutoRetard = attendanceIncidents.find(
               (i) => isSameEmp(i.employeeId) && i.date === todayStr && i.type === 'retard'
             );
-
             if (!existingAutoRetard) {
-              const autoIncident: AttendanceIncident = {
+              targetIncident = {
                 id: `inc-${Date.now()}`,
                 employeeId: empIdStr,
                 employeeName: employeeProfile.name,
@@ -139,12 +117,6 @@ export function useClockingActions({
                 status: 'automatique',
                 createdAt: new Date().toISOString(),
               };
-
-              if (onAddAttendanceIncident) {
-                await onAddAttendanceIncident(autoIncident);
-              } else {
-                await incidentService.saveIncident(autoIncident);
-              }
             }
           }
         }
@@ -153,7 +125,7 @@ export function useClockingActions({
         if (isEarlyDeparture) {
           if (declaredEarlyDept) {
             const reasonBase = declaredEarlyDept.reason || 'Sortie prématurée';
-            const updatedEarly: AttendanceIncident = {
+            targetIncident = {
               ...declaredEarlyDept,
               timeString: declaredEarlyDept.timeString || timeStr,
               isJustified: true,
@@ -162,18 +134,12 @@ export function useClockingActions({
                 ? reasonBase
                 : `${reasonBase} (Départ effectif à ${timeStr})`,
             };
-            if (onAddAttendanceIncident) {
-              await onAddAttendanceIncident(updatedEarly);
-            } else {
-              await incidentService.saveIncident(updatedEarly);
-            }
           } else {
             const existingAutoEarly = attendanceIncidents.find(
               (i) => isSameEmp(i.employeeId) && i.date === todayStr && (i.type === 'sortie_prematuree' || i.type === 'depart_anticipe')
             );
-
             if (!existingAutoEarly) {
-              const autoIncident: AttendanceIncident = {
+              targetIncident = {
                 id: `inc-${Date.now()}`,
                 employeeId: empIdStr,
                 employeeName: employeeProfile.name,
@@ -187,12 +153,6 @@ export function useClockingActions({
                 status: 'automatique',
                 createdAt: new Date().toISOString(),
               };
-
-              if (onAddAttendanceIncident) {
-                await onAddAttendanceIncident(autoIncident);
-              } else {
-                await incidentService.saveIncident(autoIncident);
-              }
             }
           }
         }
@@ -203,6 +163,7 @@ export function useClockingActions({
         (p) => p.employeeId === employeeProfile.id && p.date === todayStr
       );
 
+      let targetPresence: Presence;
       if (existingIdx >= 0) {
         const existing = { ...updatedPresences[existingIdx] };
         existing.employeeId = employeeProfile.id;
@@ -225,9 +186,10 @@ export function useClockingActions({
         existing.latitude = latitude;
         existing.longitude = longitude;
         existing.clockingMethod = method;
+        targetPresence = existing;
         updatedPresences[existingIdx] = existing;
       } else {
-        const newPresence: Presence = {
+        targetPresence = {
           id: `pr-${Date.now()}`,
           employeeId: employeeProfile.id,
           employeeName: employeeProfile.name,
@@ -244,67 +206,68 @@ export function useClockingActions({
           longitude,
           clockingMethod: method,
         };
-        updatedPresences.push(newPresence);
+        updatedPresences.push(targetPresence);
       }
 
-      try {
-        await onUpdatePresences(updatedPresences);
-      } catch (presErr) {
-        console.error('Erreur lors de la mise à jour des présences:', presErr);
-      }
-
-      try {
-        if (onAddNotification) {
-          const actionLabels: Record<string, string> = {
-            arrival: 'Arrivée',
-            pauseStart: 'Début de pause',
-            pauseEnd: 'Fin de pause',
-            departure: 'Départ',
-            sortieProStart: 'Mission pro (Départ)',
-            sortieProEnd: 'Mission pro (Retour)',
-          };
-          const actionLabel = actionLabels[pendingClockAction] || 'Pointage';
-
-          let notifTitle = `Pointage enregistré : ${actionLabel}`;
-          let notifContent = `Votre pointage (${actionLabel}) a été validé à ${timeStr} sur le site ${locationName}.`;
-          let notifPayload: any = {
-            source: 'pointage',
-            employeeId: employeeProfile.id,
-            employeeName: employeeProfile.name,
-            action: pendingClockAction,
-            time: timeStr,
-            date: todayStr,
-          };
-
-          if (isLateArrival) {
-            notifTitle = `Pointage validé : Arrivée (Retard constaté)`;
-            notifContent = `Votre arrivée a été validée à ${timeStr} sur le site ${locationName}. Un incident de retard (après ${lateThreshold}) a été consigné automatiquement.`;
-            notifPayload.incidentType = 'retard';
-          } else if (pendingClockAction === 'departure' && timeStr < plannedDeparture) {
-            notifTitle = `Pointage validé : Départ (Sortie prématurée)`;
-            notifContent = `Départ badgé à ${timeStr} sur le site ${locationName} avant ${plannedDeparture}. Un incident de sortie anticipée a été consigné automatiquement.`;
-            notifPayload.incidentType = 'sortie_prematuree';
-          }
-
-          onAddNotification({
-            id: `notif-clock-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            type: 'system',
-            recipient: employeeProfile.id,
-            targetUserId: employeeProfile.id,
-            title: notifTitle,
-            content: notifContent,
-            message: notifContent,
-            payload: JSON.stringify(notifPayload),
-            timestamp: new Date().toISOString(),
-            read: false,
-          });
-
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-          }
+      let targetNotification: NotificationLog | null = null;
+      if (onAddNotification) {
+        const actionLabels: Record<string, string> = {
+          arrival: 'Arrivée',
+          pauseStart: 'Début de pause',
+          pauseEnd: 'Fin de pause',
+          departure: 'Départ',
+          sortieProStart: 'Mission pro (Départ)',
+          sortieProEnd: 'Mission pro (Retour)',
+        };
+        const actionLabel = actionLabels[pendingClockAction] || 'Pointage';
+        let notifTitle = `Pointage enregistré : ${actionLabel}`;
+        let notifContent = `Votre pointage (${actionLabel}) a été validé à ${timeStr} sur le site ${locationName}.`;
+        let notifPayload: any = {
+          source: 'pointage',
+          employeeId: employeeProfile.id,
+          employeeName: employeeProfile.name,
+          action: pendingClockAction,
+          time: timeStr,
+          date: todayStr,
+        };
+        if (isLateArrival) {
+          notifTitle = 'Pointage validé : Arrivée (Retard constaté)';
+          notifContent = `Votre arrivée a été validée à ${timeStr} sur le site ${locationName}. Un incident de retard (après ${lateThreshold}) a été consigné automatiquement.`;
+          notifPayload.incidentType = 'retard';
+        } else if (pendingClockAction === 'departure' && timeStr < plannedDeparture) {
+          notifTitle = 'Pointage validé : Départ (Sortie prématurée)';
+          notifContent = `Départ badgé à ${timeStr} sur le site ${locationName} avant ${plannedDeparture}. Un incident de sortie anticipée a été consigné automatiquement.`;
+          notifPayload.incidentType = 'sortie_prematuree';
         }
-      } catch (notifErr) {
-        console.warn('Notification log warning:', notifErr);
+        targetNotification = {
+          id: `notif-clock-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          type: 'system',
+          recipient: employeeProfile.id,
+          targetUserId: employeeProfile.id,
+          title: notifTitle,
+          content: notifContent,
+          message: notifContent,
+          payload: JSON.stringify(notifPayload),
+          timestamp: new Date().toISOString(),
+          read: false,
+        };
+      }
+
+      // ATOMIC TRANSACTION: Save presence, incident, and notification together
+      const atomicResult = await savePresenceAtomic(targetPresence, targetIncident, targetNotification);
+      if (!atomicResult.success) {
+        throw new Error(atomicResult.error || 'Erreur lors de la transaction atomique de pointage.');
+      }
+
+      onUpdatePresences(updatedPresences);
+      if (targetIncident && onAddAttendanceIncident) {
+        onAddAttendanceIncident(targetIncident);
+      }
+      if (targetNotification && onAddNotification) {
+        onAddNotification(targetNotification);
+        if (typeof window !== undefined) {
+          window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+        }
       }
 
       try {
@@ -320,7 +283,7 @@ export function useClockingActions({
       }
 
       if (!isLateArrival && pendingClockAction === 'arrival') {
-        showToast('Pointage Réussi', `Arrivée à l'heure badgée avec succès (${timeStr}).`, 'success');
+        showToast('Pointage Réussi', `Arrivée à lheure badgée avec succès (${timeStr}).`, 'success');
       } else if (pendingClockAction === 'sortieProStart') {
         showToast('Sortie Pro Badgée', `Départ en mission extérieure enregistré à ${timeStr}.`, 'success');
       } else if (pendingClockAction === 'sortieProEnd') {
@@ -328,6 +291,7 @@ export function useClockingActions({
       } else if (pendingClockAction !== 'arrival') {
         showToast('Pointage Validé', `Votre action (${pendingClockAction}) a été enregistrée.`, 'success');
       }
+
       onSuccess();
     } catch (err: any) {
       console.error('Erreur validation pointage:', err);

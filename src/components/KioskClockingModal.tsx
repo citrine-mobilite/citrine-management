@@ -1,3 +1,4 @@
+import { savePresenceAtomic } from '../services/dataService';
 import React, { useState } from 'react';
 import { X, Search, Tablet, CheckCircle2 } from 'lucide-react';
 import { Employee, Presence, NotificationLog, CompanyModuleConfig, AttendanceIncident } from '../types';
@@ -49,7 +50,7 @@ export default function KioskClockingModal({
        (emp.department && emp.department.toLowerCase().includes(searchQuery.toLowerCase())))
   );
 
-  const handleClockAction = (
+  const handleClockAction = async (
     emp: Employee,
     action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure'
   ) => {
@@ -59,9 +60,42 @@ export default function KioskClockingModal({
     const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
     const late = action === 'arrival' && isLate(timeStr, scheduleStart);
 
+    let targetIncident: AttendanceIncident | null = null;
+    if (action === 'arrival' && late) {
+      targetIncident = {
+        id: `inc-${Date.now()}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        date: todayStr,
+        timeString: timeStr,
+        type: 'retard',
+        origin: 'automatique_pointage',
+        reason: `Retard automatique constaté sur la borne à ${timeStr} (seuil: ${scheduleStart})`,
+        isDeclaredInAdvance: false,
+        isJustified: false,
+        status: 'automatique',
+        createdAt: new Date().toISOString(),
+      };
+    } else if (action === 'departure' && timeStr < plannedDeparture) {
+      targetIncident = {
+        id: `inc-${Date.now()}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        date: todayStr,
+        timeString: timeStr,
+        type: 'sortie_prematuree',
+        origin: 'automatique_pointage',
+        reason: `Sortie prématurée constatée sur la borne à ${timeStr} avant 16h30 (horaire de référence: ${plannedDeparture})`,
+        isDeclaredInAdvance: false,
+        isJustified: false,
+        status: 'automatique',
+        createdAt: new Date().toISOString(),
+      };
+    }
+
     const updatedPresences = [...presences];
     const existingIdx = updatedPresences.findIndex((p) => p.employeeId === emp.id && p.date === todayStr);
-
+    let targetPresence: Presence;
     if (existingIdx >= 0) {
       const existing = { ...updatedPresences[existingIdx] };
       existing.employeeId = emp.id;
@@ -78,9 +112,10 @@ export default function KioskClockingModal({
       }
       existing.location = 'Borne Tablette (Accueil)';
       existing.clockingMethod = 'kiosk_pin';
+      targetPresence = existing;
       updatedPresences[existingIdx] = existing;
     } else {
-      updatedPresences.push({
+      targetPresence = {
         id: `pr-${Date.now()}`,
         employeeId: emp.id,
         employeeName: emp.name,
@@ -92,69 +127,27 @@ export default function KioskClockingModal({
         departureTime: action === 'departure' ? timeStr : null,
         location: 'Borne Tablette (Accueil)',
         clockingMethod: 'kiosk_pin',
-      });
+      };
+      updatedPresences.push(targetPresence);
     }
 
-    // Gestion automatique des incidents
-    if (action === 'arrival' && late) {
-      const autoIncident: AttendanceIncident = {
-        id: `inc-${Date.now()}`,
-        employeeId: emp.id,
-        employeeName: emp.name,
-        date: todayStr,
-        timeString: timeStr,
-        type: 'retard',
-        origin: 'automatique_pointage',
-        reason: `Retard automatique constaté sur la borne à ${timeStr} (seuil: ${scheduleStart})`,
-        isDeclaredInAdvance: false,
-        isJustified: false,
-        status: 'automatique',
-        createdAt: new Date().toISOString(),
-      };
-      if (onAddAttendanceIncident) {
-        onAddAttendanceIncident(autoIncident);
-      } else {
-        incidentService.saveIncident(autoIncident);
-      }
-    } else if (action === 'departure' && timeStr < plannedDeparture) {
-      const autoIncident: AttendanceIncident = {
-        id: `inc-${Date.now()}`,
-        employeeId: emp.id,
-        employeeName: emp.name,
-        date: todayStr,
-        timeString: timeStr,
-        type: 'sortie_prematuree',
-        origin: 'automatique_pointage',
-        reason: `Sortie prématurée constatée sur la borne à ${timeStr} avant 16h30 (horaire de référence: ${plannedDeparture})`,
-        isDeclaredInAdvance: false,
-        isJustified: false,
-        status: 'automatique',
-        createdAt: new Date().toISOString(),
-      };
-      if (onAddAttendanceIncident) {
-        onAddAttendanceIncident(autoIncident);
-      } else {
-        incidentService.saveIncident(autoIncident);
-      }
-    }
-
-    onUpdatePresences(updatedPresences);
-
-    const actionLabels = {
+    const actionLabels: Record<string, string> = {
       arrival: 'Arrivée (Pointage)',
       pauseStart: 'Début Pause',
       pauseEnd: 'Fin Pause',
       departure: 'Départ (Pointage)',
     };
 
+    let targetNotification: NotificationLog | null = null;
     if (onAddNotification) {
-      onAddNotification({
+      targetNotification = {
         id: `notif-kiosk-${Date.now()}-${emp.id}`,
         type: 'system',
         recipient: emp.id,
         targetUserId: emp.id,
         title: `Pointage sur Borne : ${actionLabels[action] || action}`,
-        content: `Pointage (${actionLabels[action] || action}) validé sur la borne d'accueil à ${timeStr}.`,
+        content: `Pointage (${actionLabels[action] || action}) validé sur la borne daccueil à ${timeStr}.`,
+        message: `Pointage (${actionLabels[action] || action}) validé sur la borne daccueil à ${timeStr}.`,
         payload: JSON.stringify({
           source: 'kiosk',
           employeeId: emp.id,
@@ -165,21 +158,35 @@ export default function KioskClockingModal({
         }),
         timestamp: new Date().toISOString(),
         read: false,
-      });
+      };
+    }
 
-      if (typeof window !== 'undefined') {
+    const res = await savePresenceAtomic(targetPresence, targetIncident, targetNotification);
+    if (!res.success) {
+      console.error("Kiosk atomic save failed:", res.error);
+      setToastMessage(`Erreur denregistrement atomique: ${res.error}`);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
+    onUpdatePresences(updatedPresences);
+    if (targetIncident && onAddAttendanceIncident) {
+      onAddAttendanceIncident(targetIncident);
+    }
+    if (targetNotification && onAddNotification) {
+      onAddNotification(targetNotification);
+      if (typeof window !== undefined) {
         window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
       }
     }
 
     pushNotificationBridgeService.sendPush({
-      title: `Pointage Enregistré ⏱️`,
+      title: 'Pointage Enregistré ⏱️',
       message: `${emp.name} a pointé : ${actionLabels[action] || action} à ${timeStr}.`,
       senderName: emp.name,
       type: 'attendance',
       link: 'presences',
     });
-
     setToastMessage(`Pointage de ${emp.name} validé (${action}) à ${timeStr}`);
     setTimeout(() => setToastMessage(null), 3000);
   };
