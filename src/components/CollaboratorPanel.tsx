@@ -45,7 +45,12 @@ import { CollaboratorPresenceMap } from './CollaboratorPresenceMap';
 import { getEmployeeSoftColor } from '../utils/colorUtils';
 import { downloadPayslipPdf } from '../services/pdfExportService';
 import { saveUser } from '../services/userService';
-import { generateUuidV4, createCollaboratorWithUserTransactional } from '../services/employeeService';
+import { 
+  generateUuidV4, 
+  createCollaboratorWithUserTransactional, 
+  updateCollaboratorWithUserTransactional, 
+  isEmployeeActive 
+} from '../services/employeeService';
 import { saveDocument, COLLECTIONS } from '../services/dataService';
 import { supabaseAdmin } from '../lib/supabase';
 import { CollaboratorAvatarPickerModal } from './collaborators/CollaboratorAvatarPickerModal';
@@ -298,47 +303,120 @@ export default function CollaboratorPanel({
         });
       }
 
-      const resolvedRoleId = formData.roleId ? Number(formData.roleId) : (formData.userRole === 'administrateur' ? 1 : formData.userRole === 'responsable' ? 2 : 3);
+      const resolvedRoleId = formData.roleId
+        ? Number(formData.roleId)
+        : (formData.userRole === 'administrateur' ? 1 : formData.userRole === 'responsable' ? 2 : 3);
       const targetUserId = formData.userId || editingEmployee.userId || '';
+      const isEmpActive = isEmployeeActive({ status: formData.status });
+
+      const updatedEmp: Employee = {
+        ...editingEmployee,
+        ...formData,
+        userId: targetUserId || undefined,
+        roleId: resolvedRoleId,
+        department: empDepartment,
+        status: formData.status,
+        employmentStatus: formData.status as any,
+      };
 
       const updated = employees.map((emp) =>
-        emp.id === editingEmployee.id
-          ? {
-              ...emp,
-              ...formData,
-              userId: targetUserId || undefined,
-              roleId: resolvedRoleId,
-              department: empDepartment,
-            }
-          : emp
+        emp.id === editingEmployee.id ? updatedEmp : emp
       );
       onUpdateEmployees(updated);
 
-      // Synchroniser le compte utilisateur correspondant si existant
-      if (formData.email || editingEmployee.email || targetUserId) {
-        const targetEmail = (formData.email || editingEmployee.email || '').trim().toLowerCase();
-        const existingUser = users?.find(
-          (u) =>
-            (targetUserId && (u.id === targetUserId || u.uid === targetUserId)) ||
-            (targetEmail && u.email && u.email.toLowerCase() === targetEmail) ||
-            (u.employeeId && u.employeeId === editingEmployee.id)
-        );
+      // SYNCHRONISER OBLIGATOIREMENT LE COMPTE UTILISATEUR CORRESPONDANT (EN MÉMOIRE ET EN BD)
+      const targetEmail = (formData.email || '').trim().toLowerCase();
+      const oldEmail = (editingEmployee.email || '').trim().toLowerCase();
 
-        if (existingUser) {
-          const updatedUser: AppUser = {
-            ...existingUser,
-            name: formData.name.trim(),
-            role: formData.userRole,
-            roleId: resolvedRoleId,
-            department: empDepartment,
-            phone: formData.phone || existingUser.phone,
-            employeeId: editingEmployee.id,
-          };
-          saveUser(updatedUser).catch(() => {});
-          if (onUpdateUsers && users) {
-            onUpdateUsers(users.map((u) => (u.id === existingUser.id ? updatedUser : u)));
+      let matchedUserIndex = -1;
+      if (users && users.length > 0) {
+        matchedUserIndex = users.findIndex(
+          (u) =>
+            (targetUserId && (String(u.id) === String(targetUserId) || u.uid === String(targetUserId))) ||
+            (oldEmail && u.email && u.email.toLowerCase() === oldEmail) ||
+            (targetEmail && u.email && u.email.toLowerCase() === targetEmail) ||
+            (u.employeeId && (String(u.employeeId) === String(editingEmployee.id) || u.employeeId === editingEmployee.uid))
+        );
+      }
+
+      let updatedUserObj: AppUser;
+      if (matchedUserIndex >= 0 && users) {
+        const existingUser = users[matchedUserIndex];
+        updatedUserObj = {
+          ...existingUser,
+          name: formData.name.trim(),
+          email: targetEmail || existingUser.email,
+          phone: formData.phone || existingUser.phone || '',
+          department: empDepartment,
+          role: formData.userRole,
+          roleId: resolvedRoleId,
+          status: isEmpActive ? 'actif' : 'inactif',
+          employmentStatus: formData.status as any,
+          avatarUrl: formData.avatarUrl || existingUser.avatarUrl || '',
+          employeeId: String(editingEmployee.id),
+        };
+        if (onUpdateUsers) {
+          onUpdateUsers(users.map((u, i) => (i === matchedUserIndex ? updatedUserObj : u)));
+        }
+      } else {
+        // Créer l'objet utilisateur s'il n'était pas dans la liste React
+        updatedUserObj = {
+          id: targetUserId || `user-${Date.now()}`,
+          name: formData.name.trim(),
+          email: targetEmail || (oldEmail || `collab_${editingEmployee.id}@citrinemgmt.cm`),
+          phone: formData.phone || '',
+          department: empDepartment,
+          role: formData.userRole,
+          roleId: resolvedRoleId,
+          status: isEmpActive ? 'actif' : 'inactif',
+          employmentStatus: formData.status as any,
+          avatarUrl: formData.avatarUrl || '',
+          employeeId: String(editingEmployee.id),
+          createdAt: new Date().toISOString(),
+          passwordHash: 'Collab@2026',
+        };
+        if (onUpdateUsers && users) {
+          onUpdateUsers([updatedUserObj, ...users]);
+        }
+      }
+
+      // Persistance transactionnelle complète en base de données Supabase
+      setIsSaving(true);
+      try {
+        const syncResult = await updateCollaboratorWithUserTransactional({
+          employee: updatedEmp,
+          previousEmployee: editingEmployee,
+          userRole: formData.userRole,
+          userPassword: formData.userPassword,
+        });
+
+        const finalEmp = syncResult.employee || updatedEmp;
+        const updatedList = employees.map((emp) =>
+          emp.id === editingEmployee.id ? finalEmp : emp
+        );
+        onUpdateEmployees(updatedList);
+
+        if (syncResult.user && onUpdateUsers && users) {
+          const finalU = syncResult.user;
+          const uIdx = users.findIndex(
+            (u) =>
+              String(u.id) === String(finalU.id) ||
+              (oldEmail && u.email && u.email.toLowerCase() === oldEmail) ||
+              (targetEmail && u.email && u.email.toLowerCase() === targetEmail) ||
+              (u.employeeId && (String(u.employeeId) === String(editingEmployee.id) || u.employeeId === editingEmployee.uid))
+          );
+          if (uIdx >= 0) {
+            const nextUsers = [...users];
+            nextUsers[uIdx] = finalU;
+            onUpdateUsers(nextUsers);
+          } else {
+            onUpdateUsers([finalU, ...users]);
           }
         }
+      } catch (err) {
+        console.warn('[CollaboratorPanel] Notice persistance collaborateur/user:', err);
+      } finally {
+        setIsSaving(false);
       }
 
       if (onAddNotification) {
@@ -346,7 +424,7 @@ export default function CollaboratorPanel({
           id: `notif-collab-upd-${Date.now()}`,
           type: 'system',
           title: 'Fiche collaborateur modifiée',
-          content: `La fiche de ${formData.name.trim()} a été mise à jour par l'administrateur.`,
+          content: `La fiche de ${formData.name.trim()} (${formData.email}) a été mise à jour avec son compte utilisateur associé.`,
           recipient: 'Administrateurs & RH',
           payload: JSON.stringify({ employeeId: editingEmployee.id, updatedFields: formData }),
           timestamp: new Date().toISOString(),
@@ -358,7 +436,9 @@ export default function CollaboratorPanel({
       }
 
       setAuditOpsList(getAdminAuditOperations());
-      if (showToast) showToast(`Fiche collaborateur mise à jour (Rôle ID: ${resolvedRoleId}).`, 'success');
+      if (showToast) showToast(`Fiche collaborateur et compte utilisateur synchronisés avec succès.`, 'success');
+      setIsModalOpen(false);
+      return;
     } else {
       setIsSaving(true);
       try {
@@ -463,17 +543,43 @@ export default function CollaboratorPanel({
       return;
     }
 
-    const updated = employees.map((e) =>
-      e.id === empId ? { ...e, status: newStatus } : e
-    );
+    const updatedEmp: Employee = { ...emp, status: newStatus, employmentStatus: newStatus as any };
+    const updated = employees.map((e) => (e.id === empId ? updatedEmp : e));
     onUpdateEmployees(updated);
-    if (showToast) showToast('Statut du collaborateur mis à jour.', 'success');
+
+    // Synchronisation vers le compte utilisateur
+    const isAct = isEmployeeActive(updatedEmp);
+    const targetEmail = (emp.email || '').toLowerCase().trim();
+    const uIdx = users?.findIndex(
+      (u) =>
+        (emp.userId && (String(u.id) === String(emp.userId) || u.uid === String(emp.userId))) ||
+        (targetEmail && u.email && u.email.toLowerCase() === targetEmail) ||
+        (u.employeeId && (String(u.employeeId) === String(emp.id) || u.employeeId === emp.uid))
+    );
+
+    if (uIdx !== undefined && uIdx >= 0 && users && onUpdateUsers) {
+      const existingU = users[uIdx];
+      const nextU: AppUser = {
+        ...existingU,
+        status: isAct ? 'actif' : 'inactif',
+        employmentStatus: newStatus as any,
+      };
+      onUpdateUsers(users.map((u, i) => (i === uIdx ? nextU : u)));
+    }
+
+    updateCollaboratorWithUserTransactional({
+      employee: updatedEmp,
+      previousEmployee: emp,
+    }).catch(() => {});
+
+    if (showToast) showToast('Statut du collaborateur et compte utilisateur mis à jour.', 'success');
   };
 
   const handleConfirmStatusReason = (empId: string, status: Employee['status'], reason: string) => {
+    let targetUpdatedEmp: Employee | null = null;
     const updated = employees.map((emp) => {
       if (emp.id !== empId) return emp;
-      const copy = { ...emp, status };
+      const copy: Employee = { ...emp, status, employmentStatus: status as any };
       if (status === 'renvoye' || status === 'parti') {
         copy.departureReason = reason;
         copy.departureDate = new Date().toISOString().split('T')[0];
@@ -481,6 +587,7 @@ export default function CollaboratorPanel({
         copy.suspensionReason = reason;
         copy.suspensionDate = new Date().toISOString().split('T')[0];
       }
+      targetUpdatedEmp = copy;
       return copy;
     });
 
@@ -498,7 +605,35 @@ export default function CollaboratorPanel({
     }
 
     onUpdateEmployees(updated);
-    if (showToast) showToast(`Statut mis à jour avec le motif : "${reason}"`, 'success');
+
+    // Synchronisation vers le compte utilisateur
+    if (targetUpdatedEmp && target) {
+      const isAct = isEmployeeActive(targetUpdatedEmp);
+      const targetEmail = (target.email || '').toLowerCase().trim();
+      const uIdx = users?.findIndex(
+        (u) =>
+          (target.userId && (String(u.id) === String(target.userId) || u.uid === String(target.userId))) ||
+          (targetEmail && u.email && u.email.toLowerCase() === targetEmail) ||
+          (u.employeeId && (String(u.employeeId) === String(target.id) || u.employeeId === target.uid))
+      );
+
+      if (uIdx !== undefined && uIdx >= 0 && users && onUpdateUsers) {
+        const existingU = users[uIdx];
+        const nextU: AppUser = {
+          ...existingU,
+          status: isAct ? 'actif' : 'inactif',
+          employmentStatus: status as any,
+        };
+        onUpdateUsers(users.map((u, i) => (i === uIdx ? nextU : u)));
+      }
+
+      updateCollaboratorWithUserTransactional({
+        employee: targetUpdatedEmp,
+        previousEmployee: target,
+      }).catch(() => {});
+    }
+
+    if (showToast) showToast(`Statut et compte utilisateur mis à jour avec le motif : "${reason}"`, 'success');
   };
 
   const selectedEmployeeObj = employees.find((e) => e.id === selectedEmpId);
@@ -1545,6 +1680,37 @@ export default function CollaboratorPanel({
                         <option value={2}>2 — Responsable (Génération QR 30s & Validation)</option>
                         <option value={1}>1 — Administrateur (Accès et Contrôle Total)</option>
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
+                        Mot de passe de connexion (optionnel)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={formData.userPassword}
+                          onChange={(e) => setFormData({ ...formData, userPassword: e.target.value })}
+                          placeholder="Laissez vide pour conserver l'actuel"
+                          className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-mono font-bold text-stone-800 focus:ring-2 focus:ring-[#2A7B76] outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const randomPw = `Collab@${Math.floor(1000 + Math.random() * 9000)}`;
+                            setFormData({ ...formData, userPassword: randomPw });
+                          }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#2A7B76] font-bold hover:underline"
+                        >
+                          Générer
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2 text-[11px] text-stone-600 bg-white/80 p-2.5 rounded-xl border border-stone-200/80 flex items-center justify-between gap-2">
+                      <span>
+                        🔄 <strong>Synchronisation bidirectionnelle :</strong> Toute modification de l'adresse e-mail, du nom ou du statut mettra instantanément à jour le compte utilisateur correspondant en base de données.
+                      </span>
                     </div>
 
                     {!formData.userId && (

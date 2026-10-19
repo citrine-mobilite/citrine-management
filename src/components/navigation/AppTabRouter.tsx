@@ -91,6 +91,7 @@ export interface AppTabRouterProps {
   onOpenProfileModal: () => void;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   handleSetCurrentUser: (u: AppUser | null) => void;
+  onLogout: () => void;
   onUpdateUser?: (updated: AppUser) => void;
   leaveRequests?: LeaveRequest[];
   onUpdateLeaveRequests?: (leaves: LeaveRequest[]) => void;
@@ -106,7 +107,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
     onUpdateNotifications, onUpdateEmployees, onUpdateSalaryDebts, onUpdateSalaryPayments,
     onUpdateFinancialTransactions, onUpdateDocuments, onUpdateDisciplinaryIncidents,
     onUpdateInventoryItems, onUpdatePartners, onUpdateUsers, onUpdateModuleConfig,
-    onOpenProfileModal, showToast, handleSetCurrentUser, onUpdateUser,
+    onOpenProfileModal, showToast, handleSetCurrentUser, onUpdateUser, onLogout,
     leaveRequests = [], onUpdateLeaveRequests,
   } = props;
 
@@ -145,7 +146,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           initialSubTab={employeeInitialSubTab}
           leaveRequests={leaveRequests}
           onUpdateUser={onUpdateUser}
-          onLogout={() => handleSetCurrentUser(null)}
+          onLogout={onLogout}
           showToast={showToast}
         />
       )}
@@ -262,7 +263,15 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
         <PartnersPanel partners={partners} onUpdatePartners={onUpdatePartners} onAddNotification={onAddNotification} showToast={showToast} currentRole={(currentUser?.role || 'admin') as any} />
       )}
       {activeTab === 'users' && (
-        <UserManagementPanel users={users} onAddNotification={onAddNotification} currentUser={currentUser!} onUpdateUsers={onUpdateUsers} showToast={showToast} />
+        <UserManagementPanel
+          users={users}
+          onAddNotification={onAddNotification}
+          currentUser={currentUser!}
+          onUpdateUsers={onUpdateUsers}
+          employees={employees}
+          onUpdateEmployees={onUpdateEmployees}
+          showToast={showToast}
+        />
       )}
       {activeTab === 'settings' && (
         <ErrorBoundary>
@@ -322,7 +331,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
         <ProfilePage
           currentUser={currentUser}
           onBackToDashboard={() => setActiveTab(currentUser.role === 'employé' ? 'employee_portal' : 'dashboard')}
-          onLogout={() => handleSetCurrentUser(null)} onAddNotification={onAddNotification} showToast={showToast}
+          onLogout={onLogout} onAddNotification={onAddNotification} showToast={showToast}
           onUpdateUser={onUpdateUser}
         />
       )}

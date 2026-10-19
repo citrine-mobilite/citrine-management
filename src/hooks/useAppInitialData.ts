@@ -307,11 +307,46 @@ export function useAppInitialData() {
       } catch {}
     }, 3500);
 
+    const onEmpUpdated = (e: any) => {
+      const emp = e.detail;
+      if (emp) {
+        setEmployees((prev) => {
+          const idx = prev.findIndex(item => item.id === emp.id || (item.email && item.email.toLowerCase() === emp.email.toLowerCase()));
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...emp };
+            return next;
+          }
+          return [emp, ...prev];
+        });
+      }
+    };
+
+    const onUserUpdated = (e: any) => {
+      const user = e.detail;
+      if (user) {
+        setUsers((prev) => {
+          const idx = prev.findIndex(item => item.id === user.id || (item.email && item.email.toLowerCase() === user.email.toLowerCase()));
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...user };
+            return next;
+          }
+          return [user, ...prev];
+        });
+      }
+    };
+
+    window.addEventListener('citrine:employee_updated', onEmpUpdated);
+    window.addEventListener('citrine:user_updated', onUserUpdated);
+
     return () => {
       unsubs.forEach((u) => typeof u === 'function' && u());
       unsubRealtime();
       if (bc) bc.close();
       clearInterval(pollTimer);
+      window.removeEventListener('citrine:employee_updated', onEmpUpdated);
+      window.removeEventListener('citrine:user_updated', onUserUpdated);
     };
   }, []);
 

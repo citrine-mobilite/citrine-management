@@ -95,7 +95,7 @@ export function subscribeToUsers(callback: (users: AppUser[]) => void) {
   };
 }
 
-export async function saveUser(user: AppUser): Promise<AppUser> {
+export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<AppUser> {
   try {
     const cleanUser: AppUser = {
       ...user,
@@ -108,31 +108,151 @@ export async function saveUser(user: AppUser): Promise<AppUser> {
       cleanUser.passwordHash = await hashPassword(cleanUser.passwordHash);
     }
 
-    cloudSqlService.saveDocument('users', cleanUser).catch(() => {});
-    const saved = await supabaseService.saveDocument('users', cleanUser);
-    const resolvedUser: AppUser = (saved as AppUser) || cleanUser;
-
     try {
-      const client = getClient();
-      const userEmail = cleanUser.email;
+      const saved = localStorage.getItem('citrine_users');
+      let currentUsers: AppUser[] = saved ? JSON.parse(saved) : [];
+      if (Array.isArray(currentUsers)) {
+        const oldEmail = previousUser?.email?.trim().toLowerCase();
+        const idx = currentUsers.findIndex(u => 
+          u.id === cleanUser.id || 
+          u.email.toLowerCase() === cleanUser.email || 
+          (oldEmail && u.email.toLowerCase() === oldEmail)
+        );
+        if (idx >= 0) {
+          currentUsers[idx] = cleanUser;
+        } else {
+          currentUsers.push(cleanUser);
+        }
+        localStorage.setItem('citrine_users', JSON.stringify(currentUsers));
+      }
+    } catch {}
+
+    const client = getClient();
+    const oldEmail = (previousUser?.email || '').trim().toLowerCase();
+    const userEmail = cleanUser.email;
+    const isEmailChanged = Boolean(oldEmail && oldEmail !== userEmail);
+
+    let matchedUserRow: any = null;
+    if (typeof cleanUser.id === 'string' && /^\d+$/.test(cleanUser.id)) {
+      const { data } = await client.from('users').select('*').eq('id', Number(cleanUser.id)).maybeSingle();
+      matchedUserRow = data;
+    } else if (typeof cleanUser.id === 'number') {
+      const { data } = await client.from('users').select('*').eq('id', cleanUser.id).maybeSingle();
+      matchedUserRow = data;
+    }
+    if (!matchedUserRow && cleanUser.uid) {
+      const { data } = await client.from('users').select('*').eq('uid', cleanUser.uid).maybeSingle();
+      matchedUserRow = data;
+    }
+    if (!matchedUserRow && oldEmail) {
+      const { data } = await client.from('users').select('*').ilike('email', oldEmail).maybeSingle();
+      matchedUserRow = data;
+    }
+    if (!matchedUserRow && userEmail) {
+      const { data } = await client.from('users').select('*').ilike('email', userEmail).maybeSingle();
+      matchedUserRow = data;
+    }
+
+    const resolvedRoleId = cleanUser.role === 'administrateur' ? 1 : cleanUser.role === 'responsable' ? 2 : 3;
+    const isUserActive = cleanUser.status === 'actif';
+
+    let resolvedUser: AppUser;
+
+    if (matchedUserRow) {
+      const existingRaw = (matchedUserRow.raw_data && typeof matchedUserRow.raw_data === 'object') ? matchedUserRow.raw_data : {};
+      const updatedUserRaw = {
+        ...existingRaw,
+        ...cleanUser,
+        name: cleanUser.name,
+        email: cleanUser.email,
+        phone: cleanUser.phone || null,
+        department: cleanUser.department,
+        role: cleanUser.role,
+        role_id: resolvedRoleId,
+        status: cleanUser.status,
+        employmentStatus: cleanUser.employmentStatus,
+        passwordHash: cleanUser.passwordHash || existingRaw.passwordHash || existingRaw.password_hash || '',
+        password_hash: cleanUser.passwordHash || existingRaw.passwordHash || existingRaw.password_hash || '',
+        updatedAt: new Date().toISOString(),
+      };
+
+      const userDbPayload: any = {
+        name: cleanUser.name,
+        email: cleanUser.email,
+        phone: cleanUser.phone || null,
+        department: cleanUser.department,
+        role_id: resolvedRoleId,
+        status: isUserActive,
+        avatar_url: cleanUser.avatarUrl || null,
+        raw_data: updatedUserRaw,
+        updated_at: new Date().toISOString(),
+      };
+
+      await client.from('users').update(userDbPayload).eq('id', matchedUserRow.id);
+
+      if (supabaseAdmin && matchedUserRow.uid) {
+        try {
+          if (isEmailChanged) {
+            await supabaseAdmin.auth.admin.updateUserById(matchedUserRow.uid, { email: cleanUser.email });
+          }
+          if (cleanUser.passwordHash && !cleanUser.passwordHash.startsWith('pbkdf2:')) {
+            await supabaseAdmin.auth.admin.updateUserById(matchedUserRow.uid, { password: cleanUser.passwordHash });
+          }
+        } catch (authErr) {
+          console.warn('[userService] Notice update Supabase Auth user:', authErr);
+        }
+      }
+
+      resolvedUser = {
+        ...cleanUser,
+        id: String(matchedUserRow.id),
+        uid: matchedUserRow.uid,
+      };
+    } else {
+      cloudSqlService.saveDocument('users', cleanUser).catch(() => {});
+      const saved = await supabaseService.saveDocument('users', cleanUser);
+      resolvedUser = (saved as AppUser) || cleanUser;
+    }
+
+    // Synchronisation bidirectionnelle : Mise à jour du collaborateur associé dans la table 'employees'
+    try {
       const userEmployeeId = cleanUser.employeeId;
+      let matchedEmp: any = null;
 
-      let empQuery = client.from('employees').select('*');
-      const isNumUserId = /^\d+$/.test(String(cleanUser.id));
-      const isNumEmpId = userEmployeeId && /^\d+$/.test(String(userEmployeeId));
+      // 1. Recherche par identifiant d'employé
+      if (userEmployeeId) {
+        if (/^\d+$/.test(String(userEmployeeId))) {
+          const { data } = await client.from('employees').select('*').eq('id', Number(userEmployeeId)).maybeSingle();
+          matchedEmp = data;
+        }
+        if (!matchedEmp) {
+          const { data } = await client.from('employees').select('*').eq('doc_id', String(userEmployeeId)).maybeSingle();
+          matchedEmp = data;
+        }
+      }
 
-      const conditions: string[] = [`email.ilike.${userEmail}`];
-      if (isNumEmpId) conditions.push(`id.eq.${userEmployeeId}`);
-      if (userEmployeeId) conditions.push(`doc_id.eq.${userEmployeeId}`);
-      if (isNumUserId) conditions.push(`user_id.eq.${cleanUser.id}`);
+      // 2. Recherche par user_id (si ID numérique)
+      if (!matchedEmp && /^\d+$/.test(String(resolvedUser.id))) {
+        const { data } = await client.from('employees').select('*').eq('user_id', Number(resolvedUser.id)).maybeSingle();
+        matchedEmp = data;
+      }
 
-      empQuery = empQuery.or(conditions.join(','));
-      const { data: matchedEmp } = await empQuery.maybeSingle();
+      // 3. Recherche par ancien email si modification d'adresse
+      if (!matchedEmp && oldEmail) {
+        const { data } = await client.from('employees').select('*').ilike('email', oldEmail).maybeSingle();
+        matchedEmp = data;
+      }
+
+      // 4. Recherche par email actuel
+      if (!matchedEmp && userEmail) {
+        const { data } = await client.from('employees').select('*').ilike('email', userEmail).maybeSingle();
+        matchedEmp = data;
+      }
 
       if (matchedEmp) {
         const rawEmp = matchedEmp.raw_data && typeof matchedEmp.raw_data === 'object' ? matchedEmp.raw_data : {};
         
-        let newEmploymentStatus = cleanUser.employmentStatus || matchedEmp.employment_status || 'en_poste';
+        let newEmploymentStatus = cleanUser.employmentStatus || matchedEmp.employment_status || rawEmp.employmentStatus || 'en_poste';
         if (cleanUser.status === 'inactif') {
           if (newEmploymentStatus === 'en_poste' || newEmploymentStatus === 'en_conge' || newEmploymentStatus === 'en_permission') {
             newEmploymentStatus = 'suspendu';
@@ -148,31 +268,74 @@ export async function saveUser(user: AppUser): Promise<AppUser> {
           newEmploymentStatus !== 'suspendu' &&
           newEmploymentStatus !== 'parti';
 
-        const updatedEmp: Employee = {
+        const resolvedRoleType = cleanUser.role === 'administrateur' ? 'Super Administrateur' : cleanUser.role === 'responsable' ? 'Responsable' : (matchedEmp.role_type || 'Employé');
+
+        const updatedEmpRaw = {
           ...rawEmp,
           id: String(matchedEmp.id),
           doc_id: matchedEmp.doc_id || rawEmp.doc_id || `emp_${matchedEmp.id}`,
           uid: matchedEmp.uid,
-          userId: cleanUser.id,
+          userId: resolvedUser.id,
           name: cleanUser.name,
           email: cleanUser.email,
           phone: cleanUser.phone || matchedEmp.phone || '',
           department: cleanUser.department || matchedEmp.department || 'Direction Générale',
-          roleType: cleanUser.role === 'administrateur' ? 'Super Administrateur' : cleanUser.role === 'responsable' ? 'Responsable' : (matchedEmp.role_type || 'Employé'),
-          roleId: cleanUser.role === 'administrateur' ? 1 : cleanUser.role === 'responsable' ? 2 : 3,
+          roleType: resolvedRoleType,
+          roleId: resolvedRoleId,
           status: isEmpActive,
           employmentStatus: newEmploymentStatus,
-          avatarUrl: cleanUser.avatarUrl || matchedEmp.avatar_url || '',
+          avatarUrl: cleanUser.avatarUrl || matchedEmp.photo_url || rawEmp.avatarUrl || '',
           salary: matchedEmp.salary || 0,
           hireDate: matchedEmp.hire_date || rawEmp.hireDate || new Date().toISOString().split('T')[0],
         };
 
-        await supabaseService.saveDocument('employees', updatedEmp);
+        const updatedEmp: Employee = {
+          ...updatedEmpRaw,
+          id: String(matchedEmp.id),
+        };
+
+        // Mettre à jour dans la table employees de Supabase
+        await client.from('employees').update({
+          name: cleanUser.name,
+          email: cleanUser.email,
+          phone: cleanUser.phone || matchedEmp.phone || null,
+          department: cleanUser.department || matchedEmp.department || 'Direction Générale',
+          role_type: resolvedRoleType,
+          position: matchedEmp.position || resolvedRoleType,
+          role_id: resolvedRoleId,
+          user_id: /^\d+$/.test(String(resolvedUser.id)) ? Number(resolvedUser.id) : matchedEmp.user_id,
+          status: isEmpActive,
+          photo_url: cleanUser.avatarUrl || matchedEmp.photo_url || null,
+          raw_data: updatedEmpRaw,
+          updated_at: new Date().toISOString(),
+        }).eq('id', matchedEmp.id);
+
+        // Mettre à jour le cache local employees
+        try {
+          const cachedEmps = localStorage.getItem('citrine_employees');
+          if (cachedEmps) {
+            let eList: Employee[] = JSON.parse(cachedEmps);
+            if (Array.isArray(eList)) {
+              const eIdx = eList.findIndex(e => 
+                String(e.id) === String(matchedEmp.id) || 
+                (oldEmail && e.email?.toLowerCase() === oldEmail) || 
+                e.email?.toLowerCase() === cleanUser.email
+              );
+              if (eIdx >= 0) eList[eIdx] = updatedEmp;
+              else eList.push(updatedEmp);
+              localStorage.setItem('citrine_employees', JSON.stringify(eList));
+            }
+          }
+        } catch {}
+
         window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
+        console.log(`✅ [SYNC USER ➔ COLLABORATEUR] Employé "${cleanUser.name}" (${cleanUser.email}) synchronisé.`);
       }
     } catch (syncErr) {
       console.warn('[userService] Notice synchronisation collaborateur associé:', syncErr);
     }
+
+    window.dispatchEvent(new CustomEvent('citrine:user_updated', { detail: resolvedUser }));
     return resolvedUser;
   } catch (error) {
     console.error('Error saving user:', error);

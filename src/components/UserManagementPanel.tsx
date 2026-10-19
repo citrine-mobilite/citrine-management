@@ -86,7 +86,7 @@ export default function UserManagementPanel({
         passwordHash,
       };
 
-      await saveUser(userToSave);
+      await saveUser(userToSave, editingUser || undefined);
 
       // Mettre à jour l'état React des utilisateurs
       if (onUpdateUsers) {
@@ -98,11 +98,16 @@ export default function UserManagementPanel({
       }
 
       // Synchroniser immédiatement le collaborateur associé dans l'état React
-      if (onUpdateEmployees && employees) {
+      if (onUpdateEmployees && employees && employees.length > 0) {
         const targetEmail = userToSave.email.toLowerCase();
+        const oldEmail = editingUser?.email ? editingUser.email.toLowerCase() : '';
         const empIdx = employees.findIndex(
-          (e) => e.email.toLowerCase() === targetEmail || String(e.userId) === userToSave.id || e.id === userToSave.employeeId
+          (e) =>
+            (e.email && (e.email.toLowerCase() === targetEmail || (oldEmail && e.email.toLowerCase() === oldEmail))) ||
+            (e.userId && String(e.userId) === String(userToSave.id)) ||
+            (userToSave.employeeId && (String(e.id) === String(userToSave.employeeId) || e.uid === userToSave.employeeId))
         );
+
         if (empIdx >= 0) {
           const emp = employees[empIdx];
           const isEmpActive =
@@ -112,13 +117,20 @@ export default function UserManagementPanel({
             data.employmentStatus !== 'suspendu' &&
             data.employmentStatus !== 'parti';
 
+          const resolvedRoleId = userToSave.role === 'administrateur' ? 1 : userToSave.role === 'responsable' ? 2 : 3;
+          const resolvedRoleType = userToSave.role === 'administrateur' ? 'Super Administrateur' : userToSave.role === 'responsable' ? 'Responsable' : (emp.roleType || 'Employé');
+
           const updatedEmp: Employee = {
             ...emp,
             name: userToSave.name,
             email: userToSave.email,
             department: userToSave.department || emp.department,
+            roleId: resolvedRoleId,
+            roleType: resolvedRoleType,
+            role: resolvedRoleType,
             status: isEmpActive,
             employmentStatus: data.employmentStatus,
+            userId: userToSave.id,
           };
           onUpdateEmployees(employees.map((e, i) => (i === empIdx ? updatedEmp : e)));
         }

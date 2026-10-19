@@ -22,6 +22,8 @@ import { useAppInitialData } from './hooks/useAppInitialData';
 import { loadSecureSession, storeSecureSession, clearSecureSession, canAccessTab } from './services/sessionService';
 import { safeStorage } from './utils/safeStorage';
 import { subscribeToUsers } from './services/userService';
+import { authService } from './services/auth/authService';
+import { supabase } from './lib/supabase';
 import { getDefaultPortalForUser, isEmployeeUser, isEmployeeOnlyRole } from './utils/roleUtils';
 import Sidebar, { TabType } from './components/Sidebar';
 import { AppTopNavbar } from './components/navigation/AppTopNavbar';
@@ -218,9 +220,24 @@ export default function App() {
     showToast(`Bienvenue, ${user.name} !`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     clearSecureSession();
     safeStorage.removeItem('citrine_active_tab');
+    try {
+      await authService.logout();
+    } catch {
+      try {
+        await supabase.auth.signOut();
+      } catch {}
+    }
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('sb-') || key.includes('auth-token') || key.includes('supabase'))) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {}
     setCurrentUser(null);
     setProfileModalOpen(false);
     showToast('Vous avez été déconnecté.');
@@ -394,6 +411,7 @@ export default function App() {
             }}
             leaveRequests={initialData.leaveRequests}
             onUpdateLeaveRequests={initialData.setLeaveRequests}
+            onLogout={handleLogout}
           />
         </main>
       </div>

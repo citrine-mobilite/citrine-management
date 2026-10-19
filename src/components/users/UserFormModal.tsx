@@ -136,17 +136,12 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              disabled={isEditing}
               placeholder="Ex: jean.dupont@citrine.cm"
-              className={`w-full px-3.5 py-2.5 border rounded-xl text-stone-900 font-medium ${
-                isEditing 
-                  ? 'bg-stone-100 border-stone-200 cursor-not-allowed opacity-80' 
-                  : 'bg-stone-50 border-stone-200 focus:outline-none focus:border-[#2A7B76]'
-              }`}
+              className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#2A7B76] text-stone-900 font-medium"
             />
             {isEditing && (
-              <span className="text-[10px] text-stone-400 mt-1 block">
-                L'adresse email est l'identifiant unique de connexion et ne peut pas être modifiée.
+              <span className="text-[10px] text-emerald-700 mt-1 block">
+                💡 Vous pouvez modifier l'adresse email. La modification mettra à jour automatiquement le compte utilisateur, l'authentification et la fiche collaborateur associée.
               </span>
             )}
           </div>

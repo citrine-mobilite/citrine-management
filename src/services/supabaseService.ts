@@ -181,6 +181,9 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         userId: resolvedUserId,
         roleId: resolvedRoleId,
         department: empDept,
+        employmentStatus: employmentStatus,
+        status: isStatusActive,
+        avatarUrl: item.avatarUrl || item.photoUrl || null,
       };
 
       const numUserId = (typeof resolvedUserId === 'number' || (typeof resolvedUserId === 'string' && /^\d+$/.test(resolvedUserId)))
