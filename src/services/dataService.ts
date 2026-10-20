@@ -33,6 +33,7 @@ export const COLLECTIONS = {
   IDEA_SUGGESTIONS: 'idea_suggestions',
   ENTERPRISE_SURVEYS: 'enterprise_surveys',
   LEAVE_REQUESTS: 'leave_requests',
+  ABSENCES: 'absences',
   USERS: 'users'
 } as const;
 
@@ -68,6 +69,28 @@ export function subscribeToDocument<T>(
   
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(docId);
   const filter = isUuid ? `uid=eq.${docId}` : (/^\d+$/.test(docId) ? `id=eq.${docId}` : undefined);
+
+  // Initial fetch from Supabase / server
+  (async () => {
+    try {
+      const supaList = await supabaseService.fetchCollection<T>(collectionName);
+      if (!isCancelled && Array.isArray(supaList) && supaList.length > 0) {
+        const found = supaList.find((item: any) => item.id === docId || item.docId === docId);
+        if (found) {
+          callback(found);
+          return;
+        }
+      }
+
+      const serverList = await cloudSqlService.fetchCollection<T>(collectionName);
+      if (!isCancelled && Array.isArray(serverList) && serverList.length > 0) {
+        const found = serverList.find((item: any) => item.id === docId || item.docId === docId);
+        if (found) {
+          callback(found);
+        }
+      }
+    } catch {}
+  })();
 
   const channel = supabase
     .channel(channelName)

@@ -18,7 +18,8 @@ interface TaskKanbanBoardProps {
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
   onSelectTask: (task: Task) => void;
   onOpenCreateModal: (defaultStatus: TaskStatus) => void;
-  onDeleteTask: (taskId: string) => void;
+  onOpenCreateSubtask?: (task: Task) => void;
+  onDeleteTask: (task: Task) => void;
   getPriorityBadge: (p: TaskPriority) => React.ReactNode;
 }
 
@@ -43,6 +44,7 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
   onStatusChange,
   onSelectTask,
   onOpenCreateModal,
+  onOpenCreateSubtask,
   onDeleteTask,
   getPriorityBadge,
 }) => {
@@ -128,15 +130,58 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
                         <p className="text-[11px] text-stone-500 line-clamp-2">{task.description}</p>
                       )}
 
-                      {/* Subtasks progress */}
-                      {task.subtasks && task.subtasks.length > 0 && (
-                        <div className="text-[10px] text-stone-500 flex items-center gap-1 bg-stone-50 px-2 py-1 rounded-lg border border-stone-200/50">
-                          <span>📋</span>
-                          <span>
-                            {task.subtasks.filter((s) => s.completed).length}/{task.subtasks.length} sous-tâches
+                      {/* Milestone Badge if applicable */}
+                      {task.isMilestone && (
+                        <div className="bg-amber-50 text-amber-900 border border-amber-200/90 rounded-xl px-2.5 py-1 text-[10px] font-bold flex items-center justify-between shadow-3xs">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <span>🎯</span>
+                            <span className="truncate">{task.milestoneTarget || 'Jalon Stratégique'}</span>
+                          </span>
+                          <span className="text-amber-700 font-mono shrink-0 ml-1">
+                            {task.milestoneProgress ?? 0}%
                           </span>
                         </div>
                       )}
+
+                      {/* Subtasks Progress & Asana quick action */}
+                      <div className="space-y-1 bg-stone-50/80 p-2 rounded-xl border border-stone-200/60">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="font-semibold text-stone-600 flex items-center gap-1">
+                            <span>📋</span>
+                            <span>
+                              {task.subtasks && task.subtasks.length > 0 
+                                ? `${task.subtasks.filter((s) => s.completed).length}/${task.subtasks.length} sous-tâches`
+                                : '0 sous-tâche'}
+                            </span>
+                          </span>
+                          {onOpenCreateSubtask && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenCreateSubtask(task);
+                              }}
+                              className="text-[#2A7B76] hover:text-[#20635F] font-bold flex items-center gap-0.5 hover:underline cursor-pointer"
+                              title="Créer une sous-tâche détaillée (Style Asana)"
+                            >
+                              <Plus className="h-3 w-3" />
+                              <span>Sous-tâche</span>
+                            </button>
+                          )}
+                        </div>
+                        {task.subtasks && task.subtasks.length > 0 && (
+                          <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="bg-[#2A7B76] h-full rounded-full transition-all duration-300"
+                              style={{
+                                width: `${Math.round(
+                                  (task.subtasks.filter((s) => s.completed).length / task.subtasks.length) * 100
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
 
                       {/* Footer */}
                       <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-[10px] text-stone-400">
@@ -149,9 +194,7 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (confirm('Voulez-vous vraiment supprimer cette tâche ?')) {
-                                onDeleteTask(task.id);
-                              }
+                              onDeleteTask(task);
                             }}
                             className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                             title="Supprimer la tâche"

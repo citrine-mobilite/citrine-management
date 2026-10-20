@@ -170,6 +170,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 <option value="en_poste">En poste (Actif)</option>
                 <option value="en_conge">En congés</option>
                 <option value="en_permission">En permission</option>
+                <option value="en_mission">En mission professionnelle</option>
                 <option value="maladie">Arrêt maladie</option>
                 <option value="suspendu">Suspendu</option>
                 <option value="demissionne">Démissionné</option>

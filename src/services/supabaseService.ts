@@ -42,6 +42,7 @@ export function mapCollectionToTable(collectionName: string): string {
     case 'reminder_recipients': return 'reminder_recipients';
     case 'notification_recipients': return 'notification_recipients';
     case 'presence_pauses': return 'presence_pauses';
+    case 'absences': return 'absences';
     default: return 'generic_collections';
   }
 }
@@ -134,7 +135,7 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
       return {
         ...base,
         ...(base.uid ? { uid: base.uid } : {}),
-        email: (item.email || '').trim().toLowerCase(),
+        email: (item.email || '').trim(),
         name: (item.name || '').trim() || null,
         role_id: roleId,
         status: isStatusActive,
@@ -195,7 +196,7 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         name: item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || null,
         first_name: item.firstName || null,
         last_name: item.lastName || null,
-        email: item.email ? String(item.email).trim().toLowerCase() : null,
+        email: item.email ? String(item.email).trim() : null,
         phone: item.phone ? String(item.phone).trim() : null,
         role_type: item.roleType || item.role || null,
         department: empDept,
@@ -375,12 +376,14 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
     case 'rh_document_templates':
       return {
         ...base,
-        name: item.name || 'Template RH',
+        doc_id: docId,
+        name: String(item.name || item.title || 'Template RH').trim() || 'Template RH',
         category: item.category || null,
         format_type: item.formatType || null,
         description: item.description || null,
         body_template: item.bodyTemplate || null,
         is_custom: Boolean(item.isCustom),
+        raw_data: item,
       };
     case 'processflow_salary_debts':
       return {
@@ -447,12 +450,10 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
     case 'company_settings':
       return {
         ...base,
-        name: item.name || item.companyName || null,
-        company_name: item.companyName || null,
-        work_start_time: item.workStartTime || null,
-        planned_departure_time: item.plannedDepartureTime || null,
-        qr_code_secret: item.qrCodeSecret || null,
-        door_qr_code_token: item.doorQrCodeToken || null,
+        doc_id: docId,
+        setting_key: 'main_config',
+        raw_data: item,
+        updated_at: new Date().toISOString(),
       };
     case 'calls':
       return {
@@ -647,9 +648,8 @@ function supabaseRowToItem(collectionName: string, row: any): any {
       roleType: row.role_type || raw.roleType || 'employé',
       role: row.position || raw.role || row.role_type || 'Employé',
       position: row.position || raw.position,
-      department: row.department || raw.department || 'Général',
-      status: row.employment_status || (row.status ? 'en_poste' : 'parti'),
-      employmentStatus: row.employment_status || 'en_poste',
+      status: raw.status || raw.employmentStatus || row.employment_status || (row.status ? 'en_poste' : 'parti'),
+      employmentStatus: raw.employmentStatus || (typeof raw.status === 'string' && raw.status !== 'actif' && raw.status !== 'inactif' ? raw.status : undefined) || row.employment_status || (row.status ? 'en_poste' : 'parti'),
       hireDate: row.hire_date || raw.hireDate,
       departureDate: row.departure_date || raw.departureDate,
       salary: typeof row.salary === 'number' ? row.salary : (Number(row.salary) || raw.salary || 0),
@@ -811,6 +811,20 @@ function supabaseRowToItem(collectionName: string, row: any): any {
     };
   }
 
+  if (table === 'company_settings') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    return {
+      ...raw,
+      id: raw.id || row.doc_id || String(row.id),
+      docId: row.doc_id || raw.docId || 'main_config',
+      companyName: raw.companyName || (row.setting_value && typeof row.setting_value === 'object' && row.setting_value.companyName) || 'Citrine SARL',
+      workStartTime: raw.workStartTime || '08:00',
+      plannedDepartureTime: raw.plannedDepartureTime || '16:30',
+      qrCodeSecret: raw.qrCodeSecret || 'CITRINE_SECRET_2026',
+      doorQrCodeToken: raw.doorQrCodeToken || 'CITRINE_DOOR_HQ_MAIN_2026',
+    };
+  }
+
   if (row.raw_data && typeof row.raw_data === 'object') {
     const raw = row.raw_data;
     return {
@@ -935,6 +949,27 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
       return item;
     }
 
+    if (table === 'rh_document_templates') {
+      const tplDocId = String(item.id || row.doc_id || 'tpl-memo');
+      const rowToSave = {
+        ...row,
+        doc_id: tplDocId,
+        name: String(row.name || (item as any).name || (item as any).title || 'Template RH').trim() || 'Template RH',
+        code: String((item as any).code || tplDocId).trim(),
+        type: String((item as any).type || (item as any).documentType || 'general').trim(),
+        content_template: String((item as any).contentTemplate || (item as any).content || (item as any).template || 'Contenu').trim(),
+      };
+      const { data: existingRows } = await client.from('rh_document_templates').select('id').eq('doc_id', tplDocId).limit(1);
+      if (existingRows && existingRows.length > 0) {
+        const { data: updateData, error: updateErr } = await client.from('rh_document_templates').update(rowToSave).eq('doc_id', tplDocId).select().single();
+        if (!updateErr && updateData) return supabaseRowToItem(collectionName, updateData) as T;
+      } else {
+        const { data: insertData, error: insertErr } = await client.from('rh_document_templates').insert(rowToSave).select().single();
+        if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
+      }
+      return item;
+    }
+
     if (table === 'presences') {
       try {
         const empIdVal = (item as any).employeeId || (item as any).employee_id;
@@ -1045,16 +1080,24 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
 export async function deleteDocument(collectionName: string, id: string): Promise<boolean> {
   try {
     const table = mapCollectionToTable(collectionName);
-    const client = getClient();
-    if (/^\d+$/.test(String(id))) {
-      await client.from(table).delete().eq('id', Number(id));
-    } else if (isUuid(String(id))) {
-      await client.from(table).delete().eq('uid', String(id));
+    const client = supabaseAdmin || getClient();
+    const strId = String(id).trim();
+
+    if (/^\d+$/.test(strId)) {
+      await Promise.allSettled([
+        client.from(table).delete().eq('id', Number(strId)),
+        client.from(table).delete().eq('doc_id', strId),
+      ]);
+    } else if (isUuid(strId)) {
+      await Promise.allSettled([
+        client.from(table).delete().eq('uid', strId),
+        client.from(table).delete().eq('doc_id', strId),
+      ]);
     } else {
-      const res = await client.from(table).delete().eq('doc_id', String(id));
-      if (res.error) {
-        await client.from(table).delete().match({ id: String(id) });
-      }
+      await Promise.allSettled([
+        client.from(table).delete().eq('doc_id', strId),
+        client.from(table).delete().match({ id: strId }),
+      ]);
     }
     return true;
   } catch (err) {

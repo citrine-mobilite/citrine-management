@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Task, NotificationLog, Employee, TaskStatus, TaskPriority, TaskProject, AppUser } from '../../types';
+import { Task, NotificationLog, Employee, TaskStatus, TaskPriority, TaskProject, AppUser, Subtask } from '../../types';
 import { DEFAULT_TASK_PROJECTS } from './taskConstants';
 import { taskService } from '../../services/taskService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
+import { showSuccessAlert, showErrorAlert } from '../../utils/sweetAlert';
 
 interface UseTaskLogicProps {
   tasks: Task[];
@@ -27,7 +28,7 @@ export function useTaskLogic({
   const [projects, setProjects] = useState<TaskProject[]>(DEFAULT_TASK_PROJECTS);
 
   const [activeProjectId, setActiveProjectId] = useState<string>('all');
-  const [activeView, setActiveView] = useState<'kanban' | 'table'>('kanban');
+  const [activeView, setActiveView] = useState<'kanban' | 'table' | 'rendement'>('kanban');
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,6 +42,43 @@ export function useTaskLogic({
   const [createModalDefaultStatus, setCreateModalDefaultStatus] = useState<TaskStatus>('todo');
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
+  const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
+  const [taskForSubtaskModal, setTaskForSubtaskModal] = useState<Task | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+
+  const handleOpenDeleteModal = (task: Task) => {
+    setTaskToDelete(task);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteTaskConfirm = async () => {
+    if (!taskToDelete) return;
+    const targetId = String(taskToDelete.id);
+    const targetDocId = taskToDelete.docId ? String(taskToDelete.docId) : '';
+
+    await taskService.deleteTask(targetId);
+    if (targetDocId && targetDocId !== targetId) {
+      await taskService.deleteTask(targetDocId);
+    }
+
+    const updated = tasks.filter((t) => {
+      const tId = String(t.id);
+      const tDocId = t.docId ? String(t.docId) : '';
+      if (tId === targetId || (targetDocId && tId === targetDocId)) return false;
+      if (tDocId && (tDocId === targetId || (targetDocId && tDocId === targetDocId))) return false;
+      return true;
+    });
+
+    onUpdateTasks(updated);
+
+    if (
+      selectedTaskForDetail &&
+      (String(selectedTaskForDetail.id) === targetId || (targetDocId && String(selectedTaskForDetail.id) === targetDocId))
+    ) {
+      setSelectedTaskForDetail(null);
+    }
+  };
 
   // Connected employee
   const currentEmployee = useMemo(() => {
@@ -74,47 +112,88 @@ export function useTaskLogic({
     setProjects(updatedProjects);
   };
 
-  const handleCreateProject = (newProject: TaskProject) => {
+  const handleCreateProject = async (newProject: TaskProject) => {
     const updated = [...projects, newProject];
     saveProjects(updated);
     setActiveProjectId(newProject.id);
     if (showToast) showToast(`Projet "${newProject.name}" créé avec succès !`, 'success');
+    await showSuccessAlert('Projet créé !', `Le module/projet "${newProject.name}" a été créé avec succès.`);
   };
 
-  const handleCreateTask = async (taskData: Omit<Task, 'id' | 'subtasks' | 'comments' | 'incidents'>) => {
-    const taskItem: Task = {
-      id: `task-${Date.now()}`,
-      ...taskData,
-      subtasks: [],
-      comments: [],
-      incidents: [],
-      lastUpdatedTime: new Date().toISOString(),
-    };
+  const handleCreateTask = async (taskData: Omit<Task, 'id' | 'comments' | 'incidents'> & { subtasks?: Subtask[] }) => {
+    try {
+      const taskItem: Task = {
+        id: `task-${Date.now()}`,
+        ...taskData,
+        subtasks: taskData.subtasks || [],
+        comments: [],
+        incidents: [],
+        lastUpdatedTime: new Date().toISOString(),
+      };
 
-    await taskService.saveTask(taskItem);
-    const updatedTasks = [taskItem, ...tasks];
-    onUpdateTasks(updatedTasks);
+      await taskService.saveTask(taskItem);
+      const updatedTasks = [taskItem, ...tasks];
+      onUpdateTasks(updatedTasks);
 
-    onAddNotification({
-      id: `notif-${Date.now()}`,
-      recipient: taskItem.assignedTo || 'Équipe',
-      type: 'system',
-      title: 'Nouvelle Tâche Assignée',
-      content: `${taskItem.title} (${taskItem.date})`,
-      payload: '{}',
-      timestamp: new Date().toISOString(),
-    });
+      onAddNotification({
+        id: `notif-${Date.now()}`,
+        recipient: taskItem.assignedTo || 'Équipe',
+        type: 'system',
+        title: 'Nouvelle Tâche Assignée',
+        content: `${taskItem.title} (${taskItem.date})`,
+        payload: '{}',
+        timestamp: new Date().toISOString(),
+      });
 
-    pushNotificationBridgeService.sendPush({
-      title: 'Nouvelle Tâche Assignée 📋',
-      message: `${taskItem.title} vous a été assignée pour le ${taskItem.date}.`,
-      senderName: currentRole || 'Responsable',
-      type: 'task_assigned',
-      link: 'tasks',
-    });
+      pushNotificationBridgeService.sendPush({
+        title: 'Nouvelle Tâche Assignée 📋',
+        message: `${taskItem.title} vous a été assignée pour le ${taskItem.date}.`,
+        senderName: currentRole || 'Responsable',
+        type: 'task_assigned',
+        link: 'tasks',
+      });
 
-    if (showToast) {
-      showToast('Tâche créée et enregistrée en base avec succès.', 'success');
+      if (showToast) {
+        showToast('Tâche créée et enregistrée en base avec succès.', 'success');
+      }
+      await showSuccessAlert('Tâche créée !', `La tâche "${taskItem.title}" a été enregistrée avec succès.`);
+    } catch (err: any) {
+      await showErrorAlert('Erreur de création', err?.message || 'Impossible d\'enregistrer la tâche.');
+    }
+  };
+
+  const handleOpenCreateSubtask = (task?: Task) => {
+    setTaskForSubtaskModal(task || null);
+    setIsSubtaskModalOpen(true);
+  };
+
+  const handleCreateSubtask = async (subtask: Subtask, targetTaskId?: string) => {
+    try {
+      const taskIdToUpdate = targetTaskId || taskForSubtaskModal?.id;
+      if (!taskIdToUpdate) return;
+      const target = tasks.find((t) => t.id === taskIdToUpdate);
+      if (!target) return;
+
+      const updatedTask: Task = {
+        ...target,
+        subtasks: [...(target.subtasks || []), subtask],
+        lastUpdatedTime: new Date().toISOString(),
+      };
+
+      await taskService.saveTask(updatedTask);
+      const updatedTasks = tasks.map((t) => (t.id === taskIdToUpdate ? updatedTask : t));
+      onUpdateTasks(updatedTasks);
+
+      if (selectedTaskForDetail && selectedTaskForDetail.id === taskIdToUpdate) {
+        setSelectedTaskForDetail(updatedTask);
+      }
+
+      if (showToast) {
+        showToast(`Sous-tâche "${subtask.title}" créée avec succès (Style Asana Pro) !`, 'success');
+      }
+      await showSuccessAlert('Sous-tâche ajoutée !', `La sous-tâche "${subtask.title}" a été ajoutée.`);
+    } catch (err: any) {
+      await showErrorAlert('Erreur', err?.message || 'Impossible d\'ajouter la sous-tâche.');
     }
   };
 
@@ -174,40 +253,46 @@ export function useTaskLogic({
   };
 
   const handleSaveTask = async (updatedTask: Task) => {
-    const prevTask = tasks.find((t) => t.id === updatedTask.id);
-    const finalizedTask = { ...updatedTask, updatedAt: new Date().toISOString() };
+    try {
+      const prevTask = tasks.find((t) => t.id === updatedTask.id);
+      const finalizedTask = { ...updatedTask, updatedAt: new Date().toISOString() };
 
-    await taskService.saveTask(finalizedTask);
-    const updated = tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t));
-    onUpdateTasks(updated);
-    setSelectedTaskForDetail(finalizedTask);
+      await taskService.saveTask(finalizedTask);
+      const updated = tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t));
+      onUpdateTasks(updated);
+      setSelectedTaskForDetail(finalizedTask);
 
-    if (finalizedTask.assignedTo) {
-      const isStatusChanged = prevTask && prevTask.status !== finalizedTask.status;
-      const isPriorityChanged = prevTask && prevTask.priority !== finalizedTask.priority;
-      if (isStatusChanged || isPriorityChanged || !prevTask) {
-        onAddNotification({
-          id: `notif-task-update-${Date.now()}-${finalizedTask.id}`,
-          recipient: finalizedTask.assignedTo,
-          type: 'system',
-          title: `Mise à jour de tâche : ${finalizedTask.title}`,
-          content: isStatusChanged 
-            ? `Statut modifié : passage à « ${finalizedTask.status} »` 
-            : `Détails de la tâche mis à jour.`,
-          payload: JSON.stringify({
-            source: 'task_movement',
-            taskId: finalizedTask.id,
-            employeeId: finalizedTask.assignedTo,
-            newStatus: finalizedTask.status,
-          }),
-          timestamp: new Date().toISOString(),
-          read: false,
-        });
+      if (finalizedTask.assignedTo) {
+        const isStatusChanged = prevTask && prevTask.status !== finalizedTask.status;
+        const isPriorityChanged = prevTask && prevTask.priority !== finalizedTask.priority;
+        if (isStatusChanged || isPriorityChanged || !prevTask) {
+          onAddNotification({
+            id: `notif-task-update-${Date.now()}-${finalizedTask.id}`,
+            recipient: finalizedTask.assignedTo,
+            type: 'system',
+            title: `Mise à jour de tâche : ${finalizedTask.title}`,
+            content: isStatusChanged 
+              ? `Statut modifié : passage à « ${finalizedTask.status} »` 
+              : `Détails de la tâche mis à jour.`,
+            payload: JSON.stringify({
+              source: 'task_movement',
+              taskId: finalizedTask.id,
+              employeeId: finalizedTask.assignedTo,
+              newStatus: finalizedTask.status,
+            }),
+            timestamp: new Date().toISOString(),
+            read: false,
+          });
 
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+          }
         }
       }
+      if (showToast) showToast('Tâche mise à jour avec succès.', 'success');
+      await showSuccessAlert('Modifications enregistrées !', `La tâche "${finalizedTask.title}" a été mise à jour.`);
+    } catch (err: any) {
+      await showErrorAlert('Erreur', err?.message || 'Impossible d\'enregistrer les modifications.');
     }
   };
 
@@ -304,11 +389,23 @@ export function useTaskLogic({
     setIsNewProjectModalOpen,
     selectedTaskForDetail,
     setSelectedTaskForDetail,
+    isSubtaskModalOpen,
+    setIsSubtaskModalOpen,
+    taskForSubtaskModal,
+    setTaskForSubtaskModal,
+    handleOpenCreateSubtask,
+    handleCreateSubtask,
     filteredTasks,
     handleCreateProject,
     handleCreateTask,
     handleStatusChange,
     handleSaveTask,
     handleDeleteTask,
+    isDeleteModalOpen,
+    setIsDeleteModalOpen,
+    taskToDelete,
+    setTaskToDelete,
+    handleOpenDeleteModal,
+    handleDeleteTaskConfirm,
   };
 }

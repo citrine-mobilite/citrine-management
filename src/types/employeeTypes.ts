@@ -14,6 +14,7 @@ export type EmployeeStatus =
   | 'en_poste'
   | 'en_conge'
   | 'en_permission'
+  | 'en_mission'
   | 'maladie'
   | 'suspendu'
   | 'demissionne'
@@ -58,4 +59,15 @@ export interface Employee {
   team?: string;
   createdAt?: string;
   updatedAt?: string;
+  statusReason?: string;
+  statusStartDate?: string;
+  statusEndDate?: string;
+  missionHistory?: Array<{
+    id: string;
+    reason: string;
+    startDate: string;
+    endDate: string;
+    durationDays: number;
+    createdAt: string;
+  }>;
 }

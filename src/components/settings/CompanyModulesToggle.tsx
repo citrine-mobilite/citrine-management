@@ -219,9 +219,13 @@ export const CompanyModulesToggle: React.FC<CompanyModulesToggleProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="px-3.5 py-1.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl font-mono">
             {activeCount} / {MODULES_LIST.length} modules actifs
+          </span>
+          <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Sauvegardé en BD</span>
           </span>
         </div>
       </div>

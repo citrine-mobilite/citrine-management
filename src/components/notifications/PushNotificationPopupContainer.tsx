@@ -51,14 +51,73 @@ export const PushNotificationPopupContainer: React.FC<PushNotificationPopupConta
     setSelectedDetail(notifLog);
   };
 
+  const [permStatus, setPermStatus] = useState<string>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'unsupported';
+  });
+  const [hidePermBanner, setHidePermBanner] = useState(false);
+
+  const handleRequestNativePermission = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const res = await Notification.requestPermission();
+        setPermStatus(res);
+        if (res === 'granted') {
+          await pushNotificationBridgeService.sendPush({
+            title: '🚀 Push Notifications Activées !',
+            message: 'Vous recevrez désormais les alertes de pointage et de missions directement sur votre écran.',
+            senderName: 'Système Citrine',
+            type: 'alert',
+          });
+        }
+      } catch (e) {
+        console.warn('Error requesting permission:', e);
+      }
+    }
+  };
+
   return (
     <>
+      {/* Floating Push Activation Helper if permission not yet granted */}
+      {permStatus === 'default' && !hidePermBanner && (
+        <div className="fixed bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-[99998] animate-in slide-in-from-bottom-5 duration-300">
+          <div className="bg-stone-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-500/50 backdrop-blur-xl flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#2A7B76] flex items-center justify-center text-white shrink-0 shadow-sm animate-pulse">
+                <Bell className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-emerald-300">Notifications Push sur l'écran</p>
+                <p className="text-[11px] text-stone-300 leading-snug">Activez les alertes pour voir les pointages et missions en direct.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleRequestNativePermission}
+                className="bg-[#2A7B76] hover:bg-[#23635f] active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition shadow-md cursor-pointer"
+              >
+                Activer
+              </button>
+              <button
+                onClick={() => setHidePermBanner(true)}
+                className="text-stone-400 hover:text-white p-1 rounded-lg"
+                title="Masquer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeToasts.length > 0 && (
-        <div className="fixed top-20 right-6 z-50 flex flex-col space-y-3 max-w-sm w-full px-4 pointer-events-none animate-in slide-in-from-top-6 duration-300">
+        <div className="fixed top-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-[99999] flex flex-col space-y-3 pointer-events-none animate-in slide-in-from-top-6 duration-300">
           {activeToasts.map((toast) => (
             <div
               key={toast.id}
-              className="pointer-events-auto bg-white/95 dark:bg-stone-900/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-[#2A7B76]/30 dark:border-[#2A7B76]/50 overflow-hidden transition-all transform hover:scale-[1.02]"
+              className="pointer-events-auto bg-white/95 dark:bg-stone-900/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-[#2A7B76]/40 dark:border-[#2A7B76]/60 overflow-hidden transition-all transform hover:scale-[1.01] ring-1 ring-black/5"
             >
               {/* Push Header */}
               <div className="bg-gradient-to-r from-[#2A7B76] via-emerald-800 to-[#2A7B76] text-white px-4 py-3 flex items-center justify-between border-b border-emerald-700/40">

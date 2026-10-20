@@ -681,3 +681,24 @@ export const adminAuditLogs = pgTable('admin_audit_logs', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// ==============================================================================
+// 33. Table des Absences RH (Constatées / Justifiées / Non Pointées)
+// ==============================================================================
+export const absences = pgTable('absences', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  docId: text('doc_id').notNull(),
+  employeeId: text('employee_id').notNull(),
+  employeeName: text('employee_name').notNull(),
+  date: text('date').notNull(),
+  type: text('type').default('journee_non_pointee'),
+  reason: text('reason').default('Journée non pointée au bureau'),
+  status: text('status').default('non_justifie'),
+  justification: text('justification'),
+  justifiedAt: text('justified_at'),
+  justifiedBy: text('justified_by'),
+  notified: boolean('notified').default(false),
+  rawData: jsonb('raw_data'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+

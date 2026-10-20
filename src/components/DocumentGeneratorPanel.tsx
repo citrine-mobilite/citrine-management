@@ -24,6 +24,8 @@ import {
 import { OfficialDocumentModal } from './documents/OfficialDocumentModal';
 import { CreateDocumentModal } from './documents/CreateDocumentModal';
 import { CreateDocTemplateModal } from './documents/CreateDocTemplateModal';
+import { EditDocumentModal } from './documents/EditDocumentModal';
+import { showSuccessAlert, showErrorAlert, confirmActionAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface DocumentGeneratorPanelProps {
   documents: GeneratedDocument[];
@@ -47,6 +49,7 @@ export default function DocumentGeneratorPanel({
 }: DocumentGeneratorPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [previewDoc, setPreviewDoc] = useState<GeneratedDocument | null>(null);
+  const [editingDoc, setEditingDoc] = useState<GeneratedDocument | null>(null);
   const [selectedTemplateForModal, setSelectedTemplateForModal] = useState<DocTemplate | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreateTemplateModalOpen, setIsCreateTemplateModalOpen] = useState(false);
@@ -80,9 +83,18 @@ export default function DocumentGeneratorPanel({
     }
   };
 
-  const handleDeleteDoc = (id: string) => {
-    handleUpdate((prev) => prev.filter((d) => d.id !== id));
-    if (showToast) showToast('Document supprimé des archives BD.');
+  const handleDeleteDoc = async (id: string) => {
+    const target = effectiveDocuments.find((d) => d.id === id);
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer ce document ?',
+      text: 'Voulez-vous vraiment supprimer ce document des archives RH ?',
+      itemName: target?.title,
+      action: async () => {
+        handleUpdate((prev) => prev.filter((d) => d.id !== id));
+      },
+      successTitle: 'Document supprimé !',
+      successMessage: target?.title ? `"${target.title}" a été supprimé des archives.` : 'Document supprimé des archives.',
+    });
   };
 
   // Ouverture du formulaire de création avec le modèle choisi
@@ -92,7 +104,7 @@ export default function DocumentGeneratorPanel({
   };
 
   // Enregistrement systématique des documents RH en base de données
-  const handleSaveDocument = (newDoc: GeneratedDocument) => {
+  const handleSaveDocument = async (newDoc: GeneratedDocument) => {
     const docToPersist: GeneratedDocument = {
       ...newDoc,
       saveToDatabase: true
@@ -100,19 +112,35 @@ export default function DocumentGeneratorPanel({
     handleUpdate((prev) => [docToPersist, ...prev]);
     // Ouverture immédiate de l'aperçu PDF
     setPreviewDoc(docToPersist);
+    await showSuccessAlert('Document généré !', `Le document "${newDoc.title}" a été généré et archivé avec succès.`);
+  };
+
+  // Enregistrement des modifications apportées à un document existant en base de données
+  const handleSaveEditedDoc = async (updatedDoc: GeneratedDocument) => {
+    handleUpdate((prev) =>
+      prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d))
+    );
+    await showSuccessAlert('Modifications enregistrées !', `Le document "${updatedDoc.title}" a été mis à jour.`);
   };
 
   // Réinitialisation des modèles par défaut en base de données
   const handleResetTemplates = async () => {
-    if (!window.confirm("Voulez-vous synchroniser et actualiser l'ensemble des modèles RH en base de données Supabase ?")) {
-      return;
-    }
+    const isConfirmed = await confirmActionAlert({
+      title: 'Synchroniser les modèles RH ?',
+      text: 'Voulez-vous synchroniser et actualiser l\'ensemble des modèles RH en base de données Supabase ?',
+      confirmButtonText: 'Oui, synchroniser',
+      icon: 'question',
+    });
+    if (!isConfirmed) return;
+
     setIsResettingTemplates(true);
     try {
       await resetRHDocumentTemplatesToDefaults();
       if (showToast) showToast('Modèles RH synchronisés avec succès en base de données.');
-    } catch {
+      await showSuccessAlert('Modèles synchronisés !', 'L\'ensemble des modèles officiels RH a été actualisé.');
+    } catch (err: any) {
       if (showToast) showToast('Erreur lors de la synchronisation des modèles.', 'error');
+      await showErrorAlert('Erreur', err?.message || 'Erreur lors de la synchronisation des modèles.');
     } finally {
       setIsResettingTemplates(false);
     }
@@ -174,6 +202,26 @@ export default function DocumentGeneratorPanel({
         onCreateNewTemplate={() => setIsCreateTemplateModalOpen(true)}
       />
 
+      {/* Titre et statistiques de la section Archives */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-stone-100 text-[#2A7B76] rounded-lg">
+            <FileText className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-sm text-stone-900 flex items-center gap-2">
+              <span>Archives des Documents Générés</span>
+              <span className="bg-emerald-50 text-[#2A7B76] font-bold text-[10px] px-2 py-0.5 rounded-full border border-emerald-200">
+                {documents.length} document(s)
+              </span>
+            </h3>
+            <p className="text-[11px] text-stone-500">
+              Historique complet des documents RH officiels générés, enregistrés et scellés
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Barre de recherche, Commutateur Cards vs DataTable, Statistiques BD */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
         <div className="relative w-full sm:max-w-md">
@@ -231,6 +279,7 @@ export default function DocumentGeneratorPanel({
           documents={documents}
           searchTerm={searchTerm}
           onPreview={(doc) => setPreviewDoc(doc)}
+          onEdit={(doc) => setEditingDoc(doc)}
           onDelete={handleDeleteDoc}
         />
       ) : (
@@ -238,6 +287,7 @@ export default function DocumentGeneratorPanel({
           documents={documents}
           searchTerm={searchTerm}
           onPreview={(doc) => setPreviewDoc(doc)}
+          onEdit={(doc) => setEditingDoc(doc)}
           onDelete={handleDeleteDoc}
         />
       )}
@@ -250,6 +300,16 @@ export default function DocumentGeneratorPanel({
         initialTemplate={selectedTemplateForModal}
         templates={dbTemplates}
         onSaveDocument={handleSaveDocument}
+        showToast={showToast}
+      />
+
+      {/* Modal d'Édition / Modification d'un Document Existant en Base */}
+      <EditDocumentModal
+        isOpen={Boolean(editingDoc)}
+        onClose={() => setEditingDoc(null)}
+        document={editingDoc}
+        onSave={handleSaveEditedDoc}
+        employees={employees}
         showToast={showToast}
       />
 

@@ -8,5 +8,7 @@ export * from './TaskProjectModal';
 export * from './TaskProjectBar';
 export * from './TaskFilterBar';
 export * from './TaskHeaderBanner';
+export * from './TaskRendementAnalyticsView';
+export * from './SubtaskCreateModal';
 export * from './taskConstants';
 export * from './useTaskLogic';

@@ -9,6 +9,9 @@ import { AssignmentsHistoryModal } from './inventory/AssignmentsHistoryModal';
 import { InventoryAssignModal } from './inventory/InventoryAssignModal';
 import { InventoryReturnModal } from './inventory/InventoryReturnModal';
 import { InventoryDonationsPanel } from './inventory/InventoryDonationsPanel';
+import { InventoryDetailDrawer } from './inventory/InventoryDetailDrawer';
+import { InventoryDonateModal } from './inventory/InventoryDonateModal';
+import { showSuccessAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface InventoryPanelProps {
   inventoryItems: InventoryItem[];
@@ -133,23 +136,36 @@ export default function InventoryPanel({
   const [assignItem, setAssignItem] = useState<InventoryItem | null>(null);
   const [returnItem, setReturnItem] = useState<InventoryItem | null>(null);
   const [targetAssignment, setTargetAssignment] = useState<InventoryAssignment | null>(null);
+  const [selectedDetailItem, setSelectedDetailItem] = useState<InventoryItem | null>(null);
+  const [donateItem, setDonateItem] = useState<InventoryItem | null>(null);
 
   // Ensure initial items exist
   const effectiveItems = inventoryItems.length > 0 ? inventoryItems : INITIAL_DEMO_ITEMS;
 
-  const handleSaveItem = (item: InventoryItem) => {
+  const handleSaveItem = async (item: InventoryItem) => {
     const exists = effectiveItems.some((i) => i.id === item.id);
     if (exists) {
       onUpdateInventoryItems(effectiveItems.map((i) => (i.id === item.id ? item : i)));
+      await showSuccessAlert('Article modifié !', `L'article "${item.designation}" a été mis à jour.`);
     } else {
       onUpdateInventoryItems([item, ...effectiveItems]);
+      await showSuccessAlert('Article enregistré !', `L'article "${item.designation}" a été ajouté à l'inventaire.`);
     }
     if (showToast) showToast('Matériel enregistré avec succès.');
   };
 
-  const handleDeleteItem = (id: string) => {
-    onUpdateInventoryItems(effectiveItems.filter((i) => i.id !== id));
-    if (showToast) showToast('Élément d\'inventaire supprimé.');
+  const handleDeleteItem = async (id: string) => {
+    const target = effectiveItems.find((i) => i.id === id);
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer ce matériel ?',
+      text: 'Voulez-vous vraiment retirer cet équipement de l\'inventaire ?',
+      itemName: target?.designation,
+      action: async () => {
+        onUpdateInventoryItems(effectiveItems.filter((i) => i.id !== id));
+      },
+      successTitle: 'Matériel supprimé !',
+      successMessage: target?.designation ? `"${target.designation}" a été supprimé de l'inventaire.` : 'L\'article a été supprimé.',
+    });
   };
 
   const handleItemUpdated = (updated: InventoryItem) => {
@@ -304,6 +320,7 @@ export default function InventoryPanel({
               setShowCreateModal(true);
             }}
             onDeleteItem={handleDeleteItem}
+            onSelectItem={(item) => setSelectedDetailItem(item)}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -311,7 +328,7 @@ export default function InventoryPanel({
               <InventoryItemCard
                 key={item.id}
                 item={item}
-                onSelect={(item) => setHistoryItem(item)}
+                onSelect={(item) => setSelectedDetailItem(item)}
                 onDelete={handleDeleteItem}
               />
             ))}
@@ -329,7 +346,49 @@ export default function InventoryPanel({
         onSubmit={handleSaveItem}
       />
 
-      {/* 2. Screenshot 2: Assignments History Modal */}
+      {/* 2. Detail Drawer */}
+      <InventoryDetailDrawer
+        item={selectedDetailItem}
+        onClose={() => setSelectedDetailItem(null)}
+        onOpenAssign={() => {
+          if (selectedDetailItem) {
+            setAssignItem(selectedDetailItem);
+            setSelectedDetailItem(null);
+          }
+        }}
+        onOpenReturn={() => {
+          if (selectedDetailItem && selectedDetailItem.assignments && selectedDetailItem.assignments.length > 0) {
+            setReturnItem(selectedDetailItem);
+            setTargetAssignment(selectedDetailItem.assignments[0]);
+            setSelectedDetailItem(null);
+          }
+        }}
+        onOpenDonate={() => {
+          if (selectedDetailItem) {
+            setDonateItem(selectedDetailItem);
+            setSelectedDetailItem(null);
+          }
+        }}
+        onUpdateItem={(updated) => {
+          handleItemUpdated(updated);
+          setSelectedDetailItem(updated);
+        }}
+        employees={employees}
+      />
+
+      {/* 3. Donate Modal */}
+      <InventoryDonateModal
+        isOpen={Boolean(donateItem)}
+        onClose={() => setDonateItem(null)}
+        item={donateItem}
+        onDonate={(updatedItem) => {
+          handleItemUpdated(updatedItem);
+          setDonateItem(null);
+        }}
+        approvedBy={currentUser?.name || 'Direction Générale'}
+      />
+
+      {/* 4. Assignments History Modal */}
       <AssignmentsHistoryModal
         isOpen={Boolean(historyItem)}
         onClose={() => setHistoryItem(null)}
@@ -340,7 +399,7 @@ export default function InventoryPanel({
         }}
       />
 
-      {/* 3. Screenshot 4: Assign Material Modal */}
+      {/* 5. Assign Material Modal */}
       <InventoryAssignModal
         isOpen={Boolean(assignItem)}
         onClose={() => setAssignItem(null)}
@@ -350,7 +409,7 @@ export default function InventoryPanel({
         performedBy={currentUser?.name || 'Responsable Matériel'}
       />
 
-      {/* 4. Screenshot 3: Return Material Modal */}
+      {/* 6. Return Material Modal */}
       <InventoryReturnModal
         isOpen={Boolean(returnItem)}
         onClose={() => {

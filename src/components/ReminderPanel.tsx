@@ -19,6 +19,7 @@ import {
   ReminderModal, 
   ActiveAlarmBanner 
 } from './reminders';
+import { showSuccessAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface ReminderPanelProps {
   reminders: Reminder[];
@@ -160,7 +161,7 @@ export default function ReminderPanel({
   };
 
   // Save (Create or Edit)
-  const handleSaveReminder = (
+  const handleSaveReminder = async (
     reminderData: Omit<Reminder, 'id' | 'createdAt'> & { id?: string }
   ) => {
     if (reminderData.id) {
@@ -170,6 +171,7 @@ export default function ReminderPanel({
       );
       onUpdateReminders(updated);
       if (showToast) showToast('Alerte modifiée avec succès.', 'success');
+      await showSuccessAlert('Rappel modifié !', `Le rappel "${reminderData.title}" a été mis à jour.`);
     } else {
       // Création
       const newReminderItem: Reminder = {
@@ -179,16 +181,26 @@ export default function ReminderPanel({
       } as Reminder;
       onUpdateReminders([newReminderItem, ...reminders]);
       if (showToast) showToast('Nouvelle alerte programmée.', 'success');
+      await showSuccessAlert('Alerte programmée !', `Le rappel "${newReminderItem.title}" a été programmé avec succès.`);
     }
   };
 
-  // Delete
-  const handleDeleteReminder = (id: string) => {
-    if (activeRingingReminder?.id === id) {
-      handleStopAlarm();
-    }
-    onUpdateReminders(reminders.filter((r) => r.id !== id));
-    if (showToast) showToast('Alerte supprimée.');
+  // Delete with Confirmation Modal -> Loader -> SweetAlert
+  const handleDeleteReminder = async (id: string) => {
+    const target = reminders.find((r) => r.id === id);
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer ce rappel ?',
+      text: 'Voulez-vous vraiment supprimer cette alerte programmée ?',
+      itemName: target?.title,
+      action: async () => {
+        if (activeRingingReminder?.id === id) {
+          handleStopAlarm();
+        }
+        onUpdateReminders(reminders.filter((r) => r.id !== id));
+      },
+      successTitle: 'Rappel supprimé !',
+      successMessage: target?.title ? `Le rappel "${target.title}" a été supprimé.` : 'Le rappel a été supprimé.',
+    });
   };
 
   // Filtered Reminders

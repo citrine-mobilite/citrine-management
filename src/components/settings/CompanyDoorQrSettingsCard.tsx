@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   QrCode, 
   RefreshCw, 
@@ -10,10 +10,13 @@ import {
   Sparkles, 
   ExternalLink,
   Printer,
-  Info
+  Info,
+  Ban,
+  Save
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
 import { generateAndDownloadQrPoster } from '../../utils/qrPosterGenerator';
+import { confirmActionAlert, showSuccessAlert } from '../../utils/sweetAlert';
 
 interface CompanyDoorQrSettingsCardProps {
   moduleConfig: CompanyModuleConfig;
@@ -40,12 +43,17 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
 
   const [siteName, setSiteName] = useState(currentSiteName);
   const [requireGps, setRequireGps] = useState<boolean>(moduleConfig?.doorQrRequireGps ?? false);
+  const [tokenInput, setTokenInput] = useState(currentToken);
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  useEffect(() => {
+    setTokenInput(currentToken);
+  }, [currentToken]);
+
   // URL de l'image QR Code en haute résolution
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&data=${encodeURIComponent(currentToken)}`;
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&data=${encodeURIComponent(tokenInput || currentToken)}`;
 
   // Génération d'un tout nouveau token de badge d'entrée
   const handleGenerateNewDoorQr = () => {
@@ -65,6 +73,7 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
     };
 
     onUpdateModuleConfig(updated);
+    setTokenInput(newToken);
     setIsGenerating(false);
 
     if (showToast) {
@@ -73,6 +82,49 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
         'success'
       );
     }
+  };
+
+  const handleApplyToken = () => {
+    const newToken = tokenInput.trim() || 'CITRINE_DOOR_HQ_MAIN_2026';
+    const updated: any = {
+      ...(moduleConfig || {}),
+      doorQrCodeToken: newToken,
+      qrCodeSecret: newToken,
+      doorQrCodeGeneratedAt: new Date().toISOString(),
+      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
+      doorQrRequireGps: requireGps,
+    };
+    onUpdateModuleConfig(updated);
+    if (showToast) {
+      showToast('Jeton du QR Code mis à jour avec succès !', 'success');
+    }
+  };
+
+  const handleInvalidateToken = async () => {
+    const isConfirmed = await confirmActionAlert({
+      title: 'Invalider ce QR Code ?',
+      text: 'Voulez-vous vraiment invalider ce QR Code ? L\'ancien jeton cessera immédiatement de fonctionner.',
+      confirmButtonText: 'Oui, invalider',
+      isDestructive: true,
+      icon: 'warning',
+    });
+    if (!isConfirmed) return;
+
+    const revokedToken = `CITRINE_REVOKED_${Math.random().toString(36).substring(2, 8).toUpperCase()}_${Date.now()}`;
+    const updated: any = {
+      ...(moduleConfig || {}),
+      doorQrCodeToken: revokedToken,
+      qrCodeSecret: revokedToken,
+      doorQrCodeGeneratedAt: new Date().toISOString(),
+      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
+      doorQrRequireGps: requireGps,
+    };
+    onUpdateModuleConfig(updated);
+    setTokenInput(revokedToken);
+    if (showToast) {
+      showToast('QR Code invalidé et remplacé par un nouveau jeton sécurisé.', 'success');
+    }
+    await showSuccessAlert('QR Code invalidé !', 'Le QR Code d\'entrée a été révoqué et renouvelé avec succès.');
   };
 
   const handleSaveParams = (e: React.FormEvent) => {
@@ -89,21 +141,21 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
   };
 
   const handleCopyToken = () => {
-    navigator.clipboard.writeText(currentToken);
+    navigator.clipboard.writeText(tokenInput || currentToken);
     setCopiedToken(true);
     setTimeout(() => setCopiedToken(false), 2000);
   };
 
   const handleCopyDirectBadgeLink = () => {
     const origin = window.location.origin;
-    const directUrl = `${origin}/#clocking?token=${encodeURIComponent(currentToken)}`;
+    const directUrl = `${origin}/#clocking?token=${encodeURIComponent(tokenInput || currentToken)}`;
     navigator.clipboard.writeText(directUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleDownloadPoster = () => {
-    generateAndDownloadQrPoster(currentToken, {
+    generateAndDownloadQrPoster(tokenInput || currentToken, {
       companyName: moduleConfig?.companyName || 'Citrine SARL',
       siteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
       title: 'BORNE OFFICIELLE DE POINTAGE',
@@ -132,7 +184,7 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
               </span>
             </div>
             <h3 className="font-serif font-bold text-lg text-white mt-1">
-              QR Code de Badge d'Entrée (Porte des Locaux)
+              QR Code de Badge d'Entrée & Paramètres
             </h3>
             <p className="text-xs text-teal-100 max-w-xl">
               C'est ce QR Code qui reste affiché à l'entrée de l'agence. Les collaborateurs le scannent à l'arrivée et au départ pour badger leur présence.
@@ -148,11 +200,45 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
           className="px-5 py-3 bg-white hover:bg-emerald-50 text-[#2A7B76] font-bold text-xs rounded-2xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 shrink-0 self-start md:self-auto hover:scale-[1.02] active:scale-[0.98]"
         >
           <RefreshCw className={`h-4 w-4 ${isGenerating ? 'animate-spin' : ''}`} />
-          <span>Générer un Nouveau QR Code d'Entrée</span>
+          <span>Générer un Nouveau QR Code</span>
         </button>
       </div>
 
       <div className="p-6 pt-0 space-y-6">
+        {/* Token Customization Input */}
+        <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2">
+          <label className="text-xs font-bold text-stone-700 flex items-center justify-between">
+            <span>Modifier / Personnaliser le Jeton du QR Code</span>
+            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Modifiable avant, pendant ou après téléchargement</span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="Ex: CITRINE_DOOR_SECRET_2026"
+              className="flex-1 px-3.5 py-2.5 bg-white border border-stone-200 rounded-xl text-xs font-mono font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#2A7B76]"
+            />
+            <button
+              type="button"
+              onClick={handleApplyToken}
+              className="px-4 py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-xs"
+            >
+              <Save className="h-4 w-4" />
+              <span>Appliquer</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleInvalidateToken}
+              className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shrink-0 border border-red-200"
+              title="Invalider immédiatement ce jeton"
+            >
+              <Ban className="h-4 w-4 text-red-600" />
+              <span>Invalider</span>
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Colonne Gauche : Aperçu & Téléchargement de l'affiche */}
           <div className="lg:col-span-5 flex flex-col items-center bg-stone-50 p-6 rounded-3xl border border-stone-200 text-center space-y-4">
@@ -188,7 +274,7 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
               </span>
               <div className="flex items-center justify-between gap-2">
                 <code className="text-[11px] font-mono font-bold text-stone-800 truncate">
-                  {currentToken}
+                  {tokenInput}
                 </code>
                 <button
                   type="button"
@@ -218,94 +304,66 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
               <button
                 type="button"
                 onClick={handleCopyDirectBadgeLink}
-                className="w-full py-2 bg-white hover:bg-stone-100 text-stone-700 font-semibold text-[11px] rounded-xl border border-stone-200 transition cursor-pointer flex items-center justify-center gap-1.5"
+                className="w-full py-2 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
               >
-                {copiedLink ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <ExternalLink className="h-3.5 w-3.5" />}
-                <span>{copiedLink ? 'Lien copié !' : 'Copier le Lien Web Direct'}</span>
+                {copiedLink ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                <span>{copiedLink ? 'Lien direct copié !' : 'Copier le lien direct de pointage'}</span>
               </button>
             </div>
           </div>
 
-          {/* Colonne Droite : Configuration & Explications Métier */}
+          {/* Colonne Droite : Paramètres et configuration */}
           <div className="lg:col-span-7 space-y-5">
-            {/* Formulaire de personnalisation */}
-            <form onSubmit={handleSaveParams} className="bg-stone-50/80 p-5 rounded-3xl border border-stone-200 space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-stone-200">
-                <Sparkles className="h-4 w-4 text-[#2A7B76]" />
-                <h4 className="font-serif font-bold text-sm text-stone-900">
-                  Paramètres de la Borne d'Entrée
-                </h4>
-              </div>
+            <form onSubmit={handleSaveParams} className="bg-stone-50 p-6 rounded-3xl border border-stone-200 space-y-4">
+              <h4 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-[#2A7B76]" />
+                <span>Configuration de l'Emplacement de la Borne</span>
+              </h4>
 
-              {/* Nom du site ou de la porte */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase text-stone-700 flex items-center gap-1">
-                  <MapPin className="h-3 w-3 text-[#2A7B76]" /> Nom du site ou de la porte d'entrée :
-                </label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-stone-700">Nom du site / Emplacement affiché sur l'affiche</label>
                 <input
                   type="text"
                   value={siteName}
                   onChange={(e) => setSiteName(e.target.value)}
-                  placeholder="Ex: Entrée Principale (HQ Akwa), Porte Accueil, Agence Bastos"
-                  className="w-full px-3.5 py-2.5 bg-white border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#2A7B76]"
+                  placeholder="Ex: Entrée Principale (HQ Siège - Douala)"
+                  className="w-full px-3.5 py-2.5 bg-white border border-stone-200 rounded-xl text-xs font-medium text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#2A7B76]"
                 />
-                <p className="text-[10px] text-stone-500">
-                  Ce libellé apparaîtra sur l'affiche imprimée et dans l'historique des présences des salariés.
-                </p>
               </div>
 
-              {/* Option Exiger GPS ou Non */}
-              <div className="p-3.5 bg-white rounded-2xl border border-stone-200 space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-stone-900 block cursor-pointer" onClick={() => setRequireGps(!requireGps)}>
-                      Exiger la concordance GPS lors du scan
-                    </label>
-                    <p className="text-[11px] text-stone-500">
-                      {requireGps 
-                        ? 'Le téléphone de l’employé doit être géolocalisé dans le rayon du siège en plus de viser le QR Code.' 
-                        : 'Recommandé : Désactivé. La présence physique devant le QR Code imprimé à l’entrée suffit pour valider (évite les blocages si le GPS capte mal en intérieur).'}
-                    </p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={requireGps}
-                    onChange={(e) => setRequireGps(e.target.checked)}
-                    className="h-5 w-5 text-[#2A7B76] rounded cursor-pointer accent-[#2A7B76]"
-                  />
-                </div>
+              <div className="flex items-start gap-3 pt-2">
+                <input
+                  type="checkbox"
+                  id="requireGps"
+                  checked={requireGps}
+                  onChange={(e) => setRequireGps(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 text-[#2A7B76] focus:ring-[#2A7B76] border-stone-300 rounded cursor-pointer"
+                />
+                <label htmlFor="requireGps" className="text-xs text-stone-700 cursor-pointer select-none">
+                  <span className="font-bold block text-stone-900">Exiger la géolocalisation GPS lors du scan</span>
+                  Vérifie que le collaborateur est physiquement à proximité de la borne lors du scan du QR Code fixe.
+                </label>
               </div>
 
-              <div className="flex justify-end pt-2">
+              <div className="pt-3 flex justify-end">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs"
+                  className="px-5 py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-2"
                 >
-                  Enregistrer les paramètres de la borne
+                  <Check className="h-4 w-4" />
+                  <span>Enregistrer les paramètres</span>
                 </button>
               </div>
             </form>
 
-            {/* Guide d'installation physique de la borne */}
-            <div className="bg-amber-50/70 border border-amber-200/90 rounded-3xl p-5 space-y-3">
-              <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                <Info className="h-4 w-4 text-amber-700 shrink-0" />
-                <span>Procédure pour le Responsable & l'Accueil :</span>
+            <div className="bg-amber-50/70 border border-amber-200/80 p-4 rounded-2xl flex items-start gap-3">
+              <Info className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-900 space-y-1">
+                <strong className="block font-bold">Sécurité & Invalidation :</strong>
+                <span>
+                  Vous pouvez modifier ou invalider le jeton à tout moment (avant, pendant ou après téléchargement de l'affiche). Dès qu'un jeton est invalidé ou régénéré, les anciens QR codes imprimés ne permettent plus de valider les pointages, garantissant une sécurité maximale.
+                </span>
               </div>
-              <ul className="text-xs text-stone-700 space-y-2 list-disc list-inside">
-                <li>
-                  <strong className="text-stone-900">1. Générer le QR Code :</strong> Cliquez sur le bouton « Générer un Nouveau QR Code d'Entrée » ci-dessus.
-                </li>
-                <li>
-                  <strong className="text-stone-900">2. Télécharger l'affiche :</strong> Cliquez sur « Télécharger l'Affiche A4 Imprimable (HD) » pour obtenir le document haute définition.
-                </li>
-                <li>
-                  <strong className="text-stone-900">3. Placarder à l'entrée :</strong> Imprimez l'affiche et collez-la à hauteur des yeux sur la porte d'entrée ou au comptoir d'accueil.
-                </li>
-                <li>
-                  <strong className="text-stone-900">4. Badgeage immédiat :</strong> Les collaborateurs ouvrent leur espace personnel Citrine, cliquent sur « Pointage Quotidien » et visent ce QR Code avec leur caméra : leur badgeage est validé automatiquement !
-                </li>
-              </ul>
             </div>
           </div>
         </div>
@@ -313,4 +371,3 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
     </div>
   );
 };
-export default CompanyDoorQrSettingsCard;

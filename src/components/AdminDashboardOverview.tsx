@@ -56,7 +56,12 @@ export default function AdminDashboardOverview({
 
   // Les administrateurs et responsables ne badgent pas : on les exclut du pointage du jour
   const clockableEmployees = useMemo(() => {
-    return employees.filter((e) => isEmployeeOnlyRole(e.roleType || e.role || e.position));
+    return employees.filter((e) => {
+      const isRoleOk = isEmployeeOnlyRole(e.roleType || e.role || e.position);
+      const st = e.employmentStatus || (typeof e.status === 'string' ? e.status : (e.status ? 'en_poste' : 'parti'));
+      const isInPoste = st === 'en_poste' || st === ('true' as any);
+      return isRoleOk && isInPoste;
+    });
   }, [employees]);
 
   const clockableEmployeeIds = useMemo(() => new Set(clockableEmployees.map((e) => String(e.id))), [clockableEmployees]);
@@ -64,8 +69,10 @@ export default function AdminDashboardOverview({
   // Filter values based on today's date
   const todayStr = new Date().toISOString().split('T')[0];
   const todayPresences = presences.filter((p) => p.date === todayStr && clockableEmployeeIds.has(String(p.employeeId)));
-  const presentCount = todayPresences.filter((p) => p.status === 'present').length;
-  const lateCount = todayPresences.filter((p) => p.status === 'late').length;
+  const presentCount = todayPresences.filter((p) => p.status === 'present' && p.arrivalTime).length;
+  const lateCount = todayPresences.filter((p) => p.status === 'late' && p.arrivalTime).length;
+  const badgedEmpIds = new Set(todayPresences.filter((p) => p.arrivalTime || p.status === 'present' || p.status === 'late').map((p) => String(p.employeeId)));
+  const absentCount = clockableEmployees.filter((e) => !badgedEmpIds.has(String(e.id))).length;
   
   // Pending and active tasks
   const pendingTasks = tasks.filter((t) => t.status !== 'completed');

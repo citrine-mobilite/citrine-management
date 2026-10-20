@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Task, Employee, TaskStatus, TaskPriority, TaskProject, Subtask, Comment, AppUser } from '../../types';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
+import { SubtaskCreateModal } from './SubtaskCreateModal';
 
 interface TaskDetailDrawerProps {
   task: Task | null;
@@ -20,7 +21,7 @@ interface TaskDetailDrawerProps {
   projects: TaskProject[];
   onClose: () => void;
   onSaveTask: (updatedTask: Task) => void;
-  onDeleteTask: (taskId: string) => void;
+  onDeleteTask: (task: Task) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
   currentRole?: string;
   currentUser?: AppUser | null;
@@ -69,6 +70,14 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   const [newCommentText, setNewCommentText] = useState('');
   const [blockerText, setBlockerText] = useState('');
   const [isSavedRecently, setIsSavedRecently] = useState(false);
+  const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
+
+  const handleCreateSubtask = (newSub: Subtask) => {
+    const updated = [...subtasks, newSub];
+    setSubtasks(updated);
+    onSaveTask({ ...task, subtasks: updated });
+    if (showToast) showToast('Sous-tâche détaillée créée avec succès !', 'success');
+  };
 
   // Sync draft when task prop changes
   useEffect(() => {
@@ -376,21 +385,69 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
           <div className="space-y-2.5 bg-stone-50 p-4 rounded-2xl border border-stone-200/80">
             <h4 className="font-bold text-stone-800 text-xs">Sous-tâches</h4>
             <div className="space-y-1.5">
-              {subtasks.map((sub) => (
-                <div key={sub.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200">
-                  <label className="flex items-center gap-2 cursor-pointer">
+              {subtasks.map((sub: any) => (
+                <div key={sub.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
                     <input
                       type="checkbox"
                       checked={sub.completed}
                       onChange={() => handleToggleSubtask(sub.id)}
-                      className="w-4 h-4 rounded border-stone-300 text-[#2A7B76]"
+                      className="w-4 h-4 rounded border-stone-300 text-[#2A7B76] cursor-pointer"
                     />
-                    <span className={`text-xs ${sub.completed ? 'line-through text-stone-400 font-medium' : 'text-stone-800 font-bold'}`}>
-                      {sub.title}
-                    </span>
+                    <div className="min-w-0">
+                      <span className={`text-xs block truncate ${sub.completed ? 'line-through text-stone-400 font-medium' : 'text-stone-800 font-bold'}`}>
+                        {sub.title}
+                      </span>
+                      {sub.description && (
+                        <p className="text-[10px] text-stone-400 truncate">{sub.description}</p>
+                      )}
+                    </div>
                   </label>
+
+                  <div className="flex items-center gap-2 text-[10px] shrink-0 self-end sm:self-auto">
+                    {sub.assignedTo && (
+                      <span className="bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-medium">
+                        {sub.assignedTo}
+                      </span>
+                    )}
+                    {sub.estimatedHours && (
+                      <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-mono font-bold">
+                        {sub.estimatedHours}h
+                      </span>
+                    )}
+                    {sub.priority && (
+                      <span className={`px-1.5 py-0.5 rounded-md font-bold uppercase text-[9px] ${
+                        sub.priority === 'urgent' || sub.priority === 'high' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-stone-100 text-stone-600'
+                      }`}>
+                        {sub.priority}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = subtasks.filter((s) => s.id !== sub.id);
+                        setSubtasks(updated);
+                        onSaveTask({ ...task, subtasks: updated });
+                      }}
+                      className="text-stone-400 hover:text-rose-600 p-1 cursor-pointer transition"
+                      title="Supprimer cette sous-tâche"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
+            </div>
+
+            <div className="pt-1 pb-1">
+              <button
+                type="button"
+                onClick={() => setIsSubtaskModalOpen(true)}
+                className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-[#2A7B76] border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                title="Créer une sous-tâche détaillée avec le même procédé stylé que les tâches (style Asana)"
+              >
+                <span>+ Nouvelle sous-tâche détaillée (Style Asana)</span>
+              </button>
             </div>
 
             <div className="flex items-center gap-2 pt-1">
@@ -481,10 +538,8 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
           <button
             type="button"
             onClick={() => {
-              if (confirm('Voulez-vous vraiment supprimer cette tâche ?')) {
-                onDeleteTask(task.id);
-                onClose();
-              }
+              onDeleteTask(task);
+              onClose();
             }}
             className="px-3.5 py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
           >
@@ -501,6 +556,16 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
         </div>
 
       </div>
+
+      {/* Subtask Create Modal (Asana style) */}
+      <SubtaskCreateModal
+        isOpen={isSubtaskModalOpen}
+        onClose={() => setIsSubtaskModalOpen(false)}
+        onCreateSubtask={handleCreateSubtask}
+        employees={employees}
+        parentTask={task}
+        projects={projects}
+      />
     </div>
   );
 };

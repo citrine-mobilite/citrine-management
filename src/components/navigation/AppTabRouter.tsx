@@ -31,6 +31,7 @@ import ReminderPanel from '../ReminderPanel';
 import SystemLogsPanel from '../SystemLogsPanel';
 import CollaboratorPanel from '../CollaboratorPanel';
 import ProfilePage from '../ProfilePage';
+import { taskService } from '../../services/taskService';
 
 const LeaveManagementPanel = lazy(() => import('../LeaveManagementPanel'));
 const DisciplinaryPanel = lazy(() => import('../DisciplinaryPanel'));
@@ -125,9 +126,13 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           leaveRequests={leaveRequests}
           employees={employees}
           currentUser={currentUser}
-          onAddAttendanceIncident={onAddAttendanceIncident}
+          users={users}
+          onUpdateLeaveRequests={onUpdateLeaveRequests}
+          onUpdateEmployees={onUpdateEmployees}
+          onUpdateUsers={onUpdateUsers}
           onAddNotification={onAddNotification}
           showToast={(title, desc, type) => showToast(`${title} : ${desc}`, type === 'warning' ? 'error' : 'success')}
+          moduleConfig={moduleConfig}
         />
       )}
       {activeTab === 'employee_portal' && (
@@ -145,6 +150,10 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onAddAttendanceIncident={onAddAttendanceIncident}
           initialSubTab={employeeInitialSubTab}
           leaveRequests={leaveRequests}
+          onUpdateLeaveRequests={onUpdateLeaveRequests}
+          onUpdateEmployees={onUpdateEmployees}
+          onUpdateUsers={onUpdateUsers}
+          users={users}
           onUpdateUser={onUpdateUser}
           onLogout={onLogout}
           showToast={showToast}
@@ -170,8 +179,17 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
       )}
       {activeTab === 'statistics' && (
         <PresenceStatisticsView
-          employees={employees} presences={presences}
+          employees={employees}
+          presences={presences}
+          tasks={tasks}
+          incidents={attendanceIncidents}
           onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
+          onUpdateTask={async (updatedTask) => {
+            await taskService.saveTask(updatedTask);
+            const updated = tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+            onUpdateTasks(updated);
+          }}
+          showToast={showToast}
         />
       )}
       {activeTab === 'tasks' && (
@@ -221,6 +239,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           showToast={showToast}
           users={users}
           onUpdateUsers={onUpdateUsers}
+          moduleConfig={moduleConfig}
         />
       )}
       {activeTab === 'discipline' && (
@@ -355,6 +374,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
             onAddAttendanceIncident={onAddAttendanceIncident}
             initialSubTab={employeeInitialSubTab}
             showToast={showToast}
+            onLogout={onLogout}
           />
         ) : (
           <AdminDashboardOverview

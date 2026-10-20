@@ -71,6 +71,8 @@ export function CollaboratorPresenceMap({
     }
   }, [currentLayer]);
 
+  const hasFittedRef = useRef(false);
+
   useEffect(() => {
     if (!mapInstanceRef.current || !layerGroupRef.current) return;
 
@@ -93,9 +95,10 @@ export function CollaboratorPresenceMap({
       `);
     });
 
-    if (latLngs.length > 0) {
+    if (latLngs.length > 0 && !hasFittedRef.current) {
       const bounds = L.latLngBounds(latLngs);
       mapInstanceRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      hasFittedRef.current = true;
     }
   }, [points, employeeName]);
 

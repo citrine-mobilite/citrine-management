@@ -99,7 +99,7 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
   try {
     const cleanUser: AppUser = {
       ...user,
-      email: user.email.trim().toLowerCase(),
+      email: user.email.trim(),
       name: user.name.trim(),
       department: user.department?.trim() || 'Direction Générale',
     };

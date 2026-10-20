@@ -20,14 +20,36 @@ export function extractPointageMarkers(
   presences: Presence[],
   employees: Employee[],
   selectedDate: string,
-  selectedEmployeeId?: string
+  selectedEmployeeId?: string,
+  mapPeriod: 'day' | 'week' | 'month' | 'all' | 'custom' = 'day',
+  customFilterQuery?: string,
+  customStartDate?: string,
+  customEndDate?: string
 ): PointageMarker[] {
   const markers: PointageMarker[] = [];
+  const targetDateObj = new Date(selectedDate || Date.now());
 
   const filtered = presences.filter((p) => {
-    if (selectedDate && p.date !== selectedDate) return false;
+    if (!p.date) return false;
     if (selectedEmployeeId && selectedEmployeeId !== 'all' && p.employeeId !== selectedEmployeeId) return false;
-    return true;
+
+    const pDateObj = new Date(p.date);
+    const diffTime = targetDateObj.getTime() - pDateObj.getTime();
+    const diffDays = diffTime / (1000 * 3600 * 24);
+
+    if (mapPeriod === 'day') {
+      return p.date === selectedDate;
+    } else if (mapPeriod === 'week') {
+      return diffDays >= 0 && diffDays <= 7;
+    } else if (mapPeriod === 'month') {
+      return diffDays >= 0 && diffDays <= 30;
+    } else if (mapPeriod === 'custom') {
+      if (!customStartDate && !customEndDate) return true;
+      if (customStartDate && p.date < customStartDate) return false;
+      if (customEndDate && p.date > customEndDate) return false;
+      return true;
+    }
+    return true; // 'all'
   });
 
   filtered.forEach((p, idx) => {
@@ -70,7 +92,16 @@ export function extractPointageMarkers(
     }
   });
 
-  return markers;
+  return markers.filter((m) => {
+    if (!customFilterQuery || !customFilterQuery.trim()) return true;
+    const q = customFilterQuery.toLowerCase();
+    return (
+      m.employeeName.toLowerCase().includes(q) ||
+      m.locationName.toLowerCase().includes(q) ||
+      m.label.toLowerCase().includes(q) ||
+      m.time.toLowerCase().includes(q)
+    );
+  });
 }
 
 export function createLeafletCustomIcon(marker: PointageMarker): L.DivIcon {

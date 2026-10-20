@@ -3,6 +3,7 @@ import { supabase, supabaseAdmin } from '../lib/supabase';
 import { supabaseService } from './supabaseService';
 import { offlineService } from './offlineService';
 import { saveUser } from './userService';
+import { hashPassword } from '../utils/cryptoUtils';
 
 export const EMPLOYEES_COLLECTION = 'employees';
 
@@ -46,6 +47,7 @@ export function normalizeEmployeeStatus(status: unknown): EmployeeStatus {
     'en_poste',
     'en_conge',
     'en_permission',
+    'en_mission',
     'maladie',
     'suspendu',
     'demissionne',
@@ -62,7 +64,7 @@ export function isEmployeeActive(emp?: Partial<Employee> | null): boolean {
   if (!emp) return false;
   if (emp.status === false) return false;
   const s = normalizeEmployeeStatus(emp.status || emp.employmentStatus);
-  return s === 'en_poste' || s === 'en_conge' || s === 'en_permission' || s === 'maladie';
+  return s === 'en_poste' || s === 'en_conge' || s === 'en_permission' || s === 'en_mission' || s === 'maladie';
 }
 
 export function formatEmployeeFullName(emp: Partial<Employee>): string {
@@ -139,7 +141,7 @@ export interface TransactionalCollaboratorResult {
 export async function createCollaboratorWithUserTransactional(
   input: TransactionalCollaboratorInput
 ): Promise<TransactionalCollaboratorResult> {
-  const userEmail = input.email.trim().toLowerCase();
+  const userEmail = input.email.trim();
   const empName = input.name.trim();
   const empDepartment = input.department?.trim() || 'Direction Générale';
   const initialPassword = input.userPassword?.trim() || 'Collab@2026';
@@ -522,7 +524,8 @@ export async function updateCollaboratorWithUserTransactional(
   const prevEmp = input.previousEmployee;
 
   const empName = formatEmployeeFullName(emp);
-  const userEmail = (emp.email || '').trim().toLowerCase();
+  const userEmail = (emp.email || '').trim();
+  const userEmailLower = userEmail.toLowerCase();
   const oldEmail = (prevEmp?.email || '').trim().toLowerCase();
   const empDepartment = emp.department?.trim() || 'Direction Générale';
   const rawStatus = emp.status || emp.employmentStatus;
@@ -623,8 +626,20 @@ export async function updateCollaboratorWithUserTransactional(
   // 2. RECHERCHER ET METTRE À JOUR LE COMPTE UTILISATEUR CORRESPONDANT
   let matchedUserRow: any = null;
   const targetUserId = emp.userId || prevEmp?.userId || matchedEmpRow?.user_id;
+  const candidateEmpId = String(emp.id || prevEmp?.id || savedEmpDbId || '');
 
-  if (targetUserId && isIntegerId(targetUserId)) {
+  // Priorité absolue : rechercher par employeeId dans raw_data
+  if (candidateEmpId) {
+    const { data: usersList } = await client.from('users').select('*');
+    if (usersList) {
+      matchedUserRow = usersList.find((u: any) => {
+        const uRaw = u.raw_data && typeof u.raw_data === 'object' ? u.raw_data : {};
+        return String(uRaw.employeeId) === candidateEmpId || String(u.employee_id) === candidateEmpId;
+      });
+    }
+  }
+
+  if (!matchedUserRow && targetUserId && isIntegerId(targetUserId)) {
     const { data } = await client.from('users').select('*').eq('id', Number(targetUserId)).maybeSingle();
     matchedUserRow = data;
   }
@@ -639,20 +654,6 @@ export async function updateCollaboratorWithUserTransactional(
   if (!matchedUserRow && userEmail) {
     const { data } = await client.from('users').select('*').ilike('email', userEmail).maybeSingle();
     matchedUserRow = data;
-  }
-  if (!matchedUserRow && (emp.id || prevEmp?.id || matchedEmpRow?.id)) {
-    const candidateEmpId = String(emp.id || prevEmp?.id || matchedEmpRow?.id);
-    const { data: usersList } = await client.from('users').select('*');
-    if (usersList) {
-      matchedUserRow = usersList.find((u: any) => {
-        const uRaw = u.raw_data && typeof u.raw_data === 'object' ? u.raw_data : {};
-        return (
-          String(uRaw.employeeId) === candidateEmpId ||
-          (oldEmail && u.email?.toLowerCase() === oldEmail) ||
-          (userEmail && u.email?.toLowerCase() === userEmail)
-        );
-      });
-    }
   }
 
   let finalUser: AppUser | undefined = undefined;

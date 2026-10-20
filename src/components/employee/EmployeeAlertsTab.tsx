@@ -26,6 +26,7 @@ import { Employee, AppUser, Task, AttendanceIncident, NotificationLog, Presence,
 import { soundService } from '../../services/soundService';
 import { AlertCreateModal } from './AlertCreateModal';
 import { saveDocument, deleteDocument, COLLECTIONS } from '../../services/dataService';
+import { showSuccessAlert, executeDeleteWithSweetAlert } from '../../utils/sweetAlert';
 
 interface EmployeeAlertsTabProps {
   employeeProfile: Employee;
@@ -356,29 +357,37 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
   // Delete single alert from database
   const handleDeleteAlert = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const nextDeleted = new Set<string>(deletedAlertIds);
-    nextDeleted.add(id);
-    setDeletedAlertIds(nextDeleted);
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer cette notification ?',
+      text: 'Voulez-vous vraiment supprimer cet élément de vos alertes ?',
+      action: async () => {
+        const nextDeleted = new Set<string>(deletedAlertIds);
+        nextDeleted.add(id);
+        setDeletedAlertIds(nextDeleted);
 
-    // Supprimer de la table reminders en BD
-    if (id.startsWith('rem-') || reminders.some((r) => r.id === id)) {
-      await deleteDocument(COLLECTIONS.REMINDERS, id);
-      if (onUpdateReminders) {
-        onUpdateReminders(reminders.filter((r) => r.id !== id));
-      }
-    }
+        // Supprimer de la table reminders en BD
+        if (id.startsWith('rem-') || reminders.some((r) => r.id === id)) {
+          await deleteDocument(COLLECTIONS.REMINDERS, id);
+          if (onUpdateReminders) {
+            onUpdateReminders(reminders.filter((r) => r.id !== id));
+          }
+        }
 
-    // Supprimer de la table notifications en BD
-    if (notifications.some((n) => n.id === id)) {
-      await deleteDocument(COLLECTIONS.NOTIFICATIONS, id);
-      if (onUpdateNotifications) {
-        onUpdateNotifications(notifications.filter((n) => n.id !== id));
-      }
-    }
+        // Supprimer de la table notifications en BD
+        if (notifications.some((n) => n.id === id)) {
+          await deleteDocument(COLLECTIONS.NOTIFICATIONS, id);
+          if (onUpdateNotifications) {
+            onUpdateNotifications(notifications.filter((n) => n.id !== id));
+          }
+        }
 
-    if (selectedAlertModal?.id === id) {
-      setSelectedAlertModal(null);
-    }
+        if (selectedAlertModal?.id === id) {
+          setSelectedAlertModal(null);
+        }
+      },
+      successTitle: 'Alerte supprimée !',
+      successMessage: 'L\'élément a été retiré de votre fil d\'alertes.',
+    });
   };
 
   // Create alert from AlertCreateModal directly persisted in Database
@@ -431,6 +440,7 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
     }
 
     setShowCreateModal(false);
+    await showSuccessAlert('Alerte créée !', `L'alerte "${newReminderItem.title}" a été programmée.`);
   };
 
   // Continuous ringtone toggle

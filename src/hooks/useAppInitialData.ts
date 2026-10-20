@@ -25,51 +25,49 @@ import { safeStorage } from '../utils/safeStorage';
 import { CITRINE_DEFAULT_LOGO_BASE64 } from '../assets/citrineLogoBase64';
 import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
 import { realtimeSyncService } from '../services/realtimeSyncService';
+import { syncMissionsAndEmployeeStatus } from '../services/missionLifecycleService';
 
-interface CachedModuleConfig {
-  config: CompanyModuleConfig;
-  timestamp: number;
-}
 const MODULE_CACHE_KEY = 'citrine_module_config';
-const MODULE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes max
 
-function getCachedModuleConfig(): CompanyModuleConfig | null {
+function getStoredModuleConfig(): CompanyModuleConfig {
   try {
-    const raw = safeStorage.getItem(MODULE_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') {
-      if ('timestamp' in parsed && 'config' in parsed) {
-        const age = Date.now() - (parsed.timestamp || 0);
-        if (age < MODULE_CACHE_TTL_MS) {
-          return parsed.config;
-        } else {
-          // Cache expiré (> 5 minutes)
-          safeStorage.removeItem(MODULE_CACHE_KEY);
-          return null;
-        }
-      }
-      // Ancien format sans timestamp : invalider pour respecter la règle des 5 minutes
-      safeStorage.removeItem(MODULE_CACHE_KEY);
-      return null;
+    let raw = safeStorage.getItem(MODULE_CACHE_KEY);
+    if (!raw && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        raw = window.localStorage.getItem(MODULE_CACHE_KEY);
+      } catch {}
     }
-  } catch {
-    safeStorage.removeItem(MODULE_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const configObj = parsed && typeof parsed === 'object' && 'config' in parsed ? parsed.config : parsed;
+      if (configObj && typeof configObj === 'object') {
+        return {
+          ...DEFAULT_MODULE_CONFIG,
+          ...configObj,
+          companyLogoBase64: configObj.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Erreur lecture configuration modules stockée:', e);
   }
-  return null;
+  return DEFAULT_MODULE_CONFIG;
 }
 
-function setCachedModuleConfig(config: CompanyModuleConfig): void {
+function persistStoredModuleConfig(config: CompanyModuleConfig): void {
   try {
-    const payload: CachedModuleConfig = {
+    const payload = JSON.stringify({
       config,
-      timestamp: Date.now(),
-    };
-    safeStorage.setItem(MODULE_CACHE_KEY, JSON.stringify(payload));
+      updatedAt: new Date().toISOString(),
+    });
+    safeStorage.setItem(MODULE_CACHE_KEY, payload);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(MODULE_CACHE_KEY, payload);
+      } catch {}
+    }
   } catch {}
 }
-
-// (Zero localStorage architecture)
 
 export function useAppInitialData() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -88,8 +86,9 @@ export function useAppInitialData() {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
 
-  const [moduleConfig, setModuleConfig] = useState<CompanyModuleConfig>(DEFAULT_MODULE_CONFIG);
+  const [moduleConfig, setModuleConfig] = useState<CompanyModuleConfig>(() => getStoredModuleConfig());
 
+  const appStartTimeRef = useRef(Date.now());
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
   const isInitialNotifLoadDoneRef = useRef(false);
 
@@ -115,9 +114,11 @@ export function useAppInitialData() {
       if (!seenNotificationIdsRef.current.has(notif.id)) {
         seenNotificationIdsRef.current.add(notif.id);
 
-        const ageMs = Date.now() - new Date(notif.timestamp).getTime();
-        // Déclencher le push si la notification est récente (< 5 minutes)
-        if (ageMs < 5 * 60 * 1000) {
+        const notifTime = new Date(notif.timestamp).getTime();
+        // Ne déclencher le push/son que si la notification a été créée APRES le démarrage de l'application
+        const isBrandNew = notifTime > appStartTimeRef.current - 5000;
+
+        if (isBrandNew) {
           const isTarget = isCurrentAdmin || (
             currentUser && (
               notif.recipient === currentUser.name ||
@@ -187,22 +188,43 @@ export function useAppInitialData() {
       // Synchronisation temps réel des paramètres de l'entreprise et du logo stocké en BD
       subscribeToDocument<CompanyModuleConfig>(COLLECTIONS.COMPANY_SETTINGS, 'main_config', (data) => {
         if (data) {
-          const configWithLogo = {
-            ...DEFAULT_MODULE_CONFIG,
-            ...data,
-            companyLogoBase64: data.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
-          };
-          setModuleConfig(configWithLogo);
-        } else {
-          // Premier démarrage : initialisation de l'image de marque officielle en BD
-          const initialConfig: CompanyModuleConfig = {
-            ...DEFAULT_MODULE_CONFIG,
-            companyLogoBase64: CITRINE_DEFAULT_LOGO_BASE64,
-          };
-          saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...initialConfig, id: 'main_config' });
+          setModuleConfig((prev) => {
+            const mergedConfig: CompanyModuleConfig = {
+              ...DEFAULT_MODULE_CONFIG,
+              ...prev,
+              ...data,
+              companyLogoBase64: data.companyLogoBase64 || prev.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+            };
+            persistStoredModuleConfig(mergedConfig);
+            return mergedConfig;
+          });
         }
       }),
     ];
+
+    // Chargement initial complet des paramètres d'entreprise depuis la base de données
+    (async () => {
+      try {
+        const settingsList = await getCollection<CompanyModuleConfig>(COLLECTIONS.COMPANY_SETTINGS);
+        if (settingsList && settingsList.length > 0) {
+          const dbConfig = settingsList.find((s: any) => s.id === 'main_config' || s.docId === 'main_config') || settingsList[0];
+          if (dbConfig) {
+            setModuleConfig((prev) => {
+              const mergedConfig: CompanyModuleConfig = {
+                ...DEFAULT_MODULE_CONFIG,
+                ...prev,
+                ...dbConfig,
+                companyLogoBase64: dbConfig.companyLogoBase64 || prev.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+              };
+              persistStoredModuleConfig(mergedConfig);
+              return mergedConfig;
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Erreur chargement initial company_settings:', err);
+      }
+    })();
 
     // 🚀 Écouteur Temps Réel Ultra-Rapide (SSE + Event Bus) pour Responsables & Administrateurs
     const unsubRealtime = realtimeSyncService.subscribeToPresenceUpdates(async (eventData) => {
@@ -240,13 +262,7 @@ export function useAppInitialData() {
         handleIncomingNotifications([eventData.notification]);
       }
 
-      // Re-fetch silencieux pour garantir une cohérence intégrale avec la base
-      try {
-        const freshPresences = await getCollection<Presence>(COLLECTIONS.PRESENCES);
-        if (freshPresences && Array.isArray(freshPresences)) {
-          setPresences(freshPresences);
-        }
-      } catch {}
+
     });
 
     // Cross-tab synchronization via BroadcastChannel
@@ -267,45 +283,6 @@ export function useAppInitialData() {
         };
       }
     } catch {}
-
-    // Polling interval adaptatif (sécurité de synchronisation BD toutes les 3.5s)
-    let lastPresencesHash = '';
-    let lastIncidentsHash = '';
-
-    const pollTimer = setInterval(async () => {
-      try {
-        // 1. Synchronisation Présences en arrière-plan
-        const freshPres = await getCollection<Presence>(COLLECTIONS.PRESENCES);
-        if (freshPres && Array.isArray(freshPres)) {
-          const currentHash = `${freshPres.length}_${freshPres.map(p => `${p.id}:${p.arrivalTime || ''}:${p.departureTime || ''}`).join(',')}`;
-          if (currentHash !== lastPresencesHash) {
-            lastPresencesHash = currentHash;
-            setPresences(freshPres);
-          }
-        }
-
-        // 2. Synchronisation Incidents en arrière-plan
-        const freshIncs = await getCollection<AttendanceIncident>(COLLECTIONS.ATTENDANCE_INCIDENTS);
-        if (freshIncs && Array.isArray(freshIncs)) {
-          const incHash = `${freshIncs.length}_${freshIncs.map(i => `${i.id}:${i.status}`).join(',')}`;
-          if (incHash !== lastIncidentsHash) {
-            lastIncidentsHash = incHash;
-            setAttendanceIncidents(freshIncs);
-          }
-        }
-
-        // 3. Tâches et Notifications
-        const freshTasks = await getCollection<Task>(COLLECTIONS.TASKS);
-        if (freshTasks) {
-          setTasks(freshTasks);
-        }
-
-        const freshNotifs = await getCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS);
-        if (freshNotifs && freshNotifs.length > 0) {
-          handleIncomingNotifications(freshNotifs);
-        }
-      } catch {}
-    }, 3500);
 
     const onEmpUpdated = (e: any) => {
       const emp = e.detail;
@@ -344,25 +321,36 @@ export function useAppInitialData() {
       unsubs.forEach((u) => typeof u === 'function' && u());
       unsubRealtime();
       if (bc) bc.close();
-      clearInterval(pollTimer);
       window.removeEventListener('citrine:employee_updated', onEmpUpdated);
-      window.removeEventListener('citrine:user_updated', onUserUpdated);
     };
   }, []);
 
+  // 🚀 Gestion automatique du cycle de vie des missions professionnelles (Activation en_mission & Clôture en_poste)
+  useEffect(() => {
+    if (leaveRequests.length > 0 && employees.length > 0) {
+      syncMissionsAndEmployeeStatus(
+        leaveRequests,
+        employees,
+        users,
+        setLeaveRequests,
+        setEmployees,
+        setUsers,
+        handleAddNotification
+      ).catch((err) => console.warn('[syncMissionsAndEmployeeStatus Notice]:', err));
+    }
+  }, [leaveRequests.length, employees.length]);
+
   const handleUpdateEmployees = async (updated: Employee[]) => {
+    // 1. Update React state immediately for snappy UI
+    setEmployees(updated);
+
     for (const emp of updated) {
       const existing = employees.find((e) => e.id === emp.id || (e.uid && emp.uid && e.uid === emp.uid));
       if (!existing || JSON.stringify(existing) !== JSON.stringify(emp)) {
         try {
           await saveDocument(COLLECTIONS.EMPLOYEES, emp);
         } catch (e) {
-          console.warn('Supabase save employee notice:', e);
-        }
-        try {
-          await cloudSqlService.saveDocument(COLLECTIONS.EMPLOYEES, emp);
-        } catch (e) {
-          console.warn('Cloud SQL save employee notice:', e);
+          console.warn('Database save employee notice:', e);
         }
       }
     }
@@ -669,8 +657,15 @@ export function useAppInitialData() {
   };
 
   const handleUpdateModuleConfig = (newConfig: CompanyModuleConfig) => {
-    setModuleConfig(newConfig);
-    saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...newConfig, id: 'main_config' });
+    const fullConfig: CompanyModuleConfig = {
+      ...moduleConfig,
+      ...newConfig,
+    };
+    setModuleConfig(fullConfig);
+    persistStoredModuleConfig(fullConfig);
+    saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...fullConfig, id: 'main_config' }).catch((err) => {
+      console.warn('Erreur persistance BD company_settings:', err);
+    });
   };
 
   const refreshAll = async () => {
@@ -682,6 +677,7 @@ export function useAppInitialData() {
         freshLeaves,
         freshNotifs,
         freshIncidents,
+        freshSettings,
       ] = await Promise.all([
         getCollection<AppUser>(COLLECTIONS.USERS),
         getCollection<Employee>(COLLECTIONS.EMPLOYEES),
@@ -689,6 +685,7 @@ export function useAppInitialData() {
         getCollection<LeaveRequest>(COLLECTIONS.LEAVE_REQUESTS),
         getCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS),
         getCollection<AttendanceIncident>(COLLECTIONS.ATTENDANCE_INCIDENTS),
+        getCollection<CompanyModuleConfig>(COLLECTIONS.COMPANY_SETTINGS),
       ]);
 
       if (freshUsers) {
@@ -709,6 +706,21 @@ export function useAppInitialData() {
       }
       if (freshIncidents) {
         setAttendanceIncidents(freshIncidents);
+      }
+      if (freshSettings && freshSettings.length > 0) {
+        const dbConfig = freshSettings.find((s: any) => s.id === 'main_config' || s.docId === 'main_config') || freshSettings[0];
+        if (dbConfig) {
+          setModuleConfig((prev) => {
+            const mergedConfig: CompanyModuleConfig = {
+              ...DEFAULT_MODULE_CONFIG,
+              ...prev,
+              ...dbConfig,
+              companyLogoBase64: dbConfig.companyLogoBase64 || prev.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+            };
+            persistStoredModuleConfig(mergedConfig);
+            return mergedConfig;
+          });
+        }
       }
     } catch (e) {
       console.warn('Erreur lors du rafraîchissement global:', e);

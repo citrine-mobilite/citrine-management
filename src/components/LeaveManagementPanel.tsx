@@ -9,58 +9,64 @@ import {
   Clock, 
   Edit3, 
   User, 
-  AlertTriangle, 
   Building, 
   MessageSquare, 
   Check, 
   X, 
   ChevronRight,
-  ShieldAlert,
   UserCheck,
+  Calendar,
   Plus,
-  Send,
-  Calendar
+  Compass,
+  Flag
 } from 'lucide-react';
 import { 
   LeaveRequest, 
   LeaveType, 
   LeaveStatus, 
-  Employee, 
-  AppUser, 
-  AttendanceIncident, 
-  IncidentType,
-  NotificationLog, 
   LEAVE_TYPE_LABELS, 
   LEAVE_STATUS_LABELS 
-} from '../types';
-import { decideLeaveRequest, calculateDaysBetween } from '../services/leaveService';
-import { COLLECTIONS, saveDocument } from '../services/dataService';
-import { incidentService } from '../services/incidentService';
-import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
+} from '../types/leaveTypes';
+import { Employee } from '../types/employeeTypes';
+import { AppUser } from '../types/userTypes';
+import { NotificationLog, CompanyModuleConfig } from '../types/businessTypes';
+import { decideLeaveRequest, calculateDaysBetween, createAdminLeaveRequest } from '../services/leaveService';
+import { terminateMission } from '../services/missionLifecycleService';
+import { clientMailService } from '../services/clientMailService';
+import { showSuccessAlert, showErrorAlert, confirmActionAlert } from '../utils/sweetAlert';
 
 interface LeaveManagementPanelProps {
   leaveRequests: LeaveRequest[];
   employees: Employee[];
   currentUser: AppUser | null;
-  onAddAttendanceIncident?: (incident: AttendanceIncident) => void;
+  users?: AppUser[];
+  onUpdateLeaveRequests?: (leaves: LeaveRequest[]) => void;
+  onUpdateEmployees?: (employees: Employee[]) => void;
+  onUpdateUsers?: (users: AppUser[]) => void;
   onAddNotification?: (n: NotificationLog) => void;
   showToast?: (title: string, desc: string, type?: 'success' | 'warning' | 'info') => void;
+  moduleConfig?: CompanyModuleConfig;
 }
 
 export default function LeaveManagementPanel({
   leaveRequests,
   employees,
   currentUser,
-  onAddAttendanceIncident,
+  users = [],
+  onUpdateLeaveRequests,
+  onUpdateEmployees,
+  onUpdateUsers,
   onAddNotification,
   showToast,
+  moduleConfig,
 }: LeaveManagementPanelProps) {
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'missions' | 'leaves'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | LeaveStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals state
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
-  const [actionType, setActionType] = useState<'approve' | 'reject' | 'modify' | 'incident' | 'manual_incident' | null>(null);
+  const [actionType, setActionType] = useState<'approve' | 'reject' | 'modify' | null>(null);
 
   // Form states for modal actions
   const [managerComment, setManagerComment] = useState('');
@@ -69,31 +75,48 @@ export default function LeaveManagementPanel({
   const [modifiedDaysCount, setModifiedDaysCount] = useState<number>(1);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Incident form states
-  const [manualEmployeeId, setManualEmployeeId] = useState<string>('');
-  const [incidentType, setIncidentType] = useState<IncidentType>('absence_injustifiee');
-  const [incidentReason, setIncidentReason] = useState('Départ sans validation préalable de la demande de congé / permission');
-  const [incidentDate, setIncidentDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [incidentTime, setIncidentTime] = useState(() => new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
-  const [adminComment, setAdminComment] = useState('Signalement consigné manuellement par la direction suite à une absence non validée.');
-  const [notifyEmployee, setNotifyEmployee] = useState(true);
+  // State for creating leave for employee
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createEmployeeId, setCreateEmployeeId] = useState('');
+  const [createLeaveType, setCreateLeaveType] = useState<LeaveType>('conge_paye');
+  const [createStartDate, setCreateStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [createEndDate, setCreateEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [createDaysCount, setCreateDaysCount] = useState<number>(1);
+  const [createReason, setCreateReason] = useState('');
+  const [createStatus, setCreateStatus] = useState<LeaveStatus>('approved');
+  const [createManagerComment, setCreateManagerComment] = useState('');
+  const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
+
+  React.useEffect(() => {
+    if (createStartDate && createEndDate) {
+      const days = calculateDaysBetween(createStartDate, createEndDate);
+      setCreateDaysCount(days);
+    }
+  }, [createStartDate, createEndDate]);
 
   // KPIs
   const stats = useMemo(() => {
+    const missions = leaveRequests.filter((l) => l.type === 'mission_professionnelle').length;
+    const activeMissions = leaveRequests.filter(
+      (l) => l.type === 'mission_professionnelle' && (l.status === 'approved' || l.status === 'modified')
+    ).length;
     const pending = leaveRequests.filter((l) => l.status === 'pending').length;
     const approved = leaveRequests.filter((l) => l.status === 'approved').length;
     const modified = leaveRequests.filter((l) => l.status === 'modified').length;
+    const terminee = leaveRequests.filter((l) => l.status === 'terminee').length;
     const rejected = leaveRequests.filter((l) => l.status === 'rejected').length;
     const totalDaysApproved = leaveRequests
-      .filter((l) => l.status === 'approved' || l.status === 'modified')
+      .filter((l) => l.status === 'approved' || l.status === 'modified' || l.status === 'terminee')
       .reduce((sum, l) => sum + (l.approvedDaysCount ?? l.daysCount), 0);
 
-    return { pending, approved, modified, rejected, totalDaysApproved, total: leaveRequests.length };
+    return { missions, activeMissions, pending, approved, modified, terminee, rejected, totalDaysApproved, total: leaveRequests.length };
   }, [leaveRequests]);
 
   // Filtered requests
   const filteredRequests = useMemo(() => {
     return leaveRequests.filter((l) => {
+      if (categoryFilter === 'missions' && l.type !== 'mission_professionnelle') return false;
+      if (categoryFilter === 'leaves' && l.type === 'mission_professionnelle') return false;
       if (statusFilter !== 'all' && l.status !== statusFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -105,10 +128,46 @@ export default function LeaveManagementPanel({
       }
       return true;
     });
-  }, [leaveRequests, statusFilter, searchQuery]);
+  }, [leaveRequests, categoryFilter, statusFilter, searchQuery]);
+
+  // Clôture d'une mission par la Direction / Manager
+  const handleTerminateMission = async (req: LeaveRequest) => {
+    const isConfirmed = await confirmActionAlert({
+      title: 'Clôturer la mission ?',
+      text: `Confirmez-vous la clôture de la mission de ${req.employeeName} ?\nLe statut du collaborateur et son compte utilisateur repasseront immédiatement en « En poste ».`,
+      confirmButtonText: 'Oui, clôturer la mission',
+      icon: 'question',
+    });
+    if (!isConfirmed) return;
+
+    try {
+      const res = await terminateMission(
+        req.id,
+        leaveRequests,
+        employees,
+        users,
+        currentUser?.name || 'Direction RH',
+        onUpdateLeaveRequests,
+        onUpdateEmployees,
+        onUpdateUsers,
+        onAddNotification
+      );
+
+      if (res.success) {
+        showToast?.('Mission Terminée ✓', `La mission de ${req.employeeName} a été clôturée. Collaborateur replacé en poste.`, 'success');
+        await showSuccessAlert('Mission terminée !', `La mission de ${req.employeeName} a été clôturée. Le collaborateur et son compte sont de nouveau « En poste ».`);
+      } else {
+        showToast?.('Erreur', res.error || 'Impossible de clôturer la mission.', 'warning');
+        await showErrorAlert('Erreur', res.error || 'Impossible de clôturer la mission.');
+      }
+    } catch {
+      showToast?.('Erreur', 'Impossible de clôturer la mission pour le moment.', 'warning');
+      await showErrorAlert('Erreur', 'Impossible de clôturer la mission pour le moment.');
+    }
+  };
 
   // Open Decision Modal
-  const openActionModal = (req: LeaveRequest, action: 'approve' | 'reject' | 'modify' | 'incident') => {
+  const openActionModal = (req: LeaveRequest, action: 'approve' | 'reject' | 'modify') => {
     setSelectedRequest(req);
     setActionType(action);
     setManagerComment('');
@@ -117,27 +176,7 @@ export default function LeaveManagementPanel({
       setModifiedStartDate(req.startDate);
       setModifiedEndDate(req.endDate);
       setModifiedDaysCount(req.daysCount);
-    } else if (action === 'incident') {
-      setManualEmployeeId(req.employeeId);
-      setIncidentType('absence_injustifiee');
-      setIncidentDate(req.startDate || new Date().toISOString().split('T')[0]);
-      setIncidentTime(new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
-      setIncidentReason(`Départ en absence constaté sans validation de la direction (Demande de ${req.daysCount} jour(s) du ${req.startDate} au ${req.endDate}).`);
-      setAdminComment(`L'employé a sollicité une absence de ${req.daysCount} jour(s) mais est parti sans que l'on ne valide.`);
-      setNotifyEmployee(true);
     }
-  };
-
-  const openManualIncidentModal = (defaultEmpId?: string) => {
-    setSelectedRequest(null);
-    setActionType('manual_incident');
-    setManualEmployeeId(defaultEmpId || employees[0]?.id || '');
-    setIncidentType('absence_injustifiee');
-    setIncidentDate(new Date().toISOString().split('T')[0]);
-    setIncidentTime(new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
-    setIncidentReason("Départ en absence constaté sans validation managériale préalable.");
-    setAdminComment("Signalement consigné manuellement au registre RH suite à une absence non validée.");
-    setNotifyEmployee(true);
   };
 
   // Close modals
@@ -174,9 +213,11 @@ export default function LeaveManagementPanel({
           onAddNotification
         );
         showToast?.('Demande validée', `Le congé de ${selectedRequest.employeeName} a été validé.`, 'success');
+        await showSuccessAlert('Demande validée !', `La demande de ${selectedRequest.employeeName} a été validée avec succès.`);
       } else if (actionType === 'reject') {
         if (!managerComment.trim()) {
           showToast?.('Motif requis', 'Veuillez préciser le motif de refus à communiquer au collaborateur.', 'warning');
+          await showErrorAlert('Motif obligatoire', 'Veuillez préciser le motif de refus.');
           setIsProcessing(false);
           return;
         }
@@ -194,6 +235,7 @@ export default function LeaveManagementPanel({
           onAddNotification
         );
         showToast?.('Demande refusée', `La demande de ${selectedRequest.employeeName} a été refusée.`, 'info');
+        await showSuccessAlert('Demande refusée', `La demande de ${selectedRequest.employeeName} a été refusée.`);
       } else if (actionType === 'modify') {
         const days = modifiedDaysCount > 0 ? modifiedDaysCount : calculateDaysBetween(modifiedStartDate, modifiedEndDate);
 
@@ -213,6 +255,23 @@ export default function LeaveManagementPanel({
           onAddNotification
         );
         showToast?.('Durée ajustée', `La durée accordée a été ajustée à ${days} jour(s).`, 'success');
+        await showSuccessAlert('Durée ajustée !', `La durée accordée pour ${selectedRequest.employeeName} a été ajustée à ${days} jour(s).`);
+      }
+
+      // ✉️ Envoi automatique du mail groupé dans le fil du collaborateur
+      if (emp) {
+        const leaveLabel = LEAVE_TYPE_LABELS[selectedRequest.type] || selectedRequest.type;
+        clientMailService.notifyLeaveDecision({
+          employeeName: emp.name || selectedRequest.employeeName,
+          employeeEmail: emp.email || selectedRequest.employeeEmail,
+          employeeId: emp.id || selectedRequest.employeeId,
+          leaveType: leaveLabel,
+          startDate: actionType === 'modify' ? modifiedStartDate : selectedRequest.startDate,
+          endDate: actionType === 'modify' ? modifiedEndDate : selectedRequest.endDate,
+          status: actionType === 'approve' ? 'approved' : actionType === 'reject' ? 'rejected' : 'modified',
+          reason: managerComment.trim() || undefined,
+          moduleConfig,
+        }).catch((err) => console.warn('[LeaveManagement] Notice email décision congé:', err));
       }
 
       closeModal();
@@ -222,231 +281,257 @@ export default function LeaveManagementPanel({
     }
   };
 
-  // Submit Manual Incident Report
-  const handleConfirmIncident = async () => {
-    const targetEmpId = selectedRequest?.employeeId || manualEmployeeId;
-    const targetEmp = employees.find((e) => e.id === targetEmpId);
-    const targetName = selectedRequest?.employeeName || targetEmp?.name || 'Employé';
-    const targetEmail = selectedRequest?.employeeEmail || targetEmp?.email || '';
-
-    if (!targetEmpId) {
-      showToast?.('Employé requis', 'Veuillez sélectionner un employé pour ce signalement.', 'warning');
+  const handleCreateLeave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createEmployeeId) {
+      showToast?.('Collaborateur requis', 'Veuillez sélectionner un collaborateur.', 'warning');
       return;
     }
+    const emp = employees.find((e) => e.id === createEmployeeId);
+    if (!emp) return;
 
-    if (!incidentReason.trim()) {
-      showToast?.('Motif requis', 'Veuillez préciser le motif du signalement.', 'warning');
-      return;
-    }
-
-    setIsProcessing(true);
-
+    setIsSubmittingCreate(true);
     try {
-      const now = new Date();
-      const newIncident: AttendanceIncident = {
-        id: `inc-manual-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        employeeId: targetEmpId,
-        employeeName: targetName,
-        date: incidentDate,
-        timeString: incidentTime,
-        type: incidentType,
-        origin: 'signale_par_responsable',
-        reason: incidentReason.trim(),
-        isDeclaredInAdvance: false,
-        isJustified: false,
-        status: 'injustifie',
-        createdAt: now.toISOString(),
-        adminComment: adminComment.trim() || `Signalement consigné manuellement par ${currentUser?.name || 'la Direction'} suite à une absence non validée.`,
-      };
-
-      if (onAddAttendanceIncident) {
-        onAddAttendanceIncident(newIncident);
-      }
-
-      if (notifyEmployee) {
-        // Envoi de la notification push au collaborateur
-        pushNotificationBridgeService.sendPush({
-          title: `🚨 Signalement RH : Absence / Manquement`,
-          message: `${targetName}, un signalement d'absence non validée a été consigné pour le ${incidentDate}. Motif : ${incidentReason.trim()}`,
-          senderName: currentUser?.name || 'Direction RH',
-          type: 'alert',
-        });
-
-        // Envoi et archivage dans l'onglet des notifications
-        const notif: NotificationLog = {
-          id: `notif-inc-${newIncident.id}`,
-          type: 'system',
-          recipient: targetEmail || targetName,
-          title: '🚨 Signalement RH d’Absence Non Autorisée',
-          content: `Un signalement d'absence non validée a été consigné pour la date du ${incidentDate}. Motif : ${incidentReason.trim()}`,
-          payload: JSON.stringify({
-            source: 'incident_manual',
-            incidentId: newIncident.id,
-            employeeId: targetEmpId,
-            employeeName: targetName,
-            type: incidentType,
-            date: incidentDate,
-          }),
-          timestamp: now.toISOString(),
-          read: false,
-        };
-
-        await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
-        if (onAddNotification) {
-          onAddNotification(notif);
-        }
-
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-        }
-      }
+      const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+      await createAdminLeaveRequest(
+        {
+          employeeId: emp.id,
+          employeeName: empName,
+          employeeAvatar: emp.avatarUrl || '',
+          department: emp.department || 'Opérations',
+          type: createLeaveType,
+          startDate: createStartDate,
+          endDate: createEndDate,
+          daysCount: createDaysCount,
+          reason: createReason.trim() || 'Attribué par la Direction RH',
+          status: createStatus,
+          managerComment: createManagerComment.trim() || undefined,
+        },
+        currentUser,
+        onAddNotification
+      );
 
       showToast?.(
-        'Signalement consigné',
-        `Le signalement sur ${targetName} a été enregistré dans le registre RH avec succès.`,
+        createStatus === 'approved' ? 'Congé accordé et validé' : 'Demande enregistrée',
+        `Congé / Permission créé(e) avec succès pour ${empName}.`,
         'success'
       );
-      closeModal();
-    } catch {
-      showToast?.('Erreur', 'Impossible de consigner le signalement.', 'warning');
+      await showSuccessAlert(
+        createStatus === 'approved' ? 'Congé validé !' : 'Demande enregistrée !',
+        `Congé / Permission enregistré(e) avec succès pour ${empName}.`
+      );
+      setShowCreateModal(false);
+      setCreateReason('');
+      setCreateManagerComment('');
+    } catch (err: any) {
+      showToast?.('Erreur', 'Impossible de créer la demande de congé.', 'warning');
+      await showErrorAlert('Erreur', err?.message || 'Impossible de créer la demande de congé.');
     } finally {
-      setIsProcessing(false);
+      setIsSubmittingCreate(false);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* Top Banner */}
-      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-900 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <CalendarDays className="h-6 w-6 text-emerald-200" />
-            <h2 className="font-serif font-bold text-xl sm:text-2xl">Arbitrage des Congés & Permissions</h2>
+      <div className="bg-gradient-to-r from-[#2A7B76] via-[#20635F] to-emerald-900 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-white/10 backdrop-blur-xs rounded-xl border border-white/15">
+              <CalendarDays className="h-5 w-5 text-emerald-200" />
+            </div>
+            <h2 className="font-serif font-bold text-xl md:text-2xl">
+              Gestion des Congés & Permissions
+            </h2>
           </div>
-          <p className="text-xs sm:text-sm text-emerald-100 max-w-2xl">
-            Gestion centralisée des demandes d'absence. Validez, refusez ou réajustez la durée accordée. Vous pouvez également consigner manuellement un signalement RH si un employé s'absente sans validation.
+          <p className="text-xs text-emerald-100/90 pl-1 max-w-2xl">
+            Arbitrage des demandes d'absences, congés payés, permissions exceptionnelles et suivi des soldes des collaborateurs.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
           <button
-            onClick={() => openManualIncidentModal()}
-            className="bg-amber-400 hover:bg-amber-300 text-stone-900 font-bold px-4 py-2.5 rounded-2xl shadow-sm text-xs flex items-center gap-2 cursor-pointer transition active:scale-95"
-            title="Consigner manuellement un manquement ou une absence non validée sur un employé"
+            type="button"
+            onClick={() => {
+              if (employees.length > 0 && !createEmployeeId) {
+                setCreateEmployeeId(employees[0].id);
+              }
+              setShowCreateModal(true);
+            }}
+            className="px-4 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-bold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0"
           >
-            <ShieldAlert className="h-4 w-4 text-stone-900" />
-            <span>Nouveau Signalement Manuel</span>
+            <Plus className="h-4 w-4 text-[#2A7B76]" />
+            <span>+ Créer un congé / permission</span>
           </button>
 
-          {stats.pending > 0 && (
-            <div className="bg-amber-500/20 border border-amber-300/40 text-amber-100 px-3.5 py-2 rounded-2xl flex items-center gap-2 text-xs font-bold">
-              <Clock className="h-4 w-4 text-amber-300 animate-pulse" />
-              <span>{stats.pending} en attente</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
-          <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">En attente</span>
-          <div className="flex items-baseline gap-2">
-            <strong className="text-2xl font-black text-amber-600">{stats.pending}</strong>
-            <span className="text-xs text-stone-400">à traiter</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
-          <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">Validées</span>
-          <div className="flex items-baseline gap-2">
-            <strong className="text-2xl font-black text-emerald-600">{stats.approved}</strong>
-            <span className="text-xs text-stone-400">approuvées</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
-          <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">Durée ajustée</span>
-          <div className="flex items-baseline gap-2">
-            <strong className="text-2xl font-black text-indigo-600">{stats.modified}</strong>
-            <span className="text-xs text-stone-400">révisées</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
-          <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">Jours accordés</span>
-          <div className="flex items-baseline gap-2">
-            <strong className="text-2xl font-black text-[#2A7B76]">{stats.totalDaysApproved}</strong>
-            <span className="text-xs text-stone-400">total cumulé</span>
+          <div className="flex items-center gap-2 bg-black/20 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/10 text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="font-medium text-emerald-100">Module Actif</span>
           </div>
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-4">
-        {/* Search */}
-        <div className="relative w-full md:max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+      {/* KPI Ribbon */}
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+        <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs flex items-center gap-3">
+          <div className="p-2.5 bg-amber-50 text-amber-700 rounded-xl border border-amber-100">
+            <Clock className="h-4 w-4" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">En attente</span>
+            <h3 className="text-base font-bold font-serif text-stone-900">{stats.pending}</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs flex items-center gap-3">
+          <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">
+            <CheckCircle2 className="h-4 w-4" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Validées</span>
+            <h3 className="text-base font-bold font-serif text-stone-900">{stats.approved}</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs flex items-center gap-3">
+          <div className="p-2.5 bg-teal-50 text-[#2A7B76] rounded-xl border border-teal-100">
+            <Compass className="h-4 w-4" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">🚀 Missions</span>
+            <h3 className="text-base font-bold font-serif text-stone-900">{stats.missions}</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs flex items-center gap-3">
+          <div className="p-2.5 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100">
+            <Edit3 className="h-4 w-4" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Ajustées</span>
+            <h3 className="text-base font-bold font-serif text-stone-900">{stats.modified}</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs flex items-center gap-3">
+          <div className="p-2.5 bg-stone-100 text-stone-700 rounded-xl border border-stone-200">
+            <Flag className="h-4 w-4 text-emerald-700" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">🏁 Terminées</span>
+            <h3 className="text-base font-bold font-serif text-stone-900">{stats.terminee}</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs flex items-center gap-3">
+          <div className="p-2.5 bg-rose-50 text-rose-700 rounded-xl border border-rose-100">
+            <XCircle className="h-4 w-4" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Refusées</span>
+            <h3 className="text-base font-bold font-serif text-stone-900">{stats.rejected}</h3>
+          </div>
+        </div>
+      </div>
+
+      {/* Category Toggle Bar */}
+      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5 p-1 bg-stone-100 rounded-xl">
+          <button
+            onClick={() => setCategoryFilter('all')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap cursor-pointer ${
+              categoryFilter === 'all' ? 'bg-[#2A7B76] text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            Toutes les demandes ({stats.total})
+          </button>
+          <button
+            onClick={() => setCategoryFilter('missions')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+              categoryFilter === 'missions' ? 'bg-[#2A7B76] text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5" />
+            <span>🚀 Missions Professionnelles ({stats.missions})</span>
+          </button>
+          <button
+            onClick={() => setCategoryFilter('leaves')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+              categoryFilter === 'leaves' ? 'bg-[#2A7B76] text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            <span>🏖️ Congés & Permissions ({stats.total - stats.missions})</span>
+          </button>
+        </div>
+
+        <div className="relative flex-1 sm:max-w-xs">
+          <Search className="h-3.5 w-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Rechercher par nom, département ou motif..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-stone-50 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-[#2A7B76] outline-none"
+            placeholder="Rechercher par nom, motif ou lieu..."
+            className="w-full pl-8 pr-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#2A7B76]"
           />
-        </div>
-
-        {/* Status Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
-          {[
-            { id: 'all', label: 'Toutes' },
-            { id: 'pending', label: `En attente (${stats.pending})` },
-            { id: 'approved', label: 'Validées' },
-            { id: 'modified', label: 'Durée modifiée' },
-            { id: 'rejected', label: 'Refusées' },
-          ].map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setStatusFilter(f.id as any)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                statusFilter === f.id
-                  ? 'bg-[#2A7B76] text-white shadow-xs'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
         </div>
       </div>
 
-      {/* Main Table / Requests List */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 shadow-2xs overflow-hidden">
+      {/* Status Filter Toolbar */}
+      <div className="flex items-center gap-1.5 p-1 bg-stone-100 rounded-xl overflow-x-auto">
+        {[
+          { id: 'all', label: `Tous statuts (${stats.total})` },
+          { id: 'pending', label: `En attente (${stats.pending})` },
+          { id: 'approved', label: `Validées (${stats.approved})` },
+          { id: 'modified', label: `Ajustées (${stats.modified})` },
+          { id: 'terminee', label: `🏁 Terminées (${stats.terminee})` },
+          { id: 'rejected', label: `Refusées (${stats.rejected})` },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setStatusFilter(tab.id as any)}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap cursor-pointer ${
+              statusFilter === tab.id ? 'bg-[#2A7B76] text-white shadow-2xs' : 'text-stone-500 hover:text-stone-800'
+            }`}
+            title={`Filtrer par statut : ${tab.label}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Requests List */}
+      <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+          <h3 className="font-serif font-bold text-xs text-stone-900 flex items-center gap-1.5">
+            <CalendarDays className="h-4 w-4 text-[#2A7B76]" />
+            Registre des Demandes de Congés & Permissions ({filteredRequests.length})
+          </h3>
+        </div>
+
         {filteredRequests.length === 0 ? (
-          <div className="text-center py-16 px-4 space-y-2 text-stone-400">
-            <CalendarDays className="h-10 w-10 mx-auto text-stone-300" />
-            <p className="text-sm font-bold text-stone-700">Aucune demande trouvée</p>
-            <p className="text-xs">Aucune demande de congé ne correspond aux filtres actuels.</p>
+          <div className="text-center py-16 px-4 space-y-3">
+            <div className="w-12 h-12 bg-stone-100 text-stone-400 rounded-2xl flex items-center justify-center mx-auto">
+              <CalendarDays className="h-6 w-6" />
+            </div>
+            <p className="text-xs font-bold text-stone-700">Aucune demande trouvée</p>
+            <p className="text-[11px] text-stone-400">Modifiez vos filtres ou la recherche pour afficher d'autres demandes.</p>
           </div>
         ) : (
           <div className="divide-y divide-stone-100">
             {filteredRequests.map((req) => {
-              const typeCfg = LEAVE_TYPE_LABELS[req.type] || LEAVE_TYPE_LABELS.autre;
-              const statusCfg = LEAVE_STATUS_LABELS[req.status] || LEAVE_STATUS_LABELS.pending;
+              const typeCfg = LEAVE_TYPE_LABELS[req.type] || { label: req.type, badgeColor: 'bg-stone-100 text-stone-800 border-stone-200' };
+              const statusCfg = LEAVE_STATUS_LABELS[req.status] || { label: req.status, badgeColor: 'bg-stone-100 text-stone-800 border-stone-200' };
 
               return (
-                <div key={req.id} className="p-4 sm:p-5 hover:bg-stone-50/70 transition space-y-3">
-                  {/* Row Top Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div key={req.id} className="p-5 hover:bg-stone-50/60 transition space-y-4">
+                  {/* Top Row: Employee & Status */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       {req.employeeAvatar ? (
-                        <img
-                          src={req.employeeAvatar}
-                          alt={req.employeeName}
-                          className="w-10 h-10 rounded-2xl object-cover border border-stone-200 shadow-2xs shrink-0"
-                        />
+                        <img src={req.employeeAvatar} alt={req.employeeName} className="w-10 h-10 rounded-2xl object-cover shrink-0" />
                       ) : (
-                        <div className="w-10 h-10 rounded-2xl bg-[#2A7B76]/10 text-[#2A7B76] flex items-center justify-center font-bold text-sm shrink-0">
+                        <div className="w-10 h-10 rounded-2xl bg-[#2A7B76]/10 text-[#2A7B76] font-bold flex items-center justify-center text-sm shrink-0">
                           {req.employeeName.charAt(0)}
                         </div>
                       )}
@@ -461,7 +546,6 @@ export default function LeaveManagementPanel({
                       </div>
                     </div>
 
-                    {/* Status & Badges */}
                     <div className="flex items-center gap-2 self-start sm:self-auto">
                       <span className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border ${typeCfg.badgeColor}`}>
                         {typeCfg.label}
@@ -478,7 +562,6 @@ export default function LeaveManagementPanel({
 
                   {/* Dates & Reason Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-stone-50/80 p-3.5 rounded-2xl border border-stone-200/60 text-xs">
-                    {/* Requested Period */}
                     <div>
                       <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Période sollicitée</span>
                       <p className="font-bold text-stone-800">
@@ -489,7 +572,6 @@ export default function LeaveManagementPanel({
                       </span>
                     </div>
 
-                    {/* Approved / Modified Period if applicable */}
                     <div>
                       <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Décision & Durée</span>
                       {req.status === 'modified' ? (
@@ -517,7 +599,6 @@ export default function LeaveManagementPanel({
                       )}
                     </div>
 
-                    {/* Decider Metadata */}
                     <div>
                       <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Arbitré par</span>
                       {req.decidedBy ? (
@@ -530,7 +611,7 @@ export default function LeaveManagementPanel({
                     </div>
                   </div>
 
-                  {/* Reason & Comment text */}
+                  {/* Reason text */}
                   <div className="space-y-1 text-xs">
                     <p className="text-stone-500 font-bold text-[11px]">Motif du collaborateur :</p>
                     <p className="bg-white p-2.5 rounded-xl border border-stone-200 text-stone-700 leading-relaxed whitespace-pre-line">
@@ -551,44 +632,33 @@ export default function LeaveManagementPanel({
                   {/* Manager Action Buttons Toolbar */}
                   <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {/* Valider */}
                       <button
                         onClick={() => openActionModal(req, 'approve')}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        title="Valider cette demande de congé"
                       >
                         <Check className="h-3.5 w-3.5" />
                         <span>Valider</span>
                       </button>
 
-                      {/* Modifier la durée */}
                       <button
                         onClick={() => openActionModal(req, 'modify')}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer"
                         title="Ajuster les dates ou le nombre de jours accordés"
                       >
                         <Edit3 className="h-3.5 w-3.5" />
                         <span>Modifier la durée</span>
                       </button>
 
-                      {/* Refuser */}
                       <button
                         onClick={() => openActionModal(req, 'reject')}
-                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                        title="Refuser cette demande de congé"
                       >
                         <X className="h-3.5 w-3.5" />
                         <span>Refuser</span>
                       </button>
                     </div>
-
-                    {/* ACTION MANUELLE : Créer un signalement sur l'employé */}
-                    <button
-                      onClick={() => openActionModal(req, 'incident')}
-                      className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer ml-auto"
-                      title="Créer manuellement un signalement RH sur cet employé (ex: départ sans validation)"
-                    >
-                      <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
-                      <span>Signaler une absence non autorisée</span>
-                    </button>
                   </div>
                 </div>
               );
@@ -615,7 +685,7 @@ export default function LeaveManagementPanel({
                   </>
                 )}
               </h3>
-              <button onClick={closeModal} className="p-1 text-stone-400 hover:text-stone-700">
+              <button onClick={closeModal} className="p-1 text-stone-400 hover:text-stone-700 cursor-pointer" title="Fermer">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -640,15 +710,16 @@ export default function LeaveManagementPanel({
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={closeModal} className="px-4 py-2 bg-stone-100 text-stone-700 text-xs font-bold rounded-xl">
+              <button onClick={closeModal} className="px-4 py-2 bg-stone-100 text-stone-700 text-xs font-bold rounded-xl cursor-pointer" title="Annuler">
                 Annuler
               </button>
               <button
                 onClick={handleConfirmDecision}
                 disabled={isProcessing}
-                className={`px-5 py-2 text-white text-xs font-bold rounded-xl transition ${
+                className={`px-5 py-2 text-white text-xs font-bold rounded-xl transition cursor-pointer ${
                   actionType === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
                 }`}
+                title="Confirmer la décision"
               >
                 {isProcessing ? 'Enregistrement...' : actionType === 'approve' ? 'Confirmer la validation' : 'Confirmer le refus'}
               </button>
@@ -666,7 +737,7 @@ export default function LeaveManagementPanel({
                 <Edit3 className="h-5 w-5 text-indigo-600" />
                 <span>Adapter la durée du congé / permission</span>
               </h3>
-              <button onClick={closeModal} className="p-1 text-stone-400 hover:text-stone-700">
+              <button onClick={closeModal} className="p-1 text-stone-400 hover:text-stone-700 cursor-pointer" title="Fermer">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -724,13 +795,14 @@ export default function LeaveManagementPanel({
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={closeModal} className="px-4 py-2 bg-stone-100 text-stone-700 text-xs font-bold rounded-xl">
+              <button onClick={closeModal} className="px-4 py-2 bg-stone-100 text-stone-700 text-xs font-bold rounded-xl cursor-pointer" title="Annuler">
                 Annuler
               </button>
               <button
                 onClick={handleConfirmDecision}
                 disabled={isProcessing}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                title="Valider la durée modifiée"
               >
                 {isProcessing ? 'Enregistrement...' : 'Valider la durée modifiée'}
               </button>
@@ -739,192 +811,168 @@ export default function LeaveManagementPanel({
         </div>
       )}
 
-      {/* MODAL 3 : Création d'un signalement RH (manuel ou depuis une demande de congé) */}
-      {(actionType === 'incident' || actionType === 'manual_incident') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-xs p-3 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 border border-stone-200 shadow-2xl my-8">
-            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-              <h3 className="font-serif font-bold text-base text-amber-900 flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 text-amber-600" />
-                <span>
-                  {actionType === 'incident'
-                    ? "Consigner un signalement d'absence non validée"
-                    : "Nouveau signalement manuel sur un employé"}
-                </span>
-              </h3>
-              <button onClick={closeModal} className="p-1 text-stone-400 hover:text-stone-700">
-                <X className="h-4 w-4" />
+      {/* MODAL CRÉATION DE CONGÉ / PERMISSION POUR UN COLLABORATEUR */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 space-y-4 my-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-50 text-[#2A7B76] rounded-xl">
+                  <CalendarDays className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base text-stone-900">
+                    Attribuer un Congé ou une Permission
+                  </h3>
+                  <p className="text-[11px] text-stone-500">
+                    Saisie administrative directe pour le compte d'un collaborateur
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Context Box */}
-            <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl text-xs text-amber-900 space-y-1">
-              <p className="font-bold">Cas d'usage RH :</p>
-              <p className="text-amber-800 leading-relaxed">
-                {selectedRequest
-                  ? `Si le collaborateur ${selectedRequest.employeeName} est parti en congé/permission sans validation de sa hiérarchie, ce signalement sera consigné officiellement dans son dossier et visible dans ses alertes.`
-                  : "Consignez manuellement une absence constatée, un départ anticipé ou un manquement disciplinaire sur le dossier d'un collaborateur."}
-              </p>
-            </div>
-
-            {/* Employee Selector */}
-            <div className="space-y-1 text-xs">
-              <label className="font-bold text-stone-700">Collaborateur concerné *</label>
-              {actionType === 'manual_incident' ? (
+            <form onSubmit={handleCreateLeave} className="space-y-3.5 text-xs">
+              {/* Sélection du collaborateur */}
+              <div className="space-y-1">
+                <label className="font-bold text-stone-700">Collaborateur bénéficiaire *</label>
                 <select
-                  value={manualEmployeeId}
-                  onChange={(e) => setManualEmployeeId(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-900 focus:outline-none focus:border-[#2A7B76]"
+                  value={createEmployeeId}
+                  onChange={(e) => setCreateEmployeeId(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-[#2A7B76]"
+                  required
                 >
-                  <option value="">Sélectionnez un collaborateur...</option>
+                  <option value="">Sélectionner un collaborateur...</option>
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.roleType || 'Employé'}) - {emp.department || 'Opérations'}
+                      {emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()} — {emp.role || emp.department || 'Salarié'}
                     </option>
                   ))}
                 </select>
-              ) : selectedRequest ? (
-                <div className="flex items-center gap-3 p-2.5 bg-stone-50 border border-stone-200 rounded-xl">
-                  {selectedRequest.employeeAvatar ? (
-                    <img
-                      src={selectedRequest.employeeAvatar}
-                      alt={selectedRequest.employeeName}
-                      className="w-8 h-8 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-lg bg-[#2A7B76]/10 text-[#2A7B76] font-bold flex items-center justify-center text-xs">
-                      {selectedRequest.employeeName.charAt(0)}
-                    </div>
-                  )}
-                  <div>
-                    <strong className="text-stone-900 block font-bold text-xs">{selectedRequest.employeeName}</strong>
-                    <span className="text-[10px] text-stone-500">
-                      Demande de {selectedRequest.daysCount} jour(s) du {selectedRequest.startDate} au {selectedRequest.endDate}
-                    </span>
-                  </div>
+              </div>
+
+              {/* Type de congé / permission */}
+              <div className="space-y-1">
+                <label className="font-bold text-stone-700">Type de congé ou d'absence *</label>
+                <select
+                  value={createLeaveType}
+                  onChange={(e) => setCreateLeaveType(e.target.value as LeaveType)}
+                  className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-[#2A7B76]"
+                >
+                  <option value="conge_paye">🌴 Congé Payé Annuel</option>
+                  <option value="permission_exceptionnelle">📄 Permission Exceptionnelle d'absence</option>
+                  <option value="conge_maladie">🏥 Congé Maladie (justifié)</option>
+                  <option value="maternite_paternite">👶 Congé Maternité / Paternité</option>
+                  <option value="evenement_familial">💍 Événement Familial (mariage, décès, etc.)</option>
+                  <option value="recuperation">⏱️ Récupération / Repos compensateur</option>
+                  <option value="teletravail">💻 Télétravail Exceptionnel</option>
+                  <option value="autre">✨ Autre motif d'absence</option>
+                </select>
+              </div>
+
+              {/* Période */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-stone-700">Date début *</label>
+                  <input
+                    type="date"
+                    value={createStartDate}
+                    onChange={(e) => setCreateStartDate(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-[#2A7B76]"
+                    required
+                  />
                 </div>
-              ) : null}
-            </div>
 
-            {/* Incident Type */}
-            <div className="space-y-1 text-xs">
-              <label className="font-bold text-stone-700">Type de signalement / anomalie</label>
-              <select
-                value={incidentType}
-                onChange={(e) => setIncidentType(e.target.value as IncidentType)}
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-900 focus:outline-none focus:border-[#2A7B76]"
-              >
-                <option value="absence_injustifiee">Absence injustifiée / Départ sans validation</option>
-                <option value="depart_sans_validation">Départ avant approbation de la demande</option>
-                <option value="depart_anticipe">Départ anticipé non autorisé</option>
-                <option value="sortie_prematuree">Sortie de poste non autorisée</option>
-                <option value="retard">Retard constaté non justifié</option>
-                <option value="autre">Autre manquement aux consignes</option>
-              </select>
-            </div>
-
-            {/* Date & Time Grid */}
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-stone-700">Date du constat</label>
-                <input
-                  type="date"
-                  value={incidentDate}
-                  onChange={(e) => setIncidentDate(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
-                />
+                <div className="space-y-1">
+                  <label className="font-bold text-stone-700">Date fin *</label>
+                  <input
+                    type="date"
+                    value={createEndDate}
+                    onChange={(e) => setCreateEndDate(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-[#2A7B76]"
+                    required
+                  />
+                </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-stone-700">Heure du constat</label>
-                <input
-                  type="time"
-                  value={incidentTime}
-                  onChange={(e) => setIncidentTime(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
-                />
-              </div>
-            </div>
+              {/* Nombre de jours */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 space-y-1">
+                  <label className="font-bold text-stone-700">Nombre de jours décomptés</label>
+                  <input
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    max={90}
+                    value={createDaysCount}
+                    onChange={(e) => setCreateDaysCount(parseFloat(e.target.value) || 1)}
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-[#2A7B76]"
+                    required
+                  />
+                </div>
 
-            {/* Suggestion Chips */}
-            <div className="space-y-1.5 text-xs">
-              <label className="font-bold text-stone-600 text-[11px]">Suggestions rapides de motif :</label>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  "Demande d'absence déposée mais départ constaté sans validation hiérarchique.",
-                  "Absence de 2 jours constatée sans justificatif ni accord managérial.",
-                  "Départ avant validation de la direction suite à demande de permission.",
-                  "Absence injustifiée constatée au poste de travail.",
-                ].map((preset, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setIncidentReason(preset)}
-                    className="text-[10px] bg-stone-100 hover:bg-stone-200 text-stone-700 px-2.5 py-1 rounded-lg transition text-left cursor-pointer"
+                <div className="flex-1 space-y-1">
+                  <label className="font-bold text-stone-700">Décision immédiate</label>
+                  <select
+                    value={createStatus}
+                    onChange={(e) => setCreateStatus(e.target.value as LeaveStatus)}
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-[#2A7B76]"
                   >
-                    + {preset}
-                  </button>
-                ))}
+                    <option value="approved">✓ Validé d'office (Par la Direction)</option>
+                    <option value="pending">⏳ En attente de décision</option>
+                  </select>
+                </div>
               </div>
-            </div>
 
-            {/* Reason Textarea */}
-            <div className="space-y-1 text-xs">
-              <label className="font-bold text-stone-700">Description détaillée des faits constatés *</label>
-              <textarea
-                rows={3}
-                value={incidentReason}
-                onChange={(e) => setIncidentReason(e.target.value)}
-                placeholder="Précisez les circonstances de l'absence non autorisée..."
-                required
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl p-2.5 text-xs text-stone-800 resize-none focus:outline-none focus:border-[#2A7B76]"
-              />
-            </div>
+              {/* Motif */}
+              <div className="space-y-1">
+                <label className="font-bold text-stone-700">Motif &amp; Justification *</label>
+                <textarea
+                  rows={2}
+                  value={createReason}
+                  onChange={(e) => setCreateReason(e.target.value)}
+                  placeholder="Précisez le motif du congé ou de la permission accordée..."
+                  required
+                  className="w-full bg-stone-50 border border-stone-300 rounded-xl p-2.5 text-xs text-stone-800 resize-none outline-none focus:border-[#2A7B76]"
+                />
+              </div>
 
-            {/* Admin Observation */}
-            <div className="space-y-1 text-xs">
-              <label className="font-bold text-stone-700">Mention administrative / Observation RH</label>
-              <input
-                type="text"
-                value={adminComment}
-                onChange={(e) => setAdminComment(e.target.value)}
-                placeholder="Mention administrative interne..."
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-800 focus:outline-none focus:border-[#2A7B76]"
-              />
-            </div>
+              {/* Commentaire de la direction */}
+              <div className="space-y-1">
+                <label className="font-bold text-stone-700">Note ou consigne de la Direction (optionnel)</label>
+                <input
+                  type="text"
+                  value={createManagerComment}
+                  onChange={(e) => setCreateManagerComment(e.target.value)}
+                  placeholder="Ex: Accord exceptionnel de la Direction Générale..."
+                  className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs text-stone-800 outline-none focus:border-[#2A7B76]"
+                />
+              </div>
 
-            {/* Notify Toggle */}
-            <label className="flex items-center gap-2 p-2.5 bg-stone-50 rounded-xl border border-stone-200 text-xs text-stone-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notifyEmployee}
-                onChange={(e) => setNotifyEmployee(e.target.checked)}
-                className="rounded text-[#2A7B76] focus:ring-[#2A7B76] h-4 w-4"
-              />
-              <span className="font-medium">
-                Envoyer une alerte push et une notification formelle dans l'espace de l'employé
-              </span>
-            </label>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition cursor-pointer"
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmIncident}
-                disabled={isProcessing}
-                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-              >
-                <ShieldAlert className="h-4 w-4" />
-                <span>{isProcessing ? 'Enregistrement...' : 'Enregistrer le signalement RH'}</span>
-              </button>
-            </div>
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl cursor-pointer transition"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCreate}
+                  className="px-5 py-2 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>{isSubmittingCreate ? 'Enregistrement...' : 'Enregistrer la permission'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

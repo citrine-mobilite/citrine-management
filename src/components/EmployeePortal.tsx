@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Clock, Calendar, DollarSign, CreditCard, CheckSquare, AlertTriangle, Bell, User, Smartphone, CalendarDays } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Clock, Calendar, DollarSign, CreditCard, CheckSquare, AlertTriangle, Bell, User, Smartphone, CalendarDays, Compass } from 'lucide-react';
 import { 
   AppUser, 
   Employee, 
@@ -58,6 +58,10 @@ interface EmployeePortalProps {
   reminders?: Reminder[];
   onUpdateReminders?: (updated: Reminder[]) => void;
   leaveRequests?: LeaveRequest[];
+  onUpdateLeaveRequests?: (leaves: LeaveRequest[]) => void;
+  onUpdateEmployees?: (employees: Employee[]) => void;
+  onUpdateUsers?: (users: AppUser[]) => void;
+  users?: AppUser[];
   initialSubTab?: string;
   onUpdateUser?: (updated: AppUser) => void;
   onLogout?: () => void;
@@ -122,13 +126,13 @@ export default function EmployeePortal(props: EmployeePortalProps) {
       {/* Subtab navigation */}
       <div className="flex items-center gap-2 overflow-x-auto p-1.5 bg-white rounded-2xl border border-stone-200 shadow-2xs">
         {[
-          { id: 'clocking', label: 'Pointage Direct', icon: Clock, badge: undefined },
-          { id: 'presences', label: 'Mes Pointages', icon: Calendar, badge: undefined },
-          { id: 'leaves', label: 'Mes Congés & Permissions', icon: CalendarDays, badge: (props.leaveRequests || []).filter(l => (l.employeeId === logic.employeeProfile.id || l.employeeEmail === logic.employeeProfile.email) && l.status === 'pending').length || undefined },
-          { id: 'incidents', label: 'Signalements', icon: AlertTriangle, badge: logic.myIncidents.length },
-          { id: 'tasks', label: 'Mes Tâches', icon: CheckSquare, badge: pendingTasksCount || undefined },
-          { id: 'alerts', label: 'Mes Alertes', icon: Bell, badge: logic.unreadAlertsCount > 0 ? logic.unreadAlertsCount : undefined },
-        ].map((tab) => {
+          moduleConfig?.enablePresences !== false && { id: 'clocking', label: 'Pointage Direct', icon: Clock, badge: undefined },
+          moduleConfig?.enablePresences !== false && { id: 'presences', label: 'Mes Pointages', icon: Calendar, badge: undefined },
+          moduleConfig?.enablePresences !== false && { id: 'leaves', label: 'Missions & Congés', icon: Compass, badge: (props.leaveRequests || []).filter(l => (l.employeeId === logic.employeeProfile.id || l.employeeEmail === logic.employeeProfile.email) && l.status === 'pending').length || undefined },
+          moduleConfig?.enablePresences !== false && { id: 'incidents', label: 'Signalements', icon: AlertTriangle, badge: logic.myIncidents.length },
+          moduleConfig?.enableTasks !== false && { id: 'tasks', label: 'Mes Tâches', icon: CheckSquare, badge: pendingTasksCount || undefined },
+          moduleConfig?.enableReminders !== false && { id: 'alerts', label: 'Mes Alertes', icon: Bell, badge: logic.unreadAlertsCount > 0 ? logic.unreadAlertsCount : undefined },
+        ].filter(Boolean).map((tab: any) => {
           const TabIcon = tab.icon;
           const isActive = logic.activeTab === tab.id;
           return (
@@ -224,6 +228,11 @@ export default function EmployeePortal(props: EmployeePortalProps) {
           leaveRequests={props.leaveRequests || []}
           onAddNotification={onAddNotification}
           showToast={logic.showToast}
+          onUpdateLeaveRequests={props.onUpdateLeaveRequests}
+          onUpdateEmployees={props.onUpdateEmployees}
+          onUpdateUsers={props.onUpdateUsers}
+          employees={props.employees}
+          users={props.users}
         />
       )}
 

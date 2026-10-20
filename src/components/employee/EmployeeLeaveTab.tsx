@@ -21,7 +21,11 @@ import {
   Eye,
   ShieldCheck,
   Hourglass,
-  Tag
+  Tag,
+  Compass,
+  MapPin,
+  Flag,
+  Send
 } from 'lucide-react';
 import { SearchableSelect } from '../common/SearchableSelect';
 import { 
@@ -33,6 +37,8 @@ import {
   LEAVE_TYPE_LABELS 
 } from '../../types';
 import { createLeaveRequest, deleteLeaveRequest, calculateDaysBetween } from '../../services/leaveService';
+import { terminateMission } from '../../services/missionLifecycleService';
+import { showSuccessAlert, showErrorAlert, confirmActionAlert, executeDeleteWithSweetAlert } from '../../utils/sweetAlert';
 
 interface EmployeeLeaveTabProps {
   employeeProfile: Employee;
@@ -40,6 +46,11 @@ interface EmployeeLeaveTabProps {
   leaveRequests: LeaveRequest[];
   onAddNotification?: (n: NotificationLog) => void;
   showToast?: (title: string, desc: string, type?: 'success' | 'warning' | 'info' | 'error') => void;
+  onUpdateLeaveRequests?: (leaves: LeaveRequest[]) => void;
+  onUpdateEmployees?: (employees: Employee[]) => void;
+  onUpdateUsers?: (users: AppUser[]) => void;
+  employees?: Employee[];
+  users?: AppUser[];
 }
 
 export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
@@ -48,21 +59,30 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
   leaveRequests = [],
   onAddNotification,
   showToast,
+  onUpdateLeaveRequests,
+  onUpdateEmployees,
+  onUpdateUsers,
+  employees = [],
+  users = [],
 }) => {
   // Modal states
   const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState<'mission' | 'leave'>('mission');
   const [selectedLeaveModal, setSelectedLeaveModal] = useState<LeaveRequest | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTerminating, setIsTerminating] = useState(false);
 
   // View density: 'compact' or 'detailed' (exact same as in EmployeeAlertsTab)
   const [viewDensity, setViewDensity] = useState<'compact' | 'detailed'>('compact');
 
-  // Filters & search query
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'modified' | 'rejected'>('all');
+  // Category & Status Filters
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'missions' | 'leaves'>('all');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'modified' | 'terminee' | 'rejected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Form states
-  const [leaveType, setLeaveType] = useState<LeaveType>('conge_annuel');
+  const [leaveType, setLeaveType] = useState<LeaveType>('mission_professionnelle');
+  const [missionLocation, setMissionLocation] = useState('');
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -76,6 +96,22 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
   const [reason, setReason] = useState('');
   const [attachmentName, setAttachmentName] = useState('');
 
+  const handleOpenMissionModal = () => {
+    setModalMode('mission');
+    setLeaveType('mission_professionnelle');
+    setReason('');
+    setMissionLocation('');
+    setShowModal(true);
+  };
+
+  const handleOpenLeaveModal = () => {
+    setModalMode('leave');
+    setLeaveType('conge_annuel');
+    setReason('');
+    setMissionLocation('');
+    setShowModal(true);
+  };
+
   // Demandes de l'employé connecté
   const myLeaves = useMemo(() => {
     return (leaveRequests || []).filter(
@@ -85,20 +121,30 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
 
   // Statistiques pour les pastilles et le ruban
   const stats = useMemo(() => {
+    const missions = myLeaves.filter((l) => l.type === 'mission_professionnelle').length;
     const pending = myLeaves.filter((l) => l.status === 'pending').length;
     const approved = myLeaves.filter((l) => l.status === 'approved').length;
     const modified = myLeaves.filter((l) => l.status === 'modified').length;
+    const terminee = myLeaves.filter((l) => l.status === 'terminee').length;
     const rejected = myLeaves.filter((l) => l.status === 'rejected').length;
     const totalDaysTaken = myLeaves
-      .filter((l) => l.status === 'approved' || l.status === 'modified')
+      .filter((l) => l.status === 'approved' || l.status === 'modified' || l.status === 'terminee')
       .reduce((sum, l) => sum + (l.approvedDaysCount ?? l.daysCount), 0);
 
-    return { pending, approved, modified, rejected, totalDaysTaken, total: myLeaves.length };
+    return { missions, pending, approved, modified, terminee, rejected, totalDaysTaken, total: myLeaves.length };
   }, [myLeaves]);
 
   // Demandes filtrées
   const filteredLeaves = useMemo(() => {
     return myLeaves.filter((leave) => {
+      // Filtre catégorie (Missions vs Congés)
+      if (categoryFilter === 'missions' && leave.type !== 'mission_professionnelle') {
+        return false;
+      }
+      if (categoryFilter === 'leaves' && leave.type === 'mission_professionnelle') {
+        return false;
+      }
+
       // Filtre statut
       if (filter !== 'all' && leave.status !== filter) {
         return false;
@@ -123,7 +169,56 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
 
       return true;
     });
-  }, [myLeaves, filter, searchQuery]);
+  }, [myLeaves, categoryFilter, filter, searchQuery]);
+
+  // Clôture manuelle d'une mission par l'employé
+  const handleTerminateMyMission = async (leaveId: string) => {
+    const isConfirmed = await confirmActionAlert({
+      title: 'Terminer votre mission ?',
+      text: 'Confirmez-vous que votre mission professionnelle est terminée ?\nVotre statut et votre compte utilisateur seront immédiatement replacés en statut « En poste ».',
+      confirmButtonText: 'Oui, mission terminée',
+      icon: 'question',
+    });
+    if (!isConfirmed) return;
+
+    setIsTerminating(true);
+    try {
+      const res = await terminateMission(
+        leaveId,
+        leaveRequests,
+        employees.length > 0 ? employees : [employeeProfile],
+        users.length > 0 ? users : (currentUser ? [currentUser] : []),
+        employeeProfile.name || 'Collaborateur',
+        onUpdateLeaveRequests,
+        onUpdateEmployees,
+        onUpdateUsers,
+        onAddNotification
+      );
+
+      if (res.success) {
+        showToast?.(
+          'Mission Terminée ✓',
+          'La mission a été clôturée. Vous et votre compte utilisateur êtes de nouveau en statut « En poste ».',
+          'success'
+        );
+        await showSuccessAlert(
+          'Mission clôturée !',
+          'Votre mission est marquée comme terminée. Votre statut et compte utilisateur sont de nouveau « En poste ».'
+        );
+        if (selectedLeaveModal?.id === leaveId) {
+          setSelectedLeaveModal(null);
+        }
+      } else {
+        showToast?.('Erreur', res.error || 'Impossible de clôturer la mission.', 'error');
+        await showErrorAlert('Erreur', res.error || 'Impossible de clôturer la mission.');
+      }
+    } catch {
+      showToast?.('Erreur', 'Impossible de clôturer la mission pour le moment.', 'error');
+      await showErrorAlert('Erreur', 'Impossible de clôturer la mission pour le moment.');
+    } finally {
+      setIsTerminating(false);
+    }
+  };
 
   // Durée calculée en jours ouvrés estimés
   const currentDurationDays = useMemo(() => {
@@ -135,9 +230,10 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
     if (!reason.trim()) {
       showToast?.(
         'Motif requis',
-        'Veuillez renseigner le motif explicatif de votre demande de permission.',
+        modalMode === 'mission' ? 'Veuillez préciser l\'objectif ou le client pour cette mission.' : 'Veuillez renseigner le motif explicatif de votre demande.',
         'warning'
       );
+      await showErrorAlert('Motif obligatoire', modalMode === 'mission' ? 'Veuillez préciser l\'objectif ou le client pour cette mission.' : 'Veuillez renseigner le motif explicatif.');
       return;
     }
 
@@ -147,12 +243,19 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
         'La date de fin ne peut pas précéder la date de début.',
         'warning'
       );
+      await showErrorAlert('Dates invalides', 'La date de fin ne peut pas précéder la date de début.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const typeLabel = LEAVE_TYPE_LABELS[leaveType]?.label || 'Congé';
+      const isMission = leaveType === 'mission_professionnelle' || modalMode === 'mission';
+      const typeLabel = isMission ? 'Mission Professionnelle' : (LEAVE_TYPE_LABELS[leaveType]?.label || 'Congé');
+      
+      const finalReason = isMission && missionLocation.trim()
+        ? `[Mission: ${missionLocation.trim()}] ${reason.trim()}`
+        : reason.trim();
+
       await createLeaveRequest(
         {
           employeeId: employeeProfile.id,
@@ -160,69 +263,82 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
           employeeEmail: employeeProfile.email,
           employeeAvatar: employeeProfile.avatarUrl,
           department: employeeProfile.department || 'Opérations',
-          type: leaveType,
+          type: isMission ? 'mission_professionnelle' : leaveType,
           startDate,
           endDate,
           daysCount: currentDurationDays,
-          reason: reason.trim(),
+          reason: finalReason,
           attachmentName: attachmentName.trim() || undefined,
         },
         onAddNotification
       );
 
-      showToast?.(
-        'Demande de permission transmise',
-        `Votre demande de ${typeLabel} (${currentDurationDays} jour${currentDurationDays > 1 ? 's' : ''}) du ${startDate} au ${endDate} a bien été enregistrée et transmise à la Direction RH.`,
-        'success'
-      );
+      if (isMission) {
+        showToast?.(
+          'Ordre de mission transmis 🚀',
+          `Votre demande de mission (${currentDurationDays} j) du ${startDate} au ${endDate} a bien été enregistrée et transmise à la Direction RH.`,
+          'success'
+        );
+        await showSuccessAlert(
+          'Demande de mission transmise !',
+          `Votre ordre de mission (${currentDurationDays} j) du ${startDate} au ${endDate} a été transmis à la Direction RH.`
+        );
+      } else {
+        showToast?.(
+          'Demande transmise',
+          `Votre demande de ${typeLabel} (${currentDurationDays} j) du ${startDate} au ${endDate} a bien été enregistrée.`,
+          'success'
+        );
+        await showSuccessAlert(
+          'Demande transmise !',
+          `Votre demande de ${typeLabel} (${currentDurationDays} j) du ${startDate} au ${endDate} a été enregistrée.`
+        );
+      }
+
       setShowModal(false);
       setReason('');
+      setMissionLocation('');
       setAttachmentName('');
-    } catch {
+    } catch (err: any) {
       showToast?.(
         'Échec de transmission',
         'Impossible de transmettre la demande pour le moment. Veuillez vérifier votre connexion.',
         'error'
       );
+      await showErrorAlert('Échec de transmission', err?.message || 'Impossible de transmettre la demande.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleCancelRequest = async (leaveId: string) => {
-    if (confirm('Voulez-vous vraiment annuler cette demande de permission ?')) {
-      try {
+    await executeDeleteWithSweetAlert({
+      title: 'Annuler cette demande ?',
+      text: 'Voulez-vous vraiment annuler et retirer cette demande de votre dossier ?',
+      action: async () => {
         await deleteLeaveRequest(leaveId);
         if (selectedLeaveModal?.id === leaveId) {
           setSelectedLeaveModal(null);
         }
-        showToast?.(
-          'Demande annulée',
-          'La demande de permission a été retirée avec succès de votre dossier.',
-          'info'
-        );
-      } catch {
-        showToast?.(
-          'Erreur d’annulation',
-          'Impossible d’annuler cette demande pour le moment.',
-          'error'
-        );
-      }
-    }
+      },
+      successTitle: 'Demande annulée !',
+      successMessage: 'La demande a été retirée avec succès de votre dossier.',
+      errorMessage: 'Impossible d’annuler cette demande pour le moment.',
+    });
   };
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300 max-w-5xl mx-auto pb-10">
-      {/* Top Header Card (IDENTICAL TO EMPLOYEE ALERTS TAB) */}
+      {/* Top Header Card */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-stone-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-teal-50 text-[#2A7B76] border border-teal-100 rounded-2xl shrink-0">
-            <CalendarDays className="h-6 w-6" />
+            <Compass className="h-6 w-6" />
           </div>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-lg sm:text-xl font-serif font-bold text-stone-900">
-                Demandes de Permission & Congés
+                Missions Professionnelles & Congés
               </h2>
               {stats.pending > 0 ? (
                 <span className="bg-amber-100 text-amber-800 border border-amber-300 text-xs px-2.5 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
@@ -236,7 +352,7 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
               )}
             </div>
             <p className="text-xs text-stone-500 mt-0.5">
-              Suivi des autorisations d&apos;absence, congés payés, permissions et soldes de jours
+              Demandez et suivez vos ordres de mission, déplacements extérieurs, congés payés et autorisations d'absence
             </p>
           </div>
         </div>
@@ -277,28 +393,96 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
             </button>
           </div>
 
-          {/* Create Request button */}
+          {/* Action Buttons: 1. Demande de Mission | 2. Demande de Congé */}
           <button
             type="button"
-            onClick={() => setShowModal(true)}
-            className="bg-[#2A7B76] hover:bg-[#20615d] text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95 shrink-0"
+            onClick={handleOpenMissionModal}
+            className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 hover:from-[#23635f] hover:to-emerald-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95 shrink-0"
+            title="Déposer une demande de mission professionnelle"
           >
-            <Plus className="h-4 w-4" />
-            <span>Nouvelle demande</span>
+            <Compass className="h-4 w-4" />
+            <span>Demander une Mission</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenLeaveModal}
+            className="bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shrink-0"
+            title="Déposer une demande de congé ou permission"
+          >
+            <CalendarDays className="h-4 w-4 text-[#2A7B76]" />
+            <span>Congé / Permission</span>
           </button>
         </div>
       </div>
 
-      {/* Filter and Quick Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+      {/* Category Toggle & Status Filters Toolbar */}
+      <div className="space-y-2">
+        {/* Category Tabs: Toutes | Mes Missions | Mes Congés */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-1 p-1 bg-stone-100 rounded-2xl border border-stone-200 text-xs">
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('all')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                categoryFilter === 'all' ? 'bg-[#2A7B76] text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              Toutes ({stats.total})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('missions')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                categoryFilter === 'missions' ? 'bg-[#2A7B76] text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>🚀 Mes Missions ({stats.missions})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('leaves')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                categoryFilter === 'leaves' ? 'bg-[#2A7B76] text-white shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>🏖️ Congés & Permissions ({stats.total - stats.missions})</span>
+            </button>
+          </div>
+
+          {/* Quick Search */}
+          <div className="relative flex-1 sm:max-w-xs">
+            <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Rechercher une mission, un motif..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-white border border-stone-200 rounded-xl text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-[#2A7B76]"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Filter Pills with Counts */}
         <div className="flex items-center gap-1.5 overflow-x-auto p-1 bg-stone-100 rounded-2xl border border-stone-200 text-xs scrollbar-none">
           {[
-            { id: 'all', label: 'Toutes', count: stats.total },
+            { id: 'all', label: 'Tous statuts', count: stats.total },
             { id: 'pending', label: 'En attente', count: stats.pending },
             { id: 'approved', label: 'Accordées', count: stats.approved },
             { id: 'modified', label: 'Ajustées', count: stats.modified },
-            { id: 'rejected', label: 'Rejetées', count: stats.rejected },
+            { id: 'terminee', label: '🏁 Terminées', count: stats.terminee },
+            { id: 'rejected', label: 'Refusées', count: stats.rejected },
           ].map((item) => (
             <button
               key={item.id}
@@ -318,27 +502,6 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
               </span>
             </button>
           ))}
-        </div>
-
-        {/* Quick Search */}
-        <div className="relative sm:w-64">
-          <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Rechercher une demande..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-white border border-stone-200 rounded-xl text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-[#2A7B76]"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
       </div>
 
@@ -750,19 +913,32 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
             </div>
 
             {/* Actions Footer */}
-            <div className="pt-2 flex items-center justify-between gap-3 border-t border-stone-100">
-              {selectedLeaveModal.status === 'pending' ? (
-                <button
-                  type="button"
-                  onClick={() => handleCancelRequest(selectedLeaveModal.id)}
-                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer border border-rose-200"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Annuler cette demande</span>
-                </button>
-              ) : (
-                <div />
-              )}
+            <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-stone-100">
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedLeaveModal.status === 'pending' && (
+                  <button
+                    type="button"
+                    onClick={() => handleCancelRequest(selectedLeaveModal.id)}
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer border border-rose-200"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Annuler cette demande</span>
+                  </button>
+                )}
+
+                {selectedLeaveModal.type === 'mission_professionnelle' && (selectedLeaveModal.status === 'approved' || selectedLeaveModal.status === 'modified') && (
+                  <button
+                    type="button"
+                    disabled={isTerminating}
+                    onClick={() => handleTerminateMyMission(selectedLeaveModal.id)}
+                    className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                    <span>{isTerminating ? 'Clôture...' : '🏁 Déclarer la fin de mission (Retour en poste)'}</span>
+                  </button>
+                )}
+              </div>
+
               <button
                 type="button"
                 onClick={() => setSelectedLeaveModal(null)}
@@ -782,13 +958,15 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-stone-100">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-teal-50 text-[#2A7B76] border border-teal-100 flex items-center justify-center">
-                  <CalendarDays className="h-5 w-5" />
+                  {modalMode === 'mission' ? <Compass className="h-5 w-5" /> : <CalendarDays className="h-5 w-5" />}
                 </div>
                 <div>
                   <h3 className="font-serif font-bold text-stone-900 text-base">
-                    Déposer une demande de permission / congé
+                    {modalMode === 'mission' ? '🚀 Demande d’Ordre de Mission Professionnelle' : 'Déposer une demande de permission / congé'}
                   </h3>
-                  <p className="text-[11px] text-stone-500">Transmise directement à votre responsable hiérarchique</p>
+                  <p className="text-[11px] text-stone-500">
+                    {modalMode === 'mission' ? 'Audit, déplacement extérieur, chantier, réunion client' : 'Transmise directement à votre responsable hiérarchique'}
+                  </p>
                 </div>
               </div>
               <button
@@ -801,30 +979,50 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-              {/* Type de congé */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-stone-700">Type de congé / permission *</label>
-                <SearchableSelect
-                  options={[
-                    { value: 'conge_annuel', label: '🌴 Congé annuel payé' },
-                    { value: 'permission_exceptionnelle', label: '💍 Permission exceptionnelle (Mariage, Décès, Naissance)' },
-                    { value: 'maladie', label: '🏥 Arrêt maladie / Rendez-vous médical' },
-                    { value: 'recuperation', label: '⏰ Repos compensateur / Récupération' },
-                    { value: 'sans_solde', label: '📋 Congé sans solde' },
-                    { value: 'maternite_paternite', label: '👶 Maternité / Paternité' },
-                    { value: 'autre', label: '📝 Autre motif personnel' },
-                  ]}
-                  value={leaveType}
-                  onChange={(val) => setLeaveType(val as LeaveType)}
-                  placeholder="Sélectionner le type de congé"
-                  searchPlaceholder="Rechercher un type..."
-                />
-              </div>
+              {/* Type de congé / mission */}
+              {modalMode === 'leave' && (
+                <div className="space-y-1.5">
+                  <label className="font-bold text-stone-700">Type de congé / permission *</label>
+                  <SearchableSelect
+                    options={[
+                      { value: 'conge_annuel', label: '🌴 Congé annuel payé' },
+                      { value: 'permission_exceptionnelle', label: '💍 Permission exceptionnelle (Mariage, Décès, Naissance)' },
+                      { value: 'maladie', label: '🏥 Arrêt maladie / Rendez-vous médical' },
+                      { value: 'recuperation', label: '⏰ Repos compensateur / Récupération' },
+                      { value: 'sans_solde', label: '📋 Congé sans solde' },
+                      { value: 'maternite_paternite', label: '👶 Maternité / Paternité' },
+                      { value: 'autre', label: '📝 Autre motif d\'absence' },
+                    ]}
+                    value={leaveType}
+                    onChange={(val) => setLeaveType(val as LeaveType)}
+                    placeholder="Sélectionner le type de demande"
+                    searchPlaceholder="Rechercher un type..."
+                  />
+                </div>
+              )}
+
+              {/* Destination si Mission */}
+              {modalMode === 'mission' && (
+                <div className="space-y-1">
+                  <label className="font-bold text-stone-700 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-[#2A7B76]" />
+                    <span>Lieu / Destination de la mission *</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={missionLocation}
+                    onChange={(e) => setMissionLocation(e.target.value)}
+                    placeholder="Ex: Yaoundé, Chantier Douala Port, Client Orange Cameroun..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:border-[#2A7B76]"
+                  />
+                </div>
+              )}
 
               {/* Date début & fin */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-bold text-stone-700">Date de début *</label>
+                  <label className="font-bold text-stone-700">Date de départ *</label>
                   <input
                     type="date"
                     value={startDate}
@@ -835,7 +1033,7 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-stone-700">Date de fin *</label>
+                  <label className="font-bold text-stone-700">Date de retour *</label>
                   <input
                     type="date"
                     value={endDate}
@@ -857,14 +1055,16 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
                 </span>
               </div>
 
-              {/* Motif */}
+              {/* Motif / Objectif */}
               <div className="space-y-1">
-                <label className="font-bold text-stone-700">Motif explicatif précis *</label>
+                <label className="font-bold text-stone-700">
+                  {modalMode === 'mission' ? 'Objectif et descriptif précis de la mission *' : 'Motif explicatif précis *'}
+                </label>
                 <textarea
                   rows={3}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Expliquez la raison de votre demande de permission..."
+                  placeholder={modalMode === 'mission' ? 'Décrivez les tâches à accomplir, l’audit à réaliser ou l’objet du déplacement...' : 'Expliquez la raison de votre demande...'}
                   required
                   className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-800 focus:outline-none focus:border-[#2A7B76] resize-none"
                 />
@@ -872,12 +1072,14 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
 
               {/* Justificatif optionnel */}
               <div className="space-y-1">
-                <label className="font-bold text-stone-700">Référence justificatif (facultatif)</label>
+                <label className="font-bold text-stone-700">
+                  {modalMode === 'mission' ? 'Réf. Ordre de mission / Bon de commande (facultatif)' : 'Référence justificatif (facultatif)'}
+                </label>
                 <input
                   type="text"
                   value={attachmentName}
                   onChange={(e) => setAttachmentName(e.target.value)}
-                  placeholder="Ex: Certificat médical #492, Faire-part..."
+                  placeholder={modalMode === 'mission' ? 'Ex: Ordre de mission OM-2026-08, Billet...' : 'Ex: Certificat médical #492, Faire-part...'}
                   className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-800 focus:outline-none focus:border-[#2A7B76]"
                 />
               </div>
@@ -895,8 +1097,8 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
                   disabled={isSubmitting}
                   className="px-5 py-2 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold rounded-xl text-xs transition shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>{isSubmitting ? 'Envoi...' : 'Transmettre ma demande'}</span>
+                  <Send className="h-4 w-4" />
+                  <span>{isSubmitting ? 'Transmission...' : modalMode === 'mission' ? 'Transmettre l’ordre de mission 🚀' : 'Transmettre ma demande'}</span>
                 </button>
               </div>
             </form>

@@ -177,11 +177,24 @@ export default function SystemLogsPanel({
   const [activeSubTab, setActiveSubTab] = useState<LogSubTab>('system_events');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. Audit Comptes State
+  // 1. Audit Comptes & Opérations Générales State (Paginated par 20)
   const [auditFilterType, setAuditFilterType] = useState<string>('all');
+  const [auditFilterStatus, setAuditFilterStatus] = useState<string>('all');
+  const [auditFilterPeriod, setAuditFilterPeriod] = useState<string>('all');
+  const [auditStartDate, setAuditStartDate] = useState<string>('');
+  const [auditEndDate, setAuditEndDate] = useState<string>('');
   const [auditList, setAuditList] = useState<AdminAccountOperation[]>(() => getAdminAuditOperations());
   const [auditPage, setAuditPage] = useState(1);
   const AUDIT_PER_PAGE = 25;
+
+  // Auto-synchronisation dès qu'une action est consignée dans l'application
+  React.useEffect(() => {
+    const handleAuditUpdate = () => {
+      setAuditList(getAdminAuditOperations());
+    };
+    window.addEventListener('citrine:audit_updated', handleAuditUpdate);
+    return () => window.removeEventListener('citrine:audit_updated', handleAuditUpdate);
+  }, []);
 
   const handleRefresh = () => {
     setAuditList(getAdminAuditOperations());
@@ -189,15 +202,40 @@ export default function SystemLogsPanel({
 
   const filteredAuditOps = useMemo(() => {
     return auditList.filter((op) => {
+      const q = searchTerm.toLowerCase();
       const matchSearch =
-        op.targetName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        op.authorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        op.details.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        op.operationLabel.toLowerCase().includes(searchTerm.toLowerCase());
+        !q ||
+        op.targetName.toLowerCase().includes(q) ||
+        op.authorName.toLowerCase().includes(q) ||
+        op.details.toLowerCase().includes(q) ||
+        op.operationLabel.toLowerCase().includes(q);
+
       const matchType = auditFilterType === 'all' || op.operationType === auditFilterType;
-      return matchSearch && matchType;
+      const matchStatus = auditFilterStatus === 'all' || (op.level || 'info') === auditFilterStatus;
+
+      // Filtre Période
+      let matchPeriod = true;
+      const opDate = new Date(op.timestamp);
+      const now = new Date();
+      if (auditFilterPeriod === 'today') {
+        matchPeriod = op.timestamp.split('T')[0] === now.toISOString().split('T')[0];
+      } else if (auditFilterPeriod === '7days') {
+        const diffDays = (now.getTime() - opDate.getTime()) / (1000 * 3600 * 24);
+        matchPeriod = diffDays <= 7;
+      } else if (auditFilterPeriod === '30days') {
+        const diffDays = (now.getTime() - opDate.getTime()) / (1000 * 3600 * 24);
+        matchPeriod = diffDays <= 30;
+      } else if (auditFilterPeriod === 'this_month') {
+        matchPeriod = op.timestamp.startsWith(now.toISOString().slice(0, 7));
+      } else if (auditFilterPeriod === 'custom') {
+        const opDay = op.timestamp.split('T')[0];
+        if (auditStartDate && opDay < auditStartDate) matchPeriod = false;
+        if (auditEndDate && opDay > auditEndDate) matchPeriod = false;
+      }
+
+      return matchSearch && matchType && matchStatus && matchPeriod;
     });
-  }, [auditList, searchTerm, auditFilterType]);
+  }, [auditList, searchTerm, auditFilterType, auditFilterStatus, auditFilterPeriod, auditStartDate, auditEndDate]);
 
   const totalAuditPages = Math.max(1, Math.ceil(filteredAuditOps.length / AUDIT_PER_PAGE));
   const paginatedAuditOps = useMemo(() => {
@@ -205,26 +243,42 @@ export default function SystemLogsPanel({
     return filteredAuditOps.slice(start, start + AUDIT_PER_PAGE);
   }, [filteredAuditOps, auditPage]);
 
-  // 2. Session Logs & Security State (Filterable by Date & Paginated par 10)
+  // 2. Session Logs & Security State (Filterable by Date & Paginated par 20)
   const [sessionLogs] = useState<SessionLogItem[]>(INITIAL_SESSION_LOGS);
   const [sessionDateFilter, setSessionDateFilter] = useState<string>('');
   const [sessionLevelFilter, setSessionLevelFilter] = useState<string>('all');
+  const [sessionPeriodFilter, setSessionPeriodFilter] = useState<string>('all');
   const [sessionPage, setSessionPage] = useState<number>(1);
   const SESSIONS_PER_PAGE = 25;
 
   const filteredSessionLogs = useMemo(() => {
     return sessionLogs.filter((s) => {
+      const q = searchTerm.toLowerCase();
       const matchSearch =
-        s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.details.toLowerCase().includes(searchTerm.toLowerCase());
+        !q ||
+        s.title.toLowerCase().includes(q) ||
+        s.author.toLowerCase().includes(q) ||
+        s.details.toLowerCase().includes(q);
 
       const matchLevel = sessionLevelFilter === 'all' || s.level === sessionLevelFilter;
-      const matchDate = !sessionDateFilter || s.dateKey === sessionDateFilter || s.timestamp.startsWith(sessionDateFilter);
+      
+      let matchPeriod = true;
+      const sDate = new Date(s.timestamp);
+      const now = new Date();
+      if (sessionPeriodFilter === 'today') {
+        matchPeriod = s.dateKey === now.toISOString().split('T')[0];
+      } else if (sessionPeriodFilter === '7days') {
+        const diffDays = (now.getTime() - sDate.getTime()) / (1000 * 3600 * 24);
+        matchPeriod = diffDays <= 7;
+      } else if (sessionPeriodFilter === 'this_month') {
+        matchPeriod = s.dateKey.startsWith(now.toISOString().slice(0, 7));
+      } else if (sessionDateFilter) {
+        matchPeriod = s.dateKey === sessionDateFilter || s.timestamp.startsWith(sessionDateFilter);
+      }
 
-      return matchSearch && matchLevel && matchDate;
+      return matchSearch && matchLevel && matchPeriod;
     });
-  }, [sessionLogs, searchTerm, sessionLevelFilter, sessionDateFilter]);
+  }, [sessionLogs, searchTerm, sessionLevelFilter, sessionPeriodFilter, sessionDateFilter]);
 
   const totalSessionPages = Math.max(1, Math.ceil(filteredSessionLogs.length / SESSIONS_PER_PAGE));
   const paginatedSessionLogs = useMemo(() => {
@@ -232,7 +286,7 @@ export default function SystemLogsPanel({
     return filteredSessionLogs.slice(start, start + SESSIONS_PER_PAGE);
   }, [filteredSessionLogs, sessionPage]);
 
-  // 3. Notifications State (Paginated par 10)
+  // 3. Notifications State (Paginated par 20)
   const [notifFilter, setNotifFilter] = useState<'all' | 'read' | 'unread'>('all');
   const [notifPage, setNotifPage] = useState(1);
   const [selectedDetailNotif, setSelectedDetailNotif] = useState<NotificationLog | null>(null);
@@ -256,20 +310,47 @@ export default function SystemLogsPanel({
 
   const getOperationBadge = (type: AdminAccountOperation['operationType']) => {
     switch (type) {
+      case 'conge_permission':
+        return <span className="bg-teal-100 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🌴 Congé / Permission</span>;
+      case 'conseil_discipline':
+        return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⚖️ Conseil Discipline</span>;
+      case 'feuille_de_temps':
+        return <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-[10px] font-bold">📅 Feuille de Temps</span>;
+      case 'presence_pointage':
+        return <span className="bg-cyan-100 text-cyan-800 border border-cyan-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⏱️ Pointage & Présence</span>;
+      case 'securite_connexion':
+        return <span className="bg-sky-100 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🛡️ Sécurité & Connexion</span>;
+      case 'salary_update':
+        return <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">💰 Salaire & Finance</span>;
       case 'creation':
-        return <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Création Compte</span>;
+        return <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">👤 Création Compte</span>;
       case 'role_change':
-        return <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Changement de Rôle</span>;
+        return <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🔄 Changement de Rôle</span>;
       case 'manager_change':
-        return <span className="bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Rattachement Responsable</span>;
+        return <span className="bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">👔 Responsable</span>;
       case 'team_change':
-        return <span className="bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Affectation Équipe</span>;
+        return <span className="bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🏢 Affectation Équipe</span>;
       case 'status_change':
-        return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Statut / Suspension</span>;
+        return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🛑 Statut / Suspension</span>;
       case 'password_reset':
-        return <span className="bg-stone-200 text-stone-800 border border-stone-300 px-2 py-0.5 rounded-full text-[10px] font-bold">Mot de Passe</span>;
+        return <span className="bg-stone-200 text-stone-800 border border-stone-300 px-2 py-0.5 rounded-full text-[10px] font-bold">🔑 Mot de Passe</span>;
+      case 'access_key_regenerated':
+        return <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full text-[10px] font-bold">🎟️ Clé 16 Caractères</span>;
       default:
-        return <span className="bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full text-[10px] font-bold">Opération Admin</span>;
+        return <span className="bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full text-[10px] font-bold">⚙️ Opération Système</span>;
+    }
+  };
+
+  const getLevelBadge = (level?: string) => {
+    switch (level) {
+      case 'success':
+        return <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">✓ Succès</span>;
+      case 'warning':
+        return <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⚠️ Alerte</span>;
+      case 'error':
+        return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">✕ Erreur</span>;
+      default:
+        return <span className="bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">ℹ️ Info</span>;
     }
   };
 
@@ -650,42 +731,132 @@ export default function SystemLogsPanel({
             </div>
           </div>
 
-          {/* Search & Type filter */}
-          <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full sm:max-w-md">
-              <Search className="h-4 w-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Rechercher par nom, auteur, type d'opération..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setAuditPage(1);
-                }}
-                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#2A7B76]"
-              />
+          {/* Search, Type, Statut & Periode filter toolbar */}
+          <div className="bg-white p-4 rounded-3xl border border-stone-200 shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:max-w-md">
+                <Search className="h-4 w-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Rechercher par nom, auteur, cible, détails..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setAuditPage(1);
+                  }}
+                  className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#2A7B76]"
+                />
+              </div>
+
+              {/* Filters row */}
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                {/* 1. FILTRE PAR TYPE */}
+                <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-xl px-2 py-1 text-xs">
+                  <span className="text-[10px] font-bold text-stone-400">Type :</span>
+                  <select
+                    value={auditFilterType}
+                    onChange={(e) => {
+                      setAuditFilterType(e.target.value);
+                      setAuditPage(1);
+                    }}
+                    className="bg-transparent font-bold text-stone-700 text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">Tous les types</option>
+                    <option value="conge_permission">🌴 Congé & Permission</option>
+                    <option value="conseil_discipline">⚖️ Conseil de Discipline</option>
+                    <option value="feuille_de_temps">📅 Feuille de Temps</option>
+                    <option value="presence_pointage">⏱️ Pointage & Présence</option>
+                    <option value="securite_connexion">🛡️ Sécurité & Connexion</option>
+                    <option value="creation">👤 Création de Compte</option>
+                    <option value="role_change">🔄 Changement de Rôle</option>
+                    <option value="manager_change">👔 Responsable</option>
+                    <option value="team_change">🏢 Affectation Équipe</option>
+                    <option value="status_change">🛑 Statut & Suspension</option>
+                    <option value="salary_update">💰 Salaire</option>
+                    <option value="password_reset">🔑 Mot de passe</option>
+                  </select>
+                </div>
+
+                {/* 2. FILTRE PAR STATUT */}
+                <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-xl px-2 py-1 text-xs">
+                  <span className="text-[10px] font-bold text-stone-400">Statut :</span>
+                  <select
+                    value={auditFilterStatus}
+                    onChange={(e) => {
+                      setAuditFilterStatus(e.target.value);
+                      setAuditPage(1);
+                    }}
+                    className="bg-transparent font-bold text-stone-700 text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">Tous les statuts</option>
+                    <option value="success">✓ Succès</option>
+                    <option value="info">ℹ️ Information</option>
+                    <option value="warning">⚠️ Avertissement</option>
+                    <option value="error">✕ Erreur / Refus</option>
+                  </select>
+                </div>
+
+                {/* 3. FILTRE PAR PÉRIODE */}
+                <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-xl px-2 py-1 text-xs">
+                  <Calendar className="h-3 w-3 text-stone-400" />
+                  <span className="text-[10px] font-bold text-stone-400">Période :</span>
+                  <select
+                    value={auditFilterPeriod}
+                    onChange={(e) => {
+                      setAuditFilterPeriod(e.target.value);
+                      setAuditPage(1);
+                    }}
+                    className="bg-transparent font-bold text-stone-700 text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">Toutes les périodes</option>
+                    <option value="today">Aujourd'hui</option>
+                    <option value="7days">7 derniers jours</option>
+                    <option value="30days">30 derniers jours</option>
+                    <option value="this_month">Ce mois-ci</option>
+                    <option value="custom">Date personnalisée...</option>
+                  </select>
+                </div>
+
+                {(auditFilterType !== 'all' || auditFilterStatus !== 'all' || auditFilterPeriod !== 'all' || searchTerm) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuditFilterType('all');
+                      setAuditFilterStatus('all');
+                      setAuditFilterPeriod('all');
+                      setAuditStartDate('');
+                      setAuditEndDate('');
+                      setSearchTerm('');
+                      setAuditPage(1);
+                    }}
+                    className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 rounded-xl border border-rose-200 font-bold transition cursor-pointer"
+                    title="Réinitialiser les filtres"
+                  >
+                    Effacer filtres
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
-              <Filter className="h-3.5 w-3.5 text-stone-400 shrink-0" />
-              <select
-                value={auditFilterType}
-                onChange={(e) => {
-                  setAuditFilterType(e.target.value);
-                  setAuditPage(1);
-                }}
-                className="px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 focus:outline-none focus:border-[#2A7B76] cursor-pointer"
-              >
-                <option value="all">Toutes les opérations</option>
-                <option value="creation">Créations de compte</option>
-                <option value="role_change">Changements de rôle</option>
-                <option value="manager_change">Rattachements responsable</option>
-                <option value="team_change">Affectations à une équipe</option>
-                <option value="status_change">Statuts / Suspensions</option>
-                <option value="password_reset">Mots de passe</option>
-                <option value="access_key_regenerated">Clés d'accès 16 Car.</option>
-              </select>
-            </div>
+            {/* Custom Date Pickers when 'custom' is selected */}
+            {auditFilterPeriod === 'custom' && (
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-100 text-xs animate-in fade-in">
+                <span className="font-bold text-stone-600 text-[11px]">Plage de dates :</span>
+                <input
+                  type="date"
+                  value={auditStartDate}
+                  onChange={(e) => setAuditStartDate(e.target.value)}
+                  className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-1 text-xs"
+                />
+                <span className="text-stone-400">à</span>
+                <input
+                  type="date"
+                  value={auditEndDate}
+                  onChange={(e) => setAuditEndDate(e.target.value)}
+                  className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-1 text-xs"
+                />
+              </div>
+            )}
           </div>
 
           {/* Audit Trail Table */}
@@ -695,18 +866,19 @@ export default function SystemLogsPanel({
                 <thead className="bg-stone-50 text-stone-500 text-[10px] uppercase font-bold border-b border-stone-200/80">
                   <tr>
                     <th className="py-3 px-4">Date & Heure</th>
-                    <th className="py-3 px-4">Auteur de l'action</th>
-                    <th className="py-3 px-4">Compte Cible</th>
-                    <th className="py-3 px-4">Type d'opération</th>
+                    <th className="py-3 px-4">Auteur</th>
+                    <th className="py-3 px-4">Cible / Collaborateur</th>
+                    <th className="py-3 px-4">Type</th>
+                    <th className="py-3 px-4">Statut</th>
                     <th className="py-3 px-4">Détails & Modifications</th>
-                    <th className="py-3 px-4 text-right">Adresse IP / Lieu</th>
+                    <th className="py-3 px-4 text-right">IP / Réseau</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 font-medium">
                   {paginatedAuditOps.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-stone-400 text-xs">
-                        Aucune opération administrative trouvée avec ces critères.
+                      <td colSpan={7} className="py-12 text-center text-stone-400 text-xs">
+                        Aucune opération administrative ou système trouvée avec ces critères de filtre.
                       </td>
                     </tr>
                   ) : (
@@ -723,6 +895,11 @@ export default function SystemLogsPanel({
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span className="font-bold text-stone-900">{op.authorName}</span>
+                          {op.authorRole && (
+                            <span className="block text-[10px] text-stone-400 font-normal">
+                              {op.authorRole}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
                           <div className="flex items-center gap-1.5 font-bold text-stone-800">
@@ -735,10 +912,13 @@ export default function SystemLogsPanel({
                         <td className="py-3 px-4 whitespace-nowrap">
                           {getOperationBadge(op.operationType)}
                         </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {getLevelBadge(op.level)}
+                        </td>
                         <td className="py-3 px-4 text-stone-700">
-                          <div className="space-y-0.5">
+                          <div className="space-y-0.5 max-w-md">
                             <span className="font-bold block text-stone-900">{op.operationLabel}</span>
-                            <span className="text-[11px] text-stone-500 block">{op.details}</span>
+                            <span className="text-[11px] text-stone-500 block leading-relaxed">{op.details}</span>
                           </div>
                         </td>
                         <td className="py-3 px-4 text-right whitespace-nowrap text-stone-400 font-mono text-[10px]">
@@ -751,7 +931,7 @@ export default function SystemLogsPanel({
               </table>
             </div>
 
-            {/* Pagination Controls par 25 */}
+            {/* Pagination Controls par 20 */}
             {filteredAuditOps.length > 0 && (
               <div className="px-5 py-3.5 bg-stone-50/70 border-t border-stone-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                 <div className="text-stone-500 text-[11px]">
@@ -759,7 +939,7 @@ export default function SystemLogsPanel({
                   <span className="font-bold text-stone-800">
                     {Math.min(auditPage * AUDIT_PER_PAGE, filteredAuditOps.length)}
                   </span>{' '}
-                  sur <span className="font-bold text-[#2A7B76]">{filteredAuditOps.length}</span> opérations (25 par page)
+                  sur <span className="font-bold text-[#2A7B76]">{filteredAuditOps.length}</span> opérations ({AUDIT_PER_PAGE} par page)
                 </div>
 
                 <div className="flex items-center gap-1.5">

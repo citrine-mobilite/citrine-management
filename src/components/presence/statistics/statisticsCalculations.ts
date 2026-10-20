@@ -19,33 +19,43 @@ export type RankingSortTab = 'all' | 'presences' | 'assiduite' | 'ponctualite';
 export function computePresenceStatistics(
   employees: Employee[],
   presences: Presence[],
-  period: 'this_month' | 'last_month' | 'last_3_months' | 'all'
+  period: 'this_month' | 'last_month' | 'last_3_months' | 'all' | 'custom',
+  customStart?: string,
+  customEnd?: string
 ) {
   const now = new Date();
   const start = new Date();
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
-  if (period === 'this_month') {
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-  } else if (period === 'last_month') {
-    start.setMonth(start.getMonth() - 1);
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-    end.setDate(0);
-    end.setHours(23, 59, 59, 59);
-  } else if (period === 'last_3_months') {
-    start.setMonth(start.getMonth() - 3);
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-  } else {
-    start.setFullYear(2024, 0, 1);
-    start.setHours(0, 0, 0, 0);
-  }
+  let startStr = '';
+  let endStr = '';
 
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const startStr = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
-  const endStr = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
+  if (period === 'custom' && customStart && customEnd) {
+    startStr = customStart;
+    endStr = customEnd;
+  } else {
+    if (period === 'this_month') {
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+    } else if (period === 'last_month') {
+      start.setMonth(start.getMonth() - 1);
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      end.setDate(0);
+      end.setHours(23, 59, 59, 59);
+    } else if (period === 'last_3_months') {
+      start.setMonth(start.getMonth() - 3);
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+    } else {
+      start.setFullYear(2024, 0, 1);
+      start.setHours(0, 0, 0, 0);
+    }
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    startStr = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+    endStr = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
+  }
 
   const inRangePresences = presences.filter((p) => p.date >= startStr && p.date <= endStr);
 
@@ -53,7 +63,8 @@ export function computePresenceStatistics(
     const empPresences = inRangePresences.filter((p) => p.employeeId === emp.id);
     const presentDays = empPresences.filter((p) => p.status === 'present').length;
     const lateDays = empPresences.filter((p) => p.status === 'late').length;
-    const absentDays = empPresences.filter((p) => p.status === 'absent').length;
+    const isEmpOnMission = emp.employmentStatus === 'en_mission' || emp.status === 'en_mission';
+    const absentDays = isEmpOnMission ? 0 : empPresences.filter((p) => p.status === 'absent').length;
 
     let earlyDepartureDays = 0;
     let emergencyCount = 0;

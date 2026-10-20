@@ -409,6 +409,53 @@ CAMPAGNE D'ÉVALUATION : Année {{campaignYear}}
 
 3. CONCLUSION GÉNÉRALE
 Document support d'entretien professionnel à renseigner lors de l'échange bilatéral.`
+  },
+  {
+    id: 'tpl-proforma',
+    name: "Facture Proforma / Proposition Commerciale",
+    category: 'proforma',
+    formatType: 'word',
+    description: "Facture proforma commerciale pour propositions de services, ventes de matériel ou prestations.",
+    defaultSignature: false,
+    fields: [
+      { key: 'clientName', label: 'Nom du Client / Entreprise', type: 'text', defaultValue: 'Société Générale de Bâtiment (SGB)' },
+      { key: 'clientAddress', label: 'Adresse du Client', type: 'text', defaultValue: 'Boulevard de la Liberté, Douala' },
+      { key: 'projectName', label: 'Intitulé du Projet / Prestation', type: 'text', defaultValue: 'Fourniture et installation de matériel informatique et mobilier' },
+      { key: 'itemDescription', label: 'Description des articles ou prestations', type: 'textarea', defaultValue: "- 05 Ordinateurs Portables Dell Latitude 5420\n- 05 Fauteuils ergonomiques Mesh Black\n- 01 Imprimante Multifonction HP LaserJet" },
+      { key: 'quantity', label: 'Quantité globale', type: 'number', defaultValue: '11' },
+      { key: 'totalAmount', label: 'Montant Total HT (FCFA)', type: 'number', defaultValue: '4250000' },
+      { key: 'validityDays', label: 'Validité de l offre (jours)', type: 'number', defaultValue: '30' },
+      { key: 'paymentTerms', label: 'Conditions de règlement', type: 'text', defaultValue: '50% à la commande, solde à la livraison' }
+    ],
+    bodyTemplate: `FACTURE PROFORMA / PROPOSITION COMMERCIALE
+
+RÉFÉRENCE : PRO-2026-001
+DATE : {{effectiveDate}}
+
+CLIENT :
+{{clientName}}
+Adresse : {{clientAddress}}
+
+OBJET : {{projectName}}
+
+--------------------------------------------------------------------------------
+DÉTAIL DES PRESTATIONS OU ÉQUIPEMENTS :
+{{itemDescription}}
+
+QUANTITÉ TOTALE : {{quantity}} unités
+MONTANT TOTAL H.T. : {{totalAmount}} FCFA
+TVA (19.25%) : En sus / Applicable selon régime
+
+--------------------------------------------------------------------------------
+CONDITIONS COMMERCIALES ET MODALITÉS :
+- Validité de l'offre : {{validityDays}} jours à compter de l'émission.
+- Conditions de règlement : {{paymentTerms}}.
+- Délai de livraison : Selon disponibilité en stock ou sur planning.
+
+Arrêtée la présente facture proforma à la somme de : [{{totalAmount}}] FRANCS CFA.
+
+Pour accord et acceptation,
+La Direction Commerciale & Financière`
   }
 ];
 

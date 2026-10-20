@@ -10,12 +10,12 @@ interface StatisticsChartsSectionProps {
 type ChartMetric = 'all' | 'presences' | 'assiduite' | 'ponctualite' | 'counts';
 
 export const StatisticsChartsSection: React.FC<StatisticsChartsSectionProps> = ({
-  statsByEmployee,
+  statsByEmployee = [],
 }) => {
   const [selectedMetric, setSelectedMetric] = useState<ChartMetric>('all');
 
   const chartData = useMemo(() => {
-    const list = [...statsByEmployee];
+    const list = [...(statsByEmployee || [])];
     switch (selectedMetric) {
       case 'presences':
         list.sort((a, b) => b.presenceRate - a.presenceRate || b.presentDays - a.presentDays);

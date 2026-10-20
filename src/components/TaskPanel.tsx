@@ -10,8 +10,11 @@ import {
   TaskProjectBar, 
   TaskFilterBar,
   TaskHeaderBanner,
+  TaskRendementAnalyticsView,
+  SubtaskCreateModal,
   useTaskLogic
 } from './tasks';
+import { ConfirmDeleteModal } from './common/ConfirmDeleteModal';
 
 interface TaskPanelProps {
   tasks: Task[];
@@ -45,26 +48,35 @@ export default function TaskPanel({
 
   const getPriorityBadge = (p: TaskPriority) => {
     switch (p) {
+      case 'urgent':
+        return <span className="bg-purple-100 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Urgente ⚡</span>;
       case 'high':
-        return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Haute</span>;
+        return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Haute 🔴</span>;
       case 'medium':
-        return <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Moyenne</span>;
+        return <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Moyenne 🟡</span>;
       case 'low':
       default:
-        return <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Basse</span>;
+        return <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Basse 🟢</span>;
     }
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       
-      {/* Header Banner */}
+      {/* Header Banner avec création de tâches, jalons et sous-tâches stylées */}
       <TaskHeaderBanner
         onOpenNewProject={() => logic.setIsNewProjectModalOpen(true)}
         onOpenCreateTask={() => {
+          logic.setIsMilestoneModalDefault(false);
           logic.setCreateModalDefaultStatus('todo');
           logic.setIsCreateModalOpen(true);
         }}
+        onOpenCreateMilestone={() => {
+          logic.setIsMilestoneModalDefault(true);
+          logic.setCreateModalDefaultStatus('todo');
+          logic.setIsCreateModalOpen(true);
+        }}
+        onOpenCreateSubtask={() => logic.handleOpenCreateSubtask()}
       />
 
       {/* Project / Modules Switcher Bar */}
@@ -105,7 +117,8 @@ export default function TaskPanel({
             logic.setCreateModalDefaultStatus(status);
             logic.setIsCreateModalOpen(true);
           }}
-          onDeleteTask={logic.handleDeleteTask}
+          onOpenCreateSubtask={logic.handleOpenCreateSubtask}
+          onDeleteTask={logic.handleOpenDeleteModal}
           getPriorityBadge={getPriorityBadge}
         />
       )}
@@ -117,8 +130,18 @@ export default function TaskPanel({
           projects={logic.visibleProjects}
           onStatusChange={logic.handleStatusChange}
           onSelectTask={logic.setSelectedTaskForDetail}
-          onDeleteTask={logic.handleDeleteTask}
+          onOpenCreateSubtask={logic.handleOpenCreateSubtask}
+          onDeleteTask={logic.handleOpenDeleteModal}
           getPriorityBadge={getPriorityBadge}
+        />
+      )}
+
+      {/* Mode 3: Vue Rendement & Charge de travail (Mode Asana Pro / Business) */}
+      {logic.activeView === 'rendement' && (
+        <TaskRendementAnalyticsView
+          tasks={tasks}
+          employees={employees}
+          projects={logic.visibleProjects}
         />
       )}
 
@@ -136,7 +159,18 @@ export default function TaskPanel({
         currentUser={currentUser}
       />
 
-      {/* Modal Création Nouveau Module */}
+      {/* Modal Création Sous-tâche Haute Précision (Style Asana Pro) */}
+      <SubtaskCreateModal
+        isOpen={logic.isSubtaskModalOpen}
+        onClose={() => logic.setIsSubtaskModalOpen(false)}
+        onCreateSubtask={logic.handleCreateSubtask}
+        employees={employees}
+        parentTask={logic.taskForSubtaskModal}
+        availableTasks={tasks}
+        projects={logic.visibleProjects}
+      />
+
+      {/* Modal Création Nouveau Module / Projet */}
       <TaskProjectModal
         isOpen={logic.isNewProjectModalOpen}
         onClose={() => logic.setIsNewProjectModalOpen(false)}
@@ -152,10 +186,24 @@ export default function TaskPanel({
           projects={logic.visibleProjects}
           onClose={() => logic.setSelectedTaskForDetail(null)}
           onSaveTask={logic.handleSaveTask}
-          onDeleteTask={logic.handleDeleteTask}
+          onDeleteTask={logic.handleOpenDeleteModal}
           showToast={showToast}
         />
       )}
+
+      {/* Modal Confirmation de Suppression avec Loader & SweetAlert */}
+      <ConfirmDeleteModal
+        isOpen={logic.isDeleteModalOpen}
+        title="Supprimer la tâche"
+        message="Voulez-vous vraiment supprimer cette tâche ? Cette action est irréversible."
+        itemName={logic.taskToDelete?.title}
+        onClose={() => {
+          logic.setIsDeleteModalOpen(false);
+          setTimeout(() => logic.setTaskToDelete(null), 300);
+        }}
+        onConfirm={logic.handleDeleteTaskConfirm}
+        showToast={showToast}
+      />
     </div>
   );
 }

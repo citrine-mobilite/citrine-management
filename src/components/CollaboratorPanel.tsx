@@ -15,6 +15,8 @@ import {
   Printer, 
   ArrowLeft,
   Check,
+  Briefcase,
+  Calendar,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -39,8 +41,10 @@ import {
   EmployeeSalaryDebt, 
   NotificationLog,
   AppUser,
-  UserRole
+  UserRole,
+  CompanyModuleConfig
 } from '../types';
+import { clientMailService } from '../services/clientMailService';
 import { CollaboratorPresenceMap } from './CollaboratorPresenceMap';
 import { getEmployeeSoftColor } from '../utils/colorUtils';
 import { downloadPayslipPdf } from '../services/pdfExportService';
@@ -61,6 +65,7 @@ import { exportToExcel } from '../services/excelExportService';
 import { exportElementToPdf } from '../services/pdfExportService';
 import RhReportModal from './RhReportModal';
 import { buildMonthlyAttendanceReport, AttendanceMonthlyReport } from '../services/rhReportService';
+import { showSuccessAlert, showErrorAlert } from '../utils/sweetAlert';
 
 interface CollaboratorPanelProps {
   employees: Employee[];
@@ -76,14 +81,17 @@ interface CollaboratorPanelProps {
   showToast?: (message: string, type?: 'success' | 'error') => void;
   users?: AppUser[];
   onUpdateUsers?: (users: AppUser[]) => void;
+  moduleConfig?: CompanyModuleConfig;
 }
 
 type ViewMode = 'list' | 'detail';
-type DetailTabType = 'payslips' | 'presences' | 'map' | 'alerts' | 'tasks';
+type DetailTabType = 'payslips' | 'presences' | 'map' | 'alerts' | 'tasks' | 'missions';
 
 const STATUS_MAP = {
   en_poste: { label: 'En poste', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   en_conge: { label: 'En congés', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  en_permission: { label: 'Permission', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  en_mission: { label: 'En mission', color: 'bg-purple-50 text-purple-700 border-purple-200' },
   maladie: { label: 'Maladie', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   suspendu: { label: 'Suspendu', color: 'bg-rose-50 text-rose-700 border-rose-200' },
   parti: { label: 'Départ', color: 'bg-stone-100 text-stone-700 border-stone-300' },
@@ -112,6 +120,7 @@ export default function CollaboratorPanel({
   showToast,
   users = [],
   onUpdateUsers,
+  moduleConfig,
 }: CollaboratorPanelProps) {
   // Navigation & View States
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -133,7 +142,7 @@ export default function CollaboratorPanel({
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [statusReasonModalTarget, setStatusReasonModalTarget] = useState<{
     emp: Employee;
-    targetStatus: 'renvoye' | 'suspendu' | 'parti';
+    targetStatus: EmployeeStatus;
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -245,7 +254,7 @@ export default function CollaboratorPanel({
       hireDate: emp.hireDate || new Date().toISOString().split('T')[0],
       birthDate: emp.birthDate || '2000-01-05',
       salary: emp.salary || 200000,
-      status: (typeof emp.status === 'string' ? emp.status : 'en_poste') as any,
+      status: (emp.employmentStatus || (typeof emp.status === 'string' ? emp.status : 'en_poste')) as any,
       departureReason: emp.departureReason || '',
       suspensionReason: emp.suspensionReason || '',
       avatarUrl: emp.avatarUrl || '',
@@ -325,17 +334,19 @@ export default function CollaboratorPanel({
       onUpdateEmployees(updated);
 
       // SYNCHRONISER OBLIGATOIREMENT LE COMPTE UTILISATEUR CORRESPONDANT (EN MÉMOIRE ET EN BD)
-      const targetEmail = (formData.email || '').trim().toLowerCase();
-      const oldEmail = (editingEmployee.email || '').trim().toLowerCase();
+      const targetEmail = (formData.email || '').trim();
+      const targetEmailLower = targetEmail.toLowerCase();
+      const oldEmail = (editingEmployee.email || '').trim();
+      const oldEmailLower = oldEmail.toLowerCase();
 
       let matchedUserIndex = -1;
       if (users && users.length > 0) {
         matchedUserIndex = users.findIndex(
           (u) =>
+            (u.employeeId && String(u.employeeId) === String(editingEmployee.id)) ||
             (targetUserId && (String(u.id) === String(targetUserId) || u.uid === String(targetUserId))) ||
-            (oldEmail && u.email && u.email.toLowerCase() === oldEmail) ||
-            (targetEmail && u.email && u.email.toLowerCase() === targetEmail) ||
-            (u.employeeId && (String(u.employeeId) === String(editingEmployee.id) || u.employeeId === editingEmployee.uid))
+            (oldEmailLower && u.email && u.email.toLowerCase() === oldEmailLower) ||
+            (targetEmailLower && u.email && u.email.toLowerCase() === targetEmailLower)
         );
       }
 
@@ -361,7 +372,7 @@ export default function CollaboratorPanel({
       } else {
         // Créer l'objet utilisateur s'il n'était pas dans la liste React
         updatedUserObj = {
-          id: targetUserId || `user-${Date.now()}`,
+          id: String(targetUserId || `user-${Date.now()}`),
           name: formData.name.trim(),
           email: targetEmail || (oldEmail || `collab_${editingEmployee.id}@citrinemgmt.cm`),
           phone: formData.phone || '',
@@ -437,13 +448,14 @@ export default function CollaboratorPanel({
 
       setAuditOpsList(getAdminAuditOperations());
       if (showToast) showToast(`Fiche collaborateur et compte utilisateur synchronisés avec succès.`, 'success');
+      await showSuccessAlert('Fiche modifiée !', `La fiche de "${formData.name.trim()}" et ses accès associés ont été mis à jour avec succès.`);
       setIsModalOpen(false);
       return;
     } else {
       setIsSaving(true);
       try {
         console.log('🚀 [CollaboratorPanel] Lancement de la création transactionnelle...');
-        const userEmail = formData.email.trim() ? formData.email.trim().toLowerCase() : `collab_${Date.now()}@citrinemgmt.cm`;
+        const userEmail = formData.email.trim() ? formData.email.trim() : `collab_${Date.now()}@citrinemgmt.cm`;
         const initialPassword = formData.userPassword.trim() || 'Collab@2026';
 
         // FLUX TRANSACTIONNEL STRICT :
@@ -518,6 +530,7 @@ export default function CollaboratorPanel({
             'success'
           );
         }
+        await showSuccessAlert('Collaborateur créé !', `Le collaborateur "${formData.name.trim()}" et son compte d'accès ont été créés avec succès.`);
 
         setIsModalOpen(false);
       } catch (err: any) {
@@ -528,6 +541,7 @@ export default function CollaboratorPanel({
             'error'
           );
         }
+        await showErrorAlert('Échec de la création', err?.message || 'Erreur lors de la création du collaborateur.');
       } finally {
         setIsSaving(false);
       }
@@ -538,7 +552,7 @@ export default function CollaboratorPanel({
     const emp = employees.find((e) => e.id === empId);
     if (!emp) return;
 
-    if (newStatus === 'renvoye' || newStatus === 'suspendu' || newStatus === 'parti') {
+    if (newStatus !== 'en_poste') {
       setStatusReasonModalTarget({ emp, targetStatus: newStatus });
       return;
     }
@@ -575,17 +589,38 @@ export default function CollaboratorPanel({
     if (showToast) showToast('Statut du collaborateur et compte utilisateur mis à jour.', 'success');
   };
 
-  const handleConfirmStatusReason = (empId: string, status: Employee['status'], reason: string) => {
+  const handleConfirmStatusReason = (empId: string, status: Employee['status'], reason: string, startDate: string, endDate: string) => {
     let targetUpdatedEmp: Employee | null = null;
     const updated = employees.map((emp) => {
       if (emp.id !== empId) return emp;
-      const copy: Employee = { ...emp, status, employmentStatus: status as any };
+      const copy: Employee = {
+        ...emp,
+        status,
+        employmentStatus: status as any,
+        statusReason: reason,
+        statusStartDate: startDate,
+        statusEndDate: endDate,
+      };
       if (status === 'renvoye' || status === 'parti') {
         copy.departureReason = reason;
-        copy.departureDate = new Date().toISOString().split('T')[0];
+        copy.departureDate = startDate || new Date().toISOString().split('T')[0];
       } else if (status === 'suspendu') {
         copy.suspensionReason = reason;
-        copy.suspensionDate = new Date().toISOString().split('T')[0];
+        copy.suspensionDate = startDate || new Date().toISOString().split('T')[0];
+      } else if (status === 'en_mission') {
+        const startD = new Date(startDate || Date.now());
+        const endD = new Date(endDate || Date.now());
+        const diffTime = Math.abs(endD.getTime() - startD.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+        const newMissionItem = {
+          id: `mission-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          reason,
+          startDate: startDate || new Date().toISOString().split('T')[0],
+          endDate: endDate || new Date().toISOString().split('T')[0],
+          durationDays: diffDays,
+          createdAt: new Date().toISOString(),
+        };
+        copy.missionHistory = [newMissionItem, ...(emp.missionHistory || [])];
       }
       targetUpdatedEmp = copy;
       return copy;
@@ -633,6 +668,25 @@ export default function CollaboratorPanel({
       }).catch(() => {});
     }
 
+    // ✉️ Envoi de l'email automatique groupé dans le fil unique du collaborateur
+    if (status === 'en_mission' && target) {
+      const startD = new Date(startDate || Date.now());
+      const endD = new Date(endDate || Date.now());
+      const diffTime = Math.abs(endD.getTime() - startD.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
+      clientMailService.notifyMissionAssigned({
+        employeeName: target.name,
+        employeeEmail: target.email,
+        employeeId: target.id,
+        destinationOrReason: reason,
+        startDate: startDate || new Date().toISOString().split('T')[0],
+        endDate: endDate || new Date().toISOString().split('T')[0],
+        durationDays: diffDays,
+        moduleConfig,
+      }).catch((err) => console.warn('[CollaboratorPanel] Notice envoi email mission:', err));
+    }
+
     if (showToast) showToast(`Statut et compte utilisateur mis à jour avec le motif : "${reason}"`, 'success');
   };
 
@@ -646,7 +700,7 @@ export default function CollaboratorPanel({
       (e.phone && e.phone.includes(searchTerm));
     
     const matchesRole = roleFilter === 'all' || e.roleType === roleFilter;
-    const matchesStatus = statusFilter === 'all' || e.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || getEmployeeStatusKey(e) === statusFilter;
 
     return matchesSearch && matchesRole && matchesStatus;
   });
@@ -864,6 +918,15 @@ export default function CollaboratorPanel({
               <CheckSquare className="h-3.5 w-3.5" />
               Tâches Non Terminées ({empTasks.length})
             </button>
+            <button
+              onClick={() => setActiveDetailTab('missions')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                activeDetailTab === 'missions' ? 'bg-[#2A7B76] text-white shadow-sm' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
+              }`}
+            >
+              <Briefcase className="h-3.5 w-3.5" />
+              Missions Professionnelles ({(emp.missionHistory || []).length})
+            </button>
           </div>
 
           {/* Subtab Content Panels */}
@@ -1021,6 +1084,51 @@ export default function CollaboratorPanel({
                 </div>
               </div>
             )}
+
+            {activeDetailTab === 'missions' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+                  <h4 className="font-serif font-bold text-xs text-stone-900">Registre des Missions Professionnelles</h4>
+                  <span className="text-[10px] bg-purple-50 text-purple-700 font-bold px-2.5 py-1 rounded-xl border border-purple-200">
+                    Total : {(emp.missionHistory || []).length} mission(s) enregistrée(s)
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {(!emp.missionHistory || emp.missionHistory.length === 0) ? (
+                    <div className="p-8 text-center bg-stone-50 rounded-2xl border border-stone-100">
+                      <Briefcase className="h-8 w-8 text-stone-300 mx-auto mb-2" />
+                      <p className="text-xs text-stone-500 font-medium">Aucune mission professionnelle enregistrée pour ce collaborateur.</p>
+                      <p className="text-[11px] text-stone-400 mt-1">Changez le statut du collaborateur en "En mission" pour enregistrer ses affectations et durées.</p>
+                    </div>
+                  ) : (
+                    emp.missionHistory.map((m) => (
+                      <div key={m.id} className="p-4 bg-gradient-to-r from-purple-50/40 via-white to-stone-50/50 rounded-2xl border border-purple-100/80 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-lg text-[10px] font-bold">
+                              Mission Professionnelle
+                            </span>
+                            <span className="text-[11px] text-stone-400">Enregistrée le {m.createdAt?.split('T')[0] || 'Aujourd\'hui'}</span>
+                          </div>
+                          <p className="text-xs font-bold text-stone-900">{m.reason}</p>
+                          <div className="flex items-center gap-3 text-[11px] text-stone-600 font-medium">
+                            <span className="flex items-center gap-1 font-mono">
+                              <Calendar className="h-3 w-3 text-[#2A7B76]" />
+                              Du {m.startDate} au {m.endDate}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="bg-purple-600 text-white px-3.5 py-2 rounded-xl text-center shadow-xs shrink-0">
+                          <span className="text-[9px] uppercase font-bold block text-purple-200">Durée Total</span>
+                          <span className="text-sm font-bold font-mono">{m.durationDays} jour(s)</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1134,6 +1242,8 @@ export default function CollaboratorPanel({
             <option value="all">Tous les statuts</option>
             <option value="en_poste">En poste</option>
             <option value="en_conge">En congés</option>
+            <option value="en_permission">Permission</option>
+            <option value="en_mission">En mission</option>
             <option value="maladie">Maladie</option>
             <option value="suspendu">Suspendu</option>
             <option value="parti">Départ</option>
@@ -1224,6 +1334,8 @@ export default function CollaboratorPanel({
                         >
                           <option value="en_poste">En poste</option>
                           <option value="en_conge">En congés</option>
+                          <option value="en_permission">Permission</option>
+                          <option value="en_mission">En mission</option>
                           <option value="maladie">Maladie</option>
                           <option value="suspendu">Suspendu</option>
                           <option value="parti">Départ</option>
@@ -1421,6 +1533,8 @@ export default function CollaboratorPanel({
                   >
                     <option value="en_poste">En poste (Actif)</option>
                     <option value="en_conge">En congés</option>
+                    <option value="en_permission">Permission</option>
+                    <option value="en_mission">En mission</option>
                     <option value="maladie">Maladie</option>
                     <option value="suspendu">Suspendu</option>
                     <option value="parti">Départ</option>

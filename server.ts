@@ -11,6 +11,7 @@ import {
   executeCollaboratorCreationTransaction,
   executeAtomicClockingTransaction
 } from "./src/db/repository.ts";
+import { sendThreadedEmployeeEmail } from "./src/services/serverMailService.ts";
 
 async function startServer() {
   const app = express();
@@ -177,6 +178,64 @@ async function startServer() {
     } catch (error: any) {
       console.error("[API Atomic Clocking Error]:", error);
       res.status(500).json({ success: false, error: error.message || "Échec du pointage atomique." });
+    }
+  });
+
+  // ✉️ API Envoi d'Email Threadé par Collaborateur (Point 1 & Point 2)
+  app.post("/api/mail/send-threaded", async (req: express.Request, res: express.Response) => {
+    try {
+      const { employeeName, employeeId, employeeEmail, eventTitle, htmlContent, recipientEmails, smtpConfig } = req.body;
+      if (!employeeName || !eventTitle || !htmlContent) {
+        return res.status(400).json({
+          success: false,
+          error: "Paramètres obligatoires manquants: employeeName, eventTitle, htmlContent",
+        });
+      }
+
+      const result = await sendThreadedEmployeeEmail(
+        {
+          employeeName,
+          employeeId,
+          employeeEmail,
+          eventTitle,
+          htmlContent,
+          recipientEmails,
+        },
+        smtpConfig || {}
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[API Mail Send Threaded Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Échec d'envoi du mail threadé." });
+    }
+  });
+
+  // Test de connexion SMTP directe
+  app.post("/api/mail/test-connection", async (req: express.Request, res: express.Response) => {
+    try {
+      const { smtpConfig, testRecipient } = req.body;
+      const targetEmail = testRecipient || smtpConfig?.user || process.env.SMTP_USER || "direction@citrine-mobilite.com";
+      
+      const result = await sendThreadedEmployeeEmail(
+        {
+          employeeName: "Test Système",
+          employeeId: "test-001",
+          employeeEmail: targetEmail,
+          eventTitle: "Vérification Connexion SMTP Citrine RH",
+          htmlContent: `
+            <p>Bonjour,</p>
+            <p>Ce message confirme que la connexion SMTP de votre serveur <strong>Citrine SARL</strong> est parfaitement opérationnelle.</p>
+            <p>Toutes les futures notifications RH concernant ce fil seront regroupées automatiquement sous cette même conversation.</p>
+          `,
+        },
+        smtpConfig || {}
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[API Mail Test Connection Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Échec du test de connexion SMTP." });
     }
   });
 

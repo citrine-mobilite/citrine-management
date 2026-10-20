@@ -14,10 +14,12 @@ import { CompanyModuleConfig, DEFAULT_MODULE_CONFIG, Employee, Presence, Notific
 import { CompanyIdentitySettings } from './settings/CompanyIdentitySettings';
 import { CompanyScheduleSettings } from './settings/CompanyScheduleSettings';
 import { CompanyModulesToggle } from './settings/CompanyModulesToggle';
+import { CompanyEmailSettings } from './settings/CompanyEmailSettings';
 import { DisciplinaryMotifsManagementSection } from './settings/DisciplinaryMotifsManagementSection';
 import { SecuritySettingsSection } from './settings/SecuritySettingsSection';
 import { DatabaseRebuildSection } from './settings/DatabaseRebuildSection';
 import ErrorBoundary from './ErrorBoundary';
+import { Mail } from 'lucide-react';
 
 interface CompanySettingsPanelProps {
   moduleConfig: CompanyModuleConfig;
@@ -31,7 +33,7 @@ interface CompanySettingsPanelProps {
   initialTab?: SettingsTabId;
 }
 
-export type SettingsTabId = 'identity' | 'schedules' | 'modules' | 'discipline' | 'security' | 'database';
+export type SettingsTabId = 'identity' | 'schedules' | 'modules' | 'email' | 'discipline' | 'security' | 'database';
 
 interface TabItem {
   id: SettingsTabId;
@@ -66,6 +68,14 @@ const SETTINGS_TABS: TabItem[] = [
     description: 'Activation sélective des modules',
     icon: Layers,
     badge: 'Architecture',
+  },
+  {
+    id: 'email',
+    label: 'E-mails & SMTP',
+    shortLabel: 'E-mails',
+    description: 'Fils de discussion & serveur d\'envoi',
+    icon: Mail,
+    badge: 'Fils RH',
   },
   {
     id: 'discipline',
@@ -196,6 +206,14 @@ export default function CompanySettingsPanel({
 
           {activeTab === 'modules' && (
             <CompanyModulesToggle
+              moduleConfig={safeConfig}
+              onUpdateModuleConfig={handleUpdate}
+              showToast={showToast}
+            />
+          )}
+
+          {activeTab === 'email' && (
+            <CompanyEmailSettings
               moduleConfig={safeConfig}
               onUpdateModuleConfig={handleUpdate}
               showToast={showToast}

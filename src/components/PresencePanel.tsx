@@ -76,7 +76,12 @@ export default function PresencePanel({
 
   // Les administrateurs et responsables ne badgent pas : on les exclut du pointage du jour
   const clockableEmployees = useMemo(() => {
-    return employees.filter((e) => isEmployeeOnlyRole(e.role || e.roleType || e.position));
+    return employees.filter((e) => {
+      const isRoleOk = isEmployeeOnlyRole(e.role || e.roleType || e.position);
+      const st = e.employmentStatus || (typeof e.status === 'string' ? e.status : (e.status ? 'en_poste' : 'parti'));
+      const isInPoste = st === 'en_poste' || st === ('true' as any);
+      return isRoleOk && isInPoste;
+    });
   }, [employees]);
 
   // Selected date and employee for the left sidebar clocking widget
@@ -101,6 +106,10 @@ export default function PresencePanel({
   const [isOfficeQrModalOpen, setIsOfficeQrModalOpen] = useState(false);
   const [activePresenceTab, setActivePresenceTab] = useState<'presences' | 'requests' | 'incidents'>('presences');
   const [mapLayer, setMapLayer] = useState<MapLayerType>('standard');
+  const [mapPeriod, setMapPeriod] = useState<'day' | 'week' | 'month' | 'all' | 'custom'>('day');
+  const [mapCustomFilter, setMapCustomFilter] = useState('');
+  const [mapStartDate, setMapStartDate] = useState(todayStr);
+  const [mapEndDate, setMapEndDate] = useState(todayStr);
 
   const pendingRequestsCount = useMemo(() => {
     return extractPresenceRequests(presences, clockableEmployees).filter((r) => r.status === 'pending').length;
@@ -339,13 +348,34 @@ export default function PresencePanel({
 
   const clockableEmployeeIds = useMemo(() => new Set(clockableEmployees.map((e) => String(e.id))), [clockableEmployees]);
 
-  // Filter list rows based on collaborator select and date/period select (strictly restricted to today)
-  const filteredPresences = presences.filter((p) => {
-    if (!clockableEmployeeIds.has(String(p.employeeId))) return false;
-    const matchesEmp = collaboratorFilter === 'all' || p.employeeId === collaboratorFilter;
-    const matchesPeriod = p.date === todayStr;
-    return matchesEmp && matchesPeriod;
-  });
+  // Filter list rows based on collaborator select and date/period select, ensuring en_poste employees who haven't badged are declared as absent
+  const filteredPresences = useMemo(() => {
+    const targetDate = selectedDate || todayStr;
+    const list: Presence[] = [];
+
+    clockableEmployees.forEach((emp) => {
+      if (collaboratorFilter !== 'all' && emp.id !== collaboratorFilter) return;
+
+      const existing = presences.find((p) => String(p.employeeId) === String(emp.id) && p.date === targetDate);
+      if (existing && (existing.arrivalTime || existing.status === 'present' || existing.status === 'late')) {
+        list.push(existing);
+      } else {
+        list.push({
+          id: existing?.id || `absent-${emp.id}-${targetDate}`,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          date: targetDate,
+          status: 'absent',
+          arrivalTime: null,
+          pauseStart: null,
+          pauseEnd: null,
+          departureTime: null,
+          location: 'Non pointé (Absent)',
+        });
+      }
+    });
+    return list;
+  }, [clockableEmployees, presences, selectedDate, todayStr, collaboratorFilter]);
 
   // Paginated presence rows
   const totalItems = filteredPresences.length;
@@ -972,25 +1002,99 @@ export default function PresencePanel({
               </div>
             </div>
 
-            {/* Contrôles intégrés dans l'en-tête : Nombre de badges et sélecteur de tuiles */}
+            {/* Contrôles intégrés dans l'en-tête : Sélecteur de période, Nombre de badges et sélecteur de tuiles */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-xl border border-emerald-200 flex items-center gap-1.5">
+              <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200">
+                {(['day', 'week', 'month', 'all', 'custom'] as const).map((p) => {
+                  const labels = { day: 'Jour', week: 'Semaine', month: 'Mois', all: 'Tous', custom: 'Personnalisé' };
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setMapPeriod(p)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                        mapPeriod === p
+                          ? 'bg-[#2A7B76] text-white shadow-xs'
+                          : 'text-stone-600 hover:text-stone-900 hover:bg-white'
+                      }`}
+                    >
+                      {labels[p]}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                {filteredPresences.filter(x => x.arrivalTime).length} badges
+                {mapPeriod === 'day' ? `${filteredPresences.filter(x => x.arrivalTime).length} badges du jour` : mapPeriod === 'custom' ? `Du ${mapStartDate} au ${mapEndDate}` : `Période (${mapPeriod})`}
               </span>
               <MapLayerControls currentLayer={mapLayer} onSelectLayer={setMapLayer} />
             </div>
           </div>
 
+          {/* Filtre personnalisé par date (Début / Fin) si Période Personnalisée est active */}
+          {mapPeriod === 'custom' && (
+            <div className="flex flex-wrap items-center gap-3 bg-emerald-50/70 px-4 py-2.5 rounded-2xl border border-emerald-200 animate-in fade-in duration-200">
+              <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wide flex items-center gap-1.5">
+                <span>📅</span> Intervalle personnalisé :
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-stone-600 font-bold">Date de début :</span>
+                <input
+                  type="date"
+                  value={mapStartDate}
+                  onChange={(e) => setMapStartDate(e.target.value)}
+                  className="bg-white px-3 py-1 rounded-xl text-xs font-bold border border-stone-200 text-stone-800 outline-none focus:ring-1 focus:ring-[#2A7B76]"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-stone-600 font-bold">Date de fin :</span>
+                <input
+                  type="date"
+                  value={mapEndDate}
+                  onChange={(e) => setMapEndDate(e.target.value)}
+                  className="bg-white px-3 py-1 rounded-xl text-xs font-bold border border-stone-200 text-stone-800 outline-none focus:ring-1 focus:ring-[#2A7B76]"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Filtre texte personnalisé pour la carte */}
+          <div className="flex items-center gap-3 bg-stone-50 px-4 py-2.5 rounded-2xl border border-stone-200">
+            <span className="text-[10px] font-bold text-stone-600 uppercase tracking-wide whitespace-nowrap flex items-center gap-1.5">
+              <span>🔍</span> Recherche :
+            </span>
+            <input
+              type="text"
+              value={mapCustomFilter}
+              onChange={(e) => setMapCustomFilter(e.target.value)}
+              placeholder="Filtrer par nom de collaborateur, lieu, heure ou type..."
+              className="w-full bg-white px-3 py-1.5 rounded-xl text-xs font-semibold border border-stone-200 outline-none focus:ring-1 focus:ring-[#2A7B76] text-stone-800"
+            />
+            {mapCustomFilter && (
+              <button
+                type="button"
+                onClick={() => setMapCustomFilter('')}
+                className="text-[10px] text-stone-400 hover:text-stone-700 px-2 font-bold whitespace-nowrap cursor-pointer"
+              >
+                Effacer
+              </button>
+            )}
+          </div>
+
           {/* Conteneur de carte fixe dans le card, isolé du contexte global */}
           <div className="w-full h-[360px] rounded-2xl overflow-hidden border border-stone-200 bg-stone-100 relative isolate z-0">
             <PointageMap
-              presences={filteredPresences}
+              presences={presences}
               employees={employees}
               selectedDate={selectedDate}
               currentLayer={mapLayer}
               onLayerChange={setMapLayer}
               showInternalControls={false}
+              mapPeriod={mapPeriod}
+              customFilterQuery={mapCustomFilter}
+              customStartDate={mapStartDate}
+              customEndDate={mapEndDate}
               className="w-full h-full border-0 shadow-none min-h-[360px]"
             />
           </div>

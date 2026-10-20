@@ -1,13 +1,13 @@
 import React from 'react';
-import { LayoutGrid, ListOrdered, FolderPlus } from 'lucide-react';
+import { LayoutGrid, ListOrdered, FolderPlus, Trophy } from 'lucide-react';
 import { TaskProject, Task } from '../../types';
 
 interface TaskProjectBarProps {
   projects: TaskProject[];
   activeProjectId: string;
   onSelectProject: (id: string) => void;
-  activeView: 'kanban' | 'table';
-  onChangeView: (view: 'kanban' | 'table') => void;
+  activeView: 'kanban' | 'table' | 'rendement';
+  onChangeView: (view: 'kanban' | 'table' | 'rendement') => void;
   tasks: Task[];
   onOpenNewProject: () => void;
 }
@@ -88,6 +88,18 @@ export const TaskProjectBar: React.FC<TaskProjectBarProps> = ({
           >
             <ListOrdered className="h-3.5 w-3.5" />
             <span>Tableau / Liste</span>
+          </button>
+          <button
+            onClick={() => onChangeView('rendement')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              activeView === 'rendement'
+                ? 'bg-white text-[#2A7B76] shadow-2xs'
+                : 'text-stone-500 hover:text-stone-800'
+            }`}
+            title="Vue analytique du rendement et de la charge de travail (style Asana)"
+          >
+            <Trophy className="h-3.5 w-3.5 text-amber-600" />
+            <span>Rendement & Charge</span>
           </button>
         </div>
 

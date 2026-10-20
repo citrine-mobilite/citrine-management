@@ -4,6 +4,7 @@ import { BadgeSecurityCode16, AppUser } from '../types';
 import { badgeCodeService } from '../services/badgeCodeService';
 import { BadgeCodeGeneratorForm } from './presence/badge/BadgeCodeGeneratorForm';
 import { BadgeCodeItemCard } from './presence/badge/BadgeCodeItemCard';
+import { showSuccessAlert, showErrorAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface Badge16CodeManagerProps {
   currentUser?: AppUser | null;
@@ -37,8 +38,10 @@ export default function Badge16CodeManager({ currentUser, showToast }: Badge16Co
       setNewlyCreatedCode(created);
       setNotesInput('');
       showToast?.(`Code généré avec succès: ${created.formattedCode}`, 'success');
-    } catch {
+      await showSuccessAlert('Code généré !', `Nouveau code 16 caractères généré : ${created.formattedCode}`);
+    } catch (err: any) {
       showToast?.('Erreur lors de la génération du code', 'error');
+      await showErrorAlert('Erreur', err?.message || 'Erreur lors de la génération du code.');
     } finally {
       setIsGenerating(false);
     }
@@ -51,12 +54,15 @@ export default function Badge16CodeManager({ currentUser, showToast }: Badge16Co
   };
 
   const handleDelete = async (id: string) => {
-    try {
-      await badgeCodeService.deleteCode(id);
-      showToast?.('Code supprimé avec succès', 'info');
-    } catch {
-      showToast?.('Erreur lors de la suppression', 'error');
-    }
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer ce code de badge ?',
+      text: 'Voulez-vous vraiment supprimer ce code de badge 16 caractères ?',
+      action: async () => {
+        await badgeCodeService.deleteCode(id);
+      },
+      successTitle: 'Code supprimé !',
+      successMessage: 'Le code de badge a été supprimé de la base.',
+    });
   };
 
   const filteredCodes = codes.filter((c) => {

@@ -1,4 +1,5 @@
 import { soundService } from './soundService';
+import { pushNotificationService } from './pushNotificationService';
 
 export interface PushNotificationPayload {
   id?: string;
@@ -61,6 +62,37 @@ class PushNotificationBridgeService {
       try {
         navigator.vibrate([120, 60, 120]);
       } catch {}
+    }
+
+    // Déclenchement automatique de la notification push native du navigateur / OS
+    if (typeof window !== 'undefined') {
+      try {
+        if ('Notification' in window) {
+          if (Notification.permission === 'granted') {
+            pushNotificationService.sendNotification(fullPayload.title, {
+              body: fullPayload.message,
+              tag: fullPayload.id || `citrine-${Date.now()}`,
+              icon: '/pwa-192x192.png',
+              badge: '/pwa-192x192.png',
+              data: { link: fullPayload.link },
+            }).catch(() => {});
+          } else if (Notification.permission === 'default') {
+            Notification.requestPermission().then((perm) => {
+              if (perm === 'granted') {
+                pushNotificationService.sendNotification(fullPayload.title, {
+                  body: fullPayload.message,
+                  tag: fullPayload.id || `citrine-${Date.now()}`,
+                  icon: '/pwa-192x192.png',
+                  badge: '/pwa-192x192.png',
+                  data: { link: fullPayload.link },
+                }).catch(() => {});
+              }
+            }).catch(() => {});
+          }
+        }
+      } catch (nativeErr) {
+        console.warn('Native notification dispatch notice:', nativeErr);
+      }
     }
 
     this.listeners.forEach((listener) => {

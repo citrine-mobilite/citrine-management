@@ -146,9 +146,10 @@ export const EmployeeAttendanceReportBar: React.FC<EmployeeAttendanceReportBarPr
         onClick={() => handleGeneratePortalReport(currentMonthValue)}
         disabled={isGeneratingReport}
         className="w-full md:w-auto bg-[#2A7B76] hover:bg-[#20635F] active:scale-[0.98] disabled:opacity-50 text-white font-bold px-4 py-2 rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer ml-auto"
+        title="Télécharger la fiche mensuelle de présence au format PDF"
       >
         <FileText className="h-4 w-4" />
-        <span>{isGeneratingReport ? 'Génération du rapport...' : 'Télécharger Fiche Mensuelle Certifiée (PDF)'}</span>
+        <span>{isGeneratingReport ? 'Génération du rapport...' : 'Télécharger Fiche Mensuelle (PDF)'}</span>
       </button>
     </div>
   );

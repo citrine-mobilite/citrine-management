@@ -32,8 +32,20 @@ export interface Subtask {
   id: string;
   title: string;
   completed: boolean;
+  description?: string;
+  assignedTo?: string;
+  employeeId?: string;
+  priority?: TaskPriority;
+  status?: TaskStatus;
+  dueDate?: string;
+  time?: string;
+  estimatedHours?: number;
+  actualHours?: number;
+  tags?: string[];
+  acceptanceCriteria?: string[];
   comments?: Comment[];
   subtasks?: Subtask[];
+  createdAt?: string;
 }
 
 export interface TaskProject {

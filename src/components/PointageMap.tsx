@@ -15,6 +15,10 @@ interface PointageMapProps {
   currentLayer?: MapLayerType;
   onLayerChange?: (layer: MapLayerType) => void;
   showInternalControls?: boolean;
+  mapPeriod?: 'day' | 'week' | 'month' | 'all' | 'custom';
+  customFilterQuery?: string;
+  customStartDate?: string;
+  customEndDate?: string;
 }
 
 const TILE_URLS: Record<MapLayerType, string> = {
@@ -33,6 +37,10 @@ export const PointageMap: React.FC<PointageMapProps> = ({
   currentLayer: controlledLayer,
   onLayerChange,
   showInternalControls = false,
+  mapPeriod = 'day',
+  customFilterQuery = '',
+  customStartDate,
+  customEndDate,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -49,7 +57,7 @@ export const PointageMap: React.FC<PointageMapProps> = ({
     }
   };
 
-  const markers = React.useMemo(() => extractPointageMarkers(presences, employees, selectedDate, selectedEmployeeId), [presences, employees, selectedDate, selectedEmployeeId]);
+  const markers = React.useMemo(() => extractPointageMarkers(presences, employees, selectedDate, selectedEmployeeId, (mapPeriod as any) || 'day', customFilterQuery, customStartDate, customEndDate), [presences, employees, selectedDate, selectedEmployeeId, mapPeriod, customFilterQuery, customStartDate, customEndDate]);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;

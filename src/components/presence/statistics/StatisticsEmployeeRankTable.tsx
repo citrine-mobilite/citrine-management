@@ -14,13 +14,13 @@ interface StatisticsEmployeeRankTableProps {
 }
 
 export const StatisticsEmployeeRankTable: React.FC<StatisticsEmployeeRankTableProps> = ({
-  stats,
+  stats = [],
   onSelectEmployee,
 }) => {
   const [activeSortTab, setActiveSortTab] = useState<RankingSortTab>('all');
 
   const sortedStats = useMemo(() => {
-    const list = [...stats];
+    const list = [...(stats || [])];
     switch (activeSortTab) {
       case 'presences':
         return list.sort((a, b) => b.presenceRate - a.presenceRate || b.presentDays - a.presentDays);

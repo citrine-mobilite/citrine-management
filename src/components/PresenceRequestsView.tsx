@@ -31,6 +31,7 @@ export default function PresenceRequestsView({
   const [decisionModalItem, setDecisionModalItem] = useState<RequestItem | null>(null);
   const [decisionAction, setDecisionAction] = useState<'approved' | 'rejected' | null>(null);
   const [decisionComment, setDecisionComment] = useState('');
+  const [isProcessingDecision, setIsProcessingDecision] = useState(false);
 
   const allRequests = useMemo(() => extractPresenceRequests(presences, employees), [presences, employees]);
 
@@ -55,60 +56,64 @@ export default function PresenceRequestsView({
     setDecisionComment('');
   };
 
-  const handleConfirmDecision = () => {
+  const handleConfirmDecision = async () => {
     if (!decisionModalItem || !decisionAction) return;
 
-    const updatedPresences = [...presences];
-    const pIdx = updatedPresences.findIndex((p) => p.id === decisionModalItem.presenceId);
+    setIsProcessingDecision(true);
+    try {
+      const updatedPresences = [...presences];
+      const pIdx = updatedPresences.findIndex((p) => p.id === decisionModalItem.presenceId);
 
-    if (pIdx >= 0) {
-      const presence = { ...updatedPresences[pIdx] };
+      if (pIdx >= 0) {
+        const presence = { ...updatedPresences[pIdx] };
 
-      if (decisionModalItem.type === 'emergency' && presence.emergencies) {
-        presence.emergencies = presence.emergencies.map((emg) =>
-          emg.id === decisionModalItem.rawEmergency?.id
-            ? { ...emg, status: decisionAction }
-            : emg
-        );
-
-        // Mettre à jour le signalement officiel dans attendanceIncidents
-        if (attendanceIncidents && attendanceIncidents.length > 0) {
-          const matchingIdx = attendanceIncidents.findIndex(
-            (inc) =>
-              inc.employeeId === decisionModalItem.employeeId &&
-              inc.date === decisionModalItem.date &&
-              (inc.type === decisionModalItem.subType || inc.reason === decisionModalItem.reason)
+        if (decisionModalItem.type === 'emergency' && presence.emergencies) {
+          presence.emergencies = presence.emergencies.map((emg) =>
+            emg.id === decisionModalItem.rawEmergency?.id
+              ? { ...emg, status: decisionAction }
+              : emg
           );
 
-          if (matchingIdx >= 0) {
-            const updatedInc: AttendanceIncident = {
-              ...attendanceIncidents[matchingIdx],
-              status: decisionAction === 'approved' ? 'justifie' : 'injustifie',
-              isJustified: decisionAction === 'approved',
-              adminComment: decisionComment.trim() || (decisionAction === 'approved' ? 'Validé par la direction.' : 'Signalement rejeté par la direction.'),
-            };
-            incidentService.saveIncident(updatedInc);
-            onUpdateAttendanceIncidents?.(
-              attendanceIncidents.map((item, idx) => (idx === matchingIdx ? updatedInc : item))
+          // Mettre à jour le signalement officiel dans attendanceIncidents
+          if (attendanceIncidents && attendanceIncidents.length > 0) {
+            const matchingIdx = attendanceIncidents.findIndex(
+              (inc) =>
+                inc.employeeId === decisionModalItem.employeeId &&
+                inc.date === decisionModalItem.date &&
+                (inc.type === decisionModalItem.subType || inc.reason === decisionModalItem.reason)
             );
+
+            if (matchingIdx >= 0) {
+              const updatedInc: AttendanceIncident = {
+                ...attendanceIncidents[matchingIdx],
+                status: decisionAction === 'approved' ? 'justifie' : 'injustifie',
+                isJustified: decisionAction === 'approved',
+                adminComment: decisionComment.trim() || (decisionAction === 'approved' ? 'Validé par la direction.' : 'Signalement rejeté par la direction.'),
+              };
+              await incidentService.saveIncident(updatedInc);
+              onUpdateAttendanceIncidents?.(
+                attendanceIncidents.map((item, idx) => (idx === matchingIdx ? updatedInc : item))
+              );
+            }
           }
+        } else if (decisionModalItem.type === 'correction') {
+          presence.correctionReasonStatus = decisionAction;
+        } else if (decisionModalItem.type === 'departure') {
+          presence.departureReasonStatus = decisionAction;
         }
-      } else if (decisionModalItem.type === 'correction') {
-        presence.correctionReasonStatus = decisionAction;
-      } else if (decisionModalItem.type === 'departure') {
-        presence.departureReasonStatus = decisionAction;
+
+        updatedPresences[pIdx] = presence;
+        onUpdatePresences(updatedPresences);
+        showToast?.(
+          decisionAction === 'approved' ? 'Demande validée avec succès' : 'Demande rejetée avec mise à jour du statut',
+          decisionAction === 'approved' ? 'success' : 'info'
+        );
       }
-
-      updatedPresences[pIdx] = presence;
-      onUpdatePresences(updatedPresences);
-      showToast?.(
-        decisionAction === 'approved' ? 'Demande validée avec succès' : 'Demande rejetée avec mise à jour du statut',
-        decisionAction === 'approved' ? 'success' : 'info'
-      );
+    } finally {
+      setIsProcessingDecision(false);
+      setDecisionModalItem(null);
+      setDecisionAction(null);
     }
-
-    setDecisionModalItem(null);
-    setDecisionAction(null);
   };
 
   return (
@@ -193,6 +198,7 @@ export default function PresenceRequestsView({
           setDecisionAction(null);
         }}
         onConfirm={handleConfirmDecision}
+        isProcessing={isProcessingDecision}
       />
     </div>
   );

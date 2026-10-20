@@ -80,6 +80,17 @@ export async function getCollectionData(collectionName: string): Promise<any[]> 
           _dbId: row.id,
         };
       }
+      if (table === 'company_settings') {
+        return {
+          ...raw,
+          id: row.doc_id || raw.id || 'main_config',
+          docId: row.doc_id || raw.docId || 'main_config',
+          companyName: raw.companyName || (row.setting_value && typeof row.setting_value === 'object' && row.setting_value.companyName) || 'Citrine SARL',
+          workStartTime: raw.workStartTime || '08:00',
+          plannedDepartureTime: raw.plannedDepartureTime || '16:30',
+          _dbId: row.id,
+        };
+      }
       return {
         ...raw,
         ...row,
@@ -285,7 +296,7 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
       rowData.type = item.type || item.documentType || 'general';
     } else if (table === 'users') {
       rowData.name = item.name || item.email || 'Utilisateur';
-      if (item.email) rowData.email = String(item.email).trim().toLowerCase();
+      if (item.email) rowData.email = String(item.email).trim();
       rowData.phone = item.phone || null;
       rowData.department = item.department || 'Direction Générale';
       rowData.avatar_url = item.avatarUrl || item.photoUrl || null;
@@ -295,7 +306,7 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
       rowData.name = item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || 'Collaborateur';
       rowData.first_name = item.firstName || null;
       rowData.last_name = item.lastName || null;
-      if (item.email) rowData.email = String(item.email).trim().toLowerCase();
+      if (item.email) rowData.email = String(item.email).trim();
       rowData.phone = item.phone || null;
       rowData.department = item.department || 'Direction Générale';
       rowData.position = item.position || item.role || item.roleType || null;
@@ -323,18 +334,61 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
         const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
         if (resolvedId) rowData.employee_id = resolvedId;
       }
+    } else if (table === 'rh_document_templates') {
+      rowData.name = String(item.name || item.title || 'Modèle RH').trim() || 'Modèle RH';
+      rowData.code = String(item.code || docId || `code_${Date.now()}`).trim();
+      rowData.type = String(item.type || item.documentType || 'general').trim();
+      rowData.content_template = String(item.contentTemplate || item.content || item.template || 'Contenu du modèle').trim();
+    } else if (table === 'company_settings') {
+      rowData.setting_key = 'main_config';
     }
 
-    const { error: saveErr } = await supabaseAdmin.from(table).upsert(rowData, { onConflict: 'doc_id' });
-    if (saveErr) {
-      console.warn(`Database upsert error for table ${table}, trying fallback:`, saveErr.message);
-      const { data: existingRows } = await supabaseAdmin.from(table).select('id').eq('doc_id', docId).limit(1);
-      if (existingRows && existingRows.length > 0) {
-        const { error: updateErr } = await supabaseAdmin.from(table).update(rowData).eq('doc_id', docId);
-        if (updateErr) throw updateErr;
-      } else {
-        const { error: insertErr } = await supabaseAdmin.from(table).insert(rowData);
-        if (insertErr) throw insertErr;
+    // For employees and users, find existing row by doc_id, id, or email before inserting/upserting
+    let matchedId: number | null = null;
+    if (table === 'employees' || table === 'users') {
+      if (docId) {
+        const { data: byDoc } = await supabaseAdmin.from(table).select('id').eq('doc_id', docId).maybeSingle();
+        if (byDoc?.id) matchedId = byDoc.id;
+      }
+      if (!matchedId && rowData.id && typeof rowData.id === 'number') {
+        const { data: byNumId } = await supabaseAdmin.from(table).select('id').eq('id', rowData.id).maybeSingle();
+        if (byNumId?.id) matchedId = byNumId.id;
+      }
+      if (!matchedId && rowData.email) {
+        const { data: byEmail } = await supabaseAdmin.from(table).select('id').ilike('email', rowData.email).maybeSingle();
+        if (byEmail?.id) matchedId = byEmail.id;
+      }
+    }
+
+    if (matchedId) {
+      const { error: updateErr } = await supabaseAdmin.from(table).update(rowData).eq('id', matchedId);
+      if (updateErr) {
+        console.warn(`[repository] Update by id ${matchedId} failed on ${table}:`, updateErr.message);
+        throw updateErr;
+      }
+    } else {
+      const { error: saveErr } = await supabaseAdmin.from(table).upsert(rowData, { onConflict: 'doc_id' });
+      if (saveErr) {
+        console.warn(`Database upsert error for table ${table}, trying fallback:`, saveErr.message);
+        // Fallback: check by doc_id or email
+        let existingId: number | null = null;
+        const { data: existingRows } = await supabaseAdmin.from(table).select('id').eq('doc_id', docId).limit(1);
+        if (existingRows && existingRows.length > 0) {
+          existingId = existingRows[0].id;
+        } else if (rowData.email) {
+          const { data: existingByEmail } = await supabaseAdmin.from(table).select('id').ilike('email', rowData.email).limit(1);
+          if (existingByEmail && existingByEmail.length > 0) {
+            existingId = existingByEmail[0].id;
+          }
+        }
+
+        if (existingId) {
+          const { error: updateErr } = await supabaseAdmin.from(table).update(rowData).eq('id', existingId);
+          if (updateErr) throw updateErr;
+        } else {
+          const { error: insertErr } = await supabaseAdmin.from(table).insert(rowData);
+          if (insertErr) throw insertErr;
+        }
       }
     }
   } catch (error: any) {
@@ -348,19 +402,32 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
 export async function deleteDocumentData(collectionName: string, id: string): Promise<boolean> {
   const table = mapCollectionToTable(collectionName);
   try {
+    const strId = String(id).trim();
     if (table === 'generic_collections') {
       await supabaseAdmin
         .from('generic_collections')
         .delete()
         .eq('collection', collectionName)
-        .eq('doc_id', id);
+        .eq('doc_id', strId);
       return true;
     }
 
-    await supabaseAdmin
-      .from(table)
-      .delete()
-      .eq('doc_id', id);
+    if (/^\d+$/.test(strId)) {
+      await Promise.allSettled([
+        supabaseAdmin.from(table).delete().eq('id', Number(strId)),
+        supabaseAdmin.from(table).delete().eq('doc_id', strId),
+      ]);
+    } else if (isUuid(strId)) {
+      await Promise.allSettled([
+        supabaseAdmin.from(table).delete().eq('uid', strId),
+        supabaseAdmin.from(table).delete().eq('doc_id', strId),
+      ]);
+    } else {
+      await Promise.allSettled([
+        supabaseAdmin.from(table).delete().eq('doc_id', strId),
+        supabaseAdmin.from(table).delete().match({ id: strId }),
+      ]);
+    }
 
     return true;
   } catch (error) {

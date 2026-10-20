@@ -29,6 +29,7 @@ export type DocumentCategory =
   | 'evaluation'
   | 'procedure'
   | 'report'
+  | 'proforma'
   | 'other';
 
 export interface TemplateField {
@@ -139,7 +140,7 @@ export type SanctionType =
   | 'licenciement_faute'
   | 'classe_sans_suite';
 
-export type DisciplinaryStatus = 'ouvert' | 'en_instruction' | 'sanctionne' | 'classe';
+export type DisciplinaryStatus = 'ouvert' | 'en_instruction' | 'convoque' | 'delibere' | 'sanctionne' | 'classe';
 
 export interface DisciplinaryComment {
   id: string;
@@ -362,6 +363,15 @@ export interface CompanyModuleConfig {
   enableHse?: boolean;
   enableVisitors?: boolean;
   enableIdeasSurveys?: boolean;
+  // Configuration E-mail SMTP & Threading RH
+  enableEmailNotifications?: boolean;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpFrom?: string;
+  hrNotificationEmail?: string;
 }
 
 export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
@@ -420,6 +430,14 @@ export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
   companyPhone: '+237 680 59 40 77',
   companyEmail: 'info@citrine-mobilite.com',
   companyWebsite: 'https://citrine-mobilite.com',
+  enableEmailNotifications: true,
+  smtpHost: '',
+  smtpPort: 465,
+  smtpSecure: true,
+  smtpUser: '',
+  smtpPass: '',
+  smtpFrom: 'Citrine SARL RH <info@citrine-mobilite.com>',
+  hrNotificationEmail: 'info@citrine-mobilite.com',
 };
 
 // ==========================================

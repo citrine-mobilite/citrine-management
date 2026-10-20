@@ -10,6 +10,7 @@ import { UserTableItemRow } from './users/UserTableItemRow';
 import { UserFilterToolbar } from './users/UserFilterToolbar';
 import { exportToExcel } from '../services/excelExportService';
 import { exportElementToPdf } from '../services/pdfExportService';
+import { showSuccessAlert, showErrorAlert } from '../utils/sweetAlert';
 
 interface UserManagementPanelProps {
   users: AppUser[];
@@ -196,39 +197,25 @@ export default function UserManagementPanel({
         console.log('🔔 [NOTIFICATION CRÉÉE] Utilisateur:', userNotif);
       }
 
-      showToast?.(
-        editingUser ? 'Utilisateur mis à jour avec succès' : 'Nouvel utilisateur créé avec succès',
-        'success'
+      if (showToast) {
+        showToast(
+          editingUser ? 'Utilisateur mis à jour avec succès' : 'Nouvel utilisateur créé avec succès',
+          'success'
+        );
+      }
+      await showSuccessAlert(
+        editingUser ? 'Utilisateur mis à jour !' : 'Utilisateur créé !',
+        editingUser ? `Le compte "${user.name}" a été mis à jour.` : `Le compte "${user.name}" a été créé avec succès.`
       );
       setIsModalOpen(false);
       setEditingUser(null);
-    } catch {
-      showToast?.('Erreur lors de l’enregistrement de l’utilisateur', 'error');
+    } catch (err: any) {
+      if (showToast) showToast('Erreur lors de l’enregistrement de l’utilisateur', 'error');
+      await showErrorAlert('Erreur', err?.message || 'Erreur lors de l\'enregistrement de l\'utilisateur.');
     }
   };
 
-  const handleDeleteUser = async () => {
-    if (!userToDelete) return;
-    setIsDeleting(true);
-    try {
-      await deleteUser(userToDelete.id);
-      logAdminOperation({
-        authorName: currentUser.name,
-        authorRole: currentUser.role,
-        targetUserId: userToDelete.id,
-        targetName: userToDelete.name,
-        operationType: 'status_change',
-        operationLabel: 'Suppression de Compte',
-        details: `Compte utilisateur ${userToDelete.email} supprimé définitivement.`,
-      });
-      showToast?.('Utilisateur supprimé avec succès', 'success');
-      setUserToDelete(null);
-    } catch {
-      showToast?.('Erreur lors de la suppression', 'error');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+
 
   const handleExportExcel = () => {
     const headers = ['ID', 'Nom', 'Email', 'Rôle', 'Département', 'Statut'];
@@ -335,8 +322,20 @@ export default function UserManagementPanel({
       <UserDeleteConfirmModal
         user={userToDelete}
         onClose={() => setUserToDelete(null)}
-        onConfirm={handleDeleteUser}
+        onConfirm={async () => {
+          await deleteUser(userToDelete!.id);
+          logAdminOperation({
+            authorName: currentUser.name,
+            authorRole: currentUser.role,
+            targetUserId: userToDelete!.id,
+            targetName: userToDelete!.name,
+            operationType: 'status_change',
+            operationLabel: 'Suppression de Compte',
+            details: `Compte utilisateur ${userToDelete!.email} supprimé définitivement.`,
+          });
+        }}
         isDeleting={isDeleting}
+        setIsDeleting={setIsDeleting}
       />
     </div>
   );

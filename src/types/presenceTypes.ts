@@ -1,4 +1,4 @@
-export type PresenceStatus = 'present' | 'late' | 'absent' | 'not_tracked';
+export type PresenceStatus = 'present' | 'late' | 'absent' | 'mission' | 'not_tracked';
 
 export type EmergencyType =
   | 'retard'
@@ -37,6 +37,7 @@ export interface AttendanceIncident {
   type: IncidentType;
   origin: IncidentOrigin;
   reason: string;
+  description?: string;
   isDeclaredInAdvance: boolean;
   isJustified: boolean;
   status: 'signale' | 'automatique' | 'justifie' | 'injustifie';

@@ -10,6 +10,7 @@ interface InventoryTableViewProps {
   onOpenAssign: (item: InventoryItem) => void;
   onEditItem: (item: InventoryItem) => void;
   onDeleteItem: (id: string) => void;
+  onSelectItem?: (item: InventoryItem) => void;
 }
 
 export const InventoryTableView: React.FC<InventoryTableViewProps> = ({
@@ -18,6 +19,7 @@ export const InventoryTableView: React.FC<InventoryTableViewProps> = ({
   onOpenAssign,
   onEditItem,
   onDeleteItem,
+  onSelectItem,
 }) => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
@@ -100,18 +102,17 @@ export const InventoryTableView: React.FC<InventoryTableViewProps> = ({
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-stone-200 bg-stone-50/80 text-stone-500 font-bold uppercase text-[10px] tracking-wider">
-              <th className="p-4 pl-6 min-w-[280px]">Désignation & Référence</th>
-              <th className="p-4 text-center">Stock Total</th>
-              <th className="p-4">Répartition par État (Neuf, Bon, Endommagé...)</th>
-              <th className="p-4">Emplacement</th>
-              <th className="p-4 text-center">Historique Attributions</th>
-              <th className="p-4 pr-6 text-right">Actions</th>
+              <th className="p-3.5 pl-6 min-w-[260px]">Désignation & Référence</th>
+              <th className="p-3.5 text-center">Quantité & État</th>
+              <th className="p-3.5">Emplacement</th>
+              <th className="p-3.5 text-center">Attributions</th>
+              <th className="p-3.5 pr-6 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100">
             {currentItems.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-10 text-center text-stone-400 italic">
+                <td colSpan={5} className="p-10 text-center text-stone-400 italic">
                   Aucun matériel trouvé correspondant aux critères.
                 </td>
               </tr>
@@ -132,104 +133,87 @@ export const InventoryTableView: React.FC<InventoryTableViewProps> = ({
                 return (
                   <tr key={item.id} className="hover:bg-stone-50/70 transition">
                     {/* 1. Désignation & Référence */}
-                    <td className="p-4 pl-6 align-top space-y-1">
-                      <div className="flex items-start justify-between gap-2 max-w-sm">
-                        <h4 className="font-bold text-xs text-stone-900 leading-snug">
+                    <td className="p-3.5 pl-6 align-middle space-y-0.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4
+                          onClick={() => onSelectItem?.(item)}
+                          className="font-bold text-xs text-stone-900 leading-snug cursor-pointer hover:text-[#2A7B76] transition line-clamp-1"
+                        >
                           {item.designation}
                         </h4>
                         <span className="px-2 py-0.5 bg-stone-100 border border-stone-200/80 rounded-md text-[10px] font-mono font-bold text-stone-700 shrink-0">
-                          {item.reference || 'INV-2026-001'}
+                          {item.reference || 'INV-2026'}
                         </span>
                       </div>
 
-                      <div className="text-[11px] text-stone-600 flex items-center gap-2">
-                        <span>Catégorie: <strong className="text-stone-800">{item.category || 'Matériel Informatique'}</strong></span>
-                        <span>•</span>
-                        <span>
-                          Prix unit: <strong className="text-stone-800">{item.unitPrice ? `${item.unitPrice.toLocaleString('fr-FR')} FCFA` : 'N/A'}</strong>
+                      <div className="text-[11px] text-stone-500 flex items-center gap-2">
+                        <span>{item.category || 'Matériel'}</span>
+                        {item.unitPrice ? (
+                          <>
+                            <span>•</span>
+                            <span className="font-mono text-stone-700 font-medium">
+                              {item.unitPrice.toLocaleString('fr-FR')} FCFA
+                            </span>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+
+                    {/* 2. Quantité & État (Compact) */}
+                    <td className="p-3.5 text-center align-middle">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="px-2.5 py-1 rounded-xl border border-stone-200 text-xs font-bold text-stone-800 bg-white shadow-2xs font-mono inline-block">
+                          {item.quantity} {item.quantity > 1 ? 'unités' : 'unité'}
                         </span>
-                      </div>
-
-                      {item.notes && (
-                        <p className="text-[11px] text-stone-500 italic line-clamp-1">
-                          {item.notes}
-                        </p>
-                      )}
-                    </td>
-
-                    {/* 2. Stock Total */}
-                    <td className="p-4 text-center align-middle">
-                      <span className="inline-block px-4 py-2 rounded-2xl border border-stone-200 text-xs font-bold text-stone-800 bg-white shadow-2xs font-mono">
-                        {item.quantity} {item.quantity > 1 ? 'unités' : 'unité'}
-                      </span>
-                    </td>
-
-                    {/* 3. Répartition par État */}
-                    <td className="p-4 align-middle">
-                      <div className="flex flex-wrap items-center gap-1.5 max-w-xs text-[10px]">
-                        {quantitiesByStatus.neuf ? (
-                          <span className="px-2.5 py-1 rounded-full border border-stone-200 bg-white font-medium text-stone-800">
-                            Neuf: <u className="font-bold">{quantitiesByStatus.neuf}</u>
-                          </span>
-                        ) : null}
-
-                        {quantitiesByStatus.bon_etat ? (
-                          <span className="px-2.5 py-1 rounded-full border border-stone-200 bg-white font-medium text-stone-800">
-                            Bon état: <u className="font-bold">{quantitiesByStatus.bon_etat}</u>
-                          </span>
-                        ) : null}
-
-                        {quantitiesByStatus.usage ? (
-                          <span className="px-2.5 py-1 rounded-full border border-stone-200 bg-white font-medium text-stone-800">
-                            Usagé / Moyen: <u className="font-bold">{quantitiesByStatus.usage}</u>
-                          </span>
-                        ) : null}
-
-                        {quantitiesByStatus.endommage ? (
-                          <span className="px-2.5 py-1 rounded-full border border-stone-200 bg-stone-50 text-stone-800 font-medium">
-                            Endommagé: <u className="font-bold">{quantitiesByStatus.endommage}</u>
-                          </span>
-                        ) : null}
-
-                        {quantitiesByStatus.en_reparation ? (
-                          <span className="px-2.5 py-1 rounded-full border border-amber-200 bg-amber-50/60 text-amber-900 font-medium">
-                            En réparation: <u className="font-bold">{quantitiesByStatus.en_reparation}</u>
-                          </span>
-                        ) : null}
-
-                        {quantitiesByStatus.hors_service ? (
-                          <span className="px-2.5 py-1 rounded-full border border-stone-300 bg-stone-100 text-stone-700 font-medium">
-                            Hors service: <u className="font-bold">{quantitiesByStatus.hors_service}</u>
-                          </span>
-                        ) : null}
+                        <div className="flex flex-wrap items-center justify-center gap-1 max-w-[200px]">
+                          {Object.entries(quantitiesByStatus).map(([st, count]) => {
+                            if (!count) return null;
+                            const labels: Record<string, { label: string; cls: string }> = {
+                              neuf: { label: `${count} Neuf`, cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+                              bon_etat: { label: `${count} Bon`, cls: 'bg-blue-50 text-blue-800 border-blue-200' },
+                              usage: { label: `${count} Usagé`, cls: 'bg-amber-50 text-amber-800 border-amber-200' },
+                              endommage: { label: `${count} Endom.`, cls: 'bg-orange-50 text-orange-800 border-orange-200' },
+                              en_reparation: { label: `${count} Répar.`, cls: 'bg-purple-50 text-purple-800 border-purple-200' },
+                              hors_service: { label: `${count} HS`, cls: 'bg-stone-100 text-stone-700 border-stone-200' },
+                            };
+                            const info = labels[st] || { label: `${count} ${st}`, cls: 'bg-stone-50 text-stone-700 border-stone-200' };
+                            return (
+                              <span key={st} className={`px-1.5 py-0.5 rounded border text-[9px] font-bold ${info.cls}`}>
+                                {info.label}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
                     </td>
 
-                    {/* 4. Emplacement */}
-                    <td className="p-4 align-middle text-stone-700 text-xs">
+                    {/* 3. Emplacement */}
+                    <td className="p-3.5 align-middle text-stone-700 text-xs">
                       <div className="flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 text-stone-400 shrink-0" />
-                        <span className="font-medium">{item.location}</span>
+                        <span className="font-medium line-clamp-1">{item.location}</span>
                       </div>
                     </td>
 
-                    {/* 5. Historique Attributions */}
-                    <td className="p-4 align-middle text-center">
+                    {/* 4. Attributions */}
+                    <td className="p-3.5 align-middle text-center">
                       <button
                         onClick={() => onOpenHistory(item)}
-                        className="px-3.5 py-1.5 rounded-xl border border-stone-200/80 bg-stone-50 hover:bg-stone-100 text-stone-700 font-bold text-xs transition cursor-pointer inline-flex items-center gap-1.5"
+                        className="px-3 py-1 rounded-xl border border-stone-200/80 bg-stone-50 hover:bg-stone-100 text-stone-700 font-bold text-xs transition cursor-pointer inline-flex items-center gap-1"
+                        title="Voir l'historique des attributions"
                       >
                         <History className="h-3.5 w-3.5 text-stone-500" />
-                        Historique ({assignmentsCount})
+                        <span>({assignmentsCount})</span>
                       </button>
                     </td>
 
-                    {/* 6. Actions */}
-                    <td className="p-4 pr-6 align-middle text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    {/* 5. Actions */}
+                    <td className="p-3.5 pr-6 align-middle text-right">
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => onOpenAssign(item)}
-                          className="px-3 py-1.5 bg-[#2A7B76] hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition cursor-pointer inline-flex items-center gap-1"
+                          className="px-2.5 py-1.5 bg-[#2A7B76] hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                          title="Assigner à un collaborateur"
                         >
                           <User className="h-3.5 w-3.5" /> Assigner
                         </button>

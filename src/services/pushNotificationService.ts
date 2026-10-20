@@ -79,29 +79,41 @@ export const pushNotificationService = {
         badge: '/pwa-192x192.png',
         dir: 'auto',
         lang: 'fr',
-        tag: 'citrine-alert',
+        tag: options.tag || `citrine-alert-${Date.now()}`,
         renotify: true,
-        vibrate: [100, 50, 100],
+        vibrate: [150, 75, 150],
         ...options,
       };
 
+      // 1. Tenter l'enregistrement Service Worker actif avec un timeout strict pour ne jamais bloquer
       if ('serviceWorker' in navigator) {
         try {
-          let registration = await navigator.serviceWorker.getRegistration();
-          if (!registration) {
-            registration = await navigator.serviceWorker.ready;
+          let reg: ServiceWorkerRegistration | undefined = await navigator.serviceWorker.getRegistration();
+          
+          if (!reg) {
+            // Empêche navigator.serviceWorker.ready d'attendre indéfiniment si aucun SW n'est actif
+            const timeoutPromise = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 400));
+            reg = await Promise.race([navigator.serviceWorker.ready, timeoutPromise]);
           }
-          if (registration && registration.showNotification) {
-            await registration.showNotification(title, defaultOptions);
+
+          if (reg && reg.showNotification) {
+            await reg.showNotification(title, defaultOptions);
             return true;
           }
         } catch (swErr) {
-          console.warn("Fallback direct Notification API:", swErr);
+          console.warn('Fallback direct Notification API (SW notice):', swErr);
         }
       }
 
-      new Notification(title, defaultOptions);
-      return true;
+      // 2. Fallback direct Notification API pour navigateurs de bureau
+      try {
+        new Notification(title, defaultOptions);
+        return true;
+      } catch (directErr) {
+        console.warn('Constructeur Notification direct non supporté sur ce navigateur/mobile:', directErr);
+      }
+
+      return false;
     } catch (err) {
       console.error("Erreur lors de l'envoi de la push notification:", err);
       return false;
@@ -109,8 +121,8 @@ export const pushNotificationService = {
   },
 
   async sendTestNotification(): Promise<boolean> {
-    return this.sendNotification("Test de Notification Citrine", {
-      body: "Les notifications push fonctionnent parfaitement !",
+    return this.sendNotification("🚀 Test Push Notification Citrine", {
+      body: "Les notifications push sont parfaitement activées sur votre appareil !",
     });
   },
 };

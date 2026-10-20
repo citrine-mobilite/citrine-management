@@ -37,6 +37,7 @@ import ToastContainer from './components/Toast';
 import { DatabaseHealthBanner } from './components/common/DatabaseHealthBanner';
 import OfflineStatusBanner from './components/OfflineStatusBanner';
 import { GlobalTooltipContainer } from './components/common/GlobalTooltipContainer';
+import { PushNotificationPopupContainer } from './components/notifications/PushNotificationPopupContainer';
 
 export default function App() {
   const initialData = useAppInitialData();
@@ -467,6 +468,9 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Push Notification Visual Popup Stream */}
+      <PushNotificationPopupContainer onNavigateTab={setActiveTab} />
 
       {/* Toast Notification Container */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

@@ -55,16 +55,30 @@ export function useClockingActions({
       let locationName = customLocation?.locationName || 'Bureau / Site principal';
 
       if (latitude === undefined || longitude === undefined) {
-        if (navigator.geolocation) {
-          try {
-            const pos = await getCurrentUserLocation();
-            latitude = pos.latitude;
-            longitude = pos.longitude;
-            locationName = `GPS (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
-          } catch (geoErr) {
-            console.warn('Geolocation unavailable:', geoErr);
-          }
+        try {
+          const pos = await getCurrentUserLocation();
+          latitude = pos.latitude;
+          longitude = pos.longitude;
+          locationName = `GPS (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+        } catch (geoErr) {
+          showToast(
+            'Pointage Refusé ❌',
+            'Veuillez activer votre GPS. Le signal GPS est obligatoire pour enregistrer votre pointage (Arrivée, Pause, Reprise ou Départ).',
+            'warning'
+          );
+          setIsLocating(false);
+          return;
         }
+      }
+
+      if (latitude === undefined || longitude === undefined || isNaN(latitude) || isNaN(longitude)) {
+        showToast(
+          'Pointage Refusé ❌',
+          'Position GPS introuvable. Veuillez activer votre GPS pour effectuer ce pointage.',
+          'warning'
+        );
+        setIsLocating(false);
+        return;
       }
 
       const now = new Date();

@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Trash2, X, AlertTriangle } from 'lucide-react';
 import { AppUser } from '../../types';
+import { showSuccessAlert, showErrorAlert } from '../../utils/sweetAlert';
 
 interface UserDeleteConfirmModalProps {
   user: AppUser | null;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void> | void;
   isDeleting: boolean;
+  setIsDeleting: (val: boolean) => void;
 }
 
 export const UserDeleteConfirmModal: React.FC<UserDeleteConfirmModalProps> = ({
@@ -14,8 +16,23 @@ export const UserDeleteConfirmModal: React.FC<UserDeleteConfirmModalProps> = ({
   onClose,
   onConfirm,
   isDeleting,
+  setIsDeleting,
 }) => {
   if (!user) return null;
+
+  const handleExecute = async () => {
+    setIsDeleting(true);
+    const name = user.name;
+    try {
+      await onConfirm();
+      await showSuccessAlert('Utilisateur supprimé !', `Le compte "${name}" a été supprimé avec succès.`);
+      onClose();
+    } catch (err: any) {
+      await showErrorAlert('Échec de la suppression', err?.message || 'Erreur lors de la suppression de l\'utilisateur.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-200">
@@ -39,7 +56,7 @@ export const UserDeleteConfirmModal: React.FC<UserDeleteConfirmModalProps> = ({
             Annuler
           </button>
           <button
-            onClick={onConfirm}
+            onClick={handleExecute}
             disabled={isDeleting}
             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50"
           >
