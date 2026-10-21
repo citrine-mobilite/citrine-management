@@ -42,7 +42,7 @@ const InventoryPanel = lazy(() => import('../InventoryPanel'));
 const PartnersPanel = lazy(() => import('../PartnersPanel'));
 const UserManagementPanel = lazy(() => import('../UserManagementPanel'));
 const CompanySettingsPanel = lazy(() => import('../CompanySettingsPanel'));
-const TeamCallsPanel = lazy(() => import('../TeamCallsPanel').then((m) => ({ default: m.TeamCallsPanel })));
+const TeamCallsPanel = lazy(() => import('../TeamCallsPanel'));
 const RecruitmentPanel = lazy(() => import('../recruitment/RecruitmentPanel'));
 const ExpenseClaimsPanel = lazy(() => import('../expenses/ExpenseClaimsPanel'));
 const HsePanel = lazy(() => import('../hse/HsePanel'));

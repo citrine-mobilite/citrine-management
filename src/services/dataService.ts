@@ -34,6 +34,7 @@ export const COLLECTIONS = {
   ENTERPRISE_SURVEYS: 'enterprise_surveys',
   LEAVE_REQUESTS: 'leave_requests',
   ABSENCES: 'absences',
+  BUILDING_SUPERVISORS: 'building_supervisors',
   USERS: 'users'
 } as const;
 

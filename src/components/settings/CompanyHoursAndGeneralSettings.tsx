@@ -191,7 +191,7 @@ export const CompanyHoursAndGeneralSettings: React.FC<CompanyHoursAndGeneralSett
             </label>
             <input
               type="text"
-              value={formData.hqAddress || 'Akwa - Boulevard de la Liberté, Douala'}
+              value={formData.hqAddress || 'Japoma (Carrefour Matango), Douala'}
               onChange={(e) => handleChange('hqAddress', e.target.value)}
               className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:border-[#2A7B76]"
             />

@@ -36,8 +36,15 @@ function mapCollectionToTable(collectionName: string): string {
     case 'connection_logs': return 'connection_logs';
     case 'admin_audit_logs':
     case 'citrine_admin_audit_operations_v1': return 'admin_audit_logs';
+    case 'leave_requests': return 'leave_requests';
+    case 'absences': return 'absences';
     default: return 'generic_collections';
   }
+}
+
+function isUuid(val: any): boolean {
+  if (typeof val !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
 }
 
 export function isSqlConfigured(): boolean {
@@ -341,6 +348,46 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
       rowData.content_template = String(item.contentTemplate || item.content || item.template || 'Contenu du modèle').trim();
     } else if (table === 'company_settings') {
       rowData.setting_key = 'main_config';
+    } else if (table === 'visitor_logs') {
+      rowData.visitor_name = item.visitorName || item.visitor_name || item.name || 'Visiteur';
+      rowData.visitor_company = item.visitorCompany || item.visitor_company || null;
+      rowData.visitor_phone = item.visitorPhone || item.visitor_phone || '';
+      rowData.id_card_number = item.idCardNumber || item.id_card_number || null;
+      rowData.site_location = item.siteLocation || item.site_location || 'Siège Akwa';
+      rowData.purpose = item.purpose || 'rdv_commercial';
+      rowData.host_employee_id = item.hostEmployeeId ? String(item.hostEmployeeId) : null;
+      rowData.host_employee_name = item.hostEmployeeName || item.host_employee_name || null;
+      rowData.badge_number = item.badgeNumber || item.badge_number || null;
+      rowData.vehicle_plate = item.vehiclePlate || item.vehicle_plate || null;
+      rowData.check_in_time = item.checkInTime || item.check_in_time || null;
+      rowData.check_in_date = item.checkInDate || item.check_in_date || new Date().toISOString().split('T')[0];
+      rowData.check_out_time = item.checkOutTime || item.check_out_time || null;
+      rowData.status = item.status || 'sur_site';
+    } else if (table === 'leave_requests') {
+      rowData.employee_name = item.employeeName || item.employee_name || null;
+      rowData.type = item.type || 'conge_annuel';
+      rowData.start_date = item.startDate ? String(item.startDate).split('T')[0] : new Date().toISOString().split('T')[0];
+      rowData.end_date = item.endDate ? String(item.endDate).split('T')[0] : new Date().toISOString().split('T')[0];
+      rowData.days_count = Number(item.daysCount || 1);
+      rowData.reason = item.reason || null;
+      rowData.status = item.status || 'pending';
+      rowData.decided_by = item.decidedBy || null;
+      rowData.decided_at = item.decidedAt || null;
+      rowData.decision_reason = item.managerComment || item.decisionReason || null;
+      if (item.employeeId) {
+        const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
+        if (resolvedId) rowData.employee_id = resolvedId;
+      }
+    } else if (table === 'absences') {
+      rowData.employee_name = item.employeeName || item.employee_name || null;
+      rowData.date = item.date ? String(item.date).split('T')[0] : new Date().toISOString().split('T')[0];
+      rowData.type = item.type || 'non_justifie';
+      rowData.reason = item.reason || null;
+      rowData.status = item.status || 'en_attente';
+      if (item.employeeId) {
+        const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
+        if (resolvedId) rowData.employee_id = resolvedId;
+      }
     }
 
     // For employees and users, find existing row by doc_id, id, or email before inserting/upserting

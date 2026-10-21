@@ -319,3 +319,5 @@ export const TeamCallsPanel: React.FC<TeamCallsPanelProps> = ({
     </div>
   );
 };
+
+export default TeamCallsPanel;

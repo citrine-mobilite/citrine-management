@@ -60,6 +60,7 @@ export interface TaskProject {
 
 export interface Task {
   id: string;
+  docId?: string;
   title: string;
   description?: string;
   date: string;

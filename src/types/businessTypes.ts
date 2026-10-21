@@ -412,8 +412,8 @@ export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
   officeWifiSsid: '',
   allowedOfficeIPs: [],
   siteLocations: [],
-  hqName: 'Siège Principal Citrine - Douala',
-  hqAddress: 'Akwa - Boulevard de la Liberté, Douala',
+  hqName: 'Siège Citrine - Japoma Carrefour Matango',
+  hqAddress: 'Japoma (Carrefour Matango), Douala',
   hqLatitude: 4.016246,
   hqLongitude: 9.8203514,
   workStartTime: '08:00',
@@ -597,10 +597,28 @@ export type VisitorPurpose =
   | 'reunion_direction' 
   | 'autre';
 
-export type VisitorStatus = 'sur_site' | 'sorti' | 'attendu';
+export type VisitorStatus = 'sur_site' | 'sorti' | 'attendu' | 'attente_validation' | 'refuse';
+
+export type PersonType = 'visiteur' | 'travailleur';
+export type WorkerDomain = 'electricite' | 'plomberie' | 'maconnerie' | 'climatisation_maintenance' | 'autre';
+
+export const BUILDING_SUPERVISORS = [
+  { domain: 'electricite', label: 'Électricité', supervisorName: 'Ing. Mbah (Superviseur Électricité)' },
+  { domain: 'plomberie', label: 'Plomberie', supervisorName: 'Jean-Pierre Tientcheu (Superviseur Plomberie)' },
+  { domain: 'maconnerie', label: 'Maçonnerie / BTP', supervisorName: 'Marc Kouam (Superviseur Maçonnerie)' },
+  { domain: 'climatisation_maintenance', label: 'Climatisation & Maintenance', supervisorName: 'Ibrahim Aboubakar (Superviseur Maintenance)' },
+  { domain: 'autre', label: 'Autre Intervention', supervisorName: 'Direction Technique Générale' },
+];
 
 export interface VisitorLog {
   id: string;
+  personType?: PersonType; // 'visiteur' | 'travailleur'
+  workerDomain?: WorkerDomain;
+  supervisorName?: string;
+  interventionPerimeter?: string;
+  isPreAuthorized?: boolean; // Référencé sur liste préalable (Étape 1 & 3)
+  authorizationConfirmed?: boolean; // Confirmé par hôte ou validations prestataire + Citrine
+
   visitorName: string;
   visitorCompany?: string;
   visitorPhone: string;

@@ -205,7 +205,7 @@ export default function UserManagementPanel({
       }
       await showSuccessAlert(
         editingUser ? 'Utilisateur mis à jour !' : 'Utilisateur créé !',
-        editingUser ? `Le compte "${user.name}" a été mis à jour.` : `Le compte "${user.name}" a été créé avec succès.`
+        editingUser ? `Le compte "${userToSave.name}" a été mis à jour.` : `Le compte "${userToSave.name}" a été créé avec succès.`
       );
       setIsModalOpen(false);
       setEditingUser(null);

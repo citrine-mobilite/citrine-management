@@ -43,6 +43,7 @@ export function mapCollectionToTable(collectionName: string): string {
     case 'notification_recipients': return 'notification_recipients';
     case 'presence_pauses': return 'presence_pauses';
     case 'absences': return 'absences';
+    case 'leave_requests': return 'leave_requests';
     default: return 'generic_collections';
   }
 }
@@ -616,6 +617,21 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         details: item.details || null,
         ip_address: item.ipAddress || null,
       };
+    case 'leave_requests':
+      return {
+        ...base,
+        employee_id: item.employeeId || null,
+        employee_name: item.employeeName || null,
+        type: item.type || 'conge_annuel',
+        start_date: item.startDate || new Date().toISOString().split('T')[0],
+        end_date: item.endDate || new Date().toISOString().split('T')[0],
+        days_count: Number(item.daysCount || 1),
+        reason: item.reason || null,
+        status: item.status || 'pending',
+        decided_by: item.decidedBy || null,
+        decided_at: item.decidedAt || null,
+        decision_reason: item.managerComment || null,
+      };
     default:
       return base;
   }
@@ -825,6 +841,30 @@ function supabaseRowToItem(collectionName: string, row: any): any {
     };
   }
 
+  if (table === 'leave_requests') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    return {
+      ...raw,
+      id: raw.id || row.doc_id || String(row.id),
+      docId: row.doc_id || raw.docId,
+      uid: row.uid || raw.uid,
+      _dbId: row.id,
+      employeeId: row.employee_id ? String(row.employee_id) : raw.employeeId,
+      employeeName: row.employee_name || raw.employeeName || 'Collaborateur',
+      type: row.type || raw.type || 'conge_annuel',
+      startDate: row.start_date || raw.startDate,
+      endDate: row.end_date || raw.endDate,
+      daysCount: typeof row.days_count === 'number' ? row.days_count : (Number(row.days_count) || raw.daysCount || 1),
+      reason: row.reason || raw.reason || '',
+      status: row.status || raw.status || 'pending',
+      decidedBy: row.decided_by || raw.decidedBy,
+      decidedAt: row.decided_at || raw.decidedAt,
+      managerComment: row.decision_reason || raw.managerComment || raw.decisionReason,
+      createdAt: row.created_at || raw.createdAt || new Date().toISOString(),
+      updatedAt: row.updated_at || raw.updatedAt,
+    };
+  }
+
   if (row.raw_data && typeof row.raw_data === 'object') {
     const raw = row.raw_data;
     return {
@@ -1026,6 +1066,57 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
 
       const { data: insertData, error: insertErr } = await client.from('attendance_incidents').insert(row).select().single();
       if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
+      return item;
+    }
+
+    if (table === 'leave_requests') {
+      try {
+        const empIdVal = (item as any).employeeId || (item as any).employee_id;
+        const resolvedId = await resolveEmployeeDbId(client, empIdVal);
+        if (resolvedId) {
+          row.employee_id = resolvedId;
+        } else {
+          delete row.employee_id;
+        }
+      } catch {
+        delete row.employee_id;
+      }
+
+      const leaveDocId = String(item.id || row.doc_id || `leave-${Date.now()}`);
+      row.doc_id = leaveDocId;
+
+      const { data: upsertData, error: upsertErr } = await client
+        .from('leave_requests')
+        .upsert(row, { onConflict: 'doc_id' })
+        .select()
+        .single();
+      if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
+
+      const { data: insertData, error: insertErr } = await client.from('leave_requests').insert(row).select().single();
+      if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
+      if (insertErr) {
+        console.error('[supabaseService leave_requests save error]:', insertErr.message);
+      }
+      return item;
+    }
+
+    if (table === 'visitor_logs') {
+      const visDocId = String(item.id || row.doc_id || `vis-${Date.now()}`);
+      row.doc_id = visDocId;
+      row.visitor_name = row.visitor_name || (item as any).visitorName || (item as any).visitor_name || (item as any).name || 'Visiteur';
+
+      const { data: upsertData, error: upsertErr } = await client
+        .from('visitor_logs')
+        .upsert(row, { onConflict: 'doc_id' })
+        .select()
+        .single();
+      if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
+
+      const { data: insertData, error: insertErr } = await client.from('visitor_logs').insert(row).select().single();
+      if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
+      if (insertErr) {
+        console.error('[supabaseService visitor_logs save error]:', insertErr.message);
+      }
       return item;
     }
 

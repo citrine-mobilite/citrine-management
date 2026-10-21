@@ -84,7 +84,7 @@ export default function DocumentGeneratorPanel({
   };
 
   const handleDeleteDoc = async (id: string) => {
-    const target = effectiveDocuments.find((d) => d.id === id);
+    const target = documents.find((d) => d.id === id);
     await executeDeleteWithSweetAlert({
       title: 'Supprimer ce document ?',
       text: 'Voulez-vous vraiment supprimer ce document des archives RH ?',
