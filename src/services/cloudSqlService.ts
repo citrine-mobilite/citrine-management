@@ -29,18 +29,24 @@ export const cloudSqlService = {
   },
 
   async saveDocument<T extends { id: string }>(collectionName: string, item: T): Promise<T> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`/api/data/${collectionName}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(item),
-    });
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error || `Failed to save to ${collectionName}`);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/data/${collectionName}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(item),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.warn(`[cloudSqlService] Save to ${collectionName} returned ${res.status}:`, errJson.error);
+        return item;
+      }
+      const json = await res.json();
+      return json.data || item;
+    } catch (err: any) {
+      console.warn(`[cloudSqlService] Save to ${collectionName} fetch warning:`, err?.message);
+      return item;
     }
-    const json = await res.json();
-    return json.data || item;
   },
 
   async deleteDocument(collectionName: string, id: string): Promise<boolean> {

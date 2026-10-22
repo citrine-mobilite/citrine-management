@@ -1,15 +1,17 @@
-import React from 'react';
-import { X, Wrench, UserCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Wrench, UserCheck, Trash2 } from 'lucide-react';
 import { VisitorLog } from '../../types';
 import { getWorkerDomainLabel, getPurposeLabel } from './VisitorsTable';
 
 interface VisitorDetailModalProps {
   visitor: VisitorLog;
   onClose: () => void;
+  onDelete?: (visitor: VisitorLog) => Promise<void>;
 }
 
-export const VisitorDetailModal: React.FC<VisitorDetailModalProps> = ({ visitor, onClose }) => {
+export const VisitorDetailModal: React.FC<VisitorDetailModalProps> = ({ visitor, onClose, onDelete }) => {
   const isWorker = visitor.personType === 'travailleur';
+  const [isDeleting, setIsDeleting] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
@@ -116,10 +118,31 @@ export const VisitorDetailModal: React.FC<VisitorDetailModalProps> = ({ visitor,
           </p>
         )}
 
-        <div className="flex justify-end pt-2">
+        <div className="flex items-center justify-between pt-2 border-t border-stone-100">
+          {onDelete && (
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={async () => {
+                if (window.confirm(`Confirmez-vous la suppression définitive de ${visitor.visitorName} de la base de données ?`)) {
+                  setIsDeleting(true);
+                  try {
+                    await onDelete(visitor);
+                    onClose();
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }
+              }}
+              className="px-3 py-2 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl cursor-pointer flex items-center gap-1.5 transition disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{isDeleting ? 'Suppression...' : 'Supprimer de la Base'}</span>
+            </button>
+          )}
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl cursor-pointer"
+            className="px-4 py-2 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl cursor-pointer ml-auto"
           >
             Fermer
           </button>

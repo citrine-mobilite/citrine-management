@@ -269,9 +269,14 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
       if (item.employeeId) {
         const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
         if (resolvedId) rowData.employee_id = resolvedId;
+        else rowData.employee_id = null;
+      } else {
+        rowData.employee_id = null;
       }
       if (item.projectId && /^\d+$/.test(String(item.projectId))) {
         rowData.project_id = Number(item.projectId);
+      } else {
+        rowData.project_id = null;
       }
     } else if (table === 'reminders') {
       rowData.title = item.title || 'Rappel';

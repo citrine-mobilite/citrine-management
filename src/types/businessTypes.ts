@@ -612,6 +612,7 @@ export const BUILDING_SUPERVISORS = [
 
 export interface VisitorLog {
   id: string;
+  docId?: string;
   personType?: PersonType; // 'visiteur' | 'travailleur'
   workerDomain?: WorkerDomain;
   supervisorName?: string;

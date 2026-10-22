@@ -9,7 +9,8 @@ import {
 } from '../../types';
 import { 
   subscribeToVisitorLogs, 
-  saveVisitorLog 
+  saveVisitorLog,
+  deleteVisitorLog
 } from '../../services/visitorLogService';
 import { 
   subscribeToBuildingSupervisors, 
@@ -214,8 +215,22 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
         message: `${visitorToSave.visitorName} (${visitorToSave.visitorCompany}) est enregistré sur le site ${visitorToSave.siteLocation}.`,
         type: 'info',
       });
-    } catch {
-      showToast?.('Erreur lors de l\'enregistrement.', 'error');
+    } catch (err: any) {
+      showToast?.(err.message || 'Erreur lors de l\'enregistrement en base de données.', 'error');
+    }
+  };
+
+  const handleDeleteVisitor = async (visitor: VisitorLog) => {
+    try {
+      const vId = visitor.id || visitor.docId;
+      if (!vId) return;
+      await deleteVisitorLog(vId);
+      setVisitors((prev) => prev.filter((v) => v.id !== vId && v.docId !== vId));
+      showToast?.(`Visiteur ${visitor.visitorName} supprimé de la base de données.`, 'success');
+    } catch (err: any) {
+      console.error('Error deleting visitor:', err);
+      showToast?.(err.message || 'Erreur lors de la suppression en base de données.', 'error');
+      throw err;
     }
   };
 
@@ -395,6 +410,7 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
         <VisitorDetailModal
           visitor={selectedVisitor}
           onClose={() => setSelectedVisitor(null)}
+          onDelete={handleDeleteVisitor}
         />
       )}
     </div>

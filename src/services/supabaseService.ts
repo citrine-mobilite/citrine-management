@@ -44,6 +44,8 @@ export function mapCollectionToTable(collectionName: string): string {
     case 'presence_pauses': return 'presence_pauses';
     case 'absences': return 'absences';
     case 'leave_requests': return 'leave_requests';
+    case 'building_supervisors': return 'generic_collections';
+    case 'visitor_logs': return 'visitor_logs';
     default: return 'generic_collections';
   }
 }
@@ -98,8 +100,10 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
   }
 
   if (table === 'generic_collections') {
+    const docId = String(item.id || (item as any).docId || `doc_${Date.now()}`);
     return {
       collection: collectionName,
+      doc_id: docId,
       data: item,
       updated_at: new Date().toISOString(),
       ...(base.id ? { id: base.id } : {}),
@@ -214,7 +218,15 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         raw_data: raw,
       };
     }
-    case 'tasks':
+    case 'tasks': {
+      let resolvedTaskEmpId: number | null = null;
+      if (item.employeeId && /^\d+$/.test(String(item.employeeId))) {
+        resolvedTaskEmpId = Number(item.employeeId);
+      }
+      let resolvedProjectId: number | null = null;
+      if (item.projectId && /^\d+$/.test(String(item.projectId))) {
+        resolvedProjectId = Number(item.projectId);
+      }
       return {
         ...base,
         doc_id: docId,
@@ -225,14 +237,15 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         status: item.status || 'todo',
         priority: item.priority || 'medium',
         assigned_to: item.assignedTo || null,
-        employee_id: item.employeeId || null,
+        employee_id: resolvedTaskEmpId,
         department: item.department || null,
-        project_id: item.projectId || null,
+        project_id: resolvedProjectId,
         due_date: item.dueDate || null,
         is_milestone: Boolean(item.isMilestone),
         milestone_progress: item.milestoneProgress || 0,
         raw_data: item,
       };
+    }
     case 'task_projects':
       return {
         ...base,
@@ -642,7 +655,14 @@ function supabaseRowToItem(collectionName: string, row: any): any {
   if (!row) return null;
 
   if (row.collection && row.data) {
-    return { ...row.data, id: String(row.id), uid: row.uid, _dbId: row.id };
+    const dataObj = typeof row.data === 'object' ? row.data : {};
+    return {
+      ...dataObj,
+      id: row.doc_id || dataObj.id || String(row.id),
+      docId: row.doc_id,
+      uid: row.uid,
+      _dbId: row.id,
+    };
   }
 
   const table = mapCollectionToTable(collectionName);
@@ -865,6 +885,37 @@ function supabaseRowToItem(collectionName: string, row: any): any {
     };
   }
 
+  if (table === 'visitor_logs') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    return {
+      ...raw,
+      id: row.doc_id || raw.id || String(row.id),
+      docId: row.doc_id,
+      visitorName: row.visitor_name || raw.visitorName,
+      visitorCompany: row.visitor_company || raw.visitorCompany,
+      visitorPhone: row.visitor_phone || raw.visitorPhone,
+      idCardNumber: row.id_card_number || raw.idCardNumber,
+      siteLocation: row.site_location || raw.siteLocation,
+      purpose: row.purpose || raw.purpose,
+      hostEmployeeId: row.host_employee_id || raw.hostEmployeeId,
+      hostEmployeeName: row.host_employee_name || raw.hostEmployeeName,
+      badgeNumber: row.badge_number || raw.badgeNumber,
+      vehiclePlate: row.vehicle_plate || raw.vehiclePlate,
+      checkInTime: row.check_in_time || raw.checkInTime,
+      checkInDate: row.check_in_date || raw.checkInDate,
+      checkOutTime: row.check_out_time || raw.checkOutTime,
+      status: row.status || raw.status,
+      personType: raw.personType || 'visiteur',
+      workerDomain: raw.workerDomain,
+      supervisorName: raw.supervisorName,
+      interventionPerimeter: raw.interventionPerimeter,
+      notes: raw.notes || '',
+      createdAt: row.created_at || raw.createdAt,
+      updatedAt: row.updated_at || raw.updatedAt,
+      _dbId: row.id,
+    };
+  }
+
   if (row.raw_data && typeof row.raw_data === 'object') {
     const raw = row.raw_data;
     return {
@@ -910,19 +961,60 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
     const client = getClient();
     const row = itemToSupabaseRow(collectionName, item);
 
+    if (table === 'generic_collections') {
+      const gDocId = String(item.id || (item as any).docId || `sup-${Date.now()}`);
+      const gRow: any = {
+        collection: collectionName,
+        doc_id: gDocId,
+        data: item,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data: upsertData, error: upsertErr } = await client
+        .from('generic_collections')
+        .upsert(gRow, { onConflict: 'collection,doc_id' })
+        .select()
+        .single();
+
+      if (upsertErr) {
+        console.error(`[generic_collections save error for ${collectionName}:${gDocId}]:`, upsertErr);
+        throw new Error(upsertErr.message || `Échec de l'enregistrement de ${collectionName}`);
+      }
+
+      return supabaseRowToItem(collectionName, upsertData) as T;
+    }
+
     if (table === 'users') {
+      let savedResult: any = null;
+      let userErr: any = null;
       if (row.id && Number.isInteger(row.id)) {
         const { data, error } = await client.from('users').upsert(row, { onConflict: 'id' }).select().single();
-        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+        if (!error && data) savedResult = data;
+        else if (error) userErr = error;
       }
-      if (row.email) {
+      if (!savedResult && row.email) {
         const { data, error } = await client.from('users').upsert(row, { onConflict: 'email' }).select().single();
-        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
-        if (error) {
-          console.warn('[Supabase users upsert error]:', error.message);
-        }
+        if (!error && data) savedResult = data;
+        else if (error) userErr = error;
       }
-      return item;
+      if (!savedResult) {
+        const { data, error } = await client.from('users').insert(row).select().single();
+        if (!error && data) savedResult = data;
+        else if (error) userErr = error;
+      }
+
+      if (!savedResult) {
+        throw userErr || new Error("Échec de l'enregistrement de l'utilisateur en base de données");
+      }
+
+      // Sync email to employees if linked
+      if (savedResult && savedResult.email) {
+        try {
+          await client.from('employees').update({ email: savedResult.email }).eq('user_id', savedResult.id);
+        } catch {}
+      }
+
+      return supabaseRowToItem(collectionName, savedResult) as T;
     }
 
     if (table === 'employees') {
@@ -944,28 +1036,47 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
         }
       }
 
+      let savedResult: any = null;
+      let empErr: any = null;
+
       if (row.doc_id) {
         const { data, error } = await client.from('employees').upsert(row, { onConflict: 'doc_id' }).select().single();
-        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+        if (!error && data) savedResult = data;
+        else if (error) empErr = error;
       }
-      if (row.email) {
+      if (!savedResult && row.email) {
         const { data, error } = await client.from('employees').upsert(row, { onConflict: 'email' }).select().single();
-        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+        if (!error && data) savedResult = data;
+        else if (error) empErr = error;
       }
-      if (row.id && Number.isInteger(row.id)) {
+      if (!savedResult && row.id && Number.isInteger(row.id)) {
         const { data, error } = await client.from('employees').upsert(row, { onConflict: 'id' }).select().single();
-        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+        if (!error && data) savedResult = data;
+        else if (error) empErr = error;
       }
-      if (row.uid) {
+      if (!savedResult && row.uid) {
         const { data, error } = await client.from('employees').upsert(row, { onConflict: 'uid' }).select().single();
-        if (!error && data) return supabaseRowToItem(collectionName, data) as T;
+        if (!error && data) savedResult = data;
+        else if (error) empErr = error;
       }
-      const { data, error } = await client.from('employees').insert(row).select().single();
-      if (!error && data) return supabaseRowToItem(collectionName, data) as T;
-      if (error) {
-        console.error('[supabaseService employees save error]:', error.message);
+      if (!savedResult) {
+        const { data, error } = await client.from('employees').insert(row).select().single();
+        if (!error && data) savedResult = data;
+        else if (error) empErr = error;
       }
-      return item;
+
+      if (!savedResult) {
+        throw empErr || new Error("Échec de l'enregistrement du collaborateur en base de données");
+      }
+
+      // Sync email to users if linked by user_id
+      if (savedResult && savedResult.email && savedResult.user_id) {
+        try {
+          await client.from('users').update({ email: savedResult.email }).eq('id', savedResult.user_id);
+        } catch {}
+      }
+
+      return supabaseRowToItem(collectionName, savedResult) as T;
     }
 
     if (table === 'tasks') {
@@ -1102,20 +1213,38 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
 
     if (table === 'visitor_logs') {
       const visDocId = String(item.id || row.doc_id || `vis-${Date.now()}`);
-      row.doc_id = visDocId;
-      row.visitor_name = row.visitor_name || (item as any).visitorName || (item as any).visitor_name || (item as any).name || 'Visiteur';
+      const visitorRow: any = {
+        ...row,
+        doc_id: visDocId,
+        visitor_name: (item as any).visitorName || row.visitor_name || (item as any).name || 'Visiteur',
+        visitor_company: (item as any).visitorCompany || row.visitor_company || null,
+        visitor_phone: (item as any).visitorPhone || row.visitor_phone || null,
+        id_card_number: (item as any).idCardNumber || row.id_card_number || null,
+        site_location: (item as any).siteLocation || row.site_location || null,
+        purpose: (item as any).purpose || row.purpose || null,
+        host_employee_id: (item as any).hostEmployeeId || row.host_employee_id || null,
+        host_employee_name: (item as any).hostEmployeeName || row.host_employee_name || null,
+        badge_number: (item as any).badgeNumber || row.badge_number || null,
+        vehicle_plate: (item as any).vehiclePlate || row.vehicle_plate || null,
+        check_in_time: (item as any).checkInTime || row.check_in_time || null,
+        check_in_date: (item as any).checkInDate && String((item as any).checkInDate).length >= 10 ? String((item as any).checkInDate).split('T')[0] : new Date().toISOString().split('T')[0],
+        check_out_time: (item as any).checkOutTime || row.check_out_time || null,
+        status: (item as any).status || row.status || 'sur_site',
+        raw_data: item,
+        updated_at: new Date().toISOString(),
+      };
+      delete visitorRow.id;
 
       const { data: upsertData, error: upsertErr } = await client
         .from('visitor_logs')
-        .upsert(row, { onConflict: 'doc_id' })
+        .upsert(visitorRow, { onConflict: 'doc_id' })
         .select()
         .single();
       if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
 
-      const { data: insertData, error: insertErr } = await client.from('visitor_logs').insert(row).select().single();
-      if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
-      if (insertErr) {
-        console.error('[supabaseService visitor_logs save error]:', insertErr.message);
+      if (upsertErr) {
+        console.error('[visitor_logs save error]:', upsertErr);
+        throw new Error(upsertErr.message || "Erreur d'enregistrement du visiteur en base de données");
       }
       return item;
     }
@@ -1174,26 +1303,45 @@ export async function deleteDocument(collectionName: string, id: string): Promis
     const client = supabaseAdmin || getClient();
     const strId = String(id).trim();
 
+    if (table === 'generic_collections') {
+      const { error } = await client
+        .from('generic_collections')
+        .delete()
+        .eq('collection', collectionName)
+        .eq('doc_id', strId);
+      if (error) {
+        console.error(`[deleteDocument generic_collections error for ${collectionName}:${strId}]:`, error);
+        throw error;
+      }
+      return true;
+    }
+
+    if (table === 'visitor_logs') {
+      const { error } = await client
+        .from('visitor_logs')
+        .delete()
+        .eq('doc_id', strId);
+      if (error) {
+        console.error(`[deleteDocument visitor_logs error for ${strId}]:`, error);
+        throw error;
+      }
+      return true;
+    }
+
     if (/^\d+$/.test(strId)) {
-      await Promise.allSettled([
-        client.from(table).delete().eq('id', Number(strId)),
-        client.from(table).delete().eq('doc_id', strId),
-      ]);
+      const { error } = await client.from(table).delete().eq('id', Number(strId));
+      if (error) throw error;
     } else if (isUuid(strId)) {
-      await Promise.allSettled([
-        client.from(table).delete().eq('uid', strId),
-        client.from(table).delete().eq('doc_id', strId),
-      ]);
+      const { error } = await client.from(table).delete().eq('uid', strId);
+      if (error) throw error;
     } else {
-      await Promise.allSettled([
-        client.from(table).delete().eq('doc_id', strId),
-        client.from(table).delete().match({ id: strId }),
-      ]);
+      const { error } = await client.from(table).delete().eq('doc_id', strId);
+      if (error) throw error;
     }
     return true;
-  } catch (err) {
-    console.warn(`[Supabase Delete] Exception deleting from ${collectionName}:`, err);
-    return false;
+  } catch (err: any) {
+    console.error(`[Supabase Delete] Exception deleting from ${collectionName}:`, err);
+    throw err;
   }
 }
 

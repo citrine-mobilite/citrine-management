@@ -228,7 +228,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
                 return (
                   <li
-                    key={String(opt.value)}
+                    key={`${String(opt.value)}-${idx}`}
                     onClick={() => handleSelect(opt)}
                     onMouseEnter={() => setHighlightedIndex(idx)}
                     className={`px-3 py-2 rounded-xl flex items-center justify-between gap-2 cursor-pointer transition ${

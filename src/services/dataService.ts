@@ -256,13 +256,11 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
   // 1. Toujours mettre à jour le cache local IndexedDB immédiatement
   await offlineService.cacheLocally(collectionName, cleanedItem);
 
-  // 2. Persister sur le serveur d'application et Supabase de manière atomique
-  await Promise.all([
-    cloudSqlService.saveDocument(collectionName, cleanedItem),
-    supabaseService.saveDocument(collectionName, cleanedItem)
-  ]);
+  // 2. Persister sur Supabase directement et propager l'erreur si elle survient
+  const savedItem = await supabaseService.saveDocument(collectionName, cleanedItem);
+  cloudSqlService.saveDocument(collectionName, cleanedItem).catch(() => {});
 
-  return cleanedItem;
+  return savedItem || cleanedItem;
 }
 
 // Delete document with instant local deletion, server deletion, and Supabase backend
@@ -279,13 +277,8 @@ export async function deleteDocument(collectionName: string, id: string): Promis
   // 2. Supprimer sur le serveur d'application
   cloudSqlService.deleteDocument(collectionName, id).catch(() => {});
 
-  // 3. Supprimer de Supabase
-  Promise.race([
-    supabaseService.deleteDocument(collectionName, id),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase timeout')), 3000))
-  ]).catch((err) => {
-    console.warn(`[Supabase Async Delete Notice for ${collectionName}:${id}]:`, err.message);
-  });
+  // 3. Supprimer de Supabase et attendre la confirmation réelle en base
+  await supabaseService.deleteDocument(collectionName, id);
 
   return true;
 }

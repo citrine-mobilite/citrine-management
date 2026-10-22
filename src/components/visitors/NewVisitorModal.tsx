@@ -160,19 +160,36 @@ export const NewVisitorModal: React.FC<NewVisitorModalProps> = ({
   }, [uniqueKnownWorkers]);
 
   const domainOptions: SelectOption[] = useMemo(() => {
-    return supervisors.map((s) => ({
-      value: s.domain,
-      label: s.label,
-      description: `Superviseur : ${s.supervisorName}`,
-    }));
+    const seen = new Set<string>();
+    const list: SelectOption[] = [];
+    for (const s of supervisors) {
+      if (s.domain && !seen.has(s.domain)) {
+        seen.add(s.domain);
+        list.push({
+          value: s.domain,
+          label: s.label || s.domain,
+          description: `Superviseur : ${s.supervisorName}`,
+        });
+      }
+    }
+    return list;
   }, [supervisors]);
 
   const supervisorOptions: SelectOption[] = useMemo(() => {
-    return supervisors.map((s) => ({
-      value: s.supervisorName,
-      label: s.supervisorName,
-      description: `${s.label} ${s.phone ? `• Tél: ${s.phone}` : ''}`,
-    }));
+    const seen = new Set<string>();
+    const list: SelectOption[] = [];
+    for (const s of supervisors) {
+      const val = s.supervisorName?.trim();
+      if (val && !seen.has(val)) {
+        seen.add(val);
+        list.push({
+          value: val,
+          label: val,
+          description: `${s.label} ${s.phone ? `• Tél: ${s.phone}` : ''}`,
+        });
+      }
+    }
+    return list;
   }, [supervisors]);
 
   const hostEmployeeOptions: SelectOption[] = useMemo(() => {

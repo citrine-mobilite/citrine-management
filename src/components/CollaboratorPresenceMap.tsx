@@ -6,6 +6,7 @@ import { extractCollaboratorMapPoints, createCollaboratorPointIcon, MapBadgePoin
 import { CollaboratorMapFilters } from './presence/map/CollaboratorMapFilters';
 import { CollaboratorMapPointsList } from './presence/map/CollaboratorMapPointsList';
 import { MapLayerControls, MapLayerType } from './presence/map/MapLayerControls';
+import { COMPANY_HQ_LOCATION } from '../utils/geolocation';
 
 interface CollaboratorPresenceMapProps {
   presences: Presence[];
@@ -41,8 +42,8 @@ export function CollaboratorPresenceMap({
 
     if (!mapInstanceRef.current) {
       const map = L.map(mapContainerRef.current, {
-        center: [4.0511, 9.7679],
-        zoom: 13,
+        center: [COMPANY_HQ_LOCATION.latitude, COMPANY_HQ_LOCATION.longitude],
+        zoom: 14,
         zoomControl: false,
         attributionControl: false,
       });
@@ -79,6 +80,29 @@ export function CollaboratorPresenceMap({
     layerGroupRef.current.clearLayers();
     const latLngs: L.LatLngExpression[] = [];
 
+    // Add Company HQ Marker at Japoma Carrefour Matango
+    const hqLatLng: [number, number] = [COMPANY_HQ_LOCATION.latitude, COMPANY_HQ_LOCATION.longitude];
+    latLngs.push(hqLatLng);
+
+    const hqIcon = L.divIcon({
+      className: 'company-hq-marker',
+      html: `
+        <div style="background-color: #2A7B76; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.35); font-size: 18px;" title="Siège Citrine (Japoma Carrefour Matango)">
+          🏢
+        </div>
+      `,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20],
+    });
+    const hqMarker = L.marker(hqLatLng, { icon: hqIcon }).addTo(layerGroupRef.current!);
+    hqMarker.bindPopup(`
+      <div style="font-family: sans-serif; font-size: 12px; padding: 4px;">
+        <strong style="color: #2A7B76;">Siège de l'Entreprise (Citrine Management)</strong>
+        <div style="font-size: 11px; margin-top: 2px;">📍 Japoma Carrefour Matango, Douala</div>
+        <div style="font-size: 10px; color: #666; margin-top: 2px;">Périmètre de géofencing (500m)</div>
+      </div>
+    `);
+
     points.forEach((pt) => {
       const latLng: [number, number] = [pt.lat, pt.lng];
       latLngs.push(latLng);
@@ -97,7 +121,7 @@ export function CollaboratorPresenceMap({
 
     if (latLngs.length > 0 && !hasFittedRef.current) {
       const bounds = L.latLngBounds(latLngs);
-      mapInstanceRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      mapInstanceRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
       hasFittedRef.current = true;
     }
   }, [points, employeeName]);

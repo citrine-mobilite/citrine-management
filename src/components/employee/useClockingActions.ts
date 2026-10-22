@@ -10,7 +10,7 @@ import {
   EmergencyType,
   NotificationLog
 } from '../../types';
-import { getCurrentUserLocation } from '../../utils/geolocation';
+import { getCurrentUserLocation, calculateDistanceMeters, COMPANY_HQ_LOCATION } from '../../utils/geolocation';
 import { isLate } from '../../utils/dateUtils';
 import { incidentService } from '../../services/incidentService';
 import { savePresenceAtomic } from '../../services/dataService';
@@ -52,14 +52,13 @@ export function useClockingActions({
     try {
       let latitude: number | undefined = customLocation?.latitude;
       let longitude: number | undefined = customLocation?.longitude;
-      let locationName = customLocation?.locationName || 'Bureau / Site principal';
+      let locationName = customLocation?.locationName || '';
 
       if (latitude === undefined || longitude === undefined) {
         try {
           const pos = await getCurrentUserLocation();
           latitude = pos.latitude;
           longitude = pos.longitude;
-          locationName = `GPS (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
         } catch (geoErr) {
           showToast(
             'Pointage Refusé ❌',
@@ -79,6 +78,14 @@ export function useClockingActions({
         );
         setIsLocating(false);
         return;
+      }
+
+      // Geofencing check: if within 500m of company HQ (Japoma Carrefour Matango), mark as "Sur site"
+      const distanceToHQ = calculateDistanceMeters(latitude, longitude, COMPANY_HQ_LOCATION.latitude, COMPANY_HQ_LOCATION.longitude);
+      if (distanceToHQ <= 500) {
+        locationName = `Siège Citrine - Japoma Carrefour Matango (Sur site - ${Math.round(distanceToHQ)}m)`;
+      } else {
+        locationName = `Hors site - GPS (${latitude.toFixed(4)}, ${longitude.toFixed(4)} - ${Math.round(distanceToHQ)}m du siège)`;
       }
 
       const now = new Date();

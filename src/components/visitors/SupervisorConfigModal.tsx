@@ -14,8 +14,8 @@ export const SupervisorConfigModal: React.FC<SupervisorConfigModalProps> = ({
   onSaved,
 }) => {
   const [list, setList] = useState<BuildingSupervisor[]>(currentSupervisors);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [statusState, setStatusState] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleUpdate = (index: number, field: keyof BuildingSupervisor, value: string) => {
     setList((prev) =>
@@ -38,29 +38,37 @@ export const SupervisorConfigModal: React.FC<SupervisorConfigModalProps> = ({
   const handleDelete = async (index: number) => {
     const target = list[index];
     if (target.id) {
-      await removeBuildingSupervisor(target.id);
+      try {
+        setStatusState('pending');
+        await removeBuildingSupervisor(target.id);
+        setStatusState('idle');
+      } catch (err: any) {
+        console.error('Error removing supervisor from DB:', err);
+        setStatusState('error');
+        setErrorMessage(err?.message || 'Erreur lors de la suppression en base de données');
+        return;
+      }
     }
     setList((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true);
+    setStatusState('pending');
+    setErrorMessage(null);
     try {
-      for (const sup of list) {
-        if (sup.supervisorName.trim()) {
-          await saveBuildingSupervisor(sup);
-        }
-      }
-      setSaveSuccess(true);
-      onSaved?.(list);
+      const validList = list.filter((s) => s.supervisorName.trim());
+      const results = await Promise.all(validList.map((sup) => saveBuildingSupervisor(sup)));
+
+      setStatusState('success');
+      onSaved?.(results);
       setTimeout(() => {
         onClose();
-      }, 700);
-    } catch (err) {
-      console.error('Error saving supervisors to database:', err);
-    } finally {
-      setIsSaving(false);
+      }, 900);
+    } catch (err: any) {
+      console.error('Error saving supervisors to DB:', err);
+      setStatusState('error');
+      setErrorMessage(err?.message || 'Erreur lors de l\'enregistrement en base de données');
     }
   };
 
@@ -163,12 +171,23 @@ export const SupervisorConfigModal: React.FC<SupervisorConfigModalProps> = ({
           </button>
 
           <div className="flex items-center justify-between pt-3 border-t border-stone-100">
-            {saveSuccess ? (
+            {statusState === 'success' && (
               <span className="text-emerald-700 font-semibold flex items-center gap-1">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Superviseurs enregistrés en base de données !
+                Succès : Superviseurs enregistrés en base de données !
               </span>
-            ) : (
+            )}
+            {statusState === 'pending' && (
+              <span className="text-amber-600 font-semibold flex items-center gap-1 animate-pulse">
+                ⏳ En attente : Enregistrement en cours en base de données...
+              </span>
+            )}
+            {statusState === 'error' && (
+              <span className="text-rose-600 font-semibold flex items-center gap-1">
+                ❌ Erreur : {errorMessage || 'Échec de l\'enregistrement'}
+              </span>
+            )}
+            {statusState === 'idle' && (
               <span className="text-[11px] text-stone-400">
                 {list.length} superviseur(s) configuré(s)
               </span>
@@ -184,11 +203,11 @@ export const SupervisorConfigModal: React.FC<SupervisorConfigModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isSaving}
+                disabled={statusState === 'pending'}
                 className="px-5 py-2 bg-[#2A7B76] text-white rounded-xl font-bold hover:bg-[#236863] transition cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                <span>{isSaving ? 'Enregistrement...' : 'Enregistrer en Base de Données'}</span>
+                <span>{statusState === 'pending' ? 'Enregistrement...' : 'Enregistrer en Base de Données'}</span>
               </button>
             </div>
           </div>
