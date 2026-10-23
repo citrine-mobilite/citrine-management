@@ -3,7 +3,7 @@ import { Task, NotificationLog, Employee, TaskStatus, TaskPriority, TaskProject,
 import { DEFAULT_TASK_PROJECTS } from './taskConstants';
 import { taskService } from '../../services/taskService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
-import { showSuccessAlert, showErrorAlert } from '../../utils/sweetAlert';
+import { showSuccessAlert, showErrorAlert, confirmDeleteAlert } from '../../utils/sweetAlert';
 import { isSelfOnlyUser } from '../../utils/roleUtils';
 
 interface UseTaskLogicProps {
@@ -48,37 +48,52 @@ export function useTaskLogic({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
-  const handleOpenDeleteModal = (task: Task) => {
-    setTaskToDelete(task);
-    setIsDeleteModalOpen(true);
+  const handleOpenDeleteModal = async (task: Task) => {
+    const isConfirmed = await confirmDeleteAlert({
+      title: 'Supprimer la tâche',
+      text: 'Voulez-vous vraiment supprimer cette tâche ? Cette action est irréversible.',
+      itemName: task.title,
+      confirmButtonText: 'Oui, supprimer la tâche',
+    });
+
+    if (!isConfirmed) return;
+
+    const targetId = String(task.id);
+    const targetDocId = task.docId ? String(task.docId) : '';
+
+    try {
+      await taskService.deleteTask(targetId);
+      if (targetDocId && targetDocId !== targetId) {
+        await taskService.deleteTask(targetDocId);
+      }
+
+      const updated = tasks.filter((t) => {
+        const tId = String(t.id);
+        const tDocId = t.docId ? String(t.docId) : '';
+        if (tId === targetId || (targetDocId && tId === targetDocId)) return false;
+        if (tDocId && (tDocId === targetId || (targetDocId && tDocId === targetDocId))) return false;
+        return true;
+      });
+
+      onUpdateTasks(updated);
+
+      if (
+        selectedTaskForDetail &&
+        (String(selectedTaskForDetail.id) === targetId || (targetDocId && String(selectedTaskForDetail.id) === targetDocId))
+      ) {
+        setSelectedTaskForDetail(null);
+      }
+
+      if (showToast) {
+        showToast('Tâche supprimée avec succès.', 'success');
+      }
+    } catch (err: any) {
+      await showErrorAlert('Erreur de suppression', err?.message || 'Impossible de supprimer la tâche.');
+    }
   };
 
   const handleDeleteTaskConfirm = async () => {
-    if (!taskToDelete) return;
-    const targetId = String(taskToDelete.id);
-    const targetDocId = taskToDelete.docId ? String(taskToDelete.docId) : '';
-
-    await taskService.deleteTask(targetId);
-    if (targetDocId && targetDocId !== targetId) {
-      await taskService.deleteTask(targetDocId);
-    }
-
-    const updated = tasks.filter((t) => {
-      const tId = String(t.id);
-      const tDocId = t.docId ? String(t.docId) : '';
-      if (tId === targetId || (targetDocId && tId === targetDocId)) return false;
-      if (tDocId && (tDocId === targetId || (targetDocId && tDocId === targetDocId))) return false;
-      return true;
-    });
-
-    onUpdateTasks(updated);
-
-    if (
-      selectedTaskForDetail &&
-      (String(selectedTaskForDetail.id) === targetId || (targetDocId && String(selectedTaskForDetail.id) === targetDocId))
-    ) {
-      setSelectedTaskForDetail(null);
-    }
+    // Maintenu pour rétrocompatibilité
   };
 
   // Connected employee
@@ -131,7 +146,6 @@ export function useTaskLogic({
     saveProjects(updated);
     setActiveProjectId(newProject.id);
     if (showToast) showToast(`Projet "${newProject.name}" créé avec succès !`, 'success');
-    await showSuccessAlert('Projet créé !', `Le module/projet "${newProject.name}" a été créé avec succès.`);
   };
 
   const handleCreateTask = async (taskData: Omit<Task, 'id' | 'comments' | 'incidents'> & { subtasks?: Subtask[] }) => {
@@ -170,7 +184,6 @@ export function useTaskLogic({
       if (showToast) {
         showToast('Tâche créée et enregistrée en base avec succès.', 'success');
       }
-      await showSuccessAlert('Tâche créée !', `La tâche "${taskItem.title}" a été enregistrée avec succès.`);
     } catch (err: any) {
       await showErrorAlert('Erreur de création', err?.message || 'Impossible d\'enregistrer la tâche.');
     }
@@ -203,9 +216,8 @@ export function useTaskLogic({
       }
 
       if (showToast) {
-        showToast(`Sous-tâche "${subtask.title}" créée avec succès (Style Asana Pro) !`, 'success');
+        showToast(`Sous-tâche "${subtask.title}" créée avec succès !`, 'success');
       }
-      await showSuccessAlert('Sous-tâche ajoutée !', `La sous-tâche "${subtask.title}" a été ajoutée.`);
     } catch (err: any) {
       await showErrorAlert('Erreur', err?.message || 'Impossible d\'ajouter la sous-tâche.');
     }

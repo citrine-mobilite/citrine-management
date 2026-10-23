@@ -5,12 +5,11 @@ import { saveUser, deleteUser } from '../services/userService';
 import { hashPassword } from '../utils/cryptoUtils';
 import { logAdminOperation } from '../services/adminAuditService';
 import { UserFormModal } from './users/UserFormModal';
-import { UserDeleteConfirmModal } from './users/UserDeleteConfirmModal';
 import { UserTableItemRow } from './users/UserTableItemRow';
 import { UserFilterToolbar } from './users/UserFilterToolbar';
 import { exportToExcel } from '../services/excelExportService';
 import { exportElementToPdf } from '../services/pdfExportService';
-import { showSuccessAlert, showErrorAlert } from '../utils/sweetAlert';
+import { showSuccessAlert, showErrorAlert, confirmDeleteAlert } from '../utils/sweetAlert';
 
 interface UserManagementPanelProps {
   users: AppUser[];
@@ -37,8 +36,6 @@ export default function UserManagementPanel({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
-  const [userToDelete, setUserToDelete] = useState<AppUser | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredUsers = users.filter((u) => {
     if (roleFilter !== 'all' && u.role !== roleFilter) return false;
@@ -58,6 +55,38 @@ export default function UserManagementPanel({
   const handleEditUser = (user: AppUser) => {
     setEditingUser(user);
     setIsModalOpen(true);
+  };
+
+  const handleDeleteUser = async (user: AppUser) => {
+    const isConfirmed = await confirmDeleteAlert({
+      title: 'Supprimer cet utilisateur ?',
+      text: `Voulez-vous vraiment supprimer définitivement le compte de ${user.name} (${user.email}) ? Cette action est irréversible.`,
+      itemName: user.name,
+      confirmButtonText: 'Oui, supprimer le compte',
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      await deleteUser(user.id);
+      if (onUpdateUsers) {
+        onUpdateUsers(users.filter((u) => u.id !== user.id));
+      }
+      logAdminOperation({
+        authorName: currentUser.name,
+        authorRole: currentUser.role,
+        targetUserId: user.id,
+        targetName: user.name,
+        operationType: 'status_change',
+        operationLabel: 'Suppression de Compte',
+        details: `Compte utilisateur ${user.email} supprimé définitivement.`,
+      });
+      if (showToast) {
+        showToast(`Le compte de "${user.name}" a été supprimé avec succès.`, 'success');
+      }
+    } catch (err: any) {
+      await showErrorAlert('Échec de la suppression', err?.message || 'Erreur lors de la suppression de l\'utilisateur.');
+    }
   };
 
   const handleSaveUser = async (data: {
@@ -297,7 +326,7 @@ export default function UserManagementPanel({
                     user={user}
                     currentUserId={currentUser.id}
                     onEdit={handleEditUser}
-                    onDelete={(u) => setUserToDelete(u)}
+                    onDelete={handleDeleteUser}
                   />
                 ))
               )}
@@ -318,25 +347,6 @@ export default function UserManagementPanel({
           onSave={handleSaveUser}
         />
       )}
-
-      <UserDeleteConfirmModal
-        user={userToDelete}
-        onClose={() => setUserToDelete(null)}
-        onConfirm={async () => {
-          await deleteUser(userToDelete!.id);
-          logAdminOperation({
-            authorName: currentUser.name,
-            authorRole: currentUser.role,
-            targetUserId: userToDelete!.id,
-            targetName: userToDelete!.name,
-            operationType: 'status_change',
-            operationLabel: 'Suppression de Compte',
-            details: `Compte utilisateur ${userToDelete!.email} supprimé définitivement.`,
-          });
-        }}
-        isDeleting={isDeleting}
-        setIsDeleting={setIsDeleting}
-      />
     </div>
   );
 }

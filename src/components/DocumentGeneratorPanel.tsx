@@ -27,6 +27,7 @@ import { CreateDocTemplateModal } from './documents/CreateDocTemplateModal';
 import { EditDocumentModal } from './documents/EditDocumentModal';
 import { showSuccessAlert, showErrorAlert, confirmActionAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
+import { asyncActionTrackerService } from '../services/asyncActionTrackerService';
 
 interface DocumentGeneratorPanelProps {
   documents: GeneratedDocument[];
@@ -154,7 +155,9 @@ export default function DocumentGeneratorPanel({
 
     setIsResettingTemplates(true);
     try {
-      await resetRHDocumentTemplatesToDefaults();
+      await asyncActionTrackerService.track('Synchronisation des modèles RH...', async () => {
+        await resetRHDocumentTemplatesToDefaults();
+      });
       if (showToast) showToast('Modèles RH synchronisés avec succès en base de données.');
       await showSuccessAlert('Modèles synchronisés !', 'L\'ensemble des modèles officiels RH a été actualisé.');
     } catch (err: any) {

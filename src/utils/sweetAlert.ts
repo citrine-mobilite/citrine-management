@@ -158,7 +158,10 @@ export async function showErrorAlert(title: string = 'Erreur', text: string = 'U
 }
 
 /**
- * Exécute une suppression complète avec Confirmation Modal -> Loader -> SweetAlert Succès ou Échec
+ * Exécute une suppression complète :
+ * - Confirmation Modal
+ * - Loader affiché UNIQUEMENT si l'action prend plus de 1 seconde (règle des 1000ms)
+ * - Fermeture immédiate et propre, sans pop-up de succès redondant
  */
 export async function executeDeleteWithSweetAlert(options: {
   title?: string;
@@ -174,8 +177,6 @@ export async function executeDeleteWithSweetAlert(options: {
     text = 'Voulez-vous vraiment supprimer cet élément ? Cette action est irréversible.',
     itemName,
     action,
-    successTitle = 'Supprimé !',
-    successMessage,
     errorMessage = 'Échec de la suppression.',
   } = options;
 
@@ -183,20 +184,24 @@ export async function executeDeleteWithSweetAlert(options: {
   const isConfirmed = await confirmDeleteAlert({ title, text, itemName });
   if (!isConfirmed) return false;
 
-  // 2. Affichage du Loader
-  showLoadingAlert('Suppression en cours...', 'Veuillez patienter pendant la mise à jour...');
+  // 2. Déclenchement du Loader SI ET SEULEMENT SI l'action prend plus de 1 seconde
+  let loaderTimer: any = setTimeout(() => {
+    showLoadingAlert('Suppression en cours...', 'Veuillez patienter pendant la mise à jour...');
+  }, 1000);
 
   try {
     // 3. Exécution de l'action
     await action();
 
-    // 4. SweetAlert Succès
-    const finalSuccessMsg = successMessage || (itemName ? `"${itemName}" a été supprimé avec succès.` : 'L\'élément a été supprimé avec succès.');
-    await showSuccessAlert(successTitle, finalSuccessMsg);
+    // 4. Fermeture propre : annulation du loader s'il n'a pas encore été déclenché, ou fermeture
+    clearTimeout(loaderTimer);
+    if (Swal.isVisible()) {
+      Swal.close();
+    }
     return true;
   } catch (error: any) {
+    clearTimeout(loaderTimer);
     console.error('Erreur lors de la suppression :', error);
-    // 5. SweetAlert Échec
     const finalErrorMsg = error?.message || errorMessage;
     await showErrorAlert('Échec de la suppression', finalErrorMsg);
     return false;
@@ -204,7 +209,10 @@ export async function executeDeleteWithSweetAlert(options: {
 }
 
 /**
- * Exécute une action générale avec Confirmation Modal -> Loader -> SweetAlert Succès ou Échec
+ * Exécute une action générale :
+ * - Confirmation Modal
+ * - Loader affiché UNIQUEMENT si l'action prend plus de 1 seconde (règle des 1000ms)
+ * - Fermeture propre
  */
 export async function executeActionWithSweetAlert<T = any>(options: {
   title: string;
@@ -228,8 +236,6 @@ export async function executeActionWithSweetAlert<T = any>(options: {
     loadingTitle = 'Traitement en cours...',
     loadingText = 'Veuillez patienter...',
     action,
-    successTitle = 'Opération réussie !',
-    successMessage = 'L\'action a été enregistrée avec succès.',
     errorMessage = 'Une erreur est survenue lors du traitement.',
   } = options;
 
@@ -243,19 +249,24 @@ export async function executeActionWithSweetAlert<T = any>(options: {
   });
   if (!isConfirmed) return { success: false };
 
-  // 2. Loader
-  showLoadingAlert(loadingTitle, loadingText);
+  // 2. Déclenchement du Loader SI ET SEULEMENT SI l'action prend plus de 1 seconde
+  let loaderTimer: any = setTimeout(() => {
+    showLoadingAlert(loadingTitle, loadingText);
+  }, 1000);
 
   try {
     // 3. Action
     const result = await action();
 
-    // 4. SweetAlert Succès
-    await showSuccessAlert(successTitle, successMessage);
+    // 4. Fermeture directe
+    clearTimeout(loaderTimer);
+    if (Swal.isVisible()) {
+      Swal.close();
+    }
     return { success: true, data: result };
   } catch (error: any) {
+    clearTimeout(loaderTimer);
     console.error('Erreur lors du traitement :', error);
-    // 5. SweetAlert Échec
     await showErrorAlert('Erreur', error?.message || errorMessage);
     return { success: false, error };
   }

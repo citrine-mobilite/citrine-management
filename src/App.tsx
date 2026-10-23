@@ -38,6 +38,7 @@ import { DatabaseHealthBanner } from './components/common/DatabaseHealthBanner';
 import OfflineStatusBanner from './components/OfflineStatusBanner';
 import { GlobalTooltipContainer } from './components/common/GlobalTooltipContainer';
 import { PushNotificationPopupContainer } from './components/notifications/PushNotificationPopupContainer';
+import { GlobalActionLoader } from './components/common/GlobalActionLoader';
 
 export default function App() {
   const initialData = useAppInitialData();
@@ -480,6 +481,9 @@ export default function App() {
 
       {/* Global Luxury Tooltip Engine */}
       <GlobalTooltipContainer />
+
+      {/* Global Action Loader (Déclenchement automatique pour toute action > 1 seconde) */}
+      <GlobalActionLoader />
     </div>
   );
 }

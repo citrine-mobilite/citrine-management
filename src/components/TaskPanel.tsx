@@ -14,7 +14,6 @@ import {
   SubtaskCreateModal,
   useTaskLogic
 } from './tasks';
-import { ConfirmDeleteModal } from './common/ConfirmDeleteModal';
 
 interface TaskPanelProps {
   tasks: Task[];
@@ -196,20 +195,6 @@ export default function TaskPanel({
           currentUser={currentUser}
         />
       )}
-
-      {/* Modal Confirmation de Suppression avec Loader & SweetAlert */}
-      <ConfirmDeleteModal
-        isOpen={logic.isDeleteModalOpen}
-        title="Supprimer la tâche"
-        message="Voulez-vous vraiment supprimer cette tâche ? Cette action est irréversible."
-        itemName={logic.taskToDelete?.title}
-        onClose={() => {
-          logic.setIsDeleteModalOpen(false);
-          setTimeout(() => logic.setTaskToDelete(null), 300);
-        }}
-        onConfirm={logic.handleDeleteTaskConfirm}
-        showToast={showToast}
-      />
     </div>
   );
 }

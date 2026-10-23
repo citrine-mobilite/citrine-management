@@ -3,6 +3,7 @@ import { supabaseService, mapCollectionToTable } from './supabaseService';
 import { cloudSqlService } from './cloudSqlService';
 import { supabase } from '../lib/supabase';
 import { pushNotificationBridgeService } from './pushNotificationBridgeService';
+import { asyncActionTrackerService } from './asyncActionTrackerService';
 
 export const COLLECTIONS = {
   EMPLOYEES: 'employees',
@@ -280,11 +281,12 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
   // 1. Toujours mettre à jour le cache local IndexedDB immédiatement
   await offlineService.cacheLocally(collectionName, cleanedItem);
 
-  // 2. Persister sur Supabase directement et propager l'erreur si elle survient
-  const savedItem = await supabaseService.saveDocument(collectionName, cleanedItem);
-  cloudSqlService.saveDocument(collectionName, cleanedItem).catch(() => {});
-
-  return savedItem || cleanedItem;
+  // 2. Persister sur Supabase directement avec suivi du seuil de 1 seconde
+  return asyncActionTrackerService.track('Enregistrement des modifications...', async () => {
+    const savedItem = await supabaseService.saveDocument(collectionName, cleanedItem);
+    cloudSqlService.saveDocument(collectionName, cleanedItem).catch(() => {});
+    return savedItem || cleanedItem;
+  });
 }
 
 // Delete document with instant local deletion, server deletion, and Supabase backend
@@ -298,13 +300,12 @@ export async function deleteDocument(collectionName: string, id: string): Promis
     }
   } catch {}
 
-  // 2. Supprimer sur le serveur d'application
-  cloudSqlService.deleteDocument(collectionName, id).catch(() => {});
-
-  // 3. Supprimer de Supabase et attendre la confirmation réelle en base
-  await supabaseService.deleteDocument(collectionName, id);
-
-  return true;
+  // 2. Supprimer sur le serveur d'application et Supabase avec suivi du seuil de 1 seconde
+  return asyncActionTrackerService.track('Suppression en cours...', async () => {
+    cloudSqlService.deleteDocument(collectionName, id).catch(() => {});
+    await supabaseService.deleteDocument(collectionName, id);
+    return true;
+  });
 }
 
 export async function seedDatabaseIfEmpty() {
@@ -312,6 +313,7 @@ export async function seedDatabaseIfEmpty() {
 }
 
 export async function savePresenceAtomic(presence: any, incident?: any | null, notification?: any | null): Promise<{ success: boolean; error?: string; data?: any }> {
+  return asyncActionTrackerService.track('Enregistrement du pointage...', async () => {
   try {
     const cleanedPresence = removeUndefined(presence);
     if (!cleanedPresence.date) {
@@ -432,4 +434,5 @@ export async function savePresenceAtomic(presence: any, incident?: any | null, n
     console.error("Atomic presence transaction failed:", err);
     return { success: false, error: err.message || "Erreur lors de la transaction atomique de pointage (présence non créée)" };
   }
+  });
 }

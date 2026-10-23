@@ -1,16 +1,18 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { asyncActionTrackerService } from '../asyncActionTrackerService';
 
 export async function exportElementToPdf(
   elementOrId: HTMLElement | string,
   fileName: string = 'Document_Citrine.pdf'
 ): Promise<boolean> {
-  try {
-    const targetElement = typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
-    if (!targetElement) {
-      console.error(`Export PDF: Element not found (${elementOrId})`);
-      return false;
-    }
+  return asyncActionTrackerService.track('Génération du document PDF...', async () => {
+    try {
+      const targetElement = typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
+      if (!targetElement) {
+        console.error(`Export PDF: Element not found (${elementOrId})`);
+        return false;
+      }
 
     const canvas = await html2canvas(targetElement, {
       scale: 2,
@@ -48,4 +50,5 @@ export async function exportElementToPdf(
     console.error('Error exporting element to PDF:', error);
     return false;
   }
+  });
 }

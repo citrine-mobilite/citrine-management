@@ -3,6 +3,7 @@ import { hashPassword } from '../utils/cryptoUtils';
 import { supabase, supabaseAdmin } from '../lib/supabase';
 import { supabaseService } from './supabaseService';
 import { cloudSqlService } from './cloudSqlService';
+import { asyncActionTrackerService } from './asyncActionTrackerService';
 
 export const USERS_COLLECTION = 'users';
 
@@ -96,6 +97,7 @@ export function subscribeToUsers(callback: (users: AppUser[]) => void) {
 }
 
 export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<AppUser> {
+  return asyncActionTrackerService.track('Enregistrement du compte utilisateur...', async () => {
   try {
     const cleanUser: AppUser = {
       ...user,
@@ -341,6 +343,7 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
     console.error('Error saving user:', error);
     return user;
   }
+  });
 }
 
 export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser | null> {
@@ -509,11 +512,13 @@ export async function fetchFreshUser(emailOrId: string): Promise<AppUser | null>
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  try {
-    await supabaseService.deleteDocument('users', userId).catch(() => {});
-  } catch (error) {
-    console.error('Error deleting user:', error);
-  }
+  return asyncActionTrackerService.track('Suppression du compte utilisateur...', async () => {
+    try {
+      await supabaseService.deleteDocument('users', userId).catch(() => {});
+    } catch (error) {
+      console.error('Error deleting user:', error);
+    }
+  });
 }
 
 export function findUserByEmail(users: AppUser[], email?: string | null): AppUser | undefined {
