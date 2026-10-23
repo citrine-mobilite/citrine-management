@@ -27,6 +27,7 @@ import { EmployeeDisciplinarySummary } from './disciplinary/EmployeeDisciplinary
 import { RecognitionPanel } from './disciplinary/RecognitionPanel';
 import { logSystemAudit } from '../services/adminAuditService';
 import { showSuccessAlert, showErrorAlert } from '../utils/sweetAlert';
+import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
 
 interface DisciplinaryPanelProps {
   incidents: DisciplinaryIncident[];
@@ -43,6 +44,7 @@ export default function DisciplinaryPanel({
   onUpdateIncidents,
   employees = [],
   currentUser,
+  currentRole,
   showToast,
 }: DisciplinaryPanelProps) {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
@@ -163,9 +165,21 @@ export default function DisciplinaryPanel({
     }
   };
 
+  const isRestricted = isSelfOnlyUser(currentUser, currentRole);
+  const myEmp = useMemo(() => findMatchingEmployee(employees, currentUser), [employees, currentUser]);
+  const myEmpId = myEmp?.id || currentUser?.id;
+  const myEmpName = (myEmp?.name || currentUser?.name || '').toLowerCase();
+
   // Filtrage combiné (Recherche, Statut, Gravité, Collaborateur, Période)
   const filteredIncidents = useMemo(() => {
     return incidents.filter((i) => {
+      // Isolation stricte collaborateurs
+      if (isRestricted) {
+        const matchesSelf = (myEmpId && i.employeeId === myEmpId) || 
+                            (myEmpName && i.employeeName.toLowerCase().includes(myEmpName));
+        if (!matchesSelf) return false;
+      }
+
       // 1. Recherche plein texte
       const q = searchTerm.toLowerCase();
       const matchSearch =
@@ -200,7 +214,7 @@ export default function DisciplinaryPanel({
 
       return matchSearch && matchStatus && matchSeverity && matchEmployee && matchPeriod;
     });
-  }, [incidents, searchTerm, statusFilter, severityFilter, employeeFilter, periodFilter]);
+  }, [incidents, isRestricted, myEmpId, myEmpName, searchTerm, statusFilter, severityFilter, employeeFilter, periodFilter]);
 
   // Counts for tabs
   const openCount = incidents.filter((i) => i.status === 'ouvert' || i.status === 'en_instruction').length;
@@ -239,20 +253,22 @@ export default function DisciplinaryPanel({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-5 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0"
-          >
-            <Plus className="h-4 w-4 text-[#2A7B76]" />
-            <span>+ Convoquer Conseil / Consigner Fait</span>
-          </button>
-        </div>
+        {!isRestricted && (
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-5 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0"
+            >
+              <Plus className="h-4 w-4 text-[#2A7B76]" />
+              <span>+ Convoquer Conseil / Consigner Fait</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="space-y-6">
         {/* KPI Stats */}
-        <DisciplinaryStats incidents={incidents} />
+        <DisciplinaryStats incidents={filteredIncidents} />
 
         {/* Quick Filter Tabs for Procedural Stages */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -333,22 +349,29 @@ export default function DisciplinaryPanel({
             </div>
 
             {/* 2. Filtre Collaborateur */}
-            <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5">
-              <User className="h-3.5 w-3.5 text-stone-400" />
-              <span className="text-[10px] font-bold text-stone-400">Collaborateur :</span>
-              <select
-                value={employeeFilter}
-                onChange={(e) => setEmployeeFilter(e.target.value)}
-                className="bg-transparent font-bold text-stone-700 text-xs focus:outline-none cursor-pointer max-w-[180px]"
-              >
-                <option value="all">Tous les collaborateurs</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!isRestricted ? (
+              <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5">
+                <User className="h-3.5 w-3.5 text-stone-400" />
+                <span className="text-[10px] font-bold text-stone-400">Collaborateur :</span>
+                <select
+                  value={employeeFilter}
+                  onChange={(e) => setEmployeeFilter(e.target.value)}
+                  className="bg-transparent font-bold text-stone-700 text-xs focus:outline-none cursor-pointer max-w-[180px]"
+                >
+                  <option value="all">Tous les collaborateurs</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5 text-stone-700 font-bold text-xs">
+                <User className="h-3.5 w-3.5 text-stone-400" />
+                <span>Mon dossier personnel</span>
+              </div>
+            )}
 
             {/* 3. Filtre Période */}
             <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5">

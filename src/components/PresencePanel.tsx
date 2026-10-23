@@ -35,9 +35,9 @@ import { StaticDoorQrModal } from './presence/StaticDoorQrModal';
 import { PresenceIncidentsAdminView } from './presence/PresenceIncidentsAdminView';
 import PresenceRequestsView from './PresenceRequestsView';
 import { extractPresenceRequests } from './presence/requests/presenceRequestsUtils';
-import { incidentService } from '../services/incidentService';
-import { isEmployeeOnlyRole } from '../utils/roleUtils';
+import { isEmployeeOnlyRole, isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
 import { realtimeSyncService } from '../services/realtimeSyncService';
+import { incidentService } from '../services/incidentService';
 
 interface PresencePanelProps {
   employees: Employee[];
@@ -66,6 +66,7 @@ export default function PresencePanel({
   onSelectTab,
   showToast,
   currentUser,
+  currentRole,
   moduleConfig,
   onUpdateModuleConfig,
   attendanceIncidents = [],
@@ -74,15 +75,21 @@ export default function PresencePanel({
 }: PresencePanelProps) {
   const todayStr = new Date().toISOString().split('T')[0];
 
+  const isRestricted = isSelfOnlyUser(currentUser, currentRole);
+  const myEmp = useMemo(() => findMatchingEmployee(employees, currentUser), [employees, currentUser]);
+
   // Les administrateurs et responsables ne badgent pas : on les exclut du pointage du jour
   const clockableEmployees = useMemo(() => {
-    return employees.filter((e) => {
+    const list = employees.filter((e) => {
       const isRoleOk = isEmployeeOnlyRole(e.role || e.roleType || e.position);
       const st = e.employmentStatus || (typeof e.status === 'string' ? e.status : (e.status ? 'en_poste' : 'parti'));
       const isInPoste = st === 'en_poste' || st === ('true' as any);
       return isRoleOk && isInPoste;
     });
-  }, [employees]);
+    if (!isRestricted) return list;
+    if (myEmp) return [myEmp];
+    return list.slice(0, 1);
+  }, [employees, isRestricted, myEmp]);
 
   // Selected date and employee for the left sidebar clocking widget
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -660,13 +667,15 @@ export default function PresencePanel({
             >
               {nextStep.label}
             </button>
-            <button
-              onClick={() => setIsAdminClockModalOpen(true)}
-              className="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200"
-            >
-              <UserCheck className="h-3.5 w-3.5 text-[#2A7B76]" />
-              <span>Badger avec motif pour ce collaborateur</span>
-            </button>
+            {!isRestricted && (
+              <button
+                onClick={() => setIsAdminClockModalOpen(true)}
+                className="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200"
+              >
+                <UserCheck className="h-3.5 w-3.5 text-[#2A7B76]" />
+                <span>Badger avec motif pour ce collaborateur</span>
+              </button>
+            )}
             <p className="text-[10px] text-stone-400 italic text-center leading-normal">
               {nextStep.desc}
             </p>
@@ -737,16 +746,22 @@ export default function PresencePanel({
           <div className="flex items-center gap-2 w-full md:w-auto flex-1">
             <div className="space-y-1 flex-1">
               <label className="block text-[10px] text-stone-400 font-extrabold uppercase">Collaborateur :</label>
-              <select
-                value={collaboratorFilter}
-                onChange={(e) => setCollaboratorFilter(e.target.value)}
-                className="w-full px-3 py-1.5 border border-stone-200 bg-stone-50 rounded-xl text-xs font-semibold focus:ring-1 focus:ring-[#2A7B76] outline-none"
-              >
-                <option value="all">Tous les collaborateurs</option>
-                {clockableEmployees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                ))}
-              </select>
+              {!isRestricted ? (
+                <select
+                  value={collaboratorFilter}
+                  onChange={(e) => setCollaboratorFilter(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-stone-200 bg-stone-50 rounded-xl text-xs font-semibold focus:ring-1 focus:ring-[#2A7B76] outline-none"
+                >
+                  <option value="all">Tous les collaborateurs</option>
+                  {clockableEmployees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="w-full px-3 py-1.5 border border-stone-200 bg-stone-50 rounded-xl text-xs font-bold text-stone-800">
+                  👤 {myEmp?.name || 'Mon pointage personnel'}
+                </div>
+              )}
             </div>
 
             <div className="space-y-1 flex-1">
@@ -1085,9 +1100,10 @@ export default function PresencePanel({
           {/* Conteneur de carte fixe dans le card, isolé du contexte global */}
           <div className="w-full h-[360px] rounded-2xl overflow-hidden border border-stone-200 bg-stone-100 relative isolate z-0">
             <PointageMap
-              presences={presences}
-              employees={employees}
+              presences={isRestricted ? presences.filter(p => p.employeeId === myEmp?.id) : presences}
+              employees={clockableEmployees}
               selectedDate={selectedDate}
+              selectedEmployeeId={isRestricted ? myEmp?.id : undefined}
               currentLayer={mapLayer}
               onLayerChange={setMapLayer}
               showInternalControls={false}

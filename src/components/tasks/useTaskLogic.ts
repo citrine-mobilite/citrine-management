@@ -4,6 +4,7 @@ import { DEFAULT_TASK_PROJECTS } from './taskConstants';
 import { taskService } from '../../services/taskService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { showSuccessAlert, showErrorAlert } from '../../utils/sweetAlert';
+import { isSelfOnlyUser } from '../../utils/roleUtils';
 
 interface UseTaskLogicProps {
   tasks: Task[];
@@ -86,10 +87,23 @@ export function useTaskLogic({
     return employees.find((e) => e.email === currentUser.email || e.name === currentUser.name || e.id === currentUser.id);
   }, [currentUser, employees]);
 
+  const isRestrictedStaff = isSelfOnlyUser(currentUser, currentRole);
+
+  // Visible employees for filters and workload view (employees only see themselves)
+  const visibleEmployees = useMemo(() => {
+    if (!isRestrictedStaff) return employees;
+    if (currentEmployee) return [currentEmployee];
+    const matched = employees.filter(e => 
+      e.id === currentUser?.id || 
+      (currentUser?.email && e.email === currentUser.email) ||
+      (currentUser?.name && e.name === currentUser.name)
+    );
+    return matched.length > 0 ? matched : employees.slice(0, 1);
+  }, [employees, isRestrictedStaff, currentEmployee, currentUser]);
+
   // Project restriction: non-admin users only see projects they belong to
   const visibleProjects = useMemo(() => {
-    const isEmployeeRole = currentRole === 'employé' || (currentUser && currentUser.role === 'employé');
-    if (!isEmployeeRole) return projects;
+    if (!isRestrictedStaff) return projects;
 
     return projects.filter((p) => {
       if (p.id === 'all') return true;
@@ -98,7 +112,7 @@ export function useTaskLogic({
       if (currentUser && p.memberIds.includes(currentUser.id)) return true;
       return false;
     });
-  }, [projects, currentRole, currentUser, currentEmployee]);
+  }, [projects, isRestrictedStaff, currentUser, currentEmployee]);
 
   // Sync selected task details with tasks updates
   useEffect(() => {
@@ -290,7 +304,6 @@ export function useTaskLogic({
         }
       }
       if (showToast) showToast('Tâche mise à jour avec succès.', 'success');
-      await showSuccessAlert('Modifications enregistrées !', `La tâche "${finalizedTask.title}" a été mise à jour.`);
     } catch (err: any) {
       await showErrorAlert('Erreur', err?.message || 'Impossible d\'enregistrer les modifications.');
     }
@@ -306,10 +319,8 @@ export function useTaskLogic({
 
   // Filter tasks based on search, project permissions, priority, assignee, and milestone filter
   const filteredTasks = useMemo(() => {
-    const isEmployeeRole = currentRole === 'employé' || (currentUser && currentUser.role === 'employé');
-
     return tasks.filter((t) => {
-      if (isEmployeeRole) {
+      if (isRestrictedStaff) {
         const empName = currentEmployee?.name || currentUser?.name;
         const empId = currentEmployee?.id || currentUser?.id;
         const userEmail = currentUser?.email;
@@ -318,15 +329,15 @@ export function useTaskLogic({
         const assignedList = assignedField.split(',').map(s => s.trim());
 
         const assignedToMe = assignedList.some(a => 
-          (empName && a === empName) ||
+          (empName && a.toLowerCase() === empName.toLowerCase()) ||
           (empId && a === empId) ||
-          (userEmail && a === userEmail) ||
+          (userEmail && a.toLowerCase() === userEmail.toLowerCase()) ||
           a === 'Équipe' || a === 'Tous'
-        );
+        ) || (t.employeeId && (t.employeeId === empId || t.employeeId === currentUser?.id));
         if (!assignedToMe) return false;
       }
 
-      if (isEmployeeRole && t.projectId && t.projectId !== 'general') {
+      if (isRestrictedStaff && t.projectId && t.projectId !== 'general') {
         const p = projects.find((proj) => proj.id === t.projectId);
         if (p && p.memberIds && p.memberIds.length > 0) {
           const isMember = (currentEmployee && p.memberIds.includes(currentEmployee.id)) ||
@@ -407,5 +418,7 @@ export function useTaskLogic({
     setTaskToDelete,
     handleOpenDeleteModal,
     handleDeleteTaskConfirm,
+    isRestrictedStaff,
+    visibleEmployees,
   };
 }

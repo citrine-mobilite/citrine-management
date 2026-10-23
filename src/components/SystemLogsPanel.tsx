@@ -23,6 +23,7 @@ import { NotificationListItem } from './notifications/NotificationListItem';
 import { NotificationDetailModal } from './notifications/NotificationDetailModal';
 import { exportToExcel } from '../services/excelExportService';
 import { exportElementToPdf } from '../services/pdfExportService';
+import { canSeeAllNotifications, findMatchingEmployee } from '../utils/roleUtils';
 
 interface SystemLogsPanelProps {
   notifications: NotificationLog[];
@@ -172,6 +173,7 @@ const INITIAL_SESSION_LOGS: SessionLogItem[] = [
 export default function SystemLogsPanel({
   notifications,
   currentUser,
+  employees = [],
 }: SystemLogsPanelProps) {
   // Ordre requis : 1er = Notifs Systèmes, 2e = Logs d'Audit, 3e = Notifications
   const [activeSubTab, setActiveSubTab] = useState<LogSubTab>('system_events');
@@ -292,15 +294,39 @@ export default function SystemLogsPanel({
   const [selectedDetailNotif, setSelectedDetailNotif] = useState<NotificationLog | null>(null);
   const NOTIFS_PER_PAGE = 25;
 
+  const canSeeAll = canSeeAllNotifications(currentUser);
+  const matchedEmp = useMemo(() => findMatchingEmployee(employees || [], currentUser), [employees, currentUser]);
+  const myName = (matchedEmp?.name || currentUser?.name || '').toLowerCase();
+  const myId = matchedEmp?.id || currentUser?.id;
+  const myEmail = (matchedEmp?.email || currentUser?.email || '').toLowerCase();
+
   const filteredNotifs = useMemo(() => {
     return notifications.filter((n) => {
+      // Seuls l'IT, Superadmin, Admin et Responsables voient tout
+      if (!canSeeAll) {
+        const recip = (n.recipient || '').toLowerCase();
+        const title = (n.title || '').toLowerCase();
+        const content = (n.content || '').toLowerCase();
+
+        const isForMe =
+          recip === 'tous' ||
+          recip === 'équipe' ||
+          recip === 'equipe' ||
+          recip === 'all' ||
+          (myName && (recip.includes(myName) || title.includes(myName) || content.includes(myName))) ||
+          (myId && recip === myId.toLowerCase()) ||
+          (myEmail && recip.includes(myEmail));
+
+        if (!isForMe) return false;
+      }
+
       const matchesSearch =
         n.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         n.content.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesFilter = notifFilter === 'all' ? true : notifFilter === 'read' ? n.read : !n.read;
       return matchesSearch && matchesFilter;
     });
-  }, [notifications, searchTerm, notifFilter]);
+  }, [notifications, canSeeAll, myName, myId, myEmail, searchTerm, notifFilter]);
 
   const totalNotifPages = Math.max(1, Math.ceil(filteredNotifs.length / NOTIFS_PER_PAGE));
   const paginatedNotifs = useMemo(() => {

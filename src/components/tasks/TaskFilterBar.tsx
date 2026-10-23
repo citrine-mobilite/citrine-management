@@ -51,17 +51,23 @@ export const TaskFilterBar: React.FC<TaskFilterBarProps> = ({
         </select>
 
         {/* Assignee Filter */}
-        <select
-          value={filterAssignee}
-          onChange={(e) => onAssigneeChange(e.target.value)}
-          className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 focus:outline-none cursor-pointer"
-        >
-          <option value="all">Tous les collaborateurs</option>
-          <option value="Équipe">Toute l'équipe</option>
-          {employees.map((emp) => (
-            <option key={emp.id} value={emp.name}>{emp.name}</option>
-          ))}
-        </select>
+        {employees.length <= 1 ? (
+          <div className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 whitespace-nowrap">
+            👤 {employees[0]?.name || 'Mes tâches assignées'}
+          </div>
+        ) : (
+          <select
+            value={filterAssignee}
+            onChange={(e) => onAssigneeChange(e.target.value)}
+            className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 focus:outline-none cursor-pointer"
+          >
+            <option value="all">Tous les collaborateurs</option>
+            <option value="Équipe">Toute l'équipe</option>
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.name}>{emp.name}</option>
+            ))}
+          </select>
+        )}
       </div>
     </div>
   );

@@ -37,7 +37,9 @@ export interface Subtask {
   employeeId?: string;
   priority?: TaskPriority;
   status?: TaskStatus;
+  startDate?: string;
   dueDate?: string;
+  endDate?: string;
   time?: string;
   estimatedHours?: number;
   actualHours?: number;
@@ -45,6 +47,9 @@ export interface Subtask {
   acceptanceCriteria?: string[];
   comments?: Comment[];
   subtasks?: Subtask[];
+  blockerReason?: string;
+  isBlocked?: boolean;
+  incidents?: Incident[];
   createdAt?: string;
 }
 

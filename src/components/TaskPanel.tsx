@@ -103,7 +103,7 @@ export default function TaskPanel({
         onAssigneeChange={logic.setFilterAssignee}
         filterType={logic.filterType}
         onTypeChange={logic.setFilterType}
-        employees={employees}
+        employees={logic.visibleEmployees}
       />
 
       {/* Mode 1: Kanban défilant horizontal strict */}
@@ -139,9 +139,11 @@ export default function TaskPanel({
       {/* Mode 3: Vue Rendement & Charge de travail (Mode Asana Pro / Business) */}
       {logic.activeView === 'rendement' && (
         <TaskRendementAnalyticsView
-          tasks={tasks}
-          employees={employees}
+          tasks={logic.filteredTasks}
+          employees={logic.visibleEmployees}
           projects={logic.visibleProjects}
+          currentUser={currentUser}
+          currentRole={currentRole}
         />
       )}
 
@@ -150,7 +152,7 @@ export default function TaskPanel({
         isOpen={logic.isCreateModalOpen}
         onClose={() => logic.setIsCreateModalOpen(false)}
         onCreateTask={logic.handleCreateTask}
-        employees={employees}
+        employees={logic.visibleEmployees}
         projects={logic.visibleProjects}
         defaultProjectId={logic.activeProjectId}
         defaultStatus={logic.createModalDefaultStatus}
@@ -164,10 +166,12 @@ export default function TaskPanel({
         isOpen={logic.isSubtaskModalOpen}
         onClose={() => logic.setIsSubtaskModalOpen(false)}
         onCreateSubtask={logic.handleCreateSubtask}
-        employees={employees}
+        employees={logic.visibleEmployees}
         parentTask={logic.taskForSubtaskModal}
-        availableTasks={tasks}
+        availableTasks={logic.filteredTasks}
         projects={logic.visibleProjects}
+        currentUser={currentUser}
+        currentRole={currentRole}
       />
 
       {/* Modal Création Nouveau Module / Projet */}
@@ -175,19 +179,21 @@ export default function TaskPanel({
         isOpen={logic.isNewProjectModalOpen}
         onClose={() => logic.setIsNewProjectModalOpen(false)}
         onSaveProject={logic.handleCreateProject}
-        employees={employees}
+        employees={logic.visibleEmployees}
       />
 
       {/* Drawer Fiche Détail */}
       {logic.selectedTaskForDetail && (
         <TaskDetailDrawer
           task={logic.selectedTaskForDetail}
-          employees={employees}
+          employees={logic.visibleEmployees}
           projects={logic.visibleProjects}
           onClose={() => logic.setSelectedTaskForDetail(null)}
           onSaveTask={logic.handleSaveTask}
           onDeleteTask={logic.handleOpenDeleteModal}
           showToast={showToast}
+          currentRole={currentRole}
+          currentUser={currentUser}
         />
       )}
 

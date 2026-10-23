@@ -24,7 +24,7 @@ import { safeStorage } from './utils/safeStorage';
 import { subscribeToUsers } from './services/userService';
 import { authService } from './services/auth/authService';
 import { supabase } from './lib/supabase';
-import { getDefaultPortalForUser, isEmployeeUser, isEmployeeOnlyRole } from './utils/roleUtils';
+import { getDefaultPortalForUser, isEmployeeUser, isEmployeeOnlyRole, canSeeAllNotifications } from './utils/roleUtils';
 import Sidebar, { TabType } from './components/Sidebar';
 import { AppTopNavbar } from './components/navigation/AppTopNavbar';
 import { AppTabRouter } from './components/navigation/AppTabRouter';
@@ -247,15 +247,18 @@ export default function App() {
   // Badges counts
   const unreadNotificationsCount = useMemo(() => {
     if (!currentUser) return 0;
-    const isEmp = isEmployeeUser(currentUser);
-    if (!isEmp) {
+    const canSeeAll = canSeeAllNotifications(currentUser);
+    if (canSeeAll) {
       return initialData.notifications.filter((n) => !n.read).length;
     }
     return initialData.notifications.filter(
       (n) => !n.read && (
+        (n.targetUserId && (String(n.targetUserId) === String(currentUser.id) || String(n.targetUserId) === String(currentUser.email))) ||
         n.recipient === currentUser.name || 
         n.recipient === currentUser.email || 
-        n.recipient === 'Tous'
+        n.recipient === 'Tous' ||
+        n.recipient === 'Broadcast' ||
+        (currentUser.phone && n.recipient.includes(currentUser.phone))
       )
     ).length;
   }, [initialData.notifications, currentUser]);

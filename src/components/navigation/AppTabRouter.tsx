@@ -183,6 +183,8 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           presences={presences}
           tasks={tasks}
           incidents={attendanceIncidents}
+          currentUser={currentUser}
+          currentRole={currentUser?.role}
           onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
           onUpdateTask={async (updatedTask) => {
             await taskService.saveTask(updatedTask);
@@ -240,6 +242,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           users={users}
           onUpdateUsers={onUpdateUsers}
           moduleConfig={moduleConfig}
+          selectedEmployeeId={selectedEmployeeId}
         />
       )}
       {activeTab === 'discipline' && (

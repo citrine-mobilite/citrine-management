@@ -253,6 +253,30 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
     }
   }
 
+  // Garantir que pour les incidents HSE, la date est toujours définie
+  if (collectionName === 'hse_incidents' || collectionName === COLLECTIONS.HSE_INCIDENTS) {
+    if (!cleanedItem.date) {
+      cleanedItem.date = new Date().toISOString().split('T')[0];
+    }
+  }
+
+  // Garantir que pour les tâches, title est défini
+  if (collectionName === 'tasks' || collectionName === COLLECTIONS.TASKS) {
+    if (!cleanedItem.title) {
+      cleanedItem.title = cleanedItem.description ? cleanedItem.description.slice(0, 50) + '...' : 'Tâche';
+    }
+  }
+
+  // Garantir que pour les notes de frais, title est défini
+  if (collectionName === 'expense_claims' || collectionName === COLLECTIONS.EXPENSE_CLAIMS) {
+    if (!cleanedItem.title && cleanedItem.reason) {
+      cleanedItem.title = cleanedItem.reason;
+    }
+    if (!cleanedItem.title) {
+      cleanedItem.title = 'Note de frais';
+    }
+  }
+
   // 1. Toujours mettre à jour le cache local IndexedDB immédiatement
   await offlineService.cacheLocally(collectionName, cleanedItem);
 

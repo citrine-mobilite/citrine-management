@@ -107,6 +107,7 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
                 const matchedProj = projects.find((p) => p.id === task.projectId);
                 const subtasks = task.subtasks || [];
                 const completedSub = subtasks.filter((s) => s.completed).length;
+                const blockedSub = subtasks.filter((s) => s.status === 'blocked' || s.isBlocked || (s.incidents && s.incidents.length > 0)).length;
                 const subPercentage = subtasks.length > 0 ? Math.round((completedSub / subtasks.length) * 100) : 0;
 
                 return (
@@ -208,6 +209,11 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
                                 style={{ width: `${subPercentage}%` }}
                               />
                             </div>
+                            {blockedSub > 0 && (
+                              <span className="text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1 py-0.2 rounded-md block mt-0.5">
+                                🚨 {blockedSub} bloquée{blockedSub > 1 ? 's' : ''}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-stone-300 text-[11px]">-</span>

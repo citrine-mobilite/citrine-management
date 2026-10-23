@@ -10,12 +10,14 @@ import {
 } from '../../types';
 import { 
   subscribeToHseIncidents, 
-  saveHseIncident 
+  saveHseIncident,
+  deleteHseIncident
 } from '../../services/hseService';
 import { HseKpiBanner } from './HseKpiBanner';
 import { HseIncidentsGrid } from './HseIncidentsGrid';
 import { HseDetailModal } from './HseDetailModal';
-import { NewHseIncidentModal } from './NewHseIncidentModal';
+import { HseIncidentModal } from './HseIncidentModal';
+import { SearchableSelect, SelectOption } from '../common/SearchableSelect';
 
 interface HsePanelProps {
   currentUser?: AppUser | null;
@@ -26,6 +28,7 @@ interface HsePanelProps {
 
 export const HsePanel: React.FC<HsePanelProps> = ({
   currentUser,
+  employees = [],
   onAddNotification,
   showToast,
 }) => {
@@ -35,7 +38,8 @@ export const HsePanel: React.FC<HsePanelProps> = ({
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   
-  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingIncident, setEditingIncident] = useState<HseIncident | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<HseIncident | null>(null);
 
   useEffect(() => {
@@ -57,7 +61,8 @@ export const HsePanel: React.FC<HsePanelProps> = ({
       inc.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inc.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (inc.zonePrecise && inc.zonePrecise.toLowerCase().includes(searchTerm.toLowerCase()));
+      (inc.zonePrecise && inc.zonePrecise.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (inc.victimName && inc.victimName.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchSite = selectedSite === 'all' || inc.site === selectedSite;
     const matchSev = selectedSeverity === 'all' || inc.severity === selectedSeverity;
@@ -109,44 +114,97 @@ export const HsePanel: React.FC<HsePanelProps> = ({
     }
   };
 
-  const handleCreateIncident = async (incidentData: Partial<HseIncident>) => {
+  const handleSaveIncident = async (incidentData: Partial<HseIncident>) => {
     if (!incidentData.title || !incidentData.description) {
       showToast?.('Veuillez renseigner un titre et une description.', 'error');
       return;
     }
 
     try {
-      const incToSave: HseIncident = {
-        id: `hse-${Date.now()}`,
-        reference: `HSE-2026-${String(incidents.length + 13).padStart(4, '0')}`,
-        site: incidentData.site || 'Base Logistique Japoma',
-        zonePrecise: incidentData.zonePrecise || 'Zone générale',
-        type: (incidentData.type as HseIncidentType) || 'presque_accident',
-        severity: (incidentData.severity as HseSeverity) || 'faible',
-        date: incidentData.date || new Date().toISOString().split('T')[0],
-        time: incidentData.time || '10:00',
-        title: incidentData.title,
-        description: incidentData.description,
-        reportedBy: currentUser?.name || 'Agent Citrine',
-        reportedByRole: currentUser?.role || 'Collaborateur',
-        immediateActionTaken: incidentData.immediateActionTaken || '',
-        status: 'signale',
-        correctiveActions: [],
-        createdAt: new Date().toISOString(),
-      };
+      if (editingIncident) {
+        // Update existing incident
+        const updated: HseIncident = {
+          ...editingIncident,
+          ...incidentData,
+          id: editingIncident.id,
+          reference: editingIncident.reference,
+          createdAt: editingIncident.createdAt,
+        };
+        await saveHseIncident(updated);
+        setIsModalOpen(false);
+        setEditingIncident(null);
+        setSelectedIncident(null);
+        showToast?.('Incident HSE mis à jour avec succès !', 'success');
+      } else {
+        // Create new incident
+        const incToSave: HseIncident = {
+          id: `hse-${Date.now()}`,
+          reference: `HSE-2026-${String(incidents.length + 1).padStart(4, '0')}`,
+          site: incidentData.site || 'Base Japoma - Carrefour Matango',
+          zonePrecise: incidentData.zonePrecise || 'Zone générale',
+          type: (incidentData.type as HseIncidentType) || 'presque_accident',
+          severity: (incidentData.severity as HseSeverity) || 'faible',
+          date: incidentData.date || new Date().toISOString().split('T')[0],
+          time: incidentData.time || '10:00',
+          title: incidentData.title || '',
+          description: incidentData.description || '',
+          reportedBy: currentUser?.name || 'Agent Citrine',
+          reportedByRole: currentUser?.role || 'Collaborateur',
+          immediateActionTaken: incidentData.immediateActionTaken || '',
+          rootCause: incidentData.rootCause || '',
+          victimName: incidentData.victimName || '',
+          victimInjury: incidentData.victimInjury || '',
+          daysLost: incidentData.daysLost || 0,
+          status: incidentData.status || 'signale',
+          correctiveActions: [],
+          createdAt: new Date().toISOString(),
+        };
 
-      await saveHseIncident(incToSave);
-      setIsNewModalOpen(false);
-      showToast?.('Signalement HSE enregistré avec succès !', 'success');
-      onAddNotification?.({
-        title: 'Nouveau Signalement HSE',
-        message: `${incToSave.reference} : "${incToSave.title}" sur le site de ${incToSave.site}.`,
-        type: incToSave.severity === 'grave' || incToSave.severity === 'critique' ? 'warning' : 'info',
-      });
-    } catch {
-      showToast?.('Erreur lors de l\'enregistrement.', 'error');
+        await saveHseIncident(incToSave);
+        setIsModalOpen(false);
+        showToast?.('Signalement HSE enregistré avec succès !', 'success');
+        onAddNotification?.({
+          title: 'Nouveau Signalement HSE',
+          message: `${incToSave.reference} : "${incToSave.title}" sur le site de ${incToSave.site}.`,
+          type: incToSave.severity === 'grave' || incToSave.severity === 'critique' ? 'warning' : 'info',
+        });
+      }
+    } catch (err: any) {
+      console.error('[HSE Save Error]:', err);
+      showToast?.(err?.message || 'Erreur lors de l\'enregistrement.', 'error');
     }
   };
+
+  const handleDeleteIncident = async (incidentId: string) => {
+    try {
+      await deleteHseIncident(incidentId);
+      setSelectedIncident(null);
+      showToast?.('Incident supprimé avec succès.', 'success');
+    } catch {
+      showToast?.('Erreur lors de la suppression.', 'error');
+    }
+  };
+
+  const siteFilterOptions: SelectOption[] = [
+    { value: 'all', label: 'Tous les sites' },
+    { value: 'Base Japoma - Carrefour Matango', label: 'Base Japoma - Carrefour Matango' },
+  ];
+
+  const severityFilterOptions: SelectOption[] = [
+    { value: 'all', label: 'Toutes gravités' },
+    { value: 'faible', label: 'Faible' },
+    { value: 'modere', label: 'Modéré' },
+    { value: 'grave', label: 'Grave' },
+    { value: 'critique', label: 'Critique' },
+  ];
+
+  const statusFilterOptions: SelectOption[] = [
+    { value: 'all', label: 'Tous les statuts' },
+    { value: 'signale', label: 'Signalé' },
+    { value: 'en_cours_analyse', label: 'En cours d\'analyse' },
+    { value: 'actions_lancees', label: 'Actions lancées' },
+    { value: 'cloture', label: 'Clôturé' },
+  ];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -165,7 +223,10 @@ export const HsePanel: React.FC<HsePanelProps> = ({
         </div>
 
         <button
-          onClick={() => setIsNewModalOpen(true)}
+          onClick={() => {
+            setEditingIncident(null);
+            setIsModalOpen(true);
+          }}
           className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition cursor-pointer"
         >
           <AlertTriangle className="w-4 h-4" /> Déclarer un Incident / Danger
@@ -182,54 +243,45 @@ export const HsePanel: React.FC<HsePanelProps> = ({
         closedIncidentsCount={closedCount}
       />
 
-      {/* Filters Bar */}
+      {/* Filters Bar with SearchableSelect */}
       <div className="flex flex-col md:flex-row items-center gap-3 bg-white p-3.5 rounded-xl border border-stone-200">
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Rechercher par référence, description, zone, cause racine..."
+            placeholder="Rechercher par référence, description, zone, victime, titre..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-lg border border-stone-200 focus:outline-none focus:border-[#2A7B76]"
+            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-stone-200 focus:outline-none focus:border-[#2A7B76]"
           />
         </div>
 
-        <select
-          value={selectedSite}
-          onChange={(e) => setSelectedSite(e.target.value)}
-          className="px-3 py-2 text-xs rounded-lg border border-stone-200 bg-white text-stone-700"
-        >
-          <option value="all">Tous les sites</option>
-          <option value="Base Logistique Japoma">Base Japoma</option>
-          <option value="Siège Akwa">Siège Akwa</option>
-          <option value="Atelier Mécanique Japoma">Atelier Mécanique</option>
-          <option value="Chantier / Route">Chantier / Route</option>
-        </select>
+        <div className="w-full md:w-48">
+          <SearchableSelect
+            options={siteFilterOptions}
+            value={selectedSite}
+            onChange={(val) => setSelectedSite(String(val))}
+            placeholder="Filtrer par site..."
+          />
+        </div>
 
-        <select
-          value={selectedSeverity}
-          onChange={(e) => setSelectedSeverity(e.target.value)}
-          className="px-3 py-2 text-xs rounded-lg border border-stone-200 bg-white text-stone-700"
-        >
-          <option value="all">Toutes gravités</option>
-          <option value="faible">Faible</option>
-          <option value="modere">Modéré</option>
-          <option value="grave">Grave</option>
-          <option value="critique">Critique</option>
-        </select>
+        <div className="w-full md:w-44">
+          <SearchableSelect
+            options={severityFilterOptions}
+            value={selectedSeverity}
+            onChange={(val) => setSelectedSeverity(String(val))}
+            placeholder="Filtrer par gravité..."
+          />
+        </div>
 
-        <select
-          value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-          className="px-3 py-2 text-xs rounded-lg border border-stone-200 bg-white text-stone-700"
-        >
-          <option value="all">Tous les statuts</option>
-          <option value="signale">Signalé</option>
-          <option value="en_cours_analyse">En cours d'analyse</option>
-          <option value="actions_lancees">Actions lancées</option>
-          <option value="cloture">Clôturé</option>
-        </select>
+        <div className="w-full md:w-44">
+          <SearchableSelect
+            options={statusFilterOptions}
+            value={selectedStatus}
+            onChange={(val) => setSelectedStatus(String(val))}
+            placeholder="Filtrer par statut..."
+          />
+        </div>
       </div>
 
       <HseIncidentsGrid
@@ -244,13 +296,26 @@ export const HsePanel: React.FC<HsePanelProps> = ({
           onClose={() => setSelectedIncident(null)}
           onToggleAction={handleToggleAction}
           onAddAction={handleAddAction}
+          onEdit={() => {
+            setEditingIncident(selectedIncident);
+            setIsModalOpen(true);
+          }}
+          onDelete={async () => {
+            await handleDeleteIncident(selectedIncident.id);
+          }}
         />
       )}
 
-      {isNewModalOpen && (
-        <NewHseIncidentModal
-          onClose={() => setIsNewModalOpen(false)}
-          onSubmit={handleCreateIncident}
+      {isModalOpen && (
+        <HseIncidentModal
+          initialIncident={editingIncident}
+          employees={employees}
+          currentUser={currentUser}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingIncident(null);
+          }}
+          onSave={handleSaveIncident}
         />
       )}
     </div>
@@ -258,3 +323,4 @@ export const HsePanel: React.FC<HsePanelProps> = ({
 };
 
 export default HsePanel;
+

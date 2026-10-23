@@ -11,9 +11,11 @@ import {
   User,
   AlertTriangle
 } from 'lucide-react';
-import { Task, Employee, TaskStatus, TaskPriority, TaskProject, Subtask, Comment, AppUser } from '../../types';
+import { Task, Employee, TaskStatus, TaskPriority, TaskProject, Subtask, Comment, AppUser, Incident } from '../../types';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { SubtaskCreateModal } from './SubtaskCreateModal';
+import { SubtaskDetailModal } from './SubtaskDetailModal';
+import { canManageTaskAssignment, isSelfOnlyUser } from '../../utils/roleUtils';
 
 interface TaskDetailDrawerProps {
   task: Task | null;
@@ -47,7 +49,9 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   currentRole,
   currentUser,
 }) => {
-  const isEmployee = currentRole === 'employé' || (currentUser && currentUser.role === 'employé');
+  const canReassign = canManageTaskAssignment(currentUser, currentRole);
+  const isEmpOrIntern = isSelfOnlyUser(currentUser, currentRole);
+  const isAssignedToCurrentUser = !currentUser || !task.assignedTo || task.assignedTo.includes(currentUser.name) || task.assignedTo === 'Équipe' || isEmpOrIntern;
 
   // Local draft state
   const [draftTitle, setDraftTitle] = useState(task.title);
@@ -66,11 +70,13 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   // Subtasks & Comments
   const [subtasks, setSubtasks] = useState<Subtask[]>(task.subtasks || []);
   const [comments, setComments] = useState<Comment[]>(task.comments || []);
+  const [incidents, setIncidents] = useState<Incident[]>(task.incidents || []);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
   const [blockerText, setBlockerText] = useState('');
   const [isSavedRecently, setIsSavedRecently] = useState(false);
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
+  const [selectedSubtaskForDetail, setSelectedSubtaskForDetail] = useState<Subtask | null>(null);
 
   const handleCreateSubtask = (newSub: Subtask) => {
     const updated = [...subtasks, newSub];
@@ -93,6 +99,7 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
     setDraftMilestoneProgress(task.milestoneProgress ?? 0);
     setSubtasks(task.subtasks || []);
     setComments(task.comments || []);
+    setIncidents(task.incidents || []);
   }, [task]);
 
   // Project restriction on assignees
@@ -108,9 +115,9 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
       return;
     }
 
-    const finalAssigned = isEmployee
-      ? (currentUser?.name || task.assignedTo || 'Équipe')
-      : (draftAssignedList.length > 0 ? draftAssignedList.join(', ') : 'Équipe');
+    const finalAssigned = canReassign
+      ? (draftAssignedList.length > 0 ? draftAssignedList.join(', ') : 'Équipe')
+      : (task.assignedTo || 'Équipe');
 
     const updated: Task = {
       ...task,
@@ -186,18 +193,20 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
 
   const handleSignalBlocker = () => {
     if (!blockerText.trim()) return;
-    const newInc = {
+    const newInc: Incident = {
       id: `inc-${Date.now()}`,
       title: blockerText.trim(),
       description: blockerText.trim(),
-      severity: 'high' as const,
+      severity: 'high',
       createdAt: new Date().toLocaleDateString('fr-FR'),
       resolved: false,
     };
+    const updatedInc = [...incidents, newInc];
+    setIncidents(updatedInc);
     const updated: Task = {
       ...task,
       status: 'blocked',
-      incidents: [...(task.incidents || []), newInc],
+      incidents: updatedInc,
     };
     setDraftStatus('blocked');
     onSaveTask(updated);
@@ -232,17 +241,20 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
         {/* Form Body */}
         <form onSubmit={handleSaveAll} className="space-y-4 text-xs flex-1">
           
-          {/* Renommer le titre de la tâche */}
-          <div>
-            <label className="block text-stone-700 font-bold mb-1">
-              Intitulé de la tâche *
-            </label>
+          {/* Renommer le titre de la tâche - Grand et visible (style H2/H3) */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+                <span>📌 Intitulé de la tâche *</span>
+              </h3>
+              <span className="text-[10px] text-stone-400 font-mono">ID: {task.id}</span>
+            </div>
             <input
               type="text"
               required
               value={draftTitle}
               onChange={(e) => setDraftTitle(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 bg-stone-50 font-bold text-stone-900 text-sm focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none transition"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 bg-stone-50 font-serif font-bold text-stone-900 text-lg sm:text-xl focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none transition shadow-2xs"
               placeholder="Intitulé de la tâche..."
             />
           </div>
@@ -325,13 +337,11 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
               <label className="block text-stone-600 font-bold mb-1 text-[11px] flex items-center gap-1">
                 <User className="h-3 w-3 text-[#2A7B76]" /> Assigné à
               </label>
-              {isEmployee ? (
-                <input
-                  type="text"
-                  disabled
-                  value={task.assignedTo || currentUser?.name || 'Moi'}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 bg-stone-100 text-stone-600 font-medium cursor-not-allowed text-[11px]"
-                />
+              {!canReassign ? (
+                <div className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-100 text-stone-700 font-medium text-xs flex items-center justify-between">
+                  <span className="font-bold text-stone-800">{task.assignedTo || 'Équipe'}</span>
+                  <span className="text-[10px] text-stone-400 italic">Attribution fixée (non réassignable)</span>
+                </div>
               ) : (
                 <div className="space-y-1 max-h-32 overflow-y-auto p-1.5 bg-white rounded-lg border border-stone-200">
                   <label className="flex items-center gap-1.5 text-[11px] font-bold text-stone-800 cursor-pointer">
@@ -387,24 +397,48 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
             <div className="space-y-1.5">
               {subtasks.map((sub: any) => (
                 <div key={sub.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
                     <input
                       type="checkbox"
                       checked={sub.completed}
-                      onChange={() => handleToggleSubtask(sub.id)}
-                      className="w-4 h-4 rounded border-stone-300 text-[#2A7B76] cursor-pointer"
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleToggleSubtask(sub.id);
+                      }}
+                      className="w-4 h-4 rounded border-stone-300 text-[#2A7B76] cursor-pointer shrink-0"
                     />
-                    <div className="min-w-0">
-                      <span className={`text-xs block truncate ${sub.completed ? 'line-through text-stone-400 font-medium' : 'text-stone-800 font-bold'}`}>
-                        {sub.title}
-                      </span>
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSubtaskForDetail(sub);
+                      }}
+                      className="min-w-0 flex-1 cursor-pointer group"
+                      title="Cliquer pour ouvrir le détail complet de cette sous-tâche"
+                    >
+                      <h4 
+                        className={`text-sm sm:text-base font-bold text-stone-900 group-hover:text-[#2A7B76] transition truncate ${sub.completed ? 'line-through text-stone-400 font-medium' : ''}`}
+                      >
+                        {sub.title} {sub.subtasks && sub.subtasks.length > 0 ? `(${sub.subtasks.length} sous-tâche(s))` : ''}
+                      </h4>
                       {sub.description && (
-                        <p className="text-[10px] text-stone-400 truncate">{sub.description}</p>
+                        <p className="text-[11px] text-stone-500 truncate mt-0.5">{sub.description}</p>
+                      )}
+                      {(sub.status === 'blocked' || sub.isBlocked || sub.blockerReason || (sub.incidents && sub.incidents.length > 0)) && (
+                        <div className="text-[10px] text-rose-700 font-semibold bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md mt-1 inline-flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600" />
+                          <span className="truncate">Blocage : {sub.blockerReason || (sub.incidents && sub.incidents.length > 0 ? sub.incidents[sub.incidents.length - 1].title : 'Difficulté signalée')}</span>
+                        </div>
                       )}
                     </div>
-                  </label>
+                  </div>
 
                   <div className="flex items-center gap-2 text-[10px] shrink-0 self-end sm:self-auto">
+                    {(sub.status === 'blocked' || sub.isBlocked || (sub.incidents && sub.incidents.length > 0)) && (
+                      <span className="px-2 py-0.5 rounded-md font-bold text-[9px] bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 shrink-0">
+                        <AlertTriangle className="h-2.5 w-2.5 text-rose-600" />
+                        <span>Bloquée</span>
+                      </span>
+                    )}
                     {sub.assignedTo && (
                       <span className="bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-medium">
                         {sub.assignedTo}
@@ -422,6 +456,17 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
                         {sub.priority}
                       </span>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSubtaskForDetail(sub);
+                      }}
+                      className="px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[10px] font-bold cursor-pointer"
+                      title="Ouvrir le détail complet et options de la sous-tâche"
+                    >
+                      Ouvrir ⚙️
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -471,9 +516,18 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
 
           {/* Section Commentaires */}
           <div className="space-y-2.5 bg-stone-50 p-4 rounded-2xl border border-stone-200/80">
-            <h4 className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
-              <MessageSquare className="h-3.5 w-3.5 text-[#2A7B76]" /> Commentaires & Activité
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
+                <MessageSquare className="h-3.5 w-3.5 text-[#2A7B76]" />
+                <span>Commentaires &amp; Activité ({comments.length})</span>
+              </h4>
+              <span className="text-[10px] text-[#2A7B76] font-semibold bg-[#2A7B76]/10 px-2 py-0.5 rounded-full">
+                Points pour le manager
+              </span>
+            </div>
+            <p className="text-[10px] text-stone-500 italic">
+              Vos commentaires rédigés ici font office de points à signaler au manager dans votre feuille de temps.
+            </p>
             <div className="space-y-2 max-h-36 overflow-y-auto">
               {comments.map((com) => (
                 <div key={com.id} className="bg-white p-2.5 rounded-xl border border-stone-200 text-xs space-y-1">
@@ -508,27 +562,82 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
             </div>
           </div>
 
-          {/* Section Signalement de blocage */}
-          <div className="space-y-2 bg-rose-50/70 p-4 rounded-2xl border border-rose-200">
-            <h4 className="font-bold text-rose-800 text-xs flex items-center gap-1.5">
-              <ShieldAlert className="h-3.5 w-3.5 text-rose-600" /> Signaler une difficulté / un blocage
-            </h4>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Décrivez le blocage rencontré..."
-                value={blockerText}
-                onChange={(e) => setBlockerText(e.target.value)}
-                className="flex-1 px-3 py-1.5 rounded-xl border border-rose-200 bg-white text-xs outline-none focus:ring-2 focus:ring-rose-500 text-rose-900"
-              />
-              <button
-                type="button"
-                onClick={handleSignalBlocker}
-                className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 cursor-pointer"
-              >
-                Signaler
-              </button>
+          {/* Section Signalement de blocage (Autant de blocages qu'on veut) */}
+          <div className="space-y-2.5 bg-rose-50/70 p-4 rounded-2xl border border-rose-200">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-rose-800 text-xs flex items-center gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5 text-rose-600" />
+                <span>Blocages &amp; Difficultés signalés ({incidents.length})</span>
+              </h4>
+              <span className="text-[10px] text-rose-700 font-semibold bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200">
+                Imprévus en feuille de temps
+              </span>
             </div>
+            <p className="text-[10px] text-rose-600/90 italic">
+              Les blocages signalés ici font office d'imprévus dans la feuille de temps (signalés directement par le collaborateur assigné).
+            </p>
+
+            {incidents.length > 0 && (
+              <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                {incidents.map((inc) => (
+                  <div key={inc.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-rose-200 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                      <span className="text-stone-800 font-medium truncate">{inc.title}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updatedInc = incidents.filter((i) => i.id !== inc.id);
+                        setIncidents(updatedInc);
+                        const updated: Task = {
+                          ...task,
+                          incidents: updatedInc,
+                          status: updatedInc.length === 0 ? 'in_progress' : 'blocked',
+                        };
+                        onSaveTask(updated);
+                      }}
+                      className="text-stone-400 hover:text-rose-600 p-1 cursor-pointer transition"
+                      title="Supprimer ce blocage"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {canReassign && !isAssignedToCurrentUser ? (
+              <div className="bg-white/80 p-2.5 rounded-xl border border-rose-200 text-stone-600 text-[11px] flex items-center gap-2">
+                <span className="text-base">🛡️</span>
+                <span>
+                  Les blocages font office d'imprévus : ils sont signalés par le collaborateur assigné (<strong>{task.assignedTo || 'l\'employé'}</strong>) lors de l'exécution de sa tâche.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder="Décrivez un nouveau blocage..."
+                  value={blockerText}
+                  onChange={(e) => setBlockerText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSignalBlocker();
+                    }
+                  }}
+                  className="flex-1 px-3 py-1.5 rounded-xl border border-rose-200 bg-white text-xs outline-none focus:ring-2 focus:ring-rose-500 text-rose-900"
+                />
+                <button
+                  type="button"
+                  onClick={handleSignalBlocker}
+                  className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 cursor-pointer shrink-0"
+                >
+                  Signaler
+                </button>
+              </div>
+            )}
           </div>
 
         </form>
@@ -565,7 +674,36 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
         employees={employees}
         parentTask={task}
         projects={projects}
+        currentUser={currentUser}
+        currentRole={currentRole}
       />
+
+      {/* Subtask Detail Modal (behaves like a task, supports infinite nested subtasks) */}
+      {selectedSubtaskForDetail && (
+        <SubtaskDetailModal
+          isOpen={true}
+          subtask={selectedSubtaskForDetail}
+          onClose={() => setSelectedSubtaskForDetail(null)}
+          onSaveSubtask={(updatedSub) => {
+            const updateInTree = (list: Subtask[]): Subtask[] => {
+              return list.map((s) => {
+                if (s.id === updatedSub.id) return updatedSub;
+                if (s.subtasks && s.subtasks.length > 0) return { ...s, subtasks: updateInTree(s.subtasks) };
+                return s;
+              });
+            };
+            const updatedList = updateInTree(subtasks);
+            setSubtasks(updatedList);
+            onSaveTask({ ...task, subtasks: updatedList });
+            setSelectedSubtaskForDetail(updatedSub);
+          }}
+          employees={employees}
+          projects={projects}
+          showToast={showToast}
+          currentUser={currentUser}
+          currentRole={currentRole}
+        />
+      )}
     </div>
   );
 };

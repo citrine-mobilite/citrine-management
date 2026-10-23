@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, CheckSquare, Square } from 'lucide-react';
+import { X, CheckCircle2, CheckSquare, Square, Pencil, Trash2 } from 'lucide-react';
 import { HseIncident, HseCorrectiveAction } from '../../types';
 import { getSeverityBadge, getStatusBadge, getTypeLabel } from './HseIncidentsGrid';
 
@@ -9,6 +9,8 @@ interface HseDetailModalProps {
   onClose: () => void;
   onToggleAction: (incident: HseIncident, actionId: string) => Promise<void>;
   onAddAction: (incident: HseIncident, action: HseCorrectiveAction) => Promise<void>;
+  onEdit: () => void;
+  onDelete?: () => Promise<void>;
 }
 
 export const HseDetailModal: React.FC<HseDetailModalProps> = ({
@@ -17,10 +19,13 @@ export const HseDetailModal: React.FC<HseDetailModalProps> = ({
   onClose,
   onToggleAction,
   onAddAction,
+  onEdit,
+  onDelete,
 }) => {
   const [newActionText, setNewActionText] = useState('');
   const [newActionAssignee, setNewActionAssignee] = useState('');
   const [newActionDeadline, setNewActionDeadline] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleAdd = async () => {
     if (!newActionText) return;
@@ -37,6 +42,18 @@ export const HseDetailModal: React.FC<HseDetailModalProps> = ({
     setNewActionDeadline('');
   };
 
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer l'incident ${incident.reference} ?`)) {
+      setIsDeleting(true);
+      try {
+        await onDelete();
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
   const completedCount = (incident.correctiveActions || []).filter((a) => a.isCompleted).length;
   const totalCount = (incident.correctiveActions || []).length;
 
@@ -51,13 +68,38 @@ export const HseDetailModal: React.FC<HseDetailModalProps> = ({
               {getStatusBadge(incident.status)}
             </div>
             <h3 className="text-lg font-bold text-stone-900 mt-1">{incident.title}</h3>
-            <p className="text-xs text-stone-500">
-              {getTypeLabel(incident.type)} • {incident.site}
+            <p className="text-xs text-stone-600 font-medium mt-0.5">
+              {getTypeLabel(incident.type)} • {incident.site} {incident.zonePrecise ? `(${incident.zonePrecise})` : ''}
+            </p>
+            <p className="text-[11px] text-stone-400 mt-0.5">
+              Survenu le {incident.date || 'Non renseigné'} {incident.time ? `à ${incident.time}` : ''} {incident.reportedBy ? `• Signalé par : ${incident.reportedBy}` : ''}
             </p>
           </div>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-700 cursor-pointer">
-            <X className="w-5 h-5" />
-          </button>
+
+          <div className="flex items-center gap-1.5">
+            {isAdminOrManager && (
+              <>
+                <button
+                  onClick={onEdit}
+                  className="p-2 text-stone-600 hover:text-[#2A7B76] hover:bg-emerald-50 rounded-xl transition cursor-pointer"
+                  title="Modifier l'incident"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="p-2 text-stone-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                  title="Supprimer l'incident"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+            <button onClick={onClose} className="p-2 text-stone-400 hover:text-stone-700 cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Circumstances & facts */}
@@ -66,6 +108,15 @@ export const HseDetailModal: React.FC<HseDetailModalProps> = ({
             <span className="font-bold text-stone-700">Circonstances précises :</span>
             <p className="text-stone-600 mt-0.5">{incident.description}</p>
           </div>
+
+          {incident.victimName && (
+            <div className="pt-2 border-t border-stone-200/60">
+              <span className="font-bold text-stone-700">Victime / Collaborateur impliqué :</span>
+              <p className="text-stone-600 mt-0.5">
+                {incident.victimName} {incident.victimInjury ? `— ${incident.victimInjury}` : ''} {typeof incident.daysLost === 'number' && incident.daysLost > 0 ? `(${incident.daysLost} jours d'arrêt)` : ''}
+              </p>
+            </div>
+          )}
 
           {incident.immediateActionTaken && (
             <div className="pt-2 border-t border-stone-200/60">

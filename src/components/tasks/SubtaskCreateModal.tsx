@@ -16,7 +16,8 @@ import {
   FolderKanban,
   FileCheck
 } from 'lucide-react';
-import { Subtask, Employee, TaskPriority, TaskStatus, Task, TaskProject } from '../../types';
+import { Subtask, Employee, TaskPriority, TaskStatus, Task, TaskProject, AppUser } from '../../types';
+import { isSelfOnlyUser } from '../../utils/roleUtils';
 
 interface SubtaskCreateModalProps {
   isOpen: boolean;
@@ -27,6 +28,8 @@ interface SubtaskCreateModalProps {
   availableTasks?: Task[];
   projects?: TaskProject[];
   defaultTaskId?: string;
+  currentUser?: AppUser | null;
+  currentRole?: string;
 }
 
 export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
@@ -38,7 +41,12 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
   availableTasks = [],
   projects = [],
   defaultTaskId,
+  currentUser,
+  currentRole,
 }) => {
+  const isEmpOrIntern = isSelfOnlyUser(currentUser, currentRole);
+  const myName = currentUser?.name || employees[0]?.name || 'Moi';
+
   const [selectedTaskId, setSelectedTaskId] = useState<string>(
     parentTask?.id || defaultTaskId || availableTasks[0]?.id || ''
   );
@@ -47,7 +55,7 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
   const [deliverable, setDeliverable] = useState('');
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [status, setStatus] = useState<TaskStatus>('todo');
-  const [assignedTo, setAssignedTo] = useState(employees[0]?.name || 'Équipe');
+  const [assignedTo, setAssignedTo] = useState(isEmpOrIntern ? myName : (employees[0]?.name || 'Équipe'));
   const [dueDate, setDueDate] = useState(
     parentTask?.date || new Date().toISOString().split('T')[0]
   );
@@ -55,6 +63,12 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
   const [estimatedHours, setEstimatedHours] = useState<number>(3);
   const [actualHours, setActualHours] = useState<number>(0);
   const [selectedTag, setSelectedTag] = useState<string>('Exécution');
+
+  useEffect(() => {
+    if (isEmpOrIntern) {
+      setAssignedTo(myName);
+    }
+  }, [isEmpOrIntern, myName]);
   
   // Checklist / Acceptance criteria
   const [criteria, setCriteria] = useState<string[]>([]);
@@ -380,18 +394,27 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
               <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
                 <User className="h-3.5 w-3.5 text-[#2A7B76]" /> Responsable Assigné
               </label>
-              <select
-                value={assignedTo}
-                onChange={(e) => setAssignedTo(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white font-semibold text-stone-800 outline-none"
-              >
-                <option value="Équipe">👥 Toute l'équipe</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.name}>
-                    {emp.name} ({emp.department || 'Général'})
-                  </option>
-                ))}
-              </select>
+              {isEmpOrIntern ? (
+                <input
+                  type="text"
+                  disabled
+                  value={myName}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-100 text-stone-700 font-bold cursor-not-allowed text-xs"
+                />
+              ) : (
+                <select
+                  value={assignedTo}
+                  onChange={(e) => setAssignedTo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white font-semibold text-stone-800 outline-none"
+                >
+                  <option value="Équipe">👥 Toute l'équipe</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.name}>
+                      {emp.name} ({emp.department || 'Général'})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2">

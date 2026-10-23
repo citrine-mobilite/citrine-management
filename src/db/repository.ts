@@ -98,6 +98,32 @@ export async function getCollectionData(collectionName: string): Promise<any[]> 
           _dbId: row.id,
         };
       }
+      if (table === 'hse_incidents') {
+        return {
+          ...raw,
+          ...row,
+          id: row.doc_id || String(row.id),
+          docId: row.doc_id || String(row.id),
+          reference: raw.reference || `HSE-2026-${String(row.id).padStart(4, '0')}`,
+          site: row.site_location || raw.site || 'Base Japoma - Carrefour Matango',
+          zonePrecise: row.zone_precise || raw.zonePrecise || '',
+          type: row.type || raw.type || 'presque_accident',
+          severity: row.severity || raw.severity || 'faible',
+          date: row.date || raw.date || '',
+          time: row.time || raw.time || '',
+          title: row.title || raw.title || '',
+          description: row.description || raw.description || '',
+          reportedBy: row.reported_by || raw.reportedBy || '',
+          victimName: row.victim_name || raw.victimName || '',
+          daysLost: typeof row.days_lost === 'number' ? row.days_lost : (typeof raw.daysLost === 'number' ? raw.daysLost : 0),
+          status: row.status || raw.status || 'signale',
+          immediateActionTaken: raw.immediateActionTaken || '',
+          rootCause: raw.rootCause || '',
+          victimInjury: raw.victimInjury || '',
+          correctiveActions: raw.correctiveActions || [],
+          _dbId: row.id,
+        };
+      }
       return {
         ...raw,
         ...row,
@@ -393,6 +419,19 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
         const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
         if (resolvedId) rowData.employee_id = resolvedId;
       }
+    } else if (table === 'hse_incidents') {
+      rowData.title = item.title;
+      rowData.site_location = item.site || item.siteLocation || 'Base Japoma - Carrefour Matango';
+      rowData.zone_precise = item.zonePrecise || null;
+      rowData.type = item.type || 'presque_accident';
+      rowData.severity = item.severity || 'faible';
+      rowData.date = item.date || new Date().toISOString().split('T')[0];
+      rowData.time = item.time || null;
+      rowData.description = item.description || null;
+      rowData.reported_by = item.reportedBy || null;
+      rowData.victim_name = item.victimName || null;
+      rowData.days_lost = Number(item.daysLost || 0);
+      rowData.status = item.status || 'signale';
     }
 
     // For employees and users, find existing row by doc_id, id, or email before inserting/upserting

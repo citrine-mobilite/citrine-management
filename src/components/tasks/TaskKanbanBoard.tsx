@@ -144,44 +144,60 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
                       )}
 
                       {/* Subtasks Progress & Asana quick action */}
-                      <div className="space-y-1 bg-stone-50/80 p-2 rounded-xl border border-stone-200/60">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="font-semibold text-stone-600 flex items-center gap-1">
-                            <span>📋</span>
-                            <span>
-                              {task.subtasks && task.subtasks.length > 0 
-                                ? `${task.subtasks.filter((s) => s.completed).length}/${task.subtasks.length} sous-tâches`
-                                : '0 sous-tâche'}
-                            </span>
-                          </span>
-                          {onOpenCreateSubtask && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenCreateSubtask(task);
-                              }}
-                              className="text-[#2A7B76] hover:text-[#20635F] font-bold flex items-center gap-0.5 hover:underline cursor-pointer"
-                              title="Créer une sous-tâche détaillée (Style Asana)"
-                            >
-                              <Plus className="h-3 w-3" />
-                              <span>Sous-tâche</span>
-                            </button>
-                          )}
-                        </div>
-                        {task.subtasks && task.subtasks.length > 0 && (
-                          <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
-                            <div
-                              className="bg-[#2A7B76] h-full rounded-full transition-all duration-300"
-                              style={{
-                                width: `${Math.round(
-                                  (task.subtasks.filter((s) => s.completed).length / task.subtasks.length) * 100
-                                )}%`,
-                              }}
-                            />
+                      {(() => {
+                        const blockedSubCount = task.subtasks
+                          ? task.subtasks.filter(
+                              (s) => s.status === 'blocked' || s.isBlocked || (s.incidents && s.incidents.length > 0)
+                            ).length
+                          : 0;
+
+                        return (
+                          <div className="space-y-1 bg-stone-50/80 p-2 rounded-xl border border-stone-200/60">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="font-semibold text-stone-600 flex items-center gap-1">
+                                <span>📋</span>
+                                <span>
+                                  {task.subtasks && task.subtasks.length > 0 
+                                    ? `${task.subtasks.filter((s) => s.completed).length}/${task.subtasks.length} sous-tâches`
+                                    : '0 sous-tâche'}
+                                </span>
+                              </span>
+                              {onOpenCreateSubtask && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenCreateSubtask(task);
+                                  }}
+                                  className="text-[#2A7B76] hover:text-[#20635F] font-bold flex items-center gap-0.5 hover:underline cursor-pointer"
+                                  title="Créer une sous-tâche détaillée (Style Asana)"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  <span>Sous-tâche</span>
+                                </button>
+                              )}
+                            </div>
+                            {task.subtasks && task.subtasks.length > 0 && (
+                              <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="bg-[#2A7B76] h-full rounded-full transition-all duration-300"
+                                  style={{
+                                    width: `${Math.round(
+                                      (task.subtasks.filter((s) => s.completed).length / task.subtasks.length) * 100
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                            )}
+                            {blockedSubCount > 0 && (
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-50 border border-rose-200 text-[10px] font-bold text-rose-700">
+                                <span>🚨</span>
+                                <span>{blockedSubCount} sous-tâche{blockedSubCount > 1 ? 's' : ''} bloquée{blockedSubCount > 1 ? 's' : ''}</span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
+                        );
+                      })()}
 
                       {/* Footer */}
                       <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-[10px] text-stone-400">

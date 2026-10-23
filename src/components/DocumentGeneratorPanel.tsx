@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileText, 
   Search, 
@@ -26,6 +26,7 @@ import { CreateDocumentModal } from './documents/CreateDocumentModal';
 import { CreateDocTemplateModal } from './documents/CreateDocTemplateModal';
 import { EditDocumentModal } from './documents/EditDocumentModal';
 import { showSuccessAlert, showErrorAlert, confirmActionAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
+import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
 
 interface DocumentGeneratorPanelProps {
   documents: GeneratedDocument[];
@@ -46,6 +47,8 @@ export default function DocumentGeneratorPanel({
   employees = [],
   moduleConfig,
   showToast,
+  currentUser,
+  currentRole,
 }: DocumentGeneratorPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [previewDoc, setPreviewDoc] = useState<GeneratedDocument | null>(null);
@@ -55,12 +58,28 @@ export default function DocumentGeneratorPanel({
   const [isCreateTemplateModalOpen, setIsCreateTemplateModalOpen] = useState(false);
   const [isResettingTemplates, setIsResettingTemplates] = useState(false);
 
-  // Commutateur de vue : Cards (Grille) vs DataTable (Tableau)
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
 
   const handleToggleViewMode = (mode: 'grid' | 'table') => {
     setViewMode(mode);
   };
+
+  const isRestricted = isSelfOnlyUser(currentUser, currentRole);
+  const myEmp = useMemo(() => findMatchingEmployee(employees, currentUser), [employees, currentUser]);
+  const myEmpId = myEmp?.id || currentUser?.id;
+  const myEmpName = (myEmp?.name || currentUser?.name || '').toLowerCase();
+
+  // Filtrage strict : un employé ne voit que les documents le concernant directement
+  const effectiveDocuments = useMemo(() => {
+    if (!isRestricted) return documents;
+    return documents.filter((d) => {
+      const dEmpId = (d.employeeId || '').toLowerCase();
+      const dEmpName = (d.employeeName || '').toLowerCase();
+      const dTitle = (d.title || '').toLowerCase();
+      return (myEmpId && dEmpId === myEmpId.toLowerCase()) ||
+             (myEmpName && (dEmpName.includes(myEmpName) || dTitle.includes(myEmpName)));
+    });
+  }, [documents, isRestricted, myEmpId, myEmpName]);
 
   // Synchronisation des modèles de documents RH depuis la base Firestore
   const [dbTemplates, setDbTemplates] = useState<DocTemplate[]>(DOC_TEMPLATES);
@@ -159,48 +178,52 @@ export default function DocumentGeneratorPanel({
             Papier officiel CITRINE SARL · Modèles & Données 100% conservés en base Supabase · Affichage Cards ou DataTable.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Bouton pour ajouter un type de modèle sans modifier le code */}
-          <button
-            type="button"
-            onClick={() => setIsCreateTemplateModalOpen(true)}
-            className="px-3.5 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-xs text-white text-xs font-bold rounded-2xl transition flex items-center gap-1.5 border border-white/20 cursor-pointer shadow-xs"
-            title="Créer un nouveau type de document RH stocké en base de données Supabase"
-          >
-            <FolderPlus className="h-4 w-4 text-emerald-200" />
-            <span>+ Nouveau Type de Modèle</span>
-          </button>
+        {!isRestricted && (
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Bouton pour ajouter un type de modèle sans modifier le code */}
+            <button
+              type="button"
+              onClick={() => setIsCreateTemplateModalOpen(true)}
+              className="px-3.5 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-xs text-white text-xs font-bold rounded-2xl transition flex items-center gap-1.5 border border-white/20 cursor-pointer shadow-xs"
+              title="Créer un nouveau type de document RH stocké en base de données Supabase"
+            >
+              <FolderPlus className="h-4 w-4 text-emerald-200" />
+              <span>+ Nouveau Type de Modèle</span>
+            </button>
 
-          <button
-            type="button"
-            disabled={isResettingTemplates}
-            onClick={handleResetTemplates}
-            className="px-3 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-xs text-white text-xs font-semibold rounded-2xl transition flex items-center gap-1.5 border border-white/15 cursor-pointer disabled:opacity-50"
-            title="Synchroniser les modèles RH en base Supabase"
-          >
-            <RotateCcw className={`h-3.5 w-3.5 ${isResettingTemplates ? 'animate-spin' : ''}`} />
-            <span className="hidden lg:inline">Restaurer Modèles</span>
-          </button>
+            <button
+              type="button"
+              disabled={isResettingTemplates}
+              onClick={handleResetTemplates}
+              className="px-3 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-xs text-white text-xs font-semibold rounded-2xl transition flex items-center gap-1.5 border border-white/15 cursor-pointer disabled:opacity-50"
+              title="Synchroniser les modèles RH en base Supabase"
+            >
+              <RotateCcw className={`h-3.5 w-3.5 ${isResettingTemplates ? 'animate-spin' : ''}`} />
+              <span className="hidden lg:inline">Restaurer Modèles</span>
+            </button>
 
-          <button
-            onClick={() => {
-              setSelectedTemplateForModal(null);
-              setIsCreateModalOpen(true);
-            }}
-            className="px-4 py-2.5 bg-[#D4A82F] hover:bg-[#b88f24] text-stone-900 text-xs font-bold rounded-2xl transition flex items-center gap-2 shrink-0 cursor-pointer shadow-xs"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Générer un Document</span>
-          </button>
-        </div>
+            <button
+              onClick={() => {
+                setSelectedTemplateForModal(null);
+                setIsCreateModalOpen(true);
+              }}
+              className="px-4 py-2.5 bg-[#D4A82F] hover:bg-[#b88f24] text-stone-900 text-xs font-bold rounded-2xl transition flex items-center gap-2 shrink-0 cursor-pointer shadow-xs"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Générer un Document</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Templates Selector (alimenté en temps réel par Firestore) */}
-      <DocTemplateSelector 
-        templates={dbTemplates}
-        onSelectTemplate={handleSelectTemplate}
-        onCreateNewTemplate={() => setIsCreateTemplateModalOpen(true)}
-      />
+      {/* Templates Selector (visible uniquement pour direction / RH / Admin / IT) */}
+      {!isRestricted && (
+        <DocTemplateSelector 
+          templates={dbTemplates}
+          onSelectTemplate={handleSelectTemplate}
+          onCreateNewTemplate={() => setIsCreateTemplateModalOpen(true)}
+        />
+      )}
 
       {/* Titre et statistiques de la section Archives */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2">
@@ -210,13 +233,15 @@ export default function DocumentGeneratorPanel({
           </div>
           <div>
             <h3 className="font-serif font-bold text-sm text-stone-900 flex items-center gap-2">
-              <span>Archives des Documents Générés</span>
+              <span>{isRestricted ? 'Mes Documents & Bulletins Archivés' : 'Archives des Documents Générés'}</span>
               <span className="bg-emerald-50 text-[#2A7B76] font-bold text-[10px] px-2 py-0.5 rounded-full border border-emerald-200">
-                {documents.length} document(s)
+                {effectiveDocuments.length} document(s)
               </span>
             </h3>
             <p className="text-[11px] text-stone-500">
-              Historique complet des documents RH officiels générés, enregistrés et scellés
+              {isRestricted
+                ? 'Consultation de vos documents officiels, attestations et contrats personnels'
+                : 'Historique complet des documents RH officiels générés, enregistrés et scellés'}
             </p>
           </div>
         </div>
@@ -228,7 +253,7 @@ export default function DocumentGeneratorPanel({
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
           <input
             type="text"
-            placeholder="Rechercher dans les archives BD (titre, collaborateur, catégorie)..."
+            placeholder="Rechercher dans les archives (titre, collaborateur, catégorie)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-stone-50 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-[#2A7B76] outline-none"
@@ -268,7 +293,7 @@ export default function DocumentGeneratorPanel({
 
           <div className="flex items-center gap-1.5 bg-emerald-50 text-[#2A7B76] px-3 py-1.5 rounded-xl border border-emerald-200/60 font-semibold text-xs shrink-0">
             <Database className="h-3.5 w-3.5" />
-            <span>{documents.length} document(s)</span>
+            <span>{effectiveDocuments.length} document(s)</span>
           </div>
         </div>
       </div>
@@ -276,7 +301,7 @@ export default function DocumentGeneratorPanel({
       {/* Affichage conditionnel : Cards (Grille) ou DataTable (Tableau) */}
       {viewMode === 'grid' ? (
         <DocumentGrid
-          documents={documents}
+          documents={effectiveDocuments}
           searchTerm={searchTerm}
           onPreview={(doc) => setPreviewDoc(doc)}
           onEdit={(doc) => setEditingDoc(doc)}
@@ -284,7 +309,7 @@ export default function DocumentGeneratorPanel({
         />
       ) : (
         <DocumentTableView
-          documents={documents}
+          documents={effectiveDocuments}
           searchTerm={searchTerm}
           onPreview={(doc) => setPreviewDoc(doc)}
           onEdit={(doc) => setEditingDoc(doc)}

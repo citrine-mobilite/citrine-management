@@ -13,7 +13,7 @@ import {
   FileSpreadsheet,
   Sparkles
 } from 'lucide-react';
-import { Employee, Presence, Task, AttendanceIncident } from '../types';
+import { Employee, Presence, Task, AttendanceIncident, AppUser } from '../types';
 import { computePresenceStatistics } from './presence/statistics/statisticsCalculations';
 import { StatisticsKPIRibbon } from './presence/statistics/StatisticsKPIRibbon';
 import { StatisticsChartsSection } from './presence/statistics/StatisticsChartsSection';
@@ -22,6 +22,7 @@ import EmployeeRendementPage from './presence/statistics/EmployeeRendementPage';
 import EmployeeRendementHistogram from './presence/statistics/EmployeeRendementHistogram';
 import { TimesheetModal } from './timesheet/TimesheetModal';
 import { computeEmployeeRendement } from '../utils/rendementCalculator';
+import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
 
 interface PresenceStatisticsViewProps {
   employees: Employee[];
@@ -31,6 +32,8 @@ interface PresenceStatisticsViewProps {
   onSelectEmployee?: (id: string) => void;
   onUpdateTask?: (task: Task) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
+  currentUser?: AppUser | null;
+  currentRole?: string;
 }
 
 export function PresenceStatisticsView({
@@ -41,7 +44,12 @@ export function PresenceStatisticsView({
   onSelectEmployee,
   onUpdateTask,
   showToast,
+  currentUser,
+  currentRole,
 }: PresenceStatisticsViewProps) {
+  const isRestricted = isSelfOnlyUser(currentUser, currentRole);
+  const matchedEmp = useMemo(() => findMatchingEmployee(employees, currentUser), [employees, currentUser]);
+
   const [activeSubTab, setActiveSubTab] = useState<'assiduite' | 'rendement'>('assiduite');
   const [period, setPeriod] = useState<'this_month' | 'last_month' | 'last_3_months' | 'all' | 'custom'>('this_month');
   
@@ -59,8 +67,11 @@ export function PresenceStatisticsView({
   const [timesheetMode, setTimesheetMode] = useState<'day' | 'month' | 'year'>('month');
 
   const trackedEmployees = useMemo(() => {
-    return employees.filter((e) => e.roleType !== 'sponsor' && (e.status === 'en_poste' || !e.status));
-  }, [employees]);
+    const base = employees.filter((e) => e.roleType !== 'sponsor' && (e.status === 'en_poste' || !e.status));
+    if (!isRestricted) return base;
+    if (matchedEmp) return [matchedEmp];
+    return base.slice(0, 1);
+  }, [employees, isRestricted, matchedEmp]);
 
   const stats = useMemo(
     () => computePresenceStatistics(trackedEmployees, presences, period, customStart, customEnd),
@@ -137,6 +148,8 @@ export function PresenceStatisticsView({
         onBack={() => setSelectedRendementEmployee(null)}
         onUpdateTask={onUpdateTask}
         showToast={showToast}
+        currentUser={currentUser}
+        currentRole={currentRole}
       />
     );
   }
@@ -519,6 +532,8 @@ export function PresenceStatisticsView({
           presences={presences}
           incidents={incidents}
           defaultMode={timesheetMode}
+          currentUser={currentUser}
+          currentRole={currentRole}
         />
       )}
     </div>

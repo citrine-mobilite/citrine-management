@@ -16,6 +16,7 @@ import {
   Layers
 } from 'lucide-react';
 import { Task, Employee, TaskStatus, TaskPriority, TaskProject, AppUser, Subtask } from '../../types';
+import { isSelfOnlyUser } from '../../utils/roleUtils';
 
 interface TaskCreateModalProps {
   isOpen: boolean;
@@ -42,15 +43,15 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   currentRole,
   currentUser,
 }) => {
-  const isEmployee = currentRole === 'employé' || (currentUser && currentUser.role === 'employé');
-  const defaultAssigneeName = currentUser?.name || employees[0]?.name || 'Équipe';
+  const isEmpOrIntern = isSelfOnlyUser(currentUser, currentRole);
+  const myName = currentUser?.name || employees[0]?.name || 'Moi';
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [projectId, setProjectId] = useState(defaultProjectId !== 'all' ? defaultProjectId : 'general');
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>('medium');
-  const [assignedList, setAssignedList] = useState<string[]>(isEmployee ? [defaultAssigneeName] : ['Équipe']);
+  const [assignedList, setAssignedList] = useState<string[]>(isEmpOrIntern ? [myName] : ['Équipe']);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState('09:00');
 
@@ -62,7 +63,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   // Subtasks created directly during task creation
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState(defaultAssigneeName);
+  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState(isEmpOrIntern ? myName : (currentUser?.name || employees[0]?.name || 'Équipe'));
   const [newSubtaskHours, setNewSubtaskHours] = useState<number>(2);
   const [newSubtaskPriority, setNewSubtaskPriority] = useState<TaskPriority>('medium');
   const [showSubtaskForm, setShowSubtaskForm] = useState(false);
@@ -72,10 +73,11 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   }, [isMilestoneDefault]);
 
   useEffect(() => {
-    if (isEmployee && currentUser) {
-      setAssignedList([currentUser.name || defaultAssigneeName]);
+    if (isEmpOrIntern) {
+      setAssignedList([myName]);
+      setNewSubtaskAssignee(myName);
     }
-  }, [isEmployee, currentUser, defaultAssigneeName]);
+  }, [isEmpOrIntern, myName]);
 
   if (!isOpen) return null;
 
@@ -112,7 +114,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
     e.preventDefault();
     if (!title.trim()) return;
 
-    const finalAssigned = isEmployee 
+    const finalAssigned = isEmpOrIntern 
       ? (currentUser?.name || assignedList[0] || 'Moi') 
       : (assignedList.length > 0 ? assignedList.join(', ') : 'Équipe');
 
@@ -120,7 +122,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
       title: title.trim(),
       description: description.trim(),
       date,
-      time: isEmployee ? '' : time,
+      time: isEmpOrIntern ? '' : time,
       priority,
       status,
       assignedTo: finalAssigned,
@@ -333,7 +335,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
             <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
               <User className="h-3.5 w-3.5 text-[#2A7B76]" /> Assigné à
             </label>
-            {isEmployee ? (
+            {isEmpOrIntern ? (
               <input
                 type="text"
                 disabled

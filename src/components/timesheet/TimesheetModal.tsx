@@ -21,7 +21,7 @@ import {
   Flame,
   Check
 } from 'lucide-react';
-import { Employee, Task, Presence, AttendanceIncident, TaskProject } from '../../types';
+import { Employee, Task, Presence, AttendanceIncident, TaskProject, AppUser } from '../../types';
 import { 
   generateDailyTimesheet, 
   generateMonthlyTimesheet, 
@@ -51,6 +51,8 @@ interface TimesheetModalProps {
   projects?: TaskProject[];
   defaultMode?: 'day' | 'month' | 'year';
   defaultDate?: string;
+  currentUser?: AppUser | null;
+  currentRole?: string;
 }
 
 interface CustomUnforeseenEvent {
@@ -70,12 +72,21 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
   projects = [],
   defaultMode = 'day',
   defaultDate,
+  currentUser,
+  currentRole,
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const [mode, setMode] = useState<'day' | 'month' | 'year'>(defaultMode);
   const [selectedDate, setSelectedDate] = useState<string>(defaultDate || todayStr);
   const [selectedMonth, setSelectedMonth] = useState<string>(todayStr.slice(0, 7));
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+
+  const isViewingSelf = Boolean(
+    currentUser &&
+      (currentUser.name?.toLowerCase().includes(employee.name.toLowerCase()) ||
+        currentUser.email?.toLowerCase() === employee.email?.toLowerCase() ||
+        employee.name.toLowerCase().includes(currentUser.name?.toLowerCase() || ''))
+  );
 
   // Gestion interactive des Imprévus saisis en direct
   const [customUnforeseenList, setCustomUnforeseenList] = useState<CustomUnforeseenEvent[]>([]);
@@ -596,26 +607,35 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   </table>
                 </div>
 
-                {/* 4. IMPRÉVUS SURVENUS AUJOURD'HUI (AVEC AJOUT DYNAMIQUE D'IMPRÉVUS) */}
+                {/* 4. IMPRÉVUS SURVENUS AUJOURD'HUI (Alimentés par les blocages signalés par le collaborateur) */}
                 <div className="rounded-xl border border-stone-300 overflow-hidden space-y-0">
                   <div className="bg-[#164e4b] text-white px-3 py-2 font-bold text-xs flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span>⚡</span>
-                      <span>IMPRÉVUS SURVENUS AUJOURD'HUI</span>
+                      <span>IMPRÉVUS SURVENUS AUJOURD'HUI ({dailyData.unforeseenEvents.length})</span>
+                      <span className="text-[10px] text-emerald-200 font-normal">
+                        — issus des blocages signalés par {employee.name}
+                      </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingUnforeseen(!isAddingUnforeseen)}
-                      className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded-lg text-[10px] font-bold text-white transition cursor-pointer flex items-center gap-1"
-                      title="Ajouter un imprévu survenu aujourd'hui"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>{isAddingUnforeseen ? 'Fermer' : '+ Ajouter un Imprévu'}</span>
-                    </button>
+                    {isViewingSelf ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingUnforeseen(!isAddingUnforeseen)}
+                        className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded-lg text-[10px] font-bold text-white transition cursor-pointer flex items-center gap-1"
+                        title="Ajouter un imprévu complémentaire"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>{isAddingUnforeseen ? 'Fermer' : '+ Ajouter un Imprévu'}</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-emerald-200/90 font-medium italic">
+                        Signalés par l'employé sur ses tâches
+                      </span>
+                    )}
                   </div>
 
-                  {/* Formulaire d'ajout rapide d'imprévu */}
-                  {isAddingUnforeseen && (
+                  {/* Formulaire d'ajout rapide d'imprévu (collaborateur lui-même) */}
+                  {isViewingSelf && isAddingUnforeseen && (
                     <form onSubmit={handleAddCustomUnforeseen} className="p-3 bg-amber-50/70 border-b border-amber-200 flex flex-wrap items-center gap-2 text-xs animate-in fade-in duration-150">
                       <div className="flex items-center gap-1">
                         <span className="font-bold text-stone-600 text-[10px]">Heure :</span>
@@ -633,7 +653,7 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                           type="text"
                           value={newUnforeseenSubject}
                           onChange={(e) => setNewUnforeseenSubject(e.target.value)}
-                          placeholder="Quoi ? (ex: Panne réseau, demande urgente direction...)"
+                          placeholder="Quoi ? (ex: Panne réseau, coupure de courant, urgence client...)"
                           className="w-full px-2.5 py-1 bg-white border border-stone-300 rounded-lg text-xs outline-none focus:border-[#2A7B76]"
                         />
                       </div>
@@ -662,34 +682,58 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[#2A7B76] text-white font-bold text-[11px]">
                       <tr>
-                        <th className="py-2 px-3 w-32">Heure</th>
-                        <th className="py-2 px-3">Quoi ? (qui / quel sujet)</th>
-                        <th className="py-2 px-3 text-right w-36">Temps perdu (min)</th>
-                        <th className="py-2 px-2 text-center w-12">Action</th>
+                        <th className="py-2 px-3 w-28">Heure</th>
+                        <th className="py-2 px-3">Origine &amp; Sujet de l'imprévu (Blocage opérationnel)</th>
+                        <th className="py-2 px-3 w-28 text-center">Statut</th>
+                        <th className="py-2 px-3 text-right w-28">Temps impact</th>
+                        {isViewingSelf && <th className="py-2 px-2 text-center w-12">Action</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-200">
                       {dailyData.unforeseenEvents.map((u, idx) => (
                         <tr key={idx} className="bg-white hover:bg-stone-50 transition">
                           <td className="py-2 px-3 font-mono font-bold text-stone-700">{u.time}</td>
-                          <td className="py-2 px-3 text-stone-800">{u.subject}</td>
-                          <td className="py-2 px-3 text-right font-mono text-rose-600 font-bold">{u.lostMinutes} min</td>
-                          <td className="py-2 px-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveCustomUnforeseen((u as any).id || String(idx))}
-                              className="text-stone-400 hover:text-rose-600 p-0.5 rounded cursor-pointer transition"
-                              title="Supprimer cet imprévu"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                          <td className="py-2 px-3 text-stone-800">
+                            <div className="space-y-0.5">
+                              <span className="font-semibold text-stone-900 block">{u.subject}</span>
+                              {u.sourceTask && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-stone-500 font-medium bg-stone-100 px-1.5 py-0.2 rounded border border-stone-200">
+                                  <span>Tâche source :</span>
+                                  <strong className="text-stone-700">{u.sourceTask}</strong>
+                                </span>
+                              )}
+                            </div>
                           </td>
+                          <td className="py-2 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              u.status === 'Résolu'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                            }`}>
+                              {u.status || 'Bloqué'}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono text-rose-600 font-bold">{u.lostMinutes} min</td>
+                          {isViewingSelf && (
+                            <td className="py-2 px-2 text-center">
+                              {(u as any).id && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCustomUnforeseen((u as any).id || String(idx))}
+                                  className="text-stone-400 hover:text-rose-600 p-0.5 rounded cursor-pointer transition"
+                                  title="Supprimer cet imprévu"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       ))}
                       {dailyData.unforeseenEvents.length === 0 && (
                         <tr>
-                          <td colSpan={4} className="py-3 px-3 text-center text-stone-400 italic">
-                            Aucun imprévu survenu aujourd'hui.
+                          <td colSpan={isViewingSelf ? 5 : 4} className="py-3 px-3 text-center text-stone-400 italic">
+                            Aucun blocage ni imprévu opérationnel signalé par le collaborateur sur cette journée.
                           </td>
                         </tr>
                       )}
@@ -827,6 +871,53 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                           </div>
                         </form>
                       )}
+
+                      {/* Remontées des Commentaires faisant office de Points à signaler au Manager */}
+                      <div className="mb-3 space-y-2 bg-stone-50/90 p-3 rounded-2xl border border-stone-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+                            <span>💬</span>
+                            <span>Commentaires sur les tâches (Points à signaler au Manager) ({dailyData.managerComments.length})</span>
+                          </span>
+                          <span className="text-[10px] text-[#2A7B76] font-semibold bg-[#2A7B76]/10 px-2 py-0.5 rounded-full">
+                            Compte-rendu opérationnel
+                          </span>
+                        </div>
+
+                        {dailyData.managerComments.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {dailyData.managerComments.map((com) => (
+                              <div
+                                key={com.id}
+                                className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/60 text-xs flex items-start gap-2.5"
+                              >
+                                <span className="text-base shrink-0">💬</span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+                                    <strong className="text-stone-900 font-bold">{com.author}</strong>
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-200 text-blue-900 uppercase">
+                                      {com.isSubtask ? 'Sous-tâche' : 'Tâche'}
+                                    </span>
+                                    <span className="font-semibold text-stone-600 truncate max-w-[200px]">
+                                      {com.taskTitle}
+                                    </span>
+                                    <span className="text-stone-400 font-mono ml-auto">
+                                      {com.time}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-stone-800 mt-1 font-medium leading-relaxed bg-white p-2 rounded-lg border border-blue-100">
+                                    "{com.text}"
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-stone-400 italic py-1">
+                            Aucun commentaire rédigé sur les tâches aujourd'hui (les commentaires saisis par le collaborateur sur ses tâches font office de points à signaler au manager).
+                          </p>
+                        )}
+                      </div>
 
                       {/* Liste des points à signaler enregistrés */}
                       <div className="space-y-2">

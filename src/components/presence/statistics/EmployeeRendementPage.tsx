@@ -24,7 +24,7 @@ import {
   Clock4,
   Hourglass
 } from 'lucide-react';
-import { Employee, Task, Subtask, Presence, AttendanceIncident, TaskStatus } from '../../../types';
+import { Employee, Task, Subtask, Presence, AttendanceIncident, TaskStatus, AppUser } from '../../../types';
 import { haptic } from '../../../services/hapticService';
 import { SubtaskCreateModal } from '../../tasks/SubtaskCreateModal';
 import { TimesheetModal } from '../../timesheet/TimesheetModal';
@@ -40,6 +40,8 @@ interface EmployeeRendementPageProps {
   onBack: () => void;
   onUpdateTask?: (updatedTask: Task) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
+  currentUser?: AppUser | null;
+  currentRole?: string;
 }
 
 type StatusFilter = 'all' | 'todo' | 'in_progress' | 'pending_validation' | 'blocked' | 'completed';
@@ -55,6 +57,8 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
   onBack,
   onUpdateTask,
   showToast,
+  currentUser,
+  currentRole,
 }) => {
   // Calcul DYNAMIQUE du rendement complet (tâches, sous-tâches, jalons, heures)
   const metrics = useMemo(() => {
@@ -855,6 +859,8 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
           presences={presences}
           incidents={incidents}
           defaultMode={timesheetMode}
+          currentUser={currentUser}
+          currentRole={currentRole}
         />
       )}
     </div>

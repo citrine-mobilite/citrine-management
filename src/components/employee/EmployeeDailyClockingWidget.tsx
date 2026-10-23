@@ -118,11 +118,6 @@ export const EmployeeDailyClockingWidget: React.FC<EmployeeDailyClockingWidgetPr
           setEmergencyReason('');
           setShowEmergencyModal(true);
         }}
-        onOpenCustomClockModal={() => {
-          setCustomClockReason('');
-          setCustomClockError(null);
-          setShowCustomClockModal(true);
-        }}
       />
     </div>
   );

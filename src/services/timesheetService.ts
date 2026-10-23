@@ -1,4 +1,4 @@
-import { Employee, Task, Presence, AttendanceIncident, TaskProject } from '../types';
+import { Employee, Task, Subtask, Presence, AttendanceIncident, TaskProject } from '../types';
 import { isTaskAssignedToEmployee } from '../utils/rendementCalculator';
 import { exportToExcel } from './excelExportService';
 
@@ -50,9 +50,20 @@ export interface DailyTimesheetData {
     time: string;
     subject: string;
     lostMinutes: number;
+    sourceTask?: string;
+    isFromBlockage?: boolean;
+    status?: string;
   }[];
   postponedTasks: string[];
   managerAlertPoint: string;
+  managerComments: {
+    id: string;
+    taskTitle: string;
+    isSubtask: boolean;
+    author: string;
+    time: string;
+    text: string;
+  }[];
 }
 
 export interface MonthlyTimesheetData {
@@ -277,17 +288,117 @@ export function generateDailyTimesheet(
     },
   ];
 
-  // 6. IMPRÉVUS DU JOUR
+  // 6. IMPRÉVUS DU JOUR (Blocages signalés par l'employé) & POINTS À SIGNALER (Commentaires)
   const empIncidents = incidents.filter((i) => i.employeeId === employee.id && i.date === date);
-  const unforeseenEvents = empIncidents.map((i) => ({
-    time: i.timeString || (i.createdAt ? new Date(i.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '14:00'),
-    subject: i.reason || i.description || 'Imprévu opérationnel',
-    lostMinutes: 30,
-  }));
+  const unforeseenEvents: DailyTimesheetData['unforeseenEvents'] = [];
+  const managerComments: DailyTimesheetData['managerComments'] = [];
 
-  const managerAlertPoint = empIncidents.length > 0 
-    ? `Point de vigilance : ${empIncidents.map((i) => i.reason || i.description).join(' ; ')}`
-    : 'Aucun blocage majeur rencontré aujourd’hui.';
+  // Incidents RH/Présence de l'employé
+  empIncidents.forEach((i) => {
+    unforeseenEvents.push({
+      time: i.timeString || (i.createdAt ? new Date(i.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '08:30'),
+      subject: `⚠️ [Incident présence] ${i.reason || i.description || 'Imprévu opérationnel'}`,
+      lostMinutes: 30,
+      sourceTask: 'Pointage / Présence',
+      isFromBlockage: false,
+      status: i.status || 'Signalé',
+    });
+  });
+
+  // Remontée des blocages (= Imprévus) et des commentaires (= Points à signaler au manager)
+  sortedParentTasks.forEach((t) => {
+    // A. Blocages sur la tâche parente
+    if (t.incidents && t.incidents.length > 0) {
+      t.incidents.forEach((inc) => {
+        unforeseenEvents.push({
+          time: t.time || '10:30',
+          subject: `🚨 [Blocage tâche] ${t.title} : ${inc.title || inc.description || 'Difficulté opérationnelle'}`,
+          lostMinutes: 45,
+          sourceTask: t.title,
+          isFromBlockage: true,
+          status: inc.resolved ? 'Résolu' : 'Bloqué',
+        });
+      });
+    } else if (t.status === 'blocked') {
+      unforeseenEvents.push({
+        time: t.time || '10:30',
+        subject: `🚨 [Blocage tâche] ${t.title} : Tâche bloquée`,
+        lostMinutes: 45,
+        sourceTask: t.title,
+        isFromBlockage: true,
+        status: 'Bloqué',
+      });
+    }
+
+    // B. Commentaires sur la tâche parente -> Points à signaler au manager
+    if (t.comments && t.comments.length > 0) {
+      t.comments.forEach((c) => {
+        managerComments.push({
+          id: c.id,
+          taskTitle: t.title,
+          isSubtask: false,
+          author: c.author,
+          time: c.timestamp || 'Journée',
+          text: c.text,
+        });
+      });
+    }
+
+    // C. Traitement récursif des sous-tâches : Blocages -> Imprévus, Commentaires -> Points au manager
+    const traverseSubtasks = (subList: Subtask[], parentName: string) => {
+      subList.forEach((sub) => {
+        // Blocages sur la sous-tâche
+        if (sub.incidents && sub.incidents.length > 0) {
+          sub.incidents.forEach((inc) => {
+            unforeseenEvents.push({
+              time: sub.time || '14:15',
+              subject: `🚨 [Blocage sous-tâche] ${sub.title} (sur "${parentName}") : ${inc.title || inc.description || 'Difficulté opérationnelle'}`,
+              lostMinutes: 30,
+              sourceTask: sub.title,
+              isFromBlockage: true,
+              status: inc.resolved ? 'Résolu' : 'Bloqué',
+            });
+          });
+        } else if (sub.status === 'blocked' || sub.isBlocked || sub.blockerReason) {
+          unforeseenEvents.push({
+            time: sub.time || '14:15',
+            subject: `🚨 [Blocage sous-tâche] ${sub.title} (sur "${parentName}") : ${sub.blockerReason || 'Difficulté opérationnelle signalée'}`,
+            lostMinutes: 30,
+            sourceTask: sub.title,
+            isFromBlockage: true,
+            status: 'Bloqué',
+          });
+        }
+
+        // Commentaires sur la sous-tâche -> Points à signaler au manager
+        if (sub.comments && sub.comments.length > 0) {
+          sub.comments.forEach((c) => {
+            managerComments.push({
+              id: c.id,
+              taskTitle: `${sub.title} (sur "${parentName}")`,
+              isSubtask: true,
+              author: c.author,
+              time: c.timestamp || 'Journée',
+              text: c.text,
+            });
+          });
+        }
+
+        // Récursion sur les sous-sous-tâches
+        if (sub.subtasks && sub.subtasks.length > 0) {
+          traverseSubtasks(sub.subtasks, sub.title);
+        }
+      });
+    };
+
+    if (t.subtasks && t.subtasks.length > 0) {
+      traverseSubtasks(t.subtasks, t.title);
+    }
+  });
+
+  const managerAlertPoint = managerComments.length > 0
+    ? managerComments.map((c) => `[${c.taskTitle}] ${c.author}: ${c.text}`).join(' | ')
+    : 'Aucun point particulier consigné par le collaborateur aujourd’hui.';
 
   return {
     employee,
@@ -306,6 +417,7 @@ export function generateDailyTimesheet(
     unforeseenEvents,
     postponedTasks,
     managerAlertPoint,
+    managerComments,
   };
 }
 

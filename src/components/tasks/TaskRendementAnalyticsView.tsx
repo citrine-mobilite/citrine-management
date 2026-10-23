@@ -17,22 +17,34 @@ import {
   Sparkles,
   ArrowUpRight,
   Filter,
-  PieChart
 } from 'lucide-react';
-import { Task, Employee, TaskProject } from '../../types';
+import { Task, Employee, TaskProject, AppUser } from '../../types';
 import { getTaskDynamicProgress } from '../../utils/rendementCalculator';
+import { isSelfOnlyUser, findMatchingEmployee } from '../../utils/roleUtils';
 
 interface TaskRendementAnalyticsViewProps {
   tasks: Task[];
   employees: Employee[];
   projects?: TaskProject[];
+  currentUser?: AppUser | null;
+  currentRole?: string;
 }
 
 export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProps> = ({
   tasks,
   employees,
   projects = [],
+  currentUser,
+  currentRole,
 }) => {
+  const isRestricted = isSelfOnlyUser(currentUser, currentRole);
+  const matchedEmp = useMemo(() => findMatchingEmployee(employees, currentUser), [employees, currentUser]);
+  const effectiveEmployees = useMemo(() => {
+    if (!isRestricted) return employees;
+    if (matchedEmp) return [matchedEmp];
+    return employees.slice(0, 1);
+  }, [isRestricted, matchedEmp, employees]);
+
   const [activeTab, setActiveTab] = useState<'workload' | 'milestones' | 'velocity'>('workload');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [capacityFilter, setCapacityFilter] = useState<'all' | 'overloaded' | 'available' | 'optimal'>('all');
@@ -85,7 +97,7 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
   const STANDARD_WEEKLY_CAPACITY = 35;
 
   const workloadStats = useMemo(() => {
-    return employees.map((emp) => {
+    return effectiveEmployees.map((emp) => {
       // Direct tasks
       const empTasks = filteredTasks.filter(
         (t) =>
@@ -149,7 +161,7 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
         saturationPercentage: Math.round((totalWorkloadHours / STANDARD_WEEKLY_CAPACITY) * 100),
       };
     }).sort((a, b) => b.totalHours - a.totalHours);
-  }, [filteredTasks, allSubtasks, employees]);
+  }, [filteredTasks, allSubtasks, effectiveEmployees]);
 
   // Filter workload by capacity status
   const displayedWorkload = useMemo(() => {
@@ -184,12 +196,14 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
                 </span>
               </div>
               <h2 className="font-serif font-bold text-xl md:text-2xl text-white mt-1">
-                Pilotage Avancé du Rendement & Équilibrage des Capacités
+                {isRestricted ? 'Mon Rendement & Ma Charge de Travail' : 'Pilotage Avancé du Rendement & Équilibrage des Capacités'}
               </h2>
             </div>
           </div>
           <p className="text-xs text-indigo-100/90 pl-1 max-w-3xl leading-relaxed">
-            Surveillance de la vélocité opérationnelle, répartition de la charge (Workload Balancing), décomposition fine des sous-tâches et progression des jalons stratégiques.
+            {isRestricted 
+              ? 'Suivi personnel de votre charge horaire, accomplissement de vos tâches et progression de vos sous-tâches.'
+              : 'Surveillance de la vélocité opérationnelle, répartition de la charge (Workload Balancing), décomposition fine des sous-tâches et progression des jalons stratégiques.'}
           </p>
         </div>
 

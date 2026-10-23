@@ -82,6 +82,7 @@ interface CollaboratorPanelProps {
   users?: AppUser[];
   onUpdateUsers?: (users: AppUser[]) => void;
   moduleConfig?: CompanyModuleConfig;
+  selectedEmployeeId?: string;
 }
 
 type ViewMode = 'list' | 'detail';
@@ -121,11 +122,19 @@ export default function CollaboratorPanel({
   users = [],
   onUpdateUsers,
   moduleConfig,
+  selectedEmployeeId: initialSelectedEmployeeId,
 }: CollaboratorPanelProps) {
   // Navigation & View States
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [selectedEmpId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(initialSelectedEmployeeId ? 'detail' : 'list');
+  const [selectedEmpId, setSelectedEmployeeId] = useState<string | null>(initialSelectedEmployeeId || null);
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTabType>('payslips');
+
+  React.useEffect(() => {
+    if (initialSelectedEmployeeId) {
+      setSelectedEmployeeId(initialSelectedEmployeeId);
+      setViewMode('detail');
+    }
+  }, [initialSelectedEmployeeId]);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');

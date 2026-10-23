@@ -45,7 +45,6 @@ export function mapCollectionToTable(collectionName: string): string {
     case 'absences': return 'absences';
     case 'leave_requests': return 'leave_requests';
     case 'building_supervisors': return 'generic_collections';
-    case 'visitor_logs': return 'visitor_logs';
     default: return 'generic_collections';
   }
 }
@@ -541,23 +540,26 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         approved_at: item.approvedAt || null,
         reimbursed_at: item.reimbursedAt || null,
       };
-    case 'hse_incidents':
+    case 'hse_incidents': {
+      const siteVal = item.site || item.siteLocation || item.site_location || 'Base Japoma - Carrefour Matango';
       return {
         ...base,
         reference: item.reference || null,
-        site: item.site || 'Site',
-        zone_precise: item.zonePrecise || null,
+        site_location: siteVal,
+        zone_precise: item.zonePrecise || item.zone_precise || null,
         type: item.type || null,
         severity: item.severity || null,
-        date: item.date || null,
+        date: item.date || new Date().toISOString().split('T')[0],
         time: item.time || null,
-        title: item.title || 'Incident HSE',
+        title: item.title,
         description: item.description || null,
-        reported_by: item.reportedBy || null,
-        victim_name: item.victimName || null,
-        days_lost: item.daysLost || 0,
+        reported_by: item.reportedBy || item.reported_by || null,
+        victim_name: item.victimName || item.victim_name || null,
+        days_lost: typeof item.daysLost === 'number' ? item.daysLost : (typeof item.days_lost === 'number' ? item.days_lost : 0),
         status: item.status || 'signale',
+        raw_data: item,
       };
+    }
     case 'visitor_logs':
       return {
         ...base,
@@ -916,6 +918,36 @@ function supabaseRowToItem(collectionName: string, row: any): any {
     };
   }
 
+  if (table === 'hse_incidents') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    return {
+      ...raw,
+      id: row.doc_id || raw.id || String(row.id),
+      docId: row.doc_id || raw.docId,
+      uid: row.uid,
+      _dbId: row.id,
+      reference: raw.reference || `HSE-2026-${String(row.id).padStart(4, '0')}`,
+      site: row.site_location || raw.site || 'Base Japoma - Carrefour Matango',
+      zonePrecise: row.zone_precise || raw.zonePrecise || '',
+      type: row.type || raw.type || 'presque_accident',
+      severity: row.severity || raw.severity || 'faible',
+      date: row.date || raw.date || '',
+      time: row.time || raw.time || '',
+      title: row.title || raw.title || '',
+      description: row.description || raw.description || '',
+      reportedBy: row.reported_by || raw.reportedBy || '',
+      victimName: row.victim_name || raw.victimName || '',
+      daysLost: typeof row.days_lost === 'number' ? row.days_lost : (typeof raw.daysLost === 'number' ? raw.daysLost : 0),
+      status: row.status || raw.status || 'signale',
+      immediateActionTaken: raw.immediateActionTaken || '',
+      rootCause: raw.rootCause || '',
+      victimInjury: raw.victimInjury || '',
+      correctiveActions: raw.correctiveActions || [],
+      createdAt: row.created_at || raw.createdAt,
+      updatedAt: row.updated_at || raw.updatedAt,
+    };
+  }
+
   if (row.raw_data && typeof row.raw_data === 'object') {
     const raw = row.raw_data;
     return {
@@ -1177,6 +1209,31 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
 
       const { data: insertData, error: insertErr } = await client.from('attendance_incidents').insert(row).select().single();
       if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
+      return item;
+    }
+
+    if (table === 'hse_incidents') {
+      const hseDocId = String(item.id || row.doc_id || `hse-${Date.now()}`);
+      row.doc_id = hseDocId;
+      row.title = (item as any).title || row.title;
+      row.site_location = (item as any).site || (item as any).siteLocation || row.site_location || 'Base Japoma - Carrefour Matango';
+      row.date = (item as any).date || row.date || new Date().toISOString().split('T')[0];
+
+      const { data: upsertData, error: upsertErr } = await client
+        .from('hse_incidents')
+        .upsert(row, { onConflict: 'doc_id' })
+        .select()
+        .single();
+      if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
+
+      const { data: existingRows } = await client.from('hse_incidents').select('id').eq('doc_id', hseDocId).limit(1);
+      if (existingRows && existingRows.length > 0) {
+        const { data: updateData, error: updateErr } = await client.from('hse_incidents').update(row).eq('doc_id', hseDocId).select().single();
+        if (!updateErr && updateData) return supabaseRowToItem(collectionName, updateData) as T;
+      } else {
+        const { data: insertData, error: insertErr } = await client.from('hse_incidents').insert(row).select().single();
+        if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
+      }
       return item;
     }
 
