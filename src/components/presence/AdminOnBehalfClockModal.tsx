@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { UserCheck, X, Clock, AlertCircle, ShieldAlert, Check } from 'lucide-react';
 import { Employee, Presence, AppUser, NotificationLog, AttendanceIncident, CompanyModuleConfig } from '../../types';
 import { incidentService } from '../../services/incidentService';
-import { isEmployeeOnlyRole } from '../../utils/roleUtils';
+import { shouldEmployeeClock } from '../../utils/roleUtils';
 
 interface AdminOnBehalfClockModalProps {
   isOpen: boolean;
@@ -33,7 +33,7 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
   onAddAttendanceIncident,
   moduleConfig,
 }) => {
-  const eligibleEmployees = employees.filter((emp) => isEmployeeOnlyRole(emp.roleType || emp.role));
+  const eligibleEmployees = employees.filter((emp) => shouldEmployeeClock(emp));
   const [selectedEmpId, setSelectedEmpId] = useState<string>(defaultEmployeeId || eligibleEmployees[0]?.id || employees[0]?.id || '');
   const [clockAction, setClockAction] = useState<'arrival' | 'pauseStart' | 'pauseEnd' | 'departure'>('arrival');
   const [timeInput, setTimeInput] = useState<string>(() => {

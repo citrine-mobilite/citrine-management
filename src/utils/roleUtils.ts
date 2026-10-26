@@ -52,20 +52,203 @@ export function getDefaultPortalForUser(user?: { role?: string | null } | null):
 }
 
 /**
- * Vérifie si le profil concerne strictement un employé (et non un responsable ou admin).
- * Seuls les employés badgent.
+ * Détermine si un collaborateur est soumis au pointage des présences.
+ * 
+ * Règle d'or :
+ * - Tous les collaborateurs en poste (statut 'en_poste') doivent pointer.
+ * - L'IT (informaticien, support, administrateur système, etc.) DOIT IMPÉRATIVEMENT POINTER.
+ * - Les employés, stagiaires, techniciens et responsables opérationnels en poste doivent pointer.
+ * - Ne sont exclus que les sponsors/partenaires externes ou les collaborateurs ayant quitté l'entreprise.
  */
-export function isEmployeeOnlyRole(roleOrRoleType?: string | null): boolean {
-  if (!roleOrRoleType) return true;
-  const normalized = normalizeRoleString(roleOrRoleType);
-  if (
-    normalized.includes('admin') ||
-    normalized.includes('responsable') ||
-    normalized.includes('manager') ||
-    normalized.includes('direction')
-  ) {
+export function shouldEmployeeClock(employee?: {
+  role?: string | null;
+  roleType?: string | null;
+  position?: string | null;
+  department?: string | null;
+  email?: string | null;
+  name?: string | null;
+  status?: any;
+  employmentStatus?: any;
+} | null): boolean {
+  if (!employee) return false;
+
+  // 1. Vérification du statut d'activité dans l'entreprise
+  const rawStatus = employee.employmentStatus || (typeof employee.status === 'string' ? employee.status : (employee.status ? 'en_poste' : 'parti'));
+  const isEnPoste = rawStatus === 'en_poste' || rawStatus === 'true' || rawStatus === true;
+  if (!isEnPoste) return false;
+
+  // 2. Exclusion des sponsors ou profils purement externes
+  const normRoleType = normalizeRoleString(employee.roleType);
+  if (normRoleType === 'sponsor' || normRoleType === 'partenaire') return false;
+
+  // 3. L'IT DOIT TOUJOURS POINTER (priorité absolue)
+  const dept = normalizeRoleString(employee.department);
+  const pos = normalizeRoleString(employee.position);
+  const role = normalizeRoleString(employee.role);
+  const email = (employee.email || '').toLowerCase().trim();
+  const name = (employee.name || '').toLowerCase().trim();
+
+  const isIT =
+    dept === 'it' ||
+    dept.includes('informatique') ||
+    dept.includes('information') ||
+    dept.includes('technologie') ||
+    normRoleType.includes('it') ||
+    normRoleType.includes('informaticien') ||
+    normRoleType.includes('developpeur') ||
+    pos.includes('it') ||
+    pos.includes('informatique') ||
+    pos.includes('administrateur systeme') ||
+    role.includes('it') ||
+    email.includes('it') ||
+    email === 'citrinemobilite@gmail.com' ||
+    name.includes('citrine mobilite') ||
+    name.includes('it');
+
+  if (isIT) {
+    return true; // L'IT pointe TOUJOURS !
+  }
+
+  // 4. Direction générale pure non salariée (hors IT)
+  const isPureDirection = 
+    (dept === 'direction' || dept === 'direction generale') && 
+    (pos.includes('directeur general') || pos.includes('pdg') || normRoleType.includes('direction'));
+
+  if (isPureDirection) {
     return false;
   }
+
+  return true;
+}
+
+/**
+ * Vérifie si le collaborateur fait partie de l'équipe IT (informaticien, support, sysadmin, etc.)
+ * L'IT fait partie des collaborateurs soumis au pointage.
+ */
+export function isITEmployee(employee?: {
+  role?: string | null;
+  roleType?: string | null;
+  position?: string | null;
+  department?: string | null;
+  email?: string | null;
+  name?: string | null;
+} | null): boolean {
+  if (!employee) return false;
+  const dept = normalizeRoleString(employee.department);
+  const pos = normalizeRoleString(employee.position);
+  const role = normalizeRoleString(employee.role);
+  const normRoleType = normalizeRoleString(employee.roleType);
+  const email = (employee.email || '').toLowerCase().trim();
+  const name = (employee.name || '').toLowerCase().trim();
+
+  return (
+    dept === 'it' ||
+    dept.includes('informatique') ||
+    dept.includes('information') ||
+    dept.includes('technologie') ||
+    normRoleType.includes('it') ||
+    normRoleType.includes('informaticien') ||
+    normRoleType.includes('developpeur') ||
+    pos.includes('it') ||
+    pos.includes('informatique') ||
+    pos.includes('administrateur systeme') ||
+    role.includes('it') ||
+    email.includes('it') ||
+    email === 'citrinemobilite@gmail.com' ||
+    name.includes('citrine mobilite') ||
+    name.includes('it')
+  );
+}
+
+/**
+ * Vérifie si un collaborateur est un responsable ou un super administrateur.
+ * Règle d'or de présence Citrine :
+ * Dans la feuille de pointage, les responsables et les super admins NE SONT AFFICHÉS QUE S'ILS ONT BADGÉ.
+ * S'ils n'ont pas badgé, ils ne sont jamais affichés dans la liste des pointages du jour.
+ */
+export function isManagerOrAdminEmployee(employee?: {
+  roleId?: number | string | null;
+  role?: string | null;
+  roleType?: string | null;
+  position?: string | null;
+  department?: string | null;
+  userRole?: string | null;
+  email?: string | null;
+  name?: string | null;
+} | null): boolean {
+  if (!employee) return false;
+
+  // 1. Détection par roleId numérique officiel (1 = Admin, 2 = Responsable)
+  const rId = Number(employee.roleId);
+  if (rId === 1 || rId === 2) {
+    return true;
+  }
+
+  // 2. Détection par email du compte Super Admin principal
+  const email = (employee.email || '').toLowerCase().trim();
+  if (email === 'citrinemobilite@gmail.com') {
+    return true;
+  }
+
+  // 3. Normalisation des intitulés de rôle, fonction, et direction
+  const role = normalizeRoleString(employee.role);
+  const roleType = normalizeRoleString(employee.roleType);
+  const pos = normalizeRoleString(employee.position);
+  const userRole = normalizeRoleString(employee.userRole);
+  const dept = normalizeRoleString(employee.department);
+
+  return (
+    role.includes('admin') ||
+    role.includes('super') ||
+    role.includes('responsable') ||
+    role.includes('manager') ||
+    roleType.includes('admin') ||
+    roleType.includes('super') ||
+    roleType.includes('responsable') ||
+    roleType.includes('manager') ||
+    roleType.includes('direction') ||
+    userRole.includes('admin') ||
+    userRole.includes('super') ||
+    userRole.includes('responsable') ||
+    userRole.includes('manager') ||
+    pos.includes('directeur') ||
+    pos.includes('responsable') ||
+    pos.includes('manager') ||
+    pos.includes('admin') ||
+    dept.includes('direction')
+  );
+}
+
+/**
+ * Vérifie si le profil concerne un collaborateur soumis au pointage.
+ * L'IT DOIT IMPÉRATIVEMENT POINTER.
+ */
+export function isEmployeeOnlyRole(roleOrRoleType?: string | null, departmentOrPosition?: string | null): boolean {
+  if (!roleOrRoleType && !departmentOrPosition) return true;
+  const normalized = normalizeRoleString(roleOrRoleType);
+  const normDeptPos = normalizeRoleString(departmentOrPosition);
+
+  // L'IT pointe TOUJOURS
+  if (
+    normalized.includes('it') ||
+    normalized.includes('informatique') ||
+    normalized.includes('informaticien') ||
+    normDeptPos.includes('it') ||
+    normDeptPos.includes('informatique')
+  ) {
+    return true;
+  }
+
+  // Direction générale pure
+  if (normalized.includes('direction') || normDeptPos.includes('direction')) {
+    return false;
+  }
+
+  // Administrateur pur (hors IT)
+  if (normalized.includes('admin') && !normalized.includes('it') && !normDeptPos.includes('it')) {
+    return false;
+  }
+
   return true;
 }
 

@@ -35,7 +35,7 @@ import { StaticDoorQrModal } from './presence/StaticDoorQrModal';
 import { PresenceIncidentsAdminView } from './presence/PresenceIncidentsAdminView';
 import PresenceRequestsView from './PresenceRequestsView';
 import { extractPresenceRequests } from './presence/requests/presenceRequestsUtils';
-import { isEmployeeOnlyRole, isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
+import { isEmployeeOnlyRole, isSelfOnlyUser, findMatchingEmployee, shouldEmployeeClock, isManagerOrAdminEmployee } from '../utils/roleUtils';
 import { realtimeSyncService } from '../services/realtimeSyncService';
 import { incidentService } from '../services/incidentService';
 
@@ -78,14 +78,9 @@ export default function PresencePanel({
   const isRestricted = isSelfOnlyUser(currentUser, currentRole);
   const myEmp = useMemo(() => findMatchingEmployee(employees, currentUser), [employees, currentUser]);
 
-  // Les administrateurs et responsables ne badgent pas : on les exclut du pointage du jour
+  // Liste officielle des collaborateurs soumis au pointage : l'IT pointe obligatoirement
   const clockableEmployees = useMemo(() => {
-    const list = employees.filter((e) => {
-      const isRoleOk = isEmployeeOnlyRole(e.role || e.roleType || e.position);
-      const st = e.employmentStatus || (typeof e.status === 'string' ? e.status : (e.status ? 'en_poste' : 'parti'));
-      const isInPoste = st === 'en_poste' || st === ('true' as any);
-      return isRoleOk && isInPoste;
-    });
+    const list = employees.filter((e) => shouldEmployeeClock(e));
     if (!isRestricted) return list;
     if (myEmp) return [myEmp];
     return list.slice(0, 1);
@@ -355,17 +350,91 @@ export default function PresencePanel({
 
   const clockableEmployeeIds = useMemo(() => new Set(clockableEmployees.map((e) => String(e.id))), [clockableEmployees]);
 
-  // Filter list rows based on collaborator select and date/period select, ensuring en_poste employees who haven't badged are declared as absent
+  // 1. Tous les employés soumis au pointage obligatoire (Employés, Stagiaires, Techniciens et IT)
+  const mandatoryClockingEmployees = useMemo(() => {
+    return employees.filter((e) => {
+      const st = e.employmentStatus || (typeof e.status === 'string' ? e.status : (e.status ? 'en_poste' : 'parti'));
+      const isEnPoste = st === 'en_poste' || st === ('true' as any);
+      if (!isEnPoste) return false;
+      if (e.roleType === 'sponsor') return false;
+      return !isManagerOrAdminEmployee(e);
+    });
+  }, [employees]);
+
+  // 2. Responsables et Administrateurs en poste
+  const managerAndAdminEmployees = useMemo(() => {
+    return employees.filter((e) => {
+      const st = e.employmentStatus || (typeof e.status === 'string' ? e.status : (e.status ? 'en_poste' : 'parti'));
+      const isEnPoste = st === 'en_poste' || st === ('true' as any);
+      if (!isEnPoste) return false;
+      return isManagerOrAdminEmployee(e);
+    });
+  }, [employees]);
+
+  // Vérification stricte d'un pointage réel (heure d'arrivée/départ valide et statut présent ou retard)
+  const isActualBadgePunch = (p?: Presence | null): boolean => {
+    if (!p) return false;
+    if (p.status === 'absent') return false;
+    const arr = (p.arrivalTime || '').trim();
+    const dep = (p.departureTime || '').trim();
+    const hasValidTime = (arr !== '' && arr !== '—' && arr !== '--:--') || (dep !== '' && dep !== '—' && dep !== '--:--');
+    const hasValidStatus = p.status === 'present' || p.status === 'late';
+    return Boolean(hasValidTime && hasValidStatus);
+  };
+
+  // Responsables ou super admins qui ont effectivement badgé à la date ciblée
+  const badgedManagersForDate = useMemo(() => {
+    const targetDate = selectedDate || todayStr;
+    return managerAndAdminEmployees.filter((m) => {
+      const existing = presences.find((p) => String(p.employeeId) === String(m.id) && p.date === targetDate);
+      return isActualBadgePunch(existing);
+    });
+  }, [managerAndAdminEmployees, presences, selectedDate, todayStr]);
+
+  // Collaborateurs sélectionnables dans le filtre : Tous les employés, PLUS uniquement les responsables/admins qui ont badgé
+  const filterSelectableEmployees = useMemo(() => {
+    const combined = [...mandatoryClockingEmployees, ...badgedManagersForDate];
+    if (!isRestricted) return combined;
+    if (myEmp) return [myEmp];
+    return combined.slice(0, 1);
+  }, [mandatoryClockingEmployees, badgedManagersForDate, isRestricted, myEmp]);
+
+  // Règle d'or de la liste des pointages :
+  // 1. Affiche la liste de TOUS les employés : présents s'ils ont pointé, absents sinon.
+  // 2. Concernant les responsables ou super admins : affiche UNIQUEMENT ceux qui ont badgé !
+  //    (Ex: si 10 responsables et 2 ont badgé -> affiche uniquement les 2. Pareil pour les super admins).
   const filteredPresences = useMemo(() => {
     const targetDate = selectedDate || todayStr;
     const list: Presence[] = [];
+    const addedIds = new Set<string>();
 
-    clockableEmployees.forEach((emp) => {
+    if (isRestricted && myEmp) {
+      const existing = presences.find((p) => String(p.employeeId) === String(myEmp.id) && p.date === targetDate);
+      if (isActualBadgePunch(existing)) {
+        return [existing!];
+      }
+      return [{
+        id: existing?.id || `absent-${myEmp.id}-${targetDate}`,
+        employeeId: myEmp.id,
+        employeeName: myEmp.name,
+        date: targetDate,
+        status: 'absent',
+        arrivalTime: null,
+        pauseStart: null,
+        pauseEnd: null,
+        departureTime: null,
+        location: 'Non pointé (Absent)',
+      }];
+    }
+
+    // 1. Tous les employés ordinaires soumis au pointage obligatoire
+    mandatoryClockingEmployees.forEach((emp) => {
       if (collaboratorFilter !== 'all' && emp.id !== collaboratorFilter) return;
 
+      addedIds.add(String(emp.id));
       const existing = presences.find((p) => String(p.employeeId) === String(emp.id) && p.date === targetDate);
-      if (existing && (existing.arrivalTime || existing.status === 'present' || existing.status === 'late')) {
-        list.push(existing);
+      if (isActualBadgePunch(existing)) {
+        list.push(existing!);
       } else {
         list.push({
           id: existing?.id || `absent-${emp.id}-${targetDate}`,
@@ -381,8 +450,20 @@ export default function PresencePanel({
         });
       }
     });
+
+    // 2. Responsables et Super Admins : affichés STRICTEMENT s'ils ont badgé
+    managerAndAdminEmployees.forEach((emp) => {
+      if (addedIds.has(String(emp.id))) return;
+      if (collaboratorFilter !== 'all' && emp.id !== collaboratorFilter) return;
+
+      const existing = presences.find((p) => String(p.employeeId) === String(emp.id) && p.date === targetDate);
+      if (isActualBadgePunch(existing)) {
+        list.push(existing!);
+      }
+    });
+
     return list;
-  }, [clockableEmployees, presences, selectedDate, todayStr, collaboratorFilter]);
+  }, [mandatoryClockingEmployees, managerAndAdminEmployees, presences, selectedDate, todayStr, collaboratorFilter, isRestricted, myEmp]);
 
   // Paginated presence rows
   const totalItems = filteredPresences.length;
@@ -753,7 +834,7 @@ export default function PresencePanel({
                   className="w-full px-3 py-1.5 border border-stone-200 bg-stone-50 rounded-xl text-xs font-semibold focus:ring-1 focus:ring-[#2A7B76] outline-none"
                 >
                   <option value="all">Tous les collaborateurs</option>
-                  {clockableEmployees.map((emp) => (
+                  {filterSelectableEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id}>{emp.name}</option>
                   ))}
                 </select>

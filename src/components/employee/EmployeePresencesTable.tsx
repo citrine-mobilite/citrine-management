@@ -98,6 +98,11 @@ export const EmployeePresencesTable: React.FC<EmployeePresencesTableProps> = ({
                     <div className="flex items-center gap-1 text-[10px] text-stone-500 pt-0.5">
                       <MapPin className="h-3 w-3 text-[#2A7B76] shrink-0" />
                       <span className="truncate">{p.location}</span>
+                      {p.latitude && p.longitude && (
+                        <span className="font-mono text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100 font-bold shrink-0">
+                          {p.latitude.toFixed(4)}°, {p.longitude.toFixed(4)}°
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -181,7 +186,12 @@ export const EmployeePresencesTable: React.FC<EmployeePresencesTableProps> = ({
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1">
                             <MapPin className="h-3 w-3 text-[#2A7B76] shrink-0" />
-                            <span className="truncate max-w-[150px] font-medium">{p.location || 'Bureau'}</span>
+                            <span className="truncate max-w-[130px] font-medium">{p.location || 'Bureau'}</span>
+                            {p.latitude && p.longitude && (
+                              <span className="font-mono text-[9px] text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100 font-bold shrink-0">
+                                {p.latitude.toFixed(4)}°, {p.longitude.toFixed(4)}°
+                              </span>
+                            )}
                           </div>
                           {p.clockingMethod === 'admin_on_behalf' && (
                             <span className="text-[9px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded truncate max-w-[180px]" title={`Badgé par ${p.badgedByAdminName || 'Responsable'} — Motif: ${p.adminBadgeReason || 'Non précisé'}`}>

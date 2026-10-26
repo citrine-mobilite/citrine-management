@@ -210,6 +210,19 @@ export function useClockingActions({
         const existing = { ...updatedPresences[existingIdx] };
         existing.employeeId = employeeProfile.id;
         existing.employeeName = employeeProfile.name || existing.employeeName;
+
+        // Enregistrement systématique du relevé GPS pour CETTE action précise
+        const updatedClockLocations = { ...(existing.clockLocations || {}) };
+        updatedClockLocations[action] = {
+          time: timeStr,
+          latitude,
+          longitude,
+          zoneName: locationName,
+          siteName: moduleConfig?.hqName || 'Siège Citrine',
+          method,
+        };
+        existing.clockLocations = updatedClockLocations;
+
         if (action === 'arrival') {
           existing.arrivalTime = timeStr;
           existing.status = status;
@@ -231,6 +244,15 @@ export function useClockingActions({
         targetPresence = existing;
         updatedPresences[existingIdx] = existing;
       } else {
+        const clockLocations: any = {};
+        clockLocations[action] = {
+          time: timeStr,
+          latitude,
+          longitude,
+          zoneName: locationName,
+          siteName: moduleConfig?.hqName || 'Siège Citrine',
+          method,
+        };
         targetPresence = {
           id: `pr-${Date.now()}`,
           employeeId: employeeProfile.id,
@@ -247,6 +269,7 @@ export function useClockingActions({
           latitude,
           longitude,
           clockingMethod: method,
+          clockLocations,
         };
         updatedPresences.push(targetPresence);
       }

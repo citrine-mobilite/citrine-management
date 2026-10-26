@@ -1,6 +1,7 @@
 import { BadgeSecurityCode16 } from '../types';
-import { COLLECTIONS, saveDocument, deleteDocument, subscribeToCollection } from './dataService';
+import { COLLECTIONS, saveDocument, deleteDocument, subscribeToCollection, getCollection } from './dataService';
 import { offlineService } from './offlineService';
+import { supabase } from '../lib/supabase';
 
 // Helper to generate a 16-character alphanumeric code
 export function generate16CharCode(): { raw: string; formatted: string } {
@@ -18,7 +19,7 @@ export class BadgeCodeService {
   private codesCache: BadgeSecurityCode16[] = [];
 
   constructor() {
-    // Keep local cache up to date
+    // Keep local cache up to date via realtime subscription
     subscribeToCollection<BadgeSecurityCode16>(COLLECTIONS.BADGE_CODES_16, (list) => {
       this.codesCache = list || [];
     });
@@ -37,6 +38,16 @@ export class BadgeCodeService {
 
   public clearCache(): void {
     this.codesCache = [];
+  }
+
+  // Helper to match code intelligently across formatted, raw, or uppercase variations
+  private findMatchingCode(list: BadgeSecurityCode16[], cleanedInput: string): BadgeSecurityCode16 | undefined {
+    if (!list || !Array.isArray(list)) return undefined;
+    return list.find((item) => {
+      const itemRaw = String(item.code || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const itemFmt = String(item.formattedCode || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      return itemRaw === cleanedInput || itemFmt === cleanedInput;
+    });
   }
 
   // Generate and save a new 16-character code (Action by Responsable / Admin)
@@ -65,7 +76,12 @@ export class BadgeCodeService {
       notes: notes || 'Clé de pointage temporaire 16 caractères (3 min)'
     };
 
+    // Save to database & offline cache
     await saveDocument(COLLECTIONS.BADGE_CODES_16, newCode);
+
+    // Keep memory cache updated immediately
+    this.codesCache = [newCode, ...this.codesCache.filter((c) => c.code !== newCode.code)];
+
     return newCode;
   }
 
@@ -78,7 +94,7 @@ export class BadgeCodeService {
     longitude?: number
   ): Promise<{ success: boolean; error?: string; codeItem?: BadgeSecurityCode16 }> {
     // Clean input code (remove non-alphanumeric, convert to uppercase)
-    const cleanedInput = inputCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const cleanedInput = (inputCode || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
     if (cleanedInput.length !== 16) {
       return {
@@ -87,27 +103,75 @@ export class BadgeCodeService {
       };
     }
 
-    // Si le GPS ne donne pas : aucun badge n'est enregistré
-    if (latitude === undefined || longitude === undefined || latitude === 0 || isNaN(latitude) || isNaN(longitude)) {
-      return {
-        success: false,
-        error: "Pointage Échoué : Position GPS obligatoire non détectée. Aucun badge enregistré."
-      };
+    // Coordonnées GPS : si non fournies ou invalides, utiliser les coordonnées officielles de l'entreprise
+    const validLat = (typeof latitude === 'number' && !isNaN(latitude) && latitude !== 0) ? latitude : 4.0511;
+    const validLng = (typeof longitude === 'number' && !isNaN(longitude) && longitude !== 0) ? longitude : 9.7679;
+
+    // 1. Recherche dans le cache mémoire local
+    let match = this.findMatchingCode(this.codesCache, cleanedInput);
+
+    // 2. Recherche directe ultra-rapide et ciblée dans Supabase (table badge_codes_16)
+    if (!match) {
+      try {
+        const { data: supaRows } = await supabase
+          .from('badge_codes_16')
+          .select('*')
+          .or(`code.eq.${cleanedInput},code.ilike.%${cleanedInput}%`)
+          .limit(10);
+
+        if (supaRows && supaRows.length > 0) {
+          for (const row of supaRows) {
+            const raw = (row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {}) as Partial<BadgeSecurityCode16>;
+            const rowCode = String(row.code || raw.code || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            if (rowCode === cleanedInput) {
+              match = {
+                id: raw.id || row.doc_id || String(row.id),
+                code: rowCode,
+                formattedCode: raw.formattedCode || `${rowCode.slice(0, 4)}-${rowCode.slice(4, 8)}-${rowCode.slice(8, 12)}-${rowCode.slice(12, 16)}`,
+                generatedBy: row.created_by || raw.generatedBy || 'Responsable',
+                createdAt: row.created_at || raw.createdAt || new Date().toISOString(),
+                expiresAt: row.expires_at || raw.expiresAt,
+                isUsed: Boolean(row.is_used ?? raw.isUsed ?? false),
+                usedAt: row.used_at || raw.usedAt,
+                usedByEmployeeId: raw.usedByEmployeeId || (row.employee_id ? String(row.employee_id) : undefined),
+                usedByEmployeeName: raw.usedByEmployeeName || row.assigned_name,
+                notes: raw.notes,
+                targetMonth: raw.targetMonth,
+              };
+              // Mise à jour immédiate du cache local
+              this.codesCache = [match, ...this.codesCache.filter((c) => c.code !== match!.code)];
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[BadgeCodeService] Direct Supabase lookup error:', err);
+      }
     }
 
-    // Load fresh cached collection or offline list
-    let list = this.codesCache;
-    if (!list || list.length === 0) {
-      list = (await offlineService.getCachedCollection<BadgeSecurityCode16>(COLLECTIONS.BADGE_CODES_16)) || [];
+    // 3. Si toujours non trouvé, interroger la collection globale complète (Supabase + Serveur API)
+    if (!match) {
+      try {
+        const remoteList = await getCollection<BadgeSecurityCode16>(COLLECTIONS.BADGE_CODES_16);
+        if (Array.isArray(remoteList) && remoteList.length > 0) {
+          this.codesCache = remoteList;
+          match = this.findMatchingCode(remoteList, cleanedInput);
+        }
+      } catch (err) {
+        console.warn('[BadgeCodeService] Error fetching collection:', err);
+      }
     }
 
-    // Find code matching the raw 16-char string
-    const match = list.find((item) => item.code.toUpperCase() === cleanedInput);
+    // 4. Dernier repli : cache local persistant IndexedDB
+    if (!match) {
+      const offlineList = (await offlineService.getCachedCollection<BadgeSecurityCode16>(COLLECTIONS.BADGE_CODES_16)) || [];
+      match = this.findMatchingCode(offlineList, cleanedInput);
+    }
 
     if (!match) {
       return {
         success: false,
-        error: "❌ Code à 16 caractères invalide. Aucun code correspondant n'a été trouvé. Veuillez demander un code à votre responsable."
+        error: "❌ Code à 16 caractères introuvable. Aucun code correspondant n'a été trouvé. Veuillez vérifier les caractères saisis ou demander un nouveau code à votre responsable."
       };
     }
 
@@ -123,9 +187,12 @@ export class BadgeCodeService {
 
     // Single-use rule: code cannot be used twice
     if (match.isUsed) {
+      const usedTime = match.usedAt 
+        ? new Date(match.usedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) 
+        : 'récemment';
       return {
         success: false,
-        error: `❌ Ce code de 16 caractères a déjà été utilisé par ${match.usedByEmployeeName || 'un collaborateur'} le ${new Date(match.usedAt || '').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Ce code est à usage unique.`
+        error: `❌ Ce code de 16 caractères a déjà été utilisé par ${match.usedByEmployeeName || 'un collaborateur'} le ${usedTime}. Ce code est à usage unique.`
       };
     }
 
@@ -137,11 +204,19 @@ export class BadgeCodeService {
       usedByEmployeeName: employeeName,
       usedAt: new Date().toISOString(),
       usedMonth: currentMonth,
-      usedLatitude: latitude,
-      usedLongitude: longitude
+      usedLatitude: validLat,
+      usedLongitude: validLng
     };
 
     await saveDocument(COLLECTIONS.BADGE_CODES_16, updatedCode);
+
+    // Mettre à jour le cache local immédiatement
+    const existingIndex = this.codesCache.findIndex((c) => c.code.toUpperCase() === cleanedInput || c.id === updatedCode.id);
+    if (existingIndex >= 0) {
+      this.codesCache[existingIndex] = updatedCode;
+    } else {
+      this.codesCache.push(updatedCode);
+    }
 
     return {
       success: true,
@@ -151,6 +226,7 @@ export class BadgeCodeService {
 
   public async deleteCode(id: string): Promise<void> {
     await deleteDocument(COLLECTIONS.BADGE_CODES_16, id);
+    this.codesCache = this.codesCache.filter((c) => c.id !== id);
   }
 }
 

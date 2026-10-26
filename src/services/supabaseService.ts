@@ -815,6 +815,7 @@ function supabaseRowToItem(collectionName: string, row: any): any {
       latitude: typeof row.gps_lat === 'number' ? row.gps_lat : (raw.latitude ?? null),
       longitude: typeof row.gps_lng === 'number' ? row.gps_lng : (raw.longitude ?? null),
       clockingMethod: row.method || raw.clockingMethod || 'kiosk',
+      clockLocations: raw.clockLocations || undefined,
       emergencies: raw.emergencies || [],
       createdAt: row.created_at || raw.createdAt,
       updatedAt: row.updated_at || raw.updatedAt,
@@ -846,6 +847,53 @@ function supabaseRowToItem(collectionName: string, row: any): any {
       status: raw.status || row.status || 'automatique',
       createdAt: row.created_at || raw.createdAt || new Date().toISOString(),
       adminComment: raw.adminComment || raw.admin_comment || undefined,
+    };
+  }
+
+  if (table === 'badge_codes_16') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    const rawCode = row.code || raw.code || '';
+    const cleanCode = String(rawCode).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const formatted = raw.formattedCode || (cleanCode.length === 16 
+      ? `${cleanCode.slice(0, 4)}-${cleanCode.slice(4, 8)}-${cleanCode.slice(8, 12)}-${cleanCode.slice(12, 16)}` 
+      : cleanCode);
+
+    return {
+      ...raw,
+      id: raw.id || row.doc_id || String(row.id),
+      docId: row.doc_id || raw.docId,
+      code: cleanCode,
+      formattedCode: formatted,
+      assignedName: row.assigned_name || raw.assignedName || null,
+      generatedBy: row.created_by || raw.generatedBy || raw.createdBy || 'Responsable',
+      createdAt: row.created_at || raw.createdAt || new Date().toISOString(),
+      expiresAt: row.expires_at || raw.expiresAt || null,
+      isUsed: Boolean(row.is_used ?? raw.isUsed ?? false),
+      usedAt: row.used_at || raw.usedAt || null,
+      usedByEmployeeId: raw.usedByEmployeeId || (row.employee_id ? String(row.employee_id) : undefined),
+      usedByEmployeeName: raw.usedByEmployeeName || undefined,
+      usedLatitude: raw.usedLatitude,
+      usedLongitude: raw.usedLongitude,
+      notes: raw.notes,
+      targetMonth: raw.targetMonth,
+    };
+  }
+
+  if (table === 'dynamic_qr_sessions') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    return {
+      ...raw,
+      id: raw.id || row.doc_id || row.session_id || raw.sessionId || String(row.id),
+      sessionId: row.session_id || raw.sessionId || String(row.id),
+      token: row.token || raw.token || '',
+      generatedBy: row.generated_by || raw.generatedBy || 'Responsable',
+      status: row.status || raw.status || 'active',
+      expiresAt: row.expires_at || raw.expiresAt || null,
+      usedByEmployeeId: row.used_by_employee_id || raw.usedByEmployeeId || null,
+      usedByEmployeeName: raw.usedByEmployeeName || null,
+      action: row.action || raw.action || null,
+      usedAt: raw.usedAt || null,
+      createdAt: row.created_at || raw.createdAt || new Date().toISOString(),
     };
   }
 
@@ -1303,6 +1351,86 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
         console.error('[visitor_logs save error]:', upsertErr);
         throw new Error(upsertErr.message || "Erreur d'enregistrement du visiteur en base de données");
       }
+      return item;
+    }
+
+    if (table === 'badge_codes_16') {
+      const codeDocId = String(item.id || row.doc_id || `code16-${Date.now()}`);
+      const cleanCode = String((item as any).code || row.code || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const codeRow: any = {
+        ...row,
+        doc_id: codeDocId,
+        code: cleanCode,
+        is_used: Boolean((item as any).isUsed ?? row.is_used ?? false),
+        expires_at: (item as any).expiresAt || row.expires_at || null,
+        created_by: (item as any).createdBy || (item as any).generatedBy || row.created_by || 'Responsable',
+        assigned_name: (item as any).assignedName || (item as any).employeeName || row.assigned_name || null,
+        used_at: (item as any).usedAt || row.used_at || null,
+        raw_data: item,
+        updated_at: new Date().toISOString(),
+      };
+      if (typeof codeRow.id !== 'number') delete codeRow.id;
+
+      // 1. Try upsert on code
+      const { data: upsertCodeData, error: upsertCodeErr } = await client
+        .from('badge_codes_16')
+        .upsert(codeRow, { onConflict: 'code' })
+        .select()
+        .single();
+      if (!upsertCodeErr && upsertCodeData) {
+        return supabaseRowToItem(collectionName, upsertCodeData) as T;
+      }
+
+      // 2. Try upsert on doc_id
+      const { data: upsertDocData, error: upsertDocErr } = await client
+        .from('badge_codes_16')
+        .upsert(codeRow, { onConflict: 'doc_id' })
+        .select()
+        .single();
+      if (!upsertDocErr && upsertDocData) {
+        return supabaseRowToItem(collectionName, upsertDocData) as T;
+      }
+
+      // 3. Fallback direct update
+      const { data: updateData } = await client
+        .from('badge_codes_16')
+        .update(codeRow)
+        .or(`code.eq.${cleanCode},doc_id.eq.${codeDocId}`)
+        .select()
+        .single();
+      if (updateData) return supabaseRowToItem(collectionName, updateData) as T;
+
+      // 4. Fallback direct insert
+      const { data: insertData } = await client.from('badge_codes_16').insert(codeRow).select().single();
+      if (insertData) return supabaseRowToItem(collectionName, insertData) as T;
+
+      return item;
+    }
+
+    if (table === 'dynamic_qr_sessions') {
+      const dynDocId = String(item.id || row.doc_id || (item as any).sessionId || `dyn-${Date.now()}`);
+      const dynRow: any = {
+        ...row,
+        doc_id: dynDocId,
+        session_id: String((item as any).sessionId || (item as any).id || row.session_id || dynDocId),
+        token: String((item as any).token || row.token || ''),
+        status: String((item as any).status || row.status || 'active'),
+        expires_at: (item as any).expiresAt || row.expires_at || null,
+        raw_data: item,
+        updated_at: new Date().toISOString(),
+      };
+      if (typeof dynRow.id !== 'number') delete dynRow.id;
+
+      const { data: upsertData, error: upsertErr } = await client
+        .from('dynamic_qr_sessions')
+        .upsert(dynRow, { onConflict: 'session_id' })
+        .select()
+        .single();
+      if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
+
+      const { data: insertData } = await client.from('dynamic_qr_sessions').insert(dynRow).select().single();
+      if (insertData) return supabaseRowToItem(collectionName, insertData) as T;
+
       return item;
     }
 

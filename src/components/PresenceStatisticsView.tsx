@@ -22,7 +22,7 @@ import EmployeeRendementPage from './presence/statistics/EmployeeRendementPage';
 import EmployeeRendementHistogram from './presence/statistics/EmployeeRendementHistogram';
 import { TimesheetModal } from './timesheet/TimesheetModal';
 import { computeEmployeeRendement } from '../utils/rendementCalculator';
-import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
+import { isSelfOnlyUser, findMatchingEmployee, shouldEmployeeClock, isManagerOrAdminEmployee } from '../utils/roleUtils';
 
 interface PresenceStatisticsViewProps {
   employees: Employee[];
@@ -67,11 +67,29 @@ export function PresenceStatisticsView({
   const [timesheetMode, setTimesheetMode] = useState<'day' | 'month' | 'year'>('month');
 
   const trackedEmployees = useMemo(() => {
-    const base = employees.filter((e) => e.roleType !== 'sponsor' && (e.status === 'en_poste' || !e.status));
+    const base = employees.filter((e) => {
+      const st = e.employmentStatus || (typeof e.status === 'string' ? e.status : (e.status ? 'en_poste' : 'parti'));
+      const isEnPoste = st === 'en_poste' || st === ('true' as any);
+      if (!isEnPoste) return false;
+      if (e.roleType === 'sponsor') return false;
+
+      // Les employés réguliers sont toujours suivis
+      if (!isManagerOrAdminEmployee(e)) return true;
+
+      // Concernant les responsables ou super admins : suivi UNIQUEMENT s'ils ont effectivement badgé
+      return presences.some((p) => {
+        if (String(p.employeeId) !== String(e.id)) return false;
+        if (p.status === 'absent') return false;
+        const arr = (p.arrivalTime || '').trim();
+        const dep = (p.departureTime || '').trim();
+        const hasTime = (arr !== '' && arr !== '—' && arr !== '--:--') || (dep !== '' && dep !== '—' && dep !== '--:--');
+        return Boolean(hasTime && (p.status === 'present' || p.status === 'late'));
+      });
+    });
     if (!isRestricted) return base;
     if (matchedEmp) return [matchedEmp];
     return base.slice(0, 1);
-  }, [employees, isRestricted, matchedEmp]);
+  }, [employees, presences, isRestricted, matchedEmp]);
 
   const stats = useMemo(
     () => computePresenceStatistics(trackedEmployees, presences, period, customStart, customEnd),

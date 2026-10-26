@@ -3,13 +3,13 @@ import { realtimeSyncService } from '../services/realtimeSyncService';
 import React, { useState } from 'react';
 import { X, Search, Tablet, CheckCircle2 } from 'lucide-react';
 import { Employee, Presence, NotificationLog, CompanyModuleConfig, AttendanceIncident } from '../types';
-import { getActiveKioskPinCode } from '../utils/geolocation';
+import { getActiveKioskPinCode, COMPANY_HQ_LOCATION } from '../utils/geolocation';
 import { isLate } from '../utils/dateUtils';
 import { KioskPinBanner } from './kiosk/KioskPinBanner';
 import { KioskEmployeeCard } from './kiosk/KioskEmployeeCard';
 import { incidentService } from '../services/incidentService';
 import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
-import { isEmployeeOnlyRole } from '../utils/roleUtils';
+import { shouldEmployeeClock } from '../utils/roleUtils';
 
 interface KioskClockingModalProps {
   isOpen: boolean;
@@ -45,7 +45,7 @@ export default function KioskClockingModal({
 
   const filteredEmployees = employees.filter(
     (emp) =>
-      isEmployeeOnlyRole(emp.roleType || emp.role) &&
+      shouldEmployeeClock(emp) &&
       (emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
        emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
        (emp.department && emp.department.toLowerCase().includes(searchQuery.toLowerCase())))
@@ -94,6 +94,10 @@ export default function KioskClockingModal({
       };
     }
 
+    const kioskLat = COMPANY_HQ_LOCATION.latitude;
+    const kioskLng = COMPANY_HQ_LOCATION.longitude;
+    const kioskLocation = `${moduleConfig?.hqName || 'Siège Citrine'} (Borne d'accueil - Japoma HQ)`;
+
     const updatedPresences = [...presences];
     const existingIdx = updatedPresences.findIndex((p) => p.employeeId === emp.id && p.date === todayStr);
     let targetPresence: Presence;
@@ -101,6 +105,18 @@ export default function KioskClockingModal({
       const existing = { ...updatedPresences[existingIdx] };
       existing.employeeId = emp.id;
       existing.employeeName = emp.name;
+
+      const updatedClockLocations = { ...(existing.clockLocations || {}) };
+      updatedClockLocations[action] = {
+        time: timeStr,
+        latitude: kioskLat,
+        longitude: kioskLng,
+        zoneName: kioskLocation,
+        siteName: moduleConfig?.hqName || 'Siège Citrine',
+        method: 'kiosk_pin',
+      };
+      existing.clockLocations = updatedClockLocations;
+
       if (action === 'arrival') {
         existing.arrivalTime = timeStr;
         existing.status = late ? 'late' : 'present';
@@ -111,11 +127,22 @@ export default function KioskClockingModal({
       } else if (action === 'departure') {
         existing.departureTime = timeStr;
       }
-      existing.location = 'Borne Tablette (Accueil)';
+      existing.location = kioskLocation;
+      existing.latitude = kioskLat;
+      existing.longitude = kioskLng;
       existing.clockingMethod = 'kiosk_pin';
       targetPresence = existing;
       updatedPresences[existingIdx] = existing;
     } else {
+      const clockLocations: any = {};
+      clockLocations[action] = {
+        time: timeStr,
+        latitude: kioskLat,
+        longitude: kioskLng,
+        zoneName: kioskLocation,
+        siteName: moduleConfig?.hqName || 'Siège Citrine',
+        method: 'kiosk_pin',
+      };
       targetPresence = {
         id: `pr-${Date.now()}`,
         employeeId: emp.id,
@@ -126,8 +153,11 @@ export default function KioskClockingModal({
         pauseStart: action === 'pauseStart' ? timeStr : null,
         pauseEnd: action === 'pauseEnd' ? timeStr : null,
         departureTime: action === 'departure' ? timeStr : null,
-        location: 'Borne Tablette (Accueil)',
+        location: kioskLocation,
+        latitude: kioskLat,
+        longitude: kioskLng,
         clockingMethod: 'kiosk_pin',
+        clockLocations,
       };
       updatedPresences.push(targetPresence);
     }

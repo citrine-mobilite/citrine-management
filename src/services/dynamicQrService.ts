@@ -1,6 +1,7 @@
 import { DynamicQrSession } from '../types';
-import { COLLECTIONS, saveDocument, subscribeToDocument, subscribeToCollection, deleteDocument } from './dataService';
+import { COLLECTIONS, saveDocument, subscribeToDocument, subscribeToCollection, deleteDocument, getCollection } from './dataService';
 import { offlineService } from './offlineService';
+import { supabase } from '../lib/supabase';
 
 export class DynamicQrService {
   private activeSessionsCache: DynamicQrSession[] = [];
@@ -35,6 +36,7 @@ export class DynamicQrService {
     };
 
     await saveDocument(COLLECTIONS.DYNAMIC_QR_SESSIONS, session);
+    this.activeSessionsCache = [session, ...this.activeSessionsCache.filter((s) => s.id !== session.id)];
     return session;
   }
 
@@ -55,6 +57,10 @@ export class DynamicQrService {
     };
 
     await saveDocument(COLLECTIONS.DYNAMIC_QR_SESSIONS, updatedSession);
+    const idx = this.activeSessionsCache.findIndex((s) => s.id === sessionId);
+    if (idx >= 0) {
+      this.activeSessionsCache[idx] = updatedSession;
+    }
     return updatedSession;
   }
 
@@ -70,7 +76,7 @@ export class DynamicQrService {
     employeeName: string,
     action?: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure'
   ): Promise<{ success: boolean; error?: string; session?: DynamicQrSession }> {
-    const cleanedToken = scannedToken.trim();
+    const cleanedToken = (scannedToken || '').trim();
 
     // Check if it conforms to dynamic QR format
     if (!cleanedToken.startsWith('CITRINE-DYN-30S-')) {
@@ -80,14 +86,59 @@ export class DynamicQrService {
       };
     }
 
-    // Load from cache or offline
-    let list = this.activeSessionsCache;
-    if (!list || list.length === 0) {
-      list = (await offlineService.getCachedCollection<DynamicQrSession>(COLLECTIONS.DYNAMIC_QR_SESSIONS)) || [];
+    // 1. Recherche dans le cache local mémoire
+    let match = this.activeSessionsCache.find((s) => s.token === cleanedToken);
+
+    // 2. Recherche ciblée directe dans Supabase (table dynamic_qr_sessions)
+    if (!match) {
+      try {
+        const { data: supaRows } = await supabase
+          .from('dynamic_qr_sessions')
+          .select('*')
+          .eq('token', cleanedToken)
+          .limit(1);
+
+        if (supaRows && supaRows.length > 0) {
+          const row = supaRows[0];
+          const raw = (row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {}) as Partial<DynamicQrSession>;
+          match = {
+            id: raw.id || row.doc_id || row.session_id || String(row.id),
+            sessionId: row.session_id || raw.sessionId || String(row.id),
+            token: row.token || raw.token,
+            generatedBy: row.generated_by || raw.generatedBy || 'Responsable',
+            createdAt: row.created_at || raw.createdAt || new Date().toISOString(),
+            expiresAt: row.expires_at || raw.expiresAt,
+            status: (row.status || raw.status || 'active') as any,
+            usedByEmployeeId: row.used_by_employee_id || raw.usedByEmployeeId,
+            usedByEmployeeName: raw.usedByEmployeeName,
+            action: (row.action || raw.action) as any,
+          };
+          this.activeSessionsCache = [match, ...this.activeSessionsCache.filter((s) => s.id !== match!.id)];
+        }
+      } catch (err) {
+        console.warn('[DynamicQrService] Direct Supabase lookup notice:', err);
+      }
     }
 
-    // Match by token
-    const match = list.find((s) => s.token === cleanedToken);
+    // 3. Recherche dans la collection complète distante
+    if (!match) {
+      try {
+        const remoteSessions = await getCollection<DynamicQrSession>(COLLECTIONS.DYNAMIC_QR_SESSIONS);
+        if (Array.isArray(remoteSessions) && remoteSessions.length > 0) {
+          this.activeSessionsCache = remoteSessions;
+          match = remoteSessions.find((s) => s.token === cleanedToken);
+        }
+      } catch (err) {
+        console.warn('[DynamicQrService] Error fetching collection:', err);
+      }
+    }
+
+    // 4. Repli IndexedDB local
+    if (!match) {
+      const offlineList = (await offlineService.getCachedCollection<DynamicQrSession>(COLLECTIONS.DYNAMIC_QR_SESSIONS)) || [];
+      match = offlineList.find((s) => s.token === cleanedToken);
+    }
+
     if (!match) {
       return {
         success: false,
@@ -123,6 +174,13 @@ export class DynamicQrService {
     };
 
     await saveDocument(COLLECTIONS.DYNAMIC_QR_SESSIONS, consumedSession);
+
+    const idx = this.activeSessionsCache.findIndex((s) => s.id === consumedSession.id);
+    if (idx >= 0) {
+      this.activeSessionsCache[idx] = consumedSession;
+    } else {
+      this.activeSessionsCache.push(consumedSession);
+    }
 
     return {
       success: true,

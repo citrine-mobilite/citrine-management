@@ -13,14 +13,14 @@ export const EmployeeClockProgressionStepper: React.FC<EmployeeClockProgressionS
 }) => {
   const steps = enableBreakTracking
     ? [
-        { label: 'Arrivée', time: todayPresence?.arrivalTime, icon: Play },
-        { label: 'Pause', time: todayPresence?.pauseStart, icon: Coffee },
-        { label: 'Reprise', time: todayPresence?.pauseEnd, icon: RotateCcw },
-        { label: 'Départ', time: todayPresence?.departureTime, icon: Home },
+        { key: 'arrival', label: 'Arrivée', time: todayPresence?.arrivalTime, icon: Play },
+        { key: 'pauseStart', label: 'Pause', time: todayPresence?.pauseStart, icon: Coffee },
+        { key: 'pauseEnd', label: 'Reprise', time: todayPresence?.pauseEnd, icon: RotateCcw },
+        { key: 'departure', label: 'Départ', time: todayPresence?.departureTime, icon: Home },
       ]
     : [
-        { label: 'Arrivée', time: todayPresence?.arrivalTime, icon: Play },
-        { label: 'Départ', time: todayPresence?.departureTime, icon: Home },
+        { key: 'arrival', label: 'Arrivée', time: todayPresence?.arrivalTime, icon: Play },
+        { key: 'departure', label: 'Départ', time: todayPresence?.departureTime, icon: Home },
       ];
 
   const getStatusText = () => {
@@ -90,6 +90,14 @@ export const EmployeeClockProgressionStepper: React.FC<EmployeeClockProgressionS
                 <span className="text-[9px] font-mono font-bold text-stone-500 mt-0.5">
                   {step.time || '--:--'}
                 </span>
+                {isDone && todayPresence?.clockLocations?.[step.key as keyof typeof todayPresence.clockLocations] && (
+                  <span
+                    className="text-[8px] font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1 py-0.2 rounded mt-0.5"
+                    title={`Zone: ${todayPresence.clockLocations[step.key as keyof typeof todayPresence.clockLocations]?.zoneName || 'Sur site'}`}
+                  >
+                    📍 GPS
+                  </span>
+                )}
               </div>
             );
           })}

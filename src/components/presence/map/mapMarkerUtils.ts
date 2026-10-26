@@ -60,6 +60,11 @@ export function extractPointageMarkers(
     const lat = (typeof p.latitude === 'number' && p.latitude !== 0) ? p.latitude : (4.0511 + (idx * 0.001));
     const lng = (typeof p.longitude === 'number' && p.longitude !== 0) ? p.longitude : (9.7679 + (idx * 0.001));
 
+    const arrLoc = p.clockLocations?.arrival;
+    const pauseStartLoc = p.clockLocations?.pauseStart;
+    const pauseEndLoc = p.clockLocations?.pauseEnd;
+    const depLoc = p.clockLocations?.departure;
+
     if (p.arrivalTime) {
       markers.push({
         id: `${p.id}-arr`,
@@ -70,11 +75,44 @@ export function extractPointageMarkers(
         time: p.arrivalTime,
         type: 'arrival',
         label: 'Arrivée',
-        locationName: p.location || 'Bureau',
-        lat,
-        lng,
+        locationName: arrLoc?.zoneName || p.location || 'Bureau',
+        lat: arrLoc?.latitude || lat,
+        lng: arrLoc?.longitude || lng,
       });
     }
+
+    if (p.pauseStart) {
+      markers.push({
+        id: `${p.id}-pause-start`,
+        employeeId: p.employeeId,
+        employeeName: empName,
+        avatarUrl: avatar,
+        date: p.date,
+        time: p.pauseStart,
+        type: 'pauseStart',
+        label: 'Début Pause',
+        locationName: pauseStartLoc?.zoneName || p.location || 'Pause',
+        lat: pauseStartLoc?.latitude || (lat + 0.00015),
+        lng: pauseStartLoc?.longitude || (lng - 0.00015),
+      });
+    }
+
+    if (p.pauseEnd) {
+      markers.push({
+        id: `${p.id}-pause-end`,
+        employeeId: p.employeeId,
+        employeeName: empName,
+        avatarUrl: avatar,
+        date: p.date,
+        time: p.pauseEnd,
+        type: 'pauseEnd',
+        label: 'Retour Pause',
+        locationName: pauseEndLoc?.zoneName || p.location || 'Reprise',
+        lat: pauseEndLoc?.latitude || (lat - 0.00015),
+        lng: pauseEndLoc?.longitude || (lng + 0.00015),
+      });
+    }
+
     if (p.departureTime) {
       markers.push({
         id: `${p.id}-dep`,
@@ -85,9 +123,9 @@ export function extractPointageMarkers(
         time: p.departureTime,
         type: 'departure',
         label: 'Départ',
-        locationName: p.location || 'Bureau',
-        lat: lat + 0.0002,
-        lng: lng + 0.0002,
+        locationName: depLoc?.zoneName || p.location || 'Départ',
+        lat: depLoc?.latitude || (lat + 0.0002),
+        lng: depLoc?.longitude || (lng + 0.0002),
       });
     }
   });
