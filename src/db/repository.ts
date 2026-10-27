@@ -594,7 +594,7 @@ export interface CreateCollaboratorTransactionInput {
  * En cas d'échec à n'importe quelle étape, un ROLLBACK complet est garanti.
  */
 export async function executeCollaboratorCreationTransaction(input: CreateCollaboratorTransactionInput) {
-  const userEmail = input.email.trim().toLowerCase();
+  const userEmail = input.email.trim();
   const empName = input.name.trim();
   const empDepartment = input.department?.trim() || 'Direction Générale';
   const initialPassword = input.userPassword?.trim() || 'Collab@2026';

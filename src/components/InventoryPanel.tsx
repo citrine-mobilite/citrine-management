@@ -23,96 +23,6 @@ interface InventoryPanelProps {
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
-// Initial items matching screenshot 1 if empty
-const INITIAL_DEMO_ITEMS: InventoryItem[] = [
-  {
-    id: 'inv-1',
-    designation: 'Ordinateur Portable Dell Latitude 5420',
-    reference: 'INV-2026-001',
-    serialNumber: 'SN-DLL-5420-X1',
-    category: 'Matériel Informatique',
-    quantity: 9,
-    unitPrice: 650000,
-    location: 'Bureau Principal HQ - Salle 102',
-    status: 'neuf',
-    quantitiesByStatus: { neuf: 4, bon_etat: 1, endommage: 1, en_reparation: 1, hors_service: 2 },
-    notes: 'Matériel configuré avec suite bureautique et antivirus entreprise.',
-    assignments: [
-      {
-        id: 'ass-1',
-        employeeId: 'emp-1',
-        employeeName: 'Kenne Londo Doleres',
-        quantity: 1,
-        status: 'usage',
-        assignedAt: '3 août 2026, 09:03',
-        notes: 'Dotation poste de travail',
-      },
-    ],
-    movements: [],
-    returns: [],
-    donations: [],
-    createdAt: '2026-08-01',
-    updatedAt: '2026-08-03',
-  },
-  {
-    id: 'inv-2',
-    designation: 'Fauteuil de bureau ergonomique Mesh Black',
-    reference: 'INV-2026-002',
-    serialNumber: 'SN-MOB-9921',
-    category: 'Mobilier & Bureau',
-    quantity: 12,
-    unitPrice: 85000,
-    location: 'Bureau Principal HQ - Open Space',
-    status: 'bon_etat',
-    quantitiesByStatus: { bon_etat: 12 },
-    notes: 'Acheté en 2025, parfait état de marche.',
-    assignments: [],
-    movements: [],
-    returns: [],
-    donations: [],
-    createdAt: '2026-08-01',
-    updatedAt: '2026-08-01',
-  },
-  {
-    id: 'inv-3',
-    designation: 'Vidéoprojecteur Epson Full HD EB-FH52',
-    reference: 'INV-2026-003',
-    serialNumber: 'SN-EPS-FH52',
-    category: 'Matériel Informatique',
-    quantity: 2,
-    unitPrice: 380000,
-    location: 'Salle de Réunion Douala',
-    status: 'usage',
-    quantitiesByStatus: { usage: 2 },
-    notes: 'Lampe vérifiée en Juin 2026.',
-    assignments: [],
-    movements: [],
-    returns: [],
-    donations: [],
-    createdAt: '2026-08-01',
-    updatedAt: '2026-08-01',
-  },
-  {
-    id: 'inv-4',
-    designation: 'Imprimante Multifonction HP LaserJet Pro',
-    reference: 'INV-2026-004',
-    serialNumber: 'SN-HP-LJP400',
-    category: 'Matériel Informatique',
-    quantity: 1,
-    unitPrice: 240000,
-    location: 'Atelier Maintenance Akwa',
-    status: 'en_reparation',
-    quantitiesByStatus: { en_reparation: 1 },
-    notes: "Changement du rouleau d'entraînement de papier.",
-    assignments: [],
-    movements: [],
-    returns: [],
-    donations: [],
-    createdAt: '2026-08-01',
-    updatedAt: '2026-08-01',
-  },
-];
-
 export default function InventoryPanel({
   inventoryItems = [],
   onUpdateInventoryItems,
@@ -139,8 +49,8 @@ export default function InventoryPanel({
   const [selectedDetailItem, setSelectedDetailItem] = useState<InventoryItem | null>(null);
   const [donateItem, setDonateItem] = useState<InventoryItem | null>(null);
 
-  // Ensure initial items exist
-  const effectiveItems = inventoryItems.length > 0 ? inventoryItems : INITIAL_DEMO_ITEMS;
+  // Inventaire réel passé par le composant parent ou stocké
+  const effectiveItems = inventoryItems || [];
 
   const handleSaveItem = async (item: InventoryItem) => {
     const exists = effectiveItems.some((i) => i.id === item.id);

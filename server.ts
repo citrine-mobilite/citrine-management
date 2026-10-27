@@ -1,6 +1,9 @@
 import express from "express";
 import http from "http";
 import path from "path";
+import dotenv from "dotenv";
+
+dotenv.config();
 import { createServer as createViteServer } from "vite";
 import { requireAuth, AuthRequest } from "./src/middleware/auth.ts";
 import { 
@@ -181,10 +184,10 @@ async function startServer() {
     }
   });
 
-  // ✉️ API Envoi d'Email Threadé par Collaborateur (Point 1 & Point 2)
+  // ✉️ API Envoi d'Email Threadé par Collaborateur (configuré via le .env)
   app.post("/api/mail/send-threaded", async (req: express.Request, res: express.Response) => {
     try {
-      const { employeeName, employeeId, employeeEmail, eventTitle, htmlContent, recipientEmails, smtpConfig } = req.body;
+      const { employeeName, employeeId, employeeEmail, eventTitle, htmlContent, recipientEmails } = req.body;
       if (!employeeName || !eventTitle || !htmlContent) {
         return res.status(400).json({
           success: false,
@@ -192,45 +195,41 @@ async function startServer() {
         });
       }
 
-      const result = await sendThreadedEmployeeEmail(
-        {
-          employeeName,
-          employeeId,
-          employeeEmail,
-          eventTitle,
-          htmlContent,
-          recipientEmails,
-        },
-        smtpConfig || {}
-      );
+      const result = await sendThreadedEmployeeEmail({
+        employeeName,
+        employeeId,
+        employeeEmail,
+        eventTitle,
+        htmlContent,
+        recipientEmails,
+      });
 
       res.json(result);
     } catch (error: any) {
       console.error("[API Mail Send Threaded Error]:", error);
-      res.status(500).json({ success: false, error: error.message || "Échec d'envoi du mail threadé." });
+      res.status(500).json({ success: false, error: error.message || "Échec d'envoi du mail." });
     }
   });
 
-  // Test de connexion SMTP directe
+  // Test de connexion SMTP directe (utilise uniquement les variables du .env)
   app.post("/api/mail/test-connection", async (req: express.Request, res: express.Response) => {
     try {
-      const { smtpConfig, testRecipient } = req.body;
-      const targetEmail = testRecipient || smtpConfig?.user || process.env.SMTP_USER || "direction@citrine-mobilite.com";
+      const { testRecipient } = req.body;
+      const targetEmail = testRecipient || process.env.HR_NOTIFICATION_EMAIL || process.env.SMTP_USER;
+      if (!targetEmail) {
+        return res.status(400).json({
+          success: false,
+          error: "Aucun destinataire spécifié et ni HR_NOTIFICATION_EMAIL ni SMTP_USER ne sont définis dans le .env.",
+        });
+      }
       
-      const result = await sendThreadedEmployeeEmail(
-        {
-          employeeName: "Test Système",
-          employeeId: "test-001",
-          employeeEmail: targetEmail,
-          eventTitle: "Vérification Connexion SMTP Citrine RH",
-          htmlContent: `
-            <p>Bonjour,</p>
-            <p>Ce message confirme que la connexion SMTP de votre serveur <strong>Citrine SARL</strong> est parfaitement opérationnelle.</p>
-            <p>Toutes les futures notifications RH concernant ce fil seront regroupées automatiquement sous cette même conversation.</p>
-          `,
-        },
-        smtpConfig || {}
-      );
+      const result = await sendThreadedEmployeeEmail({
+        employeeName: "Test Système",
+        employeeId: "test-001",
+        employeeEmail: targetEmail,
+        eventTitle: "Test Connexion SMTP",
+        htmlContent: `<p>Bonjour,</p><p>Ce message confirme que la configuration SMTP de votre fichier <strong>.env</strong> est opérationnelle.</p>`,
+      });
 
       res.json(result);
     } catch (error: any) {
@@ -257,6 +256,100 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  // ⏰ Tâche planifiée quotidienne (19h30) : Envoi automatique des feuilles de temps
+  setInterval(async () => {
+    const now = new Date();
+    const options: Intl.DateTimeFormatOptions = { timeZone: 'Africa/Douala', hour: 'numeric', minute: 'numeric', hour12: false };
+    const formatter = new Intl.DateTimeFormat('en-GB', options);
+    const parts = formatter.formatToParts(now);
+    const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+    const minute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+
+    const todayStr = now.toISOString().split('T')[0];
+    const cronKey = `timesheet_cron_sent_${todayStr}`;
+
+    if (hour === 19 && minute === 30 && !(global as any)[cronKey]) {
+      (global as any)[cronKey] = true;
+      console.log(`⏰ [CRON 19:30] Exécution de l'envoi automatique des feuilles de temps...`);
+      try {
+        const employees = await getCollectionData('employees');
+        const users = await getCollectionData('users');
+        const tasks = await getCollectionData('tasks');
+
+        const admins = users.filter((u: any) => u.role_id === 1 || u.role === 'administrateur' || String(u.raw_data?.role).toLowerCase().includes('admin'));
+        const adminEmails = admins.map((a: any) => a.email).filter(Boolean);
+        if (adminEmails.length === 0) {
+          if (process.env.HR_NOTIFICATION_EMAIL) adminEmails.push(process.env.HR_NOTIFICATION_EMAIL);
+          else if (process.env.SMTP_USER) adminEmails.push(process.env.SMTP_USER);
+        }
+
+        const activeEmployees = employees.filter((emp: any) => {
+          const empName = (emp.name || '').toLowerCase();
+          const empEmail = (emp.email || '').toLowerCase();
+          const empId = String(emp.id || '');
+
+          const hasSubtasks = tasks.some((t: any) => {
+            const assigned = (t.assignedTo || '').toLowerCase();
+            const isAssigned = assigned.includes(empName) || assigned.includes(empEmail) || t.employeeId === empId;
+            const hasSubs = Array.isArray(t.subtasks) && t.subtasks.length > 0;
+            return isAssigned && hasSubs;
+          });
+
+          return hasSubtasks;
+        });
+
+        for (const emp of activeEmployees) {
+          const empName = emp.name || 'Collaborateur';
+          const empEmail = emp.email || '';
+          const empId = emp.id;
+
+          const empTasks = tasks.filter((t: any) => {
+            const assigned = (t.assignedTo || '').toLowerCase();
+            return assigned.includes(empName.toLowerCase()) || assigned.includes(empEmail.toLowerCase()) || t.employeeId === String(empId);
+          });
+
+          const subtasksList = empTasks.flatMap((t: any) => (t.subtasks || []).map((sub: any) => ({
+            taskTitle: t.title,
+            subTitle: sub.title,
+            completed: sub.completed,
+            status: sub.status || (sub.completed ? 'completed' : 'todo'),
+            estimatedHours: sub.estimatedHours || 0,
+            actualHours: sub.actualHours || 0,
+          })));
+
+          const htmlContent = `
+            <h3>Fiche de Temps de la Journée - ${empName}</h3>
+            <p><strong>Date :</strong> ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <p><strong>Département :</strong> ${emp.department || 'Direction Générale'}</p>
+            <hr style="border: 0; border-top: 1px solid #e7e5e4; margin: 16px 0;" />
+            <h4>Sous-tâches et activités (${subtasksList.length}) :</h4>
+            <ul>
+              ${subtasksList.map((s: any) => `
+                <li style="margin-bottom: 6px;">
+                  <strong>[${s.completed ? 'TERMINÉ' : 'EN COURS'}] ${s.taskTitle}</strong> &gt; ${s.subTitle}
+                  <br/><span style="font-size: 11px; color: #57534e;">Statut: ${s.status} | Estimé: ${s.estimatedHours}h | Réel: ${s.actualHours}h</span>
+                </li>
+              `).join('')}
+            </ul>
+          `;
+
+          await sendThreadedEmployeeEmail({
+            employeeName: empName,
+            employeeId: empId,
+            employeeEmail: empEmail,
+            eventTitle: `Fiche de temps de la journée`,
+            htmlContent,
+            recipientEmails: adminEmails,
+          });
+        }
+
+        console.log(`✅ [CRON 19:30] Feuilles de temps envoyées avec succès pour ${activeEmployees.length} collaborateurs.`);
+      } catch (cronErr) {
+        console.error(`❌ [CRON 19:30 Error]:`, cronErr);
+      }
+    }
+  }, 60000);
 
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);

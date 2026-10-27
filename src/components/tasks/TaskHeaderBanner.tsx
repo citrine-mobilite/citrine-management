@@ -1,11 +1,12 @@
 import React from 'react';
-import { FolderKanban, FolderPlus, Plus, Trophy, Sparkles } from 'lucide-react';
+import { FolderKanban, FolderPlus, Plus, Trophy, Sparkles, Send } from 'lucide-react';
 
 interface TaskHeaderBannerProps {
   onOpenNewProject: () => void;
   onOpenCreateTask: () => void;
   onOpenCreateMilestone?: () => void;
   onOpenCreateSubtask?: () => void;
+  onSendTimesheet?: () => void;
 }
 
 export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
@@ -13,6 +14,7 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
   onOpenCreateTask,
   onOpenCreateMilestone,
   onOpenCreateSubtask,
+  onSendTimesheet,
 }) => {
   return (
     <div className="bg-gradient-to-r from-indigo-900 via-[#2A7B76] to-emerald-900 rounded-3xl p-5 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
@@ -34,6 +36,18 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 w-full md:w-auto">
+        {/* Envoyer ma fiche de temps */}
+        {onSendTimesheet && (
+          <button
+            onClick={onSendTimesheet}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3 py-2 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-md border border-emerald-400"
+            title="Envoyer votre fiche de temps de la journée"
+          >
+            <Send className="h-3.5 w-3.5 text-white" />
+            <span>Envoyer ma fiche de temps</span>
+          </button>
+        )}
+
         {/* Nouveau Projet */}
         <button
           onClick={onOpenNewProject}

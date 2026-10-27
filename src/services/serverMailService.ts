@@ -1,4 +1,7 @@
 import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 export interface EmailThreadingOptions {
   /** Nom complet du collaborateur (ex: "Éric MBIDA") */
@@ -41,28 +44,21 @@ function sanitizeThreadKey(name: string, id?: string | number): string {
 }
 
 /**
- * Crée ou réutilise le transporteur Nodemailer
+ * Crée le transporteur Nodemailer exclusivement à partir des variables d'environnement (.env)
  */
-let cachedTransporter: any | null = null;
-let cachedConfigKey = '';
-
-export function getTransporter(config: SmtpConfig): any | null {
-  const host = config.host || process.env.SMTP_HOST;
-  const port = Number(config.port || process.env.SMTP_PORT || 465);
-  const secure = config.secure !== undefined ? Boolean(config.secure) : (process.env.SMTP_SECURE !== 'false');
-  const user = config.user || process.env.SMTP_USER;
-  const pass = config.pass || process.env.SMTP_PASS;
+export function getTransporter(): any | null {
+  dotenv.config();
+  const host = process.env.SMTP_HOST;
+  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
+  const secure = process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1';
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
 
   if (!host || !user || !pass) {
     return null;
   }
 
-  const currentKey = `${host}:${port}:${user}:${secure}`;
-  if (cachedTransporter && cachedConfigKey === currentKey) {
-    return cachedTransporter;
-  }
-
-  cachedTransporter = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host,
     port,
     secure,
@@ -71,12 +67,9 @@ export function getTransporter(config: SmtpConfig): any | null {
       pass,
     },
     tls: {
-      rejectUnauthorized: false, // Tolère les certificats auto-signés éventuels
+      rejectUnauthorized: false,
     },
   });
-
-  cachedConfigKey = currentKey;
-  return cachedTransporter;
 }
 
 /**
@@ -198,25 +191,33 @@ export function buildThreadedEmailHtml(options: {
  * Envoie un email transactionnel groupé dans le fil du collaborateur
  */
 export async function sendThreadedEmployeeEmail(
-  options: EmailThreadingOptions,
-  config: SmtpConfig = {}
+  options: EmailThreadingOptions
 ): Promise<{ success: boolean; messageId?: string; simulated?: boolean; error?: string }> {
-  const transporter = getTransporter(config);
+  dotenv.config();
+  const transporter = getTransporter();
 
   const cleanCollabName = (options.employeeName || 'Collaborateur').trim();
   const threadKey = sanitizeThreadKey(cleanCollabName, options.employeeId);
   
-  // Nom de domaine de base pour l'identifiant RFC 2822
-  const fromAddress = config.from || process.env.SMTP_FROM || 'rh@citrine-mobilite.com';
-  const domain = fromAddress.includes('@') ? fromAddress.split('@')[1].replace(/[<>]/g, '').trim() : 'citrine-mobilite.com';
+  // Expéditeur configuré exclusivement via les variables d'environnement (.env)
+  const senderName = process.env.SMTP_SENDER_NAME || options.fromName;
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
+
+  if (!fromEmail) {
+    return {
+      success: false,
+      error: "Variables d'environnement manquantes dans le .env : SMTP_FROM ou SMTP_USER doit être renseigné.",
+    };
+  }
+
+  const fromAddress = senderName ? `"${senderName}" <${fromEmail}>` : fromEmail;
+  const domain = fromEmail.includes('@') ? fromEmail.split('@')[1].replace(/[<>]/g, '').trim() : 'localhost';
 
   // RFC 2822 Message-ID racine stable pour tout le fil de ce collaborateur
   const rootThreadMessageId = `<collab-thread-${threadKey}@${domain}>`;
-  // Message-ID unique pour cet envoi spécifique
   const specificMessageId = `<msg-${threadKey}-${Date.now()}@${domain}>`;
 
-  // Objet standardisé pour forcer les clients email (Gmail, Outlook, Apple Mail) à regrouper dans un même fil
-  const threadSubject = `[Citrine RH] Collaborateur : ${cleanCollabName}`;
+  const threadSubject = `[Notification RH] Collaborateur : ${cleanCollabName}`;
 
   // Déterminer la liste des destinataires
   const recipients: string[] = [];
@@ -230,7 +231,7 @@ export async function sendThreadedEmployeeEmail(
       }
     });
   }
-  const hrEmail = config.hrEmail || process.env.HR_NOTIFICATION_EMAIL || process.env.SMTP_USER;
+  const hrEmail = process.env.HR_NOTIFICATION_EMAIL;
   if (hrEmail && hrEmail.includes('@') && !recipients.includes(hrEmail.trim())) {
     recipients.push(hrEmail.trim());
   }
@@ -238,7 +239,7 @@ export async function sendThreadedEmployeeEmail(
   if (recipients.length === 0) {
     return {
       success: false,
-      error: 'Aucune adresse e-mail destinataire spécifiée pour la notification.',
+      error: "Aucune adresse e-mail destinataire spécifiée et la variable HR_NOTIFICATION_EMAIL n'est pas définie dans le .env.",
     };
   }
 
@@ -248,16 +249,10 @@ export async function sendThreadedEmployeeEmail(
     bodyHtml: options.htmlContent,
   });
 
-  // Si aucun serveur SMTP n'est encore configuré, simuler avec log propre
   if (!transporter) {
-    console.log(
-      `✉️ [SMTP SIMULATION / LOCAL] Notification groupée pour "${cleanCollabName}" (${options.eventTitle}) vers ${recipients.join(', ')}`
-    );
-    console.log(`   └─ Objet fil : "${threadSubject}" | References: ${rootThreadMessageId}`);
     return {
-      success: true,
-      simulated: true,
-      messageId: specificMessageId,
+      success: false,
+      error: "Configuration SMTP incomplète dans le .env (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS requis).",
     };
   }
 
@@ -268,28 +263,28 @@ export async function sendThreadedEmployeeEmail(
       subject: threadSubject,
       html: htmlBody,
       messageId: specificMessageId,
-      // 🚀 EN-TÊTES CLÉS POUR LE GROUPEMENT EN FIL DANS GMAIL & OUTLOOK
       inReplyTo: rootThreadMessageId,
       references: [rootThreadMessageId],
       headers: {
         'X-Entity-Ref-ID': threadKey,
-        'X-Citrine-Employee': cleanCollabName,
-        'Thread-Topic': `[Citrine RH] Collaborateur : ${cleanCollabName}`,
+        'X-Employee': cleanCollabName,
+        'Thread-Topic': `[Notification RH] Collaborateur : ${cleanCollabName}`,
         'Thread-Index': Buffer.from(threadKey).toString('base64'),
       },
     });
 
-    console.log(`✅ [SMTP REEL ENVOYÉ] ID: ${info.messageId} | Thread: ${rootThreadMessageId} vers ${recipients.join(', ')}`);
+    console.log(`✅ [SMTP ENVOYÉ] ID: ${info.messageId} vers ${recipients.join(', ')}`);
     return {
       success: true,
       messageId: info.messageId,
       simulated: false,
     };
   } catch (err: any) {
-    console.error(`❌ [SMTP ERROR] Échec envoi email threadé pour ${cleanCollabName}:`, err.message);
+    const rawError = err?.message || String(err);
+    console.error(`❌ [SMTP ERROR] Échec envoi email pour ${cleanCollabName}:`, rawError);
     return {
       success: false,
-      error: err.message,
+      error: rawError,
     };
   }
 }

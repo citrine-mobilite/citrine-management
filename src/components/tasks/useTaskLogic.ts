@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Task, NotificationLog, Employee, TaskStatus, TaskPriority, TaskProject, AppUser, Subtask } from '../../types';
 import { DEFAULT_TASK_PROJECTS } from './taskConstants';
 import { taskService } from '../../services/taskService';
+import { clientMailService } from '../../services/clientMailService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { showSuccessAlert, showErrorAlert, confirmDeleteAlert } from '../../utils/sweetAlert';
 import { isSelfOnlyUser } from '../../utils/roleUtils';
@@ -387,6 +388,74 @@ export function useTaskLogic({
     });
   }, [tasks, searchTerm, activeProjectId, filterPriority, filterAssignee, filterType, currentRole, currentUser, currentEmployee, projects]);
 
+  const handleSendManualTimesheet = async () => {
+    try {
+      if (showToast) showToast("Envoi de votre fiche de temps...", "success");
+
+      const myName = currentUser?.name || currentEmployee?.name || "Collaborateur";
+      const myEmail = currentUser?.email || currentEmployee?.email || "";
+      const myId = currentUser?.id || currentEmployee?.id || "emp-001";
+
+      const myTasks = tasks.filter((t) => {
+        const assigned = (t.assignedTo || "").toLowerCase();
+        return assigned.includes(myName.toLowerCase()) || assigned.includes(myEmail.toLowerCase()) || t.employeeId === myId;
+      });
+
+      const subtasksSummary = myTasks.flatMap((t) => (t.subtasks || []).map((sub) => ({
+        taskTitle: t.title,
+        subTitle: sub.title,
+        completed: sub.completed,
+        status: sub.status || (sub.completed ? "completed" : "todo"),
+        estimatedHours: sub.estimatedHours || 0,
+        actualHours: sub.actualHours || 0,
+      })));
+
+      const htmlContent = `
+        <h3>Fiche de Temps de la Journée - ${myName}</h3>
+        <p><strong>Date :</strong> ${new Date().toLocaleDateString("fr-FR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+        <p><strong>Email :</strong> ${myEmail || "Non spécifié"}</p>
+        <hr style="border: 0; border-top: 1px solid #e7e5e4; margin: 16px 0;" />
+        <h4>Sous-tâches et activités (${subtasksSummary.length}) :</h4>
+        <ul>
+          ${subtasksSummary.length > 0 ? subtasksSummary.map(s => `
+            <li style="margin-bottom: 8px;">
+              <strong>[${s.completed ? "TERMINÉ" : "EN COURS"}] ${s.taskTitle}</strong> &gt; ${s.subTitle}
+              <br/><span style="font-size: 11px; color: #57534e;">Statut: ${s.status} | Estimé: ${s.estimatedHours}h | Réel: ${s.actualHours}h</span>
+            </li>
+          `).join("") : "<li>Aucune sous-tâche enregistrée pour cette journée.</li>"}
+        </ul>
+      `;
+
+      const result = await clientMailService.sendThreadedEmail({
+        employeeName: myName,
+        employeeId: myId,
+        employeeEmail: myEmail,
+        eventTitle: `Fiche de temps de la journée`,
+        htmlContent,
+      });
+
+      if (result.success) {
+        if (showToast) showToast("Fiche de temps envoyée avec succès !", "success");
+        onAddNotification({
+          id: `notif-${Date.now()}`,
+          title: "Fiche de temps envoyée",
+          content: `Votre fiche de temps a été transmise avec succès.`,
+          message: `Votre fiche de temps a été transmise avec succès.`,
+          type: "email",
+          recipient: myEmail || myName,
+          payload: JSON.stringify({ employeeId: myId }),
+          timestamp: new Date().toISOString(),
+          read: false,
+          senderName: "Système RH",
+        });
+      } else {
+        if (showToast) showToast(`Erreur d'envoi: ${result.error || "Impossible d'envoyer"}`, "error");
+      }
+    } catch (err: any) {
+      if (showToast) showToast(`Erreur: ${err.message || "Échec de l'envoi"}`, "error");
+    }
+  };
+
   return {
     projects,
     visibleProjects,
@@ -432,5 +501,6 @@ export function useTaskLogic({
     handleDeleteTaskConfirm,
     isRestrictedStaff,
     visibleEmployees,
+    handleSendManualTimesheet,
   };
 }

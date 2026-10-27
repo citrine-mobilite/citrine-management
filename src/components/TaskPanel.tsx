@@ -76,6 +76,7 @@ export default function TaskPanel({
           logic.setIsCreateModalOpen(true);
         }}
         onOpenCreateSubtask={() => logic.handleOpenCreateSubtask()}
+        onSendTimesheet={logic.handleSendManualTimesheet}
       />
 
       {/* Project / Modules Switcher Bar */}

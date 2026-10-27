@@ -24,24 +24,11 @@ export const clientMailService = {
       return { success: true, simulated: true };
     }
 
-    const smtpConfig = {
-      host: moduleConfig?.smtpHost,
-      port: moduleConfig?.smtpPort,
-      secure: moduleConfig?.smtpSecure,
-      user: moduleConfig?.smtpUser,
-      pass: moduleConfig?.smtpPass,
-      from: moduleConfig?.smtpFrom,
-      hrEmail: moduleConfig?.hrNotificationEmail,
-    };
-
     try {
       const res = await fetch('/api/mail/send-threaded', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...input,
-          smtpConfig,
-        }),
+        body: JSON.stringify(input),
       });
 
       if (!res.ok) {
