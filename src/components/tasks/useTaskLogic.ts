@@ -6,6 +6,15 @@ import { clientMailService } from '../../services/clientMailService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { showSuccessAlert, showErrorAlert, confirmDeleteAlert } from '../../utils/sweetAlert';
 import { isSelfOnlyUser } from '../../utils/roleUtils';
+import {
+  getDoualaDateInfo,
+  buildTimesheetHtmlReport,
+  buildTimesheetExcelBase64,
+  TimesheetItem,
+  TimesheetBlocker,
+  TimesheetManagerPoint
+} from '../../services/timesheetReportService';
+import { getTimesheetNotes } from '../../services/timesheetNotesService';
 
 interface UseTaskLogicProps {
   tasks: Task[];
@@ -390,41 +399,147 @@ export function useTaskLogic({
 
   const handleSendManualTimesheet = async () => {
     try {
-      if (showToast) showToast("Envoi de votre fiche de temps...", "success");
+      if (showToast) showToast("Génération et envoi de votre fiche de temps...", "success");
 
       const myName = currentUser?.name || currentEmployee?.name || "Collaborateur";
       const myEmail = currentUser?.email || currentEmployee?.email || "";
       const myId = currentUser?.id || currentEmployee?.id || "emp-001";
+      const department = currentEmployee?.department || "Direction Générale";
+
+      const doualaTime = getDoualaDateInfo();
 
       const myTasks = tasks.filter((t) => {
         const assigned = (t.assignedTo || "").toLowerCase();
         return assigned.includes(myName.toLowerCase()) || assigned.includes(myEmail.toLowerCase()) || t.employeeId === myId;
       });
 
-      const subtasksSummary = myTasks.flatMap((t) => (t.subtasks || []).map((sub) => ({
-        taskTitle: t.title,
-        subTitle: sub.title,
-        completed: sub.completed,
-        status: sub.status || (sub.completed ? "completed" : "todo"),
-        estimatedHours: sub.estimatedHours || 0,
-        actualHours: sub.actualHours || 0,
-      })));
+      let itemIndex = 1;
+      const items: TimesheetItem[] = [];
+      const blockers: TimesheetBlocker[] = [];
+      const managerPoints: TimesheetManagerPoint[] = [];
 
-      const htmlContent = `
-        <h3>Fiche de Temps de la Journée - ${myName}</h3>
-        <p><strong>Date :</strong> ${new Date().toLocaleDateString("fr-FR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
-        <p><strong>Email :</strong> ${myEmail || "Non spécifié"}</p>
-        <hr style="border: 0; border-top: 1px solid #e7e5e4; margin: 16px 0;" />
-        <h4>Sous-tâches et activités (${subtasksSummary.length}) :</h4>
-        <ul>
-          ${subtasksSummary.length > 0 ? subtasksSummary.map(s => `
-            <li style="margin-bottom: 8px;">
-              <strong>[${s.completed ? "TERMINÉ" : "EN COURS"}] ${s.taskTitle}</strong> &gt; ${s.subTitle}
-              <br/><span style="font-size: 11px; color: #57534e;">Statut: ${s.status} | Estimé: ${s.estimatedHours}h | Réel: ${s.actualHours}h</span>
-            </li>
-          `).join("") : "<li>Aucune sous-tâche enregistrée pour cette journée.</li>"}
-        </ul>
-      `;
+      myTasks.forEach((t) => {
+        // Blocages sur la tâche parente
+        if (t.incidents && Array.isArray(t.incidents) && t.incidents.length > 0) {
+          t.incidents.forEach((inc) => {
+            blockers.push({
+              sourceTask: t.title,
+              reason: inc.title || inc.description || 'Incident ou blocage signalé',
+              status: inc.resolved ? 'Résolu' : 'Bloqué',
+            });
+          });
+        } else if (t.status === 'blocked') {
+          blockers.push({
+            sourceTask: t.title,
+            reason: 'Tâche déclarée bloquée',
+            status: 'Bloqué',
+          });
+        }
+
+        // Remontées des commentaires sur la tâche parente -> Points à signaler au manager
+        if (t.comment && typeof t.comment === 'string' && t.comment.trim()) {
+          managerPoints.push({
+            sourceTask: t.title,
+            content: t.comment.trim(),
+            author: myName,
+          });
+        }
+        if (Array.isArray(t.comments) && t.comments.length > 0) {
+          t.comments.forEach((c) => {
+            managerPoints.push({
+              sourceTask: t.title,
+              content: c.text || '',
+              author: c.author || myName,
+              time: c.timestamp || '',
+            });
+          });
+        }
+
+        // Traitement des sous-tâches
+        if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
+          t.subtasks.forEach((sub) => {
+            const isBlocked = sub.status === 'blocked' || sub.isBlocked || Boolean(sub.blockerReason);
+            items.push({
+              index: itemIndex++,
+              taskTitle: t.title,
+              subTitle: sub.title,
+              status: sub.status || (sub.completed ? 'completed' : 'todo'),
+              statusLabel: sub.completed ? 'TERMINÉ' : (sub.status === 'in_progress' ? 'EN COURS' : 'À FAIRE'),
+              estimatedHours: Number(sub.estimatedHours) || 0,
+              actualHours: Number(sub.actualHours) || 0,
+              blockerReason: sub.blockerReason,
+              isBlocked,
+            });
+
+            if (isBlocked) {
+              blockers.push({
+                sourceTask: `${sub.title} (sur "${t.title}")`,
+                reason: sub.blockerReason || 'Difficulté opérationnelle signalée',
+                status: 'Bloqué',
+              });
+            }
+
+            if (Array.isArray(sub.comments)) {
+              sub.comments.forEach((c) => {
+                managerPoints.push({
+                  sourceTask: `${sub.title} (sur "${t.title}")`,
+                  content: c.text || '',
+                  author: c.author || myName,
+                  time: c.timestamp || '',
+                });
+              });
+            }
+          });
+        }
+      });
+
+      // Intégrer également les notes consignées du collaborateur pour aujourd'hui
+      try {
+        const recordedNotes = getTimesheetNotes(String(myId), doualaTime.dayIso);
+        recordedNotes.forEach((n) => {
+          if (n.category === 'bloquant' || n.category === 'materiel') {
+            blockers.push({
+              sourceTask: `Note consignée (${n.category.toUpperCase()})`,
+              reason: n.content,
+              time: n.time,
+              status: n.status,
+            });
+          } else {
+            managerPoints.push({
+              sourceTask: `Note consignée (${n.category.toUpperCase()})`,
+              content: n.content,
+              author: n.authorName || myName,
+              time: n.time,
+            });
+          }
+        });
+      } catch (err) {
+        // Fallback silencieux
+      }
+
+      const totalEstimated = items.reduce((sum, i) => sum + i.estimatedHours, 0);
+      const totalActual = items.reduce((sum, i) => sum + i.actualHours, 0);
+
+      const timesheetData = {
+        employeeName: myName,
+        employeeEmail: myEmail,
+        employeeId: myId,
+        department,
+        dateStr: doualaTime.dateOnly,
+        timeStr: doualaTime.timeOnly,
+        items,
+        blockers,
+        managerPoints,
+        totalEstimatedHours: totalEstimated,
+        totalActualHours: totalActual,
+      };
+
+      const htmlContent = buildTimesheetHtmlReport(timesheetData);
+      const excelBase64 = buildTimesheetExcelBase64(timesheetData);
+
+      const safeCollabName = myName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const safeDate = doualaTime.dayIso;
+      const excelFilename = `Feuille_de_Temps_${safeCollabName}_${safeDate}.xlsx`;
 
       const result = await clientMailService.sendThreadedEmail({
         employeeName: myName,
@@ -432,15 +547,23 @@ export function useTaskLogic({
         employeeEmail: myEmail,
         eventTitle: `Fiche de temps de la journée`,
         htmlContent,
+        attachments: [
+          {
+            filename: excelFilename,
+            content: excelBase64,
+            encoding: 'base64',
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          },
+        ],
       });
 
       if (result.success) {
-        if (showToast) showToast("Fiche de temps envoyée avec succès !", "success");
+        if (showToast) showToast("Fiche de temps Excel envoyée avec succès !", "success");
         onAddNotification({
           id: `notif-${Date.now()}`,
-          title: "Fiche de temps envoyée",
-          content: `Votre fiche de temps a été transmise avec succès.`,
-          message: `Votre fiche de temps a été transmise avec succès.`,
+          title: "Fiche de temps transmise",
+          content: `Votre fiche de temps (${items.length} activités, ${totalActual}h réelles) a été transmise aux RH avec la pièce jointe Excel.`,
+          message: `Votre fiche de temps (${items.length} activités, ${totalActual}h réelles) a été transmise aux RH avec la pièce jointe Excel.`,
           type: "email",
           recipient: myEmail || myName,
           payload: JSON.stringify({ employeeId: myId }),

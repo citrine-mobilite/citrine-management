@@ -7,6 +7,12 @@ export interface SendThreadedEmailInput {
   eventTitle: string;
   htmlContent: string;
   recipientEmails?: string[];
+  attachments?: Array<{
+    filename: string;
+    content: string;
+    encoding?: string;
+    contentType?: string;
+  }>;
 }
 
 export const clientMailService = {
@@ -72,6 +78,41 @@ export const clientMailService = {
         return { success: false, error: errJson.error || 'Erreur lors du test SMTP' };
       }
 
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * Récupère la configuration SMTP effective depuis le serveur
+   */
+  async fetchMailConfig(): Promise<{ success: boolean; config?: any; error?: string }> {
+    try {
+      const res = await fetch('/api/mail/config');
+      if (!res.ok) {
+        return { success: false, error: 'Impossible de récupérer la configuration' };
+      }
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * Sauvegarde la configuration SMTP & RH en base de données sur le serveur
+   */
+  async saveMailConfig(config: any): Promise<{ success: boolean; config?: any; error?: string }> {
+    try {
+      const res = await fetch('/api/mail/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        return { success: false, error: errJson.error || 'Erreur lors de la sauvegarde' };
+      }
       return await res.json();
     } catch (err: any) {
       return { success: false, error: err.message };

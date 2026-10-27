@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import { getCollectionData } from '../db/repository.ts';
 
 dotenv.config();
 
@@ -8,16 +9,24 @@ export interface EmailThreadingOptions {
   employeeName: string;
   /** Identifiant unique du collaborateur (ex: "12" ou "emp_123") */
   employeeId?: string | number;
-  /** Adresse email du collaborateur */
-  employeeEmail?: string;
   /** Titre ou objet de l'événement précis (ex: "Affectation en Mission Professionnelle") */
   eventTitle: string;
   /** Contenu HTML du message */
   htmlContent: string;
-  /** Destinataires supplémentaires (ex: manager direct, direction RH) */
-  recipientEmails?: string[];
   /** Nom de l'expéditeur */
   fromName?: string;
+  /** Destinataires optionnels de surcharge pour les tests directs */
+  overrideRecipients?: string[];
+  /** Ignoré lors de l'envoi : la règle stricte Citrine n'envoie qu'aux adresses de HR_NOTIFICATION_EMAIL */
+  employeeEmail?: string;
+  recipientEmails?: string[];
+  /** Pièces jointes éventuelles (ex: feuille de temps Excel .xlsx) */
+  attachments?: Array<{
+    filename: string;
+    content: any;
+    encoding?: string;
+    contentType?: string;
+  }>;
 }
 
 export interface SmtpConfig {
@@ -27,7 +36,37 @@ export interface SmtpConfig {
   user?: string;
   pass?: string;
   from?: string;
+  senderName?: string;
   hrEmail?: string;
+}
+
+/**
+ * Découpe et valide une chaîne contenant un ou plusieurs e-mails (séparateurs: virgule, point-virgule, espace, saut de ligne)
+ */
+export function parseEmailList(raw?: string | string[]): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return Array.from(new Set(raw.flatMap(r => parseEmailList(r))));
+  }
+
+  // Découpage selon virgules, points-virgules, retours à la ligne ou espaces multiples
+  const tokens = String(raw).split(/[,;\n\r\t]+/).map(t => t.trim()).filter(Boolean);
+  const emails: string[] = [];
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  for (const token of tokens) {
+    // Si le format est "Nom <adresse@domaine.com>"
+    const match = token.match(/<([^>]+)>/);
+    const candidate = (match ? match[1] : token).trim();
+    if (emailRegex.test(candidate)) {
+      const lower = candidate.toLowerCase();
+      if (!emails.some(e => e.toLowerCase() === lower)) {
+        emails.push(candidate);
+      }
+    }
+  }
+
+  return emails;
 }
 
 /**
@@ -44,27 +83,91 @@ function sanitizeThreadKey(name: string, id?: string | number): string {
 }
 
 /**
- * Crée le transporteur Nodemailer exclusivement à partir des variables d'environnement (.env)
+ * Récupère la configuration SMTP effective avec priorité :
+ * 1. customConfig passé en argument (ex: lors d'un test depuis le formulaire)
+ * 2. Données persistées en base de données (table company_settings)
+ * 3. Variables d'environnement (.env / secrets)
  */
-export function getTransporter(): any | null {
+export async function getEffectiveSmtpConfig(customConfig?: Partial<SmtpConfig>): Promise<SmtpConfig> {
   dotenv.config();
-  const host = process.env.SMTP_HOST;
-  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
-  const secure = process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1';
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
 
-  if (!host || !user || !pass) {
+  let dbSettings: any = null;
+  try {
+    const list = await getCollectionData('company_settings');
+    if (Array.isArray(list) && list.length > 0) {
+      dbSettings = list.find((s: any) => s.id === 'main_config' || s.docId === 'main_config') || list[0];
+    }
+  } catch (err) {
+    // Erreur silencieuse de DB, fallback automatique sur les variables d'environnement
+  }
+
+  const rawHost = customConfig?.host || dbSettings?.smtpHost || process.env.SMTP_HOST || '';
+  const rawPort = customConfig?.port ?? (dbSettings?.smtpPort ? Number(dbSettings.smtpPort) : undefined) ?? (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587);
+  const rawSecure = customConfig?.secure ?? (dbSettings?.smtpSecure !== undefined ? Boolean(dbSettings.smtpSecure) : undefined) ?? (process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1');
+  const rawFrom = (customConfig?.from || dbSettings?.smtpFrom || process.env.SMTP_FROM || '').trim();
+  const rawUser = (customConfig?.user || dbSettings?.smtpUser || process.env.SMTP_USER || rawFrom || '').trim();
+  const rawPass = (customConfig?.pass || dbSettings?.smtpPass || process.env.SMTP_PASS || '').trim();
+  const senderName = (customConfig?.senderName || dbSettings?.smtpSenderName || process.env.SMTP_SENDER_NAME || 'Citrine Mobilité RH').trim();
+  const hrEmail = (customConfig?.hrEmail || dbSettings?.hrNotificationEmail || process.env.HR_NOTIFICATION_EMAIL || '').trim();
+
+  // Nettoyage de l'adresse utilisateur
+  const cleanFrom = rawFrom.includes('<') && rawFrom.includes('>') ? rawFrom.match(/<([^>]+)>/)?.[1].trim() : rawFrom;
+  const cleanUser = rawUser.includes('<') && rawUser.includes('>') ? rawUser.match(/<([^>]+)>/)?.[1].trim() : rawUser;
+  const user = cleanFrom || cleanUser;
+
+  // Suppression des espaces éventuels dans le mot de passe d'application Google (ex: "abcd efgh ijkl mnop")
+  const pass = rawPass.replace(/\s+/g, '');
+
+  let host = rawHost.trim();
+  let port = Number(rawPort) || 587;
+  let secure = Boolean(rawSecure);
+
+  // Auto-détection de l'hôte si manquant ou contenant "example.com"
+  if ((!host || host === 'smtp.example.com' || host.includes('example.com')) && user) {
+    if (user.endsWith('@gmail.com') || user.endsWith('@googlemail.com')) {
+      host = 'smtp.gmail.com';
+    } else if (user.endsWith('@outlook.com') || user.endsWith('@hotmail.com')) {
+      host = 'smtp.office365.com';
+    } else if (user.endsWith('@yahoo.com')) {
+      host = 'smtp.mail.yahoo.com';
+    }
+  }
+
+  // Optimisations TLS/SSL pour Gmail
+  if (host === 'smtp.gmail.com') {
+    if (port === 465) secure = true;
+    if (port === 587) secure = false;
+  }
+
+  return {
+    host,
+    port,
+    secure,
+    user,
+    pass,
+    from: rawFrom || user,
+    senderName,
+    hrEmail,
+  };
+}
+
+/**
+ * Crée le transporteur Nodemailer à partir de la configuration effective
+ */
+export async function getTransporter(customConfig?: Partial<SmtpConfig>): Promise<any | null> {
+  const config = await getEffectiveSmtpConfig(customConfig);
+
+  if (!config.host || config.host === 'smtp.example.com' || !config.user || !config.pass) {
     return null;
   }
 
   return nodemailer.createTransport({
-    host,
-    port,
-    secure,
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
     auth: {
-      user,
-      pass,
+      user: config.user,
+      pass: config.pass,
     },
     tls: {
       rejectUnauthorized: false,
@@ -73,7 +176,7 @@ export function getTransporter(): any | null {
 }
 
 /**
- * Génère un template HTML élégant et professionnel aux couleurs de Citrine SARL
+ * Génère un template HTML élégant et professionnel aux couleurs de Citrine Mobilité
  */
 export function buildThreadedEmailHtml(options: {
   employeeName: string;
@@ -82,13 +185,14 @@ export function buildThreadedEmailHtml(options: {
   tagColor?: string;
   dateStr?: string;
 }): string {
-  const dateStr = options.dateStr || new Date().toLocaleDateString('fr-FR', {
+  const dateStr = options.dateStr || new Intl.DateTimeFormat('fr-FR', {
+    timeZone: 'Africa/Douala',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  });
+  }).format(new Date());
 
   return `
 <!DOCTYPE html>
@@ -104,14 +208,14 @@ export function buildThreadedEmailHtml(options: {
       <td align="center">
         <table role="presentation" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 18px; border: 1px solid #e7e5e4; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);" cellspacing="0" cellpadding="0">
           
-          <!-- En-tête officiel Citrine SARL -->
+          <!-- En-tête officiel Citrine Mobilité -->
           <tr>
             <td style="background: linear-gradient(135deg, #1F625E 0%, #0F3E3B 100%); padding: 25px 30px; text-align: left;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td>
                     <span style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; color: #ffffff; letter-spacing: 0.5px;">
-                      CITRINE SARL
+                      CITRINE MOBILITÉ
                     </span>
                     <span style="display: block; font-size: 11px; color: #A7F3D0; font-weight: 500; margin-top: 2px;">
                       Direction des Ressources Humaines & Opérations
@@ -157,23 +261,14 @@ export function buildThreadedEmailHtml(options: {
             </td>
           </tr>
 
-          <!-- Encart informatif de regroupement en fil -->
-          <tr>
-            <td style="padding: 0 30px 24px 30px;">
-              <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 12px 16px; font-size: 11px; color: #166534; line-height: 1.5;">
-                📌 <strong>Fil Unique Collaborateur :</strong> Cet e-mail est groupé automatiquement dans la conversation dédiée à <strong>${options.employeeName}</strong> pour un suivi chronologique unifié sans dispersion.
-              </div>
-            </td>
-          </tr>
-
           <!-- Pied de page -->
           <tr>
             <td style="background-color: #fafaf9; padding: 20px 30px; border-top: 1px solid #e7e5e4; text-align: center; font-size: 11px; color: #78716c;">
               <p style="margin: 0 0 6px 0; font-weight: 600; color: #44403c;">
-                Citrine SARL — Douala, Cameroun
+                Citrine Mobilité — Douala, Cameroun
               </p>
               <p style="margin: 0; font-size: 10px; color: #a8a29e;">
-                Système Automatisé de Gestion des Ressources Humaines & Pointage · Ne pas répondre directement à cet email
+                Système Automatisé de Gestion des Ressources Humaines & Pointage · Notification interne confidentielle
               </p>
             </td>
           </tr>
@@ -188,60 +283,53 @@ export function buildThreadedEmailHtml(options: {
 }
 
 /**
- * Envoie un email transactionnel groupé dans le fil du collaborateur
+ * Envoie un email transactionnel groupé dans le fil du collaborateur.
+ * RÈGLE STRICTE CITRINE : Seules les adresses e-mails configurées dans HR_NOTIFICATION_EMAIL
+ * reçoivent les messages (ou overrideRecipients lors d'un test direct).
+ * Aucun employé ni collaborateur externe ne reçoit ces emails.
  */
 export async function sendThreadedEmployeeEmail(
-  options: EmailThreadingOptions
-): Promise<{ success: boolean; messageId?: string; simulated?: boolean; error?: string }> {
-  dotenv.config();
-  const transporter = getTransporter();
+  options: EmailThreadingOptions,
+  customConfig?: Partial<SmtpConfig>
+): Promise<{ success: boolean; messageId?: string; recipients?: string[]; simulated?: boolean; error?: string }> {
+  const config = await getEffectiveSmtpConfig(customConfig);
+  const transporter = await getTransporter(customConfig);
 
   const cleanCollabName = (options.employeeName || 'Collaborateur').trim();
   const threadKey = sanitizeThreadKey(cleanCollabName, options.employeeId);
-  
-  // Expéditeur configuré exclusivement via les variables d'environnement (.env)
-  const senderName = process.env.SMTP_SENDER_NAME || options.fromName;
-  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
 
-  if (!fromEmail) {
-    return {
-      success: false,
-      error: "Variables d'environnement manquantes dans le .env : SMTP_FROM ou SMTP_USER doit être renseigné.",
-    };
-  }
-
-  const fromAddress = senderName ? `"${senderName}" <${fromEmail}>` : fromEmail;
-  const domain = fromEmail.includes('@') ? fromEmail.split('@')[1].replace(/[<>]/g, '').trim() : 'localhost';
-
-  // RFC 2822 Message-ID racine stable pour tout le fil de ce collaborateur
-  const rootThreadMessageId = `<collab-thread-${threadKey}@${domain}>`;
-  const specificMessageId = `<msg-${threadKey}-${Date.now()}@${domain}>`;
-
-  const threadSubject = `[Notification RH] Collaborateur : ${cleanCollabName}`;
-
-  // Déterminer la liste des destinataires
-  const recipients: string[] = [];
-  if (options.employeeEmail && options.employeeEmail.includes('@')) {
-    recipients.push(options.employeeEmail.trim());
-  }
-  if (options.recipientEmails && options.recipientEmails.length > 0) {
-    options.recipientEmails.forEach((em) => {
-      if (em && em.includes('@') && !recipients.includes(em.trim())) {
-        recipients.push(em.trim());
-      }
-    });
-  }
-  const hrEmail = process.env.HR_NOTIFICATION_EMAIL;
-  if (hrEmail && hrEmail.includes('@') && !recipients.includes(hrEmail.trim())) {
-    recipients.push(hrEmail.trim());
+  // Détermination stricte des destinataires :
+  // Si overrideRecipients est fourni (ex: test de connexion), l'utiliser.
+  // Sinon, STRICTEMENT et UNIQUEMENT la liste des e-mails définis dans HR_NOTIFICATION_EMAIL (base de données ou .env).
+  let recipients: string[] = [];
+  if (options.overrideRecipients && options.overrideRecipients.length > 0) {
+    recipients = parseEmailList(options.overrideRecipients);
+  } else {
+    recipients = parseEmailList(config.hrEmail);
   }
 
   if (recipients.length === 0) {
     return {
       success: false,
-      error: "Aucune adresse e-mail destinataire spécifiée et la variable HR_NOTIFICATION_EMAIL n'est pas définie dans le .env.",
+      error: "Aucune adresse e-mail destinataire configurée dans HR_NOTIFICATION_EMAIL. Veuillez renseigner au moins une adresse valide dans les Paramètres de l'entreprise (E-mail & SMTP) ou dans les variables d'environnement.",
     };
   }
+
+  if (!transporter) {
+    return {
+      success: false,
+      error: "Configuration SMTP incomplète ou introuvable : hôte, utilisateur ou mot de passe non configuré. Veuillez vérifier les Paramètres de l'entreprise > E-mail & SMTP.",
+    };
+  }
+
+  // Préparation de l'expéditeur
+  const cleanFrom = config.from?.includes('<') && config.from?.includes('>')
+    ? (config.from.match(/<([^>]+)>/)?.[1].trim() || config.from)
+    : config.from;
+  const senderName = config.senderName || options.fromName;
+  const fromAddress = senderName && cleanFrom && !config.from?.includes('<')
+    ? `"${senderName}" <${cleanFrom}>`
+    : (config.from || cleanFrom || 'citrinemobilite@gmail.com');
 
   const htmlBody = buildThreadedEmailHtml({
     employeeName: cleanCollabName,
@@ -249,42 +337,55 @@ export async function sendThreadedEmployeeEmail(
     bodyHtml: options.htmlContent,
   });
 
-  if (!transporter) {
-    return {
-      success: false,
-      error: "Configuration SMTP incomplète dans le .env (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS requis).",
-    };
-  }
+  const plainText = `${options.eventTitle}\nCollaborateur : ${cleanCollabName}\n\n${options.htmlContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()}\n\n---\nCitrine Mobilité — Système Automatisé de Gestion des Ressources Humaines`;
+  const threadSubject = options.eventTitle ? `${options.eventTitle} - ${cleanCollabName}` : `Notification RH : ${cleanCollabName}`;
 
   try {
+    const attachments = (options.attachments || []).map((att) => {
+      if (typeof att.content === 'string' && att.encoding === 'base64') {
+        return {
+          filename: att.filename,
+          content: Buffer.from(att.content, 'base64'),
+          contentType: att.contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
+      }
+      return att;
+    });
+
     const info = await transporter.sendMail({
       from: fromAddress,
       to: recipients.join(', '),
       subject: threadSubject,
+      text: plainText,
       html: htmlBody,
-      messageId: specificMessageId,
-      inReplyTo: rootThreadMessageId,
-      references: [rootThreadMessageId],
+      attachments,
       headers: {
+        'Auto-Submitted': 'auto-generated',
+        'X-Auto-Response-Suppress': 'All',
         'X-Entity-Ref-ID': threadKey,
         'X-Employee': cleanCollabName,
-        'Thread-Topic': `[Notification RH] Collaborateur : ${cleanCollabName}`,
-        'Thread-Index': Buffer.from(threadKey).toString('base64'),
       },
     });
 
-    console.log(`✅ [SMTP ENVOYÉ] ID: ${info.messageId} vers ${recipients.join(', ')}`);
+    console.log(`✅ [SMTP ENVOYÉ] ID: ${info.messageId} strictement vers RH: [${recipients.join(', ')}]`);
     return {
       success: true,
       messageId: info.messageId,
+      recipients,
       simulated: false,
     };
   } catch (err: any) {
     const rawError = err?.message || String(err);
     console.error(`❌ [SMTP ERROR] Échec envoi email pour ${cleanCollabName}:`, rawError);
+    let userFriendlyError = rawError;
+    if (rawError.includes('534-5.7.9') || rawError.includes('Application-specific password required') || rawError.includes('InvalidSecondFactor')) {
+      userFriendlyError = "Google a bloqué la connexion : pour envoyer des e-mails avec un compte Gmail, vous devez utiliser un 'Mot de passe d'application' (16 caractères généré sur https://myaccount.google.com/apppasswords), et non votre mot de passe habituel.";
+    } else if (rawError.includes('535') || rawError.includes('BadCredentials') || rawError.includes('Username and Password not accepted')) {
+      userFriendlyError = "Identifiants SMTP invalides (nom d'utilisateur ou mot de passe incorrect). Pour Gmail, veillez à utiliser un mot de passe d'application de 16 caractères.";
+    }
     return {
       success: false,
-      error: rawError,
+      error: userFriendlyError,
     };
   }
 }

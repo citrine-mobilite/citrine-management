@@ -14,7 +14,19 @@ import {
   executeCollaboratorCreationTransaction,
   executeAtomicClockingTransaction
 } from "./src/db/repository.ts";
-import { sendThreadedEmployeeEmail } from "./src/services/serverMailService.ts";
+import { 
+  sendThreadedEmployeeEmail, 
+  getEffectiveSmtpConfig, 
+  parseEmailList 
+} from "./src/services/serverMailService.ts";
+import {
+  getDoualaDateInfo,
+  buildTimesheetHtmlReport,
+  buildTimesheetExcelBuffer,
+  TimesheetItem,
+  TimesheetBlocker,
+  TimesheetManagerPoint
+} from "./src/services/timesheetReportService.ts";
 
 async function startServer() {
   const app = express();
@@ -184,10 +196,77 @@ async function startServer() {
     }
   });
 
-  // ✉️ API Envoi d'Email Threadé par Collaborateur (configuré via le .env)
+  // ✉️ Récupérer la configuration SMTP active (Priorité Base de données, puis .env)
+  app.get("/api/mail/config", async (req: express.Request, res: express.Response) => {
+    try {
+      const config = await getEffectiveSmtpConfig();
+      res.json({
+        success: true,
+        config: {
+          smtpHost: config.host || '',
+          smtpPort: config.port || 587,
+          smtpSecure: Boolean(config.secure),
+          smtpUser: config.user || '',
+          smtpPass: config.pass || '',
+          smtpFrom: config.from || '',
+          smtpSenderName: config.senderName || '',
+          hrNotificationEmail: config.hrEmail || '',
+        },
+      });
+    } catch (error: any) {
+      console.error("[API Mail Get Config Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Impossible de charger la configuration SMTP." });
+    }
+  });
+
+  // ✉️ Enregistrer la configuration SMTP & RH en base de données (modifiable directement par les non-développeurs)
+  app.post("/api/mail/config", async (req: express.Request, res: express.Response) => {
+    try {
+      const {
+        smtpHost,
+        smtpPort,
+        smtpSecure,
+        smtpUser,
+        smtpPass,
+        smtpFrom,
+        smtpSenderName,
+        hrNotificationEmail,
+        enableEmailNotifications,
+      } = req.body;
+
+      // Récupérer le document existant pour ne pas écraser les autres paramètres d'entreprise
+      const settingsList = await getCollectionData('company_settings');
+      const existing = (Array.isArray(settingsList) && settingsList.find((s: any) => s.id === 'main_config' || s.docId === 'main_config')) || {};
+
+      const updatedDoc = {
+        ...existing,
+        id: 'main_config',
+        docId: 'main_config',
+        enableEmailNotifications: enableEmailNotifications !== undefined ? Boolean(enableEmailNotifications) : true,
+        smtpHost: smtpHost !== undefined ? String(smtpHost).trim() : existing.smtpHost,
+        smtpPort: smtpPort !== undefined ? Number(smtpPort) : existing.smtpPort,
+        smtpSecure: smtpSecure !== undefined ? Boolean(smtpSecure) : existing.smtpSecure,
+        smtpUser: smtpUser !== undefined ? String(smtpUser).trim() : existing.smtpUser,
+        smtpPass: smtpPass !== undefined ? String(smtpPass).trim() : existing.smtpPass,
+        smtpFrom: smtpFrom !== undefined ? String(smtpFrom).trim() : existing.smtpFrom,
+        smtpSenderName: smtpSenderName !== undefined ? String(smtpSenderName).trim() : existing.smtpSenderName,
+        hrNotificationEmail: hrNotificationEmail !== undefined ? String(hrNotificationEmail).trim() : existing.hrNotificationEmail,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await saveDocumentData('company_settings', updatedDoc);
+      console.log("💾 [SMTP CONFIG SAUVEGARDÉE] Paramètres SMTP mis à jour en base de données.");
+      res.json({ success: true, message: "Configuration SMTP et RH enregistrée avec succès.", config: updatedDoc });
+    } catch (error: any) {
+      console.error("[API Mail Save Config Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Échec de sauvegarde des paramètres SMTP." });
+    }
+  });
+
+  // ✉️ API Envoi d'Email Threadé par Collaborateur (strictement vers HR_NOTIFICATION_EMAIL)
   app.post("/api/mail/send-threaded", async (req: express.Request, res: express.Response) => {
     try {
-      const { employeeName, employeeId, employeeEmail, eventTitle, htmlContent, recipientEmails } = req.body;
+      const { employeeName, employeeId, eventTitle, htmlContent, attachments, smtpConfig } = req.body;
       if (!employeeName || !eventTitle || !htmlContent) {
         return res.status(400).json({
           success: false,
@@ -198,11 +277,10 @@ async function startServer() {
       const result = await sendThreadedEmployeeEmail({
         employeeName,
         employeeId,
-        employeeEmail,
         eventTitle,
         htmlContent,
-        recipientEmails,
-      });
+        attachments,
+      }, smtpConfig);
 
       res.json(result);
     } catch (error: any) {
@@ -211,25 +289,30 @@ async function startServer() {
     }
   });
 
-  // Test de connexion SMTP directe (utilise uniquement les variables du .env)
+  // Test de connexion SMTP directe (permet de tester avec les paramètres fournis ou enregistrés)
   app.post("/api/mail/test-connection", async (req: express.Request, res: express.Response) => {
     try {
-      const { testRecipient } = req.body;
-      const targetEmail = testRecipient || process.env.HR_NOTIFICATION_EMAIL || process.env.SMTP_USER;
-      if (!targetEmail) {
+      const { testRecipient, smtpConfig } = req.body;
+      const effective = await getEffectiveSmtpConfig(smtpConfig);
+      
+      const targetRecipients = testRecipient && testRecipient.trim()
+        ? parseEmailList(testRecipient)
+        : parseEmailList(effective.hrEmail);
+
+      if (targetRecipients.length === 0) {
         return res.status(400).json({
           success: false,
-          error: "Aucun destinataire spécifié et ni HR_NOTIFICATION_EMAIL ni SMTP_USER ne sont définis dans le .env.",
+          error: "Aucun destinataire spécifié et la variable HR_NOTIFICATION_EMAIL n'est pas configurée.",
         });
       }
       
       const result = await sendThreadedEmployeeEmail({
-        employeeName: "Test Système",
-        employeeId: "test-001",
-        employeeEmail: targetEmail,
-        eventTitle: "Test Connexion SMTP",
-        htmlContent: `<p>Bonjour,</p><p>Ce message confirme que la configuration SMTP de votre fichier <strong>.env</strong> est opérationnelle.</p>`,
-      });
+        employeeName: "Test Connexion Citrine",
+        employeeId: "citrine-test",
+        eventTitle: "Test Connexion SMTP - Citrine Mobilité",
+        htmlContent: `<p>Bonjour,</p><p>Ce message confirme que la configuration SMTP de votre application Citrine Mobilité est <strong>100% opérationnelle</strong>.</p><p>Destinataire(s) RH configuré(s) : <code>${targetRecipients.join(', ')}</code></p>`,
+        overrideRecipients: targetRecipients,
+      }, smtpConfig);
 
       res.json(result);
     } catch (error: any) {
@@ -299,6 +382,8 @@ async function startServer() {
           return hasSubtasks;
         });
 
+        const doualaTime = getDoualaDateInfo();
+
         for (const emp of activeEmployees) {
           const empName = emp.name || 'Collaborateur';
           const empEmail = emp.email || '';
@@ -309,30 +394,109 @@ async function startServer() {
             return assigned.includes(empName.toLowerCase()) || assigned.includes(empEmail.toLowerCase()) || t.employeeId === String(empId);
           });
 
-          const subtasksList = empTasks.flatMap((t: any) => (t.subtasks || []).map((sub: any) => ({
-            taskTitle: t.title,
-            subTitle: sub.title,
-            completed: sub.completed,
-            status: sub.status || (sub.completed ? 'completed' : 'todo'),
-            estimatedHours: sub.estimatedHours || 0,
-            actualHours: sub.actualHours || 0,
-          })));
+          let itemIndex = 1;
+          const items: TimesheetItem[] = [];
+          const blockers: TimesheetBlocker[] = [];
+          const managerPoints: TimesheetManagerPoint[] = [];
 
-          const htmlContent = `
-            <h3>Fiche de Temps de la Journée - ${empName}</h3>
-            <p><strong>Date :</strong> ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            <p><strong>Département :</strong> ${emp.department || 'Direction Générale'}</p>
-            <hr style="border: 0; border-top: 1px solid #e7e5e4; margin: 16px 0;" />
-            <h4>Sous-tâches et activités (${subtasksList.length}) :</h4>
-            <ul>
-              ${subtasksList.map((s: any) => `
-                <li style="margin-bottom: 6px;">
-                  <strong>[${s.completed ? 'TERMINÉ' : 'EN COURS'}] ${s.taskTitle}</strong> &gt; ${s.subTitle}
-                  <br/><span style="font-size: 11px; color: #57534e;">Statut: ${s.status} | Estimé: ${s.estimatedHours}h | Réel: ${s.actualHours}h</span>
-                </li>
-              `).join('')}
-            </ul>
-          `;
+          empTasks.forEach((t: any) => {
+            // Blocages sur la tâche principale
+            if (t.incidents && Array.isArray(t.incidents) && t.incidents.length > 0) {
+              t.incidents.forEach((inc: any) => {
+                blockers.push({
+                  sourceTask: t.title,
+                  reason: inc.title || inc.description || 'Incident signalé',
+                  status: inc.resolved ? 'Résolu' : 'Bloqué',
+                });
+              });
+            } else if (t.status === 'blocked') {
+              blockers.push({
+                sourceTask: t.title,
+                reason: 'Tâche déclarée bloquée',
+                status: 'Bloqué',
+              });
+            }
+
+            // Commentaires / Points de la tâche principale
+            if (t.comment && typeof t.comment === 'string' && t.comment.trim()) {
+              managerPoints.push({
+                sourceTask: t.title,
+                content: t.comment.trim(),
+                author: empName,
+              });
+            }
+            if (Array.isArray(t.comments) && t.comments.length > 0) {
+              t.comments.forEach((c: any) => {
+                managerPoints.push({
+                  sourceTask: t.title,
+                  content: c.text || c.content || '',
+                  author: c.author || empName,
+                  time: c.timestamp || '',
+                });
+              });
+            }
+
+            // Sous-tâches
+            if (Array.isArray(t.subtasks)) {
+              t.subtasks.forEach((sub: any) => {
+                const isBlocked = sub.status === 'blocked' || sub.isBlocked || Boolean(sub.blockerReason);
+                items.push({
+                  index: itemIndex++,
+                  taskTitle: t.title,
+                  subTitle: sub.title,
+                  status: sub.status || (sub.completed ? 'completed' : 'todo'),
+                  statusLabel: sub.completed ? 'TERMINÉ' : (sub.status === 'in_progress' ? 'EN COURS' : 'À FAIRE'),
+                  estimatedHours: Number(sub.estimatedHours) || 0,
+                  actualHours: Number(sub.actualHours) || 0,
+                  blockerReason: sub.blockerReason,
+                  isBlocked,
+                });
+
+                if (isBlocked) {
+                  blockers.push({
+                    sourceTask: `${sub.title} (sur "${t.title}")`,
+                    reason: sub.blockerReason || 'Difficulté opérationnelle signalée',
+                    status: 'Bloqué',
+                  });
+                }
+
+                if (Array.isArray(sub.comments)) {
+                  sub.comments.forEach((c: any) => {
+                    managerPoints.push({
+                      sourceTask: `${sub.title} (sur "${t.title}")`,
+                      content: c.text || c.content || '',
+                      author: c.author || empName,
+                      time: c.timestamp || '',
+                    });
+                  });
+                }
+              });
+            }
+          });
+
+          const totalEstimated = items.reduce((sum, i) => sum + i.estimatedHours, 0);
+          const totalActual = items.reduce((sum, i) => sum + i.actualHours, 0);
+
+          const timesheetData = {
+            employeeName: empName,
+            employeeEmail: empEmail,
+            employeeId: empId,
+            department: emp.department || 'Direction Générale',
+            dateStr: doualaTime.dateOnly,
+            timeStr: doualaTime.timeOnly,
+            items,
+            blockers,
+            managerPoints,
+            totalEstimatedHours: totalEstimated,
+            totalActualHours: totalActual,
+          };
+
+          const htmlContent = buildTimesheetHtmlReport(timesheetData);
+          const excelBuffer = buildTimesheetExcelBuffer(timesheetData);
+
+          const safeCollabName = empName.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const safeDate = doualaTime.dayIso;
+          const excelFilename = `Feuille_de_Temps_${safeCollabName}_${safeDate}.xlsx`;
 
           await sendThreadedEmployeeEmail({
             employeeName: empName,
@@ -341,6 +505,13 @@ async function startServer() {
             eventTitle: `Fiche de temps de la journée`,
             htmlContent,
             recipientEmails: adminEmails,
+            attachments: [
+              {
+                filename: excelFilename,
+                content: excelBuffer,
+                contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              },
+            ],
           });
         }
 

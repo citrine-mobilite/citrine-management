@@ -69,7 +69,9 @@ export async function getCollectionData(collectionName: string): Promise<any[]> 
 
     const { data, error } = await supabaseAdmin.from(table).select('*');
     if (error) {
-      console.warn(`[SQL getCollectionData error for ${table}]:`, error.message);
+      if (!error.message.includes('fetch failed')) {
+        console.warn(`[SQL getCollectionData error for ${table}]:`, error.message);
+      }
       return [];
     }
 
@@ -131,8 +133,10 @@ export async function getCollectionData(collectionName: string): Promise<any[]> 
         _dbId: row.id,
       };
     });
-  } catch (error) {
-    console.error(`Database query failed for collection ${collectionName}:`, error);
+  } catch (error: any) {
+    if (!error?.message?.includes('fetch failed')) {
+      console.error(`Database query failed for collection ${collectionName}:`, error);
+    }
     return [];
   }
 }

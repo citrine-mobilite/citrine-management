@@ -371,6 +371,7 @@ export interface CompanyModuleConfig {
   smtpUser?: string;
   smtpPass?: string;
   smtpFrom?: string;
+  smtpSenderName?: string;
   hrNotificationEmail?: string;
 }
 
