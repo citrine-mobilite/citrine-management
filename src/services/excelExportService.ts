@@ -28,12 +28,17 @@ export function exportToExcel(
       </xml>
       <![endif]-->
       <style>
-        th { background-color: #2A7B76; color: #ffffff; font-weight: bold; font-family: Arial, sans-serif; font-size: 12px; padding: 8px; }
-        td { font-family: Arial, sans-serif; font-size: 11px; padding: 6px; }
-        .title { font-size: 16px; font-weight: bold; color: #2A7B76; margin-bottom: 12px; }
+        body { font-family: Calibri, Arial, sans-serif; padding: 12px; }
+        .company-header { font-size: 20px; font-weight: bold; color: #164e4b; font-style: italic; margin-bottom: 2px; }
+        .title { font-size: 14px; font-weight: bold; color: #ffffff; background-color: #2A7B76; padding: 8px 12px; margin-bottom: 12px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+        th { background-color: #164e4b; color: #ffffff; font-weight: bold; font-family: Calibri, Arial, sans-serif; font-size: 11px; padding: 8px 10px; border: 1px solid #113835; text-align: left; }
+        td { font-family: Calibri, Arial, sans-serif; font-size: 11px; padding: 6px 10px; border: 1px solid #cbd5e1; color: #1e293b; background-color: #ffffff; }
+        tr:nth-child(even) td { background-color: #f8fafc; }
       </style>
     </head>
     <body>
+      <div class="company-header">CITRINE MOBILITÉ</div>
       <div class="title">${title}</div>
       <table border="1" style="border-collapse: collapse;">
         <thead>

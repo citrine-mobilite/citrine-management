@@ -15,7 +15,8 @@ export const StatisticsChartsSection: React.FC<StatisticsChartsSectionProps> = (
   const [selectedMetric, setSelectedMetric] = useState<ChartMetric>('all');
 
   const chartData = useMemo(() => {
-    const list = [...(statsByEmployee || [])];
+    const rawList = statsByEmployee;
+    const list = [...(Array.isArray(rawList) ? rawList : [])];
     switch (selectedMetric) {
       case 'presences':
         list.sort((a, b) => b.presenceRate - a.presenceRate || b.presentDays - a.presentDays);

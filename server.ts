@@ -471,11 +471,36 @@ async function startServer() {
                   });
                 }
               });
+            } else {
+              const isBlocked = t.status === 'blocked';
+              items.push({
+                index: itemIndex++,
+                taskTitle: t.title,
+                subTitle: t.title,
+                status: t.status || 'todo',
+                statusLabel: t.status === 'completed' ? 'TERMINÉ' : (t.status === 'in_progress' ? 'EN COURS' : 'À FAIRE'),
+                estimatedHours: Number(t.estimatedHours) || 1,
+                actualHours: Number(t.actualHours) || 0,
+                blockerReason: isBlocked ? 'Tâche bloquée' : undefined,
+                isBlocked,
+              });
             }
           });
 
           const totalEstimated = items.reduce((sum, i) => sum + i.estimatedHours, 0);
           const totalActual = items.reduce((sum, i) => sum + i.actualHours, 0);
+
+          const topPriorities = empTasks.slice(0, 3).map((t: any, idx: number) => ({
+            id: t.id,
+            title: t.title,
+            priority: (idx === 0 ? 'P1' : idx === 1 ? 'P2' : 'P3') as 'P1' | 'P2' | 'P3',
+            status: t.status === 'completed' ? 'Fait' : (t.status === 'in_progress' ? 'En cours' : 'À faire'),
+            isMilestone: !!t.isMilestone,
+          }));
+
+          const postponedTasks = empTasks
+            .filter((t: any) => t.status !== 'completed')
+            .map((t: any) => t.title);
 
           const timesheetData = {
             employeeName: empName,
@@ -489,14 +514,16 @@ async function startServer() {
             managerPoints,
             totalEstimatedHours: totalEstimated,
             totalActualHours: totalActual,
+            topPriorities,
+            postponedTasks,
           };
 
           const htmlContent = buildTimesheetHtmlReport(timesheetData);
           const excelBuffer = buildTimesheetExcelBuffer(timesheetData);
 
-          const safeCollabName = empName.replace(/[^a-zA-Z0-9_-]/g, '_');
-          const safeDate = doualaTime.dayIso;
-          const excelFilename = `Feuille_de_Temps_${safeCollabName}_${safeDate}.xlsx`;
+          const safeCollabName = empName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+          const safeDate = doualaTime.dayIso.replace(/-/g, '_');
+          const excelFilename = `feuille_de_temps_${safeCollabName}_${safeDate}.xlsx`;
 
           await sendThreadedEmployeeEmail({
             employeeName: empName,

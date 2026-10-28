@@ -559,149 +559,203 @@ export function generateYearlyTimesheet(
  * Export Excel Haute Fidélité conforme avec pause 13h-14h et sous-tâches dynamiques
  */
 export function exportDailyTimesheetToExcel(data: DailyTimesheetData) {
-  const fileName = `feuille_de_temps_${data.employee.name.replace(/\s+/g, '_')}_${data.date}.xls`;
+  const safeName = data.employee.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+  const safeDate = data.date.replace(/[^a-z0-9_-]/g, '_');
+  const fileName = `feuille_de_temps_${safeName}_${safeDate}.xls`;
 
   const excelHtml = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
     <head>
       <meta charset="utf-8" />
+      <!--[if gte mso 9]>
+      <xml>
+        <x:ExcelWorkbook>
+          <x:ExcelWorksheets>
+            <x:ExcelWorksheet>
+              <x:Name>Plan du Jour</x:Name>
+              <x:WorksheetOptions>
+                <x:DisplayGridlines/>
+              </x:WorksheetOptions>
+            </x:ExcelWorksheet>
+          </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+      </xml>
+      <![endif]-->
       <style>
-        body { font-family: Calibri, Arial, sans-serif; }
-        .company-header { font-size: 20px; font-weight: bold; color: #164e4b; font-style: italic; }
-        .title-banner { background-color: #2A7B76; color: #ffffff; font-weight: bold; font-size: 14px; padding: 6px; }
-        .section-header { background-color: #164e4b; color: #ffffff; font-weight: bold; font-size: 11px; padding: 5px; }
-        .sub-header { background-color: #2A7B76; color: #ffffff; font-weight: bold; font-size: 10px; }
-        th { background-color: #2A7B76; color: #ffffff; font-weight: bold; font-size: 11px; padding: 5px; text-align: left; }
-        td { font-size: 11px; padding: 4px 6px; }
-        .prio-p1 { color: #dc2626; font-weight: bold; }
-        .prio-p2 { color: #2563eb; font-weight: bold; }
-        .prio-p3 { color: #d97706; font-weight: bold; }
-        .status-fait { background-color: #d1fae5; color: #065f46; font-weight: bold; text-align: center; }
-        .status-encours { background-color: #fef3c7; color: #92400e; font-weight: bold; text-align: center; }
-        .break-row { background-color: #e0f2fe; font-weight: bold; color: #0369a1; }
-        .buffer-row { background-color: #fef9c3; font-weight: bold; color: #854d0e; }
-        .summary-bar { background-color: #164e4b; color: #ffffff; font-weight: bold; }
+        body { font-family: Calibri, Arial, sans-serif; background-color: #ffffff; color: #1e293b; padding: 16px; }
+        .company-header { font-family: Georgia, serif; font-size: 22pt; font-weight: bold; font-style: italic; color: #104c38; }
+        .subtitle { font-family: Georgia, Calibri, sans-serif; font-size: 13pt; font-weight: bold; color: #92400e; border-bottom: 1.5px solid #92400e; padding-bottom: 4px; }
+        .section-header { background-color: #0e3d2f; color: #ffffff; font-weight: bold; font-size: 11pt; padding: 6px 10px; border: 1px solid #0e3d2f; }
+        .col-header { background-color: #1f514c; color: #ffffff; font-weight: bold; font-size: 10pt; padding: 6px 10px; border: 1px solid #143e3a; }
+        td { font-size: 10pt; padding: 5px 8px; border: 1px solid #cbd5e1; }
+        .blue-text { color: #1d4ed8; font-weight: bold; }
+        .prio-p1 { background-color: #fee2e2; color: #dc2626; font-weight: bold; text-align: center; }
+        .prio-p2 { color: #2563eb; font-weight: bold; text-align: center; }
+        .prio-p3 { color: #2563eb; font-weight: bold; text-align: center; }
+        .status-fait { background-color: #d1fae5; color: #065f46; font-weight: bold; text-align: center; border: 1px solid #a7f3d0; }
+        .status-encours { background-color: #fef3c7; color: #92400e; font-weight: bold; text-align: center; border: 1px solid #fde68a; }
+        .status-afaire { background-color: #f1f5f9; color: #475569; font-weight: bold; text-align: center; }
+        .summary-row { background-color: #0e3d2f; color: #ffffff; font-weight: bold; }
+        .tampon-row { background-color: #fef9c3; color: #854d0e; font-weight: bold; }
+        .guide-title { color: #0e3d2f; font-weight: bold; font-size: 11pt; padding-top: 14px; }
+        .guide-text { color: #334155; font-size: 9.5pt; line-height: 1.4; }
       </style>
     </head>
     <body>
-      <div class="company-header">CITRINE</div>
-      <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">PLAN DU JOUR — ${data.department.toUpperCase()}</div>
-      
-      <table border="0" style="margin-bottom: 12px; font-size: 11px;">
+      <!-- EN-TÊTE OFFICIEL CITRINE -->
+      <table border="0" style="width: 100%; border-collapse: collapse; margin-bottom: 6px;">
         <tr>
-          <td><strong>Collaborateur :</strong> ${data.employee.name}</td>
-          <td><strong>Date :</strong> ${data.date}</td>
-          <td><strong>Ville :</strong> ${data.location}</td>
-          <td><strong>Jour :</strong> ${data.dayName}</td>
+          <td colspan="6" class="company-header" style="border: none; padding-bottom: 2px;">CITRINE</td>
         </tr>
+        <tr>
+          <td colspan="6" class="subtitle" style="border-top: none; border-left: none; border-right: none; margin-bottom: 8px;">
+            PLAN DU JOUR — ${data.department.toUpperCase()}
+          </td>
+        </tr>
+        <tr><td colspan="6" style="height: 6px; border: none;"></td></tr>
+        <tr>
+          <td style="border: none; width: 140px;"><strong>Date :</strong> ${data.date}</td>
+          <td style="border: none; width: 120px;" class="blue-text">${data.location}</td>
+          <td style="border: none; width: 80px;"><strong>Jour :</strong> ${data.dayName}</td>
+          <td style="border: none;" colspan="2"></td>
+          <td style="border: none; text-align: right;" class="blue-text">${data.date}</td>
+        </tr>
+        <tr><td colspan="6" style="height: 6px; border: none;"></td></tr>
       </table>
 
-      <!-- 1. LES 3 PRIORITÉS DU JOUR (JOB DESCRIPTION) -->
-      <table border="1" style="border-collapse: collapse; width: 100%; margin-bottom: 12px;">
-        <tr class="section-header">
-          <td colspan="3">🎯 LES 3 PRIORITÉS DU JOUR (Missions clés &amp; Job Description)</td>
+      <!-- 1. LES 3 PRIORITÉS DU JOUR -->
+      <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+        <tr>
+          <td colspan="6" class="section-header">🎯 LES 3 PRIORITÉS DU JOUR — si je ne fais que ça, la journée est réussie</td>
         </tr>
-        ${data.topPriorities.map((p, i) => `
+        ${data.topPriorities.map((item, idx) => `
           <tr>
-            <td style="width: 30px; text-align: center; font-weight: bold;">${i + 1}.</td>
-            <td style="color: #1d4ed8; font-weight: bold;">${p.title} ${p.isMilestone ? '🏆 [Jalon Clé]' : ''}</td>
-            <td style="width: 100px; text-align: center;">${p.status}</td>
+            <td style="width: 35px; text-align: center; font-weight: bold; color: #b45309;">${idx + 1}.</td>
+            <td colspan="5" class="blue-text" style="text-decoration: underline;">${item.title}</td>
           </tr>
         `).join('')}
       </table>
 
-      <!-- 2. TÂCHES DU JOUR (SOUS-TÂCHES OPÉRATIONNELLES) -->
-      <table border="1" style="border-collapse: collapse; width: 100%; margin-bottom: 8px;">
-        <tr class="section-header">
-          <td colspan="6">📋 TÂCHES DU JOUR (Sous-tâches concrètes traitées)</td>
+      <!-- 2. TÂCHES DU JOUR -->
+      <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+        <tr>
+          <td colspan="6" class="section-header">📋 TÂCHES DU JOUR</td>
         </tr>
         <tr>
-          <th>Sous-Tâche</th>
-          <th>Tâche Parente (Job Description)</th>
-          <th>Prio</th>
-          <th>Estimé (min)</th>
-          <th>Échéance</th>
-          <th>Statut</th>
+          <td class="col-header" style="width: 34%;">Tâche</td>
+          <td class="col-header" style="width: 16%;">Domaine</td>
+          <td class="col-header" style="width: 10%; text-align: center;">Prio</td>
+          <td class="col-header" style="width: 14%; text-align: center;">Estimé (min)</td>
+          <td class="col-header" style="width: 12%; text-align: center;">Échéance</td>
+          <td class="col-header" style="width: 14%; text-align: center;">Statut</td>
         </tr>
-        ${data.tasks.map((t) => `
-          <tr>
-            <td style="color: #1d4ed8;">${t.title}</td>
-            <td>${t.parentTaskTitle}</td>
-            <td style="text-align: center;" class="prio-${t.priorityLabel.toLowerCase()}">${t.priorityLabel}</td>
-            <td style="text-align: right;">${t.estimatedMinutes}</td>
-            <td style="text-align: center;">${t.dueDate}</td>
-            <td class="${t.status === 'Fait' ? 'status-fait' : 'status-encours'}">${t.status}</td>
-          </tr>
-        `).join('')}
-        <tr class="summary-bar">
-          <td colspan="2">Total / réalisées / taux</td>
-          <td style="text-align: center;">${data.totalTasks}</td>
-          <td style="text-align: right;">${data.completedTasks}</td>
-          <td style="text-align: center;">${data.ratePercentage}%</td>
-          <td style="text-align: center;">${data.postponedCount} report.</td>
+        ${data.tasks.map((t) => {
+          const prioClass = t.priorityLabel === 'P1' ? 'prio-p1' : (t.priorityLabel === 'P2' ? 'prio-p2' : 'prio-p3');
+          const statusClass = t.status === 'Fait' ? 'status-fait' : (t.status === 'En cours' ? 'status-encours' : 'status-afaire');
+          return `
+            <tr>
+              <td class="blue-text">${t.title}</td>
+              <td class="blue-text">${t.parentTaskTitle || t.domain}</td>
+              <td class="${prioClass}">${t.priorityLabel}</td>
+              <td style="text-align: right;">${t.estimatedMinutes}</td>
+              <td style="text-align: center;">${t.dueDate}</td>
+              <td class="${statusClass}">${t.status}</td>
+            </tr>
+          `;
+        }).join('')}
+        <tr class="summary-row">
+          <td colspan="2" style="border: 1px solid #0e3d2f; padding: 6px 10px;">Total / réalisées / taux</td>
+          <td style="border: 1px solid #0e3d2f; text-align: center;">${data.totalTasks}</td>
+          <td style="border: 1px solid #0e3d2f; text-align: center;">${data.completedTasks}</td>
+          <td style="border: 1px solid #0e3d2f; text-align: center;">${data.ratePercentage}%</td>
+          <td style="border: 1px solid #0e3d2f; text-align: center;">${data.postponedCount} report.</td>
         </tr>
       </table>
 
       <!-- 3. PLAN HORAIRE -->
-      <table border="1" style="border-collapse: collapse; width: 100%; margin-bottom: 12px;">
-        <tr class="section-header">
-          <td colspan="3">🕐 PLAN HORAIRE — Résolution des sous-tâches (Pause 13h-14h obligatoire)</td>
+      <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+        <tr>
+          <td colspan="6" class="section-header">🕐 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus</td>
         </tr>
         <tr>
-          <th style="width: 130px;">Heure</th>
-          <th>Activité / Sous-tâche traitée</th>
-          <th>Résolution &amp; Détails</th>
+          <td class="col-header" style="width: 25%;">Heure</td>
+          <td class="col-header" colspan="5">Ce que je fais sur ce créneau</td>
         </tr>
         ${data.scheduleSlots.map((s) => `
-          <tr class="${s.isBreak ? 'break-row' : (s.isBuffer ? 'buffer-row' : '')}">
+          <tr class="${s.isBuffer || s.isBreak ? 'tampon-row' : ''}">
             <td style="font-weight: bold;">${s.timeRange}</td>
-            <td style="${s.isBreak ? '' : 'color: #1d4ed8; font-weight: bold;'}">${s.activity}</td>
-            <td>${s.resolutionNote || ''}</td>
+            <td colspan="5" class="${s.isBuffer || s.isBreak ? '' : 'blue-text'}">${s.activity}</td>
           </tr>
         `).join('')}
       </table>
 
       <!-- 4. IMPRÉVUS SURVENUS AUJOURD'HUI -->
-      <table border="1" style="border-collapse: collapse; width: 100%; margin-bottom: 12px;">
-        <tr class="section-header">
-          <td colspan="3">⚡ IMPRÉVUS SURVENUS AUJOURD'HUI</td>
+      <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+        <tr>
+          <td colspan="6" class="section-header">⚡ IMPRÉVUS SURVENUS AUJOURD'HUI</td>
         </tr>
         <tr>
-          <th style="width: 140px;">Heure</th>
-          <th>Quoi ? (qui / quel sujet)</th>
-          <th style="width: 120px;">Temps perdu (min)</th>
+          <td class="col-header" style="width: 20%;">Heure</td>
+          <td class="col-header" colspan="4">Quoi ? (qui / quel sujet)</td>
+          <td class="col-header" style="width: 20%; text-align: center;">Temps perdu (min)</td>
         </tr>
         ${data.unforeseenEvents.length > 0 ? data.unforeseenEvents.map((u) => `
           <tr>
             <td>${u.time}</td>
-            <td>${u.subject}</td>
+            <td colspan="4" class="blue-text">${u.subject}</td>
             <td style="text-align: right;">${u.lostMinutes} min</td>
           </tr>
         `).join('') : `
           <tr>
-            <td colspan="3" style="text-align: center; color: #6b7280; font-style: italic;">Aucun imprévu signalé aujourd'hui.</td>
+            <td colspan="6" style="text-align: center; color: #64748b; font-style: italic; padding: 8px;">
+              Aucun imprévu signalé aujourd'hui.
+            </td>
           </tr>
         `}
       </table>
 
       <!-- 5. BILAN FIN DE JOURNÉE -->
-      <table border="1" style="border-collapse: collapse; width: 100%;">
-        <tr class="section-header">
-          <td colspan="2">☑️ BILAN FIN DE JOURNÉE &amp; CAPACITÉ</td>
+      <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+        <tr>
+          <td colspan="6" class="section-header">☑️ BILAN FIN DE JOURNÉE (2 min)</td>
         </tr>
         <tr>
-          <td style="width: 160px; font-weight: bold;">Capacité &amp; Charge :</td>
-          <td>${data.capacity.capacityAdvice}</td>
-        </tr>
-        <tr>
-          <td style="font-weight: bold; vertical-align: top;">À reporter à demain :</td>
-          <td style="color: #1d4ed8;">
-            ${data.postponedTasks.length > 0 ? data.postponedTasks.map(t => `<div>• ${t}</div>`).join('') : 'Toutes les sous-tâches du jour ont été clôturées !'}
+          <td style="width: 28%; font-weight: bold; vertical-align: top; background-color: #f8fafc;">
+            À reporter à demain :
+          </td>
+          <td colspan="5" class="blue-text" style="vertical-align: top;">
+            ${data.postponedTasks.length > 0 ? data.postponedTasks.map((t) => `<div>${t}</div>`).join('') : 'Toutes les tâches du jour ont été clôturées !'}
           </td>
         </tr>
         <tr>
-          <td style="font-weight: bold;">Point à signaler au manager :</td>
-          <td>${data.managerAlertPoint}</td>
+          <td style="width: 28%; font-weight: bold; background-color: #f8fafc;">
+            Point à signaler au manager :
+          </td>
+          <td colspan="5" class="blue-text">
+            ${data.managerAlertPoint || 'Aucun point bloquant majeur à signaler.'}
+          </td>
+        </tr>
+      </table>
+
+      <!-- 6. COMMENT L'UTILISER -->
+      <table border="0" style="width: 100%; margin-top: 10px;">
+        <tr>
+          <td colspan="6" class="guide-title" style="border: none;">Comment l'utiliser</td>
+        </tr>
+        <tr>
+          <td colspan="6" class="guide-text" style="border: none;">
+            • Le matin (5 min) : écris tes 3 priorités, liste tes tâches, choisis P1/P2/P3, pose-les dans le plan horaire. Garde le créneau tampon libre.
+          </td>
+        </tr>
+        <tr>
+          <td colspan="6" class="guide-text" style="border: none;">
+            • Dans la journée : mets à jour le Statut (menu déroulant). Note chaque imprévu d'une ligne pour voir où part ton temps.
+          </td>
+        </tr>
+        <tr>
+          <td colspan="6" class="guide-text" style="border: none;">
+            • Le soir (2 min) : reporte ce qui n'est pas fait à demain, écris le point manager. Recopie les chiffres dans l'onglet « Suivi manager ».
+          </td>
         </tr>
       </table>
     </body>

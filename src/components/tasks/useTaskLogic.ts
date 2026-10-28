@@ -490,6 +490,20 @@ export function useTaskLogic({
               });
             }
           });
+        } else {
+          // Tâche simple sans sous-tâches : intégrée directement comme tâche du jour
+          const isBlocked = t.status === 'blocked';
+          items.push({
+            index: itemIndex++,
+            taskTitle: t.title,
+            subTitle: t.title,
+            status: t.status || 'todo',
+            statusLabel: t.status === 'completed' ? 'TERMINÉ' : (t.status === 'in_progress' ? 'EN COURS' : 'À FAIRE'),
+            estimatedHours: Number(t.estimatedHours) || 1,
+            actualHours: Number(t.actualHours) || 0,
+            blockerReason: isBlocked ? 'Tâche bloquée' : undefined,
+            isBlocked,
+          });
         }
       });
 
@@ -520,6 +534,20 @@ export function useTaskLogic({
       const totalEstimated = items.reduce((sum, i) => sum + i.estimatedHours, 0);
       const totalActual = items.reduce((sum, i) => sum + i.actualHours, 0);
 
+      // 🎯 Top 3 priorités du jour
+      const topPriorities = myTasks.slice(0, 3).map((t, idx) => ({
+        id: t.id,
+        title: t.title,
+        priority: (idx === 0 ? 'P1' : idx === 1 ? 'P2' : 'P3') as 'P1' | 'P2' | 'P3',
+        status: t.status === 'completed' ? 'Fait' : (t.status === 'in_progress' ? 'En cours' : 'À faire'),
+        isMilestone: !!t.isMilestone,
+      }));
+
+      // ☑️ Tâches non complètes à reporter à demain
+      const postponedTasks = myTasks
+        .filter((t) => t.status !== 'completed')
+        .map((t) => t.title);
+
       const timesheetData = {
         employeeName: myName,
         employeeEmail: myEmail,
@@ -532,14 +560,16 @@ export function useTaskLogic({
         managerPoints,
         totalEstimatedHours: totalEstimated,
         totalActualHours: totalActual,
+        topPriorities,
+        postponedTasks,
       };
 
       const htmlContent = buildTimesheetHtmlReport(timesheetData);
       const excelBase64 = buildTimesheetExcelBase64(timesheetData);
 
-      const safeCollabName = myName.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const safeDate = doualaTime.dayIso;
-      const excelFilename = `Feuille_de_Temps_${safeCollabName}_${safeDate}.xlsx`;
+      const safeCollabName = myName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+      const safeDate = doualaTime.dayIso.replace(/-/g, '_');
+      const excelFilename = `feuille_de_temps_${safeCollabName}_${safeDate}.xlsx`;
 
       const result = await clientMailService.sendThreadedEmail({
         employeeName: myName,

@@ -322,48 +322,105 @@ export async function sendThreadedEmployeeEmail(
     };
   }
 
-  // Préparation de l'expéditeur
+  // Préparation de l'expéditeur et conformité SPF/DKIM
+  const effectiveSenderEmail = config.user || (config.from?.includes('<') ? config.from.match(/<([^>]+)>/)?.[1].trim() : config.from) || 'citrinemobilite@gmail.com';
   const cleanFrom = config.from?.includes('<') && config.from?.includes('>')
     ? (config.from.match(/<([^>]+)>/)?.[1].trim() || config.from)
-    : config.from;
-  const senderName = config.senderName || options.fromName;
-  const fromAddress = senderName && cleanFrom && !config.from?.includes('<')
-    ? `"${senderName}" <${cleanFrom}>`
-    : (config.from || cleanFrom || 'citrinemobilite@gmail.com');
+    : (config.from || effectiveSenderEmail);
+  const senderName = config.senderName || options.fromName || 'Citrine Mobilité RH';
+  
+  // Format RFC 5322 strict : "Nom" <adresse@domaine.com>
+  const fromAddress = `"${senderName.replace(/"/g, '')}" <${cleanFrom}>`;
 
-  const htmlBody = buildThreadedEmailHtml({
-    employeeName: cleanCollabName,
-    eventTitle: options.eventTitle,
-    bodyHtml: options.htmlContent,
-  });
-
-  const plainText = `${options.eventTitle}\nCollaborateur : ${cleanCollabName}\n\n${options.htmlContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()}\n\n---\nCitrine Mobilité — Système Automatisé de Gestion des Ressources Humaines`;
+  // Éviter la double encapsulation HTML si le contenu est déjà structuré
+  const isAlreadyFullHtml = options.htmlContent.includes('CITRINE') || options.htmlContent.includes('<table') || options.htmlContent.includes('<!DOCTYPE');
   const threadSubject = options.eventTitle ? `${options.eventTitle} - ${cleanCollabName}` : `Notification RH : ${cleanCollabName}`;
+
+  const htmlBody = isAlreadyFullHtml
+    ? `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>${threadSubject}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  ${options.htmlContent}
+</body>
+</html>`
+    : buildThreadedEmailHtml({
+        employeeName: cleanCollabName,
+        eventTitle: options.eventTitle,
+        bodyHtml: options.htmlContent,
+      });
+
+  // Version texte brut soignée pour éviter le score spam Outlook "MPART_ALT_DIFF / LOW_TEXT_RATIO"
+  const plainText = [
+    `CITRINE MOBILITÉ — GESTION DES RESSOURCES HUMAINES`,
+    `Dossier : ${cleanCollabName}`,
+    `Objet : ${options.eventTitle}`,
+    `Date : ${new Intl.DateTimeFormat('fr-FR', { timeZone: 'Africa/Douala', dateStyle: 'full', timeStyle: 'short' }).format(new Date())}`,
+    `--------------------------------------------------`,
+    `Le rapport détaillé ainsi que la feuille de temps officielle sont consultables dans le corps du message et via le fichier tableur joint (.xls).`,
+    ``,
+    `Direction des Ressources Humaines & Opérations`,
+    `Citrine Mobilité — Douala, Cameroun`,
+  ].join('\n');
 
   try {
     const attachments = (options.attachments || []).map((att) => {
+      let contentType = att.contentType;
+      if (!contentType) {
+        if (att.filename?.endsWith('.xls')) {
+          contentType = 'application/vnd.ms-excel';
+        } else if (att.filename?.endsWith('.xlsx')) {
+          contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        } else {
+          contentType = 'application/octet-stream';
+        }
+      }
+
       if (typeof att.content === 'string' && att.encoding === 'base64') {
         return {
           filename: att.filename,
           content: Buffer.from(att.content, 'base64'),
-          contentType: att.contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          contentType,
+          contentDisposition: 'attachment',
         };
       }
-      return att;
+      return {
+        ...att,
+        contentType,
+        contentDisposition: 'attachment',
+      };
     });
+
+    // Génération d'un Message-ID RFC 2822 valide basé sur le domaine de l'expéditeur
+    const domainMatch = cleanFrom.match(/@([^>]+)/);
+    const senderDomain = domainMatch ? domainMatch[1] : 'citrinemobilite.com';
+    const cleanMessageId = `<citrine-${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${senderDomain}>`;
 
     const info = await transporter.sendMail({
       from: fromAddress,
       to: recipients.join(', '),
+      replyTo: cleanFrom,
       subject: threadSubject,
       text: plainText,
       html: htmlBody,
+      messageId: cleanMessageId,
+      date: new Date(),
       attachments,
       headers: {
-        'Auto-Submitted': 'auto-generated',
-        'X-Auto-Response-Suppress': 'All',
+        // En-têtes standards professionnels (suppression d'Auto-Submitted et X-Auto-Response-Suppress qui déclenchent le filtre Junk d'Outlook)
+        'X-Mailer': 'Citrine RH Mail System 2.1',
+        'X-Priority': '3',
+        'Priority': 'normal',
+        'Importance': 'Normal',
+        'X-MSMail-Priority': 'Normal',
+        'MIME-Version': '1.0',
+        'Organization': 'Citrine Mobilité',
         'X-Entity-Ref-ID': threadKey,
-        'X-Employee': cleanCollabName,
       },
     });
 
