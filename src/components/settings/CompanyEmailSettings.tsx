@@ -150,6 +150,7 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
       );
 
       if (res.success) {
+        console.log("✅ [TEST SMTP SUCCÈS] Réponse du serveur :", res);
         setTestResult({
           status: 'success',
           message: 'Connexion SMTP établie avec succès ! Le message réel de test a été transmis à la boîte de réception.',
@@ -159,19 +160,29 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
           showToast('E-mail de test réel envoyé avec succès !', 'success');
         }
       } else {
+        const rawError = res.error || 'Échec de la connexion au serveur SMTP.';
+        console.error("❌ [TEST SMTP ÉCHEC] Véritable exception :", {
+          error: rawError,
+          fullResponse: res,
+        });
         setTestResult({
           status: 'error',
-          message: res.error || 'Échec de la connexion au serveur SMTP.',
+          message: rawError,
         });
         if (showToast) {
-          showToast(res.error || 'Erreur SMTP.', 'error');
+          showToast(rawError, 'error');
         }
       }
     } catch (err: any) {
+      const rawException = err?.message || String(err);
+      console.error("💥 [TEST SMTP EXCEPTION CLIENT]:", err);
       setTestResult({
         status: 'error',
-        message: err.message || 'Erreur réseau.',
+        message: rawException,
       });
+      if (showToast) {
+        showToast(rawException, 'error');
+      }
     } finally {
       setIsTesting(false);
     }

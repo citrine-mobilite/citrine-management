@@ -140,15 +140,16 @@ export async function showSuccessAlert(title: string = 'Succès !', text: string
 }
 
 /**
- * Affichage d'un SweetAlert d'échec
+ * Affichage d'un SweetAlert d'échec affichant la véritable exception sans masquer son contenu
  */
 export async function showErrorAlert(title: string = 'Erreur', text: string = 'Une erreur est survenue.') {
+  console.error("❌ [SWEETALERT ERROR POPUP]:", { title, text });
   return Swal.fire({
     ...baseSwalConfig,
     icon: 'error',
     iconColor: '#E11D48',
     title,
-    text,
+    html: `<div class="text-left font-mono text-xs bg-rose-50 border border-rose-200 text-rose-900 p-3.5 rounded-xl max-h-64 overflow-y-auto whitespace-pre-wrap select-all leading-relaxed break-words shadow-2xs">${text}</div>`,
     confirmButtonText: 'Compris',
     customClass: {
       ...baseSwalConfig.customClass,

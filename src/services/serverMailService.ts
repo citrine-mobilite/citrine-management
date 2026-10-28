@@ -315,7 +315,7 @@ export function buildThreadedEmailHtml(options: {
 export async function sendThreadedEmployeeEmail(
   options: EmailThreadingOptions,
   customConfig?: Partial<SmtpConfig>
-): Promise<{ success: boolean; messageId?: string; recipients?: string[]; simulated?: boolean; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; recipients?: string[]; simulated?: boolean; error?: string; details?: any }> {
   const config = await getEffectiveSmtpConfig(customConfig);
   const transporter = await getTransporter(customConfig);
 
@@ -480,16 +480,24 @@ export async function sendThreadedEmployeeEmail(
     };
   } catch (err: any) {
     const rawError = err?.message || String(err);
-    console.error(`❌ [SMTP ERROR] Échec envoi email pour ${cleanCollabName}:`, rawError);
-    let userFriendlyError = rawError;
-    if (rawError.includes('534-5.7.9') || rawError.includes('Application-specific password required') || rawError.includes('InvalidSecondFactor')) {
-      userFriendlyError = "Google a bloqué la connexion : pour envoyer des e-mails avec un compte Gmail, vous devez utiliser un 'Mot de passe d'application' (16 caractères généré sur https://myaccount.google.com/apppasswords), et non votre mot de passe habituel.";
-    } else if (rawError.includes('535') || rawError.includes('BadCredentials') || rawError.includes('Username and Password not accepted')) {
-      userFriendlyError = "Identifiants SMTP invalides (nom d'utilisateur ou mot de passe incorrect). Pour Gmail, veillez à utiliser un mot de passe d'application de 16 caractères.";
-    }
+    console.error(`❌ [SMTP ERROR BRUTE] Échec envoi email pour ${cleanCollabName}:`, {
+      message: rawError,
+      code: err?.code,
+      command: err?.command,
+      response: err?.response,
+      responseCode: err?.responseCode,
+      stack: err?.stack,
+    });
     return {
       success: false,
-      error: `Erreur SMTP (Production): ${rawError}. ${userFriendlyError}`,
+      error: rawError,
+      details: {
+        code: err?.code,
+        command: err?.command,
+        response: err?.response,
+        responseCode: err?.responseCode,
+        stack: err?.stack,
+      },
     };
   }
 }

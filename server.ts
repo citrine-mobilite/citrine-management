@@ -33,7 +33,8 @@ async function startServer() {
   const server = http.createServer(app);
   const PORT = 3000;
 
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "25mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
   // Health check & Database Diagnostics
   app.get("/api/health", (req, res) => {
@@ -265,8 +266,15 @@ async function startServer() {
 
   // ✉️ API Envoi d'Email Threadé par Collaborateur (strictement vers HR_NOTIFICATION_EMAIL)
   app.post("/api/mail/send-threaded", async (req: express.Request, res: express.Response) => {
+    console.log("📨 [SERVER /api/mail/send-threaded] Requête reçue:", {
+      employeeName: req.body?.employeeName,
+      employeeId: req.body?.employeeId,
+      eventTitle: req.body?.eventTitle,
+      threadCategory: req.body?.threadCategory,
+      attachmentsCount: req.body?.attachments?.length || 0,
+    });
     try {
-      const { employeeName, employeeId, eventTitle, htmlContent, attachments, smtpConfig, threadCategory, threadSubject } = req.body;
+      const { employeeName, employeeId, eventTitle, htmlContent, attachments, smtpConfig, threadCategory, threadSubject, overrideRecipients } = req.body;
       if (!employeeName || !eventTitle || !htmlContent) {
         return res.status(400).json({
           success: false,
@@ -282,12 +290,24 @@ async function startServer() {
         threadSubject,
         htmlContent,
         attachments,
+        overrideRecipients,
       }, smtpConfig);
 
+      if (!result.success) {
+        console.error("❌ [SERVER /api/mail/send-threaded ÉCHEC]:", result.error);
+        return res.status(500).json(result);
+      }
+
+      console.log("✅ [SERVER /api/mail/send-threaded SUCCÈS]:", result);
       res.json(result);
     } catch (error: any) {
-      console.error("[API Mail Send Threaded Error]:", error);
-      res.status(500).json({ success: false, error: error.message || "Échec d'envoi du mail." });
+      const rawError = error?.message || String(error);
+      console.error("💥 [SERVER /api/mail/send-threaded EXCEPTION]:", {
+        message: rawError,
+        stack: error?.stack,
+        error,
+      });
+      res.status(500).json({ success: false, error: rawError, stack: error?.stack, details: error });
     }
   });
 

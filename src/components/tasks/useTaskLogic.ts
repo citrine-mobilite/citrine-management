@@ -621,6 +621,7 @@ export function useTaskLogic({
       });
 
       if (result.success) {
+        console.log("✅ [FICHE DE TEMPS SUCCÈS] Transmission confirmée :", result);
         if (showToast) showToast("Fiche de temps Excel envoyée avec succès !", "success");
         onAddNotification({
           id: `notif-${Date.now()}`,
@@ -635,10 +636,23 @@ export function useTaskLogic({
           senderName: "Système RH",
         });
       } else {
-        if (showToast) showToast(`Erreur d'envoi: ${result.error || "Impossible d'envoyer"}`, "error");
+        const rawError = result.error || "Erreur inconnue lors de l'envoi de la fiche de temps.";
+        console.error("❌ [FICHE DE TEMPS ÉCHEC] Véritable exception reçue du serveur :", {
+          error: rawError,
+          fullResult: result,
+        });
+        if (showToast) showToast(rawError, "error");
+        await showErrorAlert("Échec d'envoi de la fiche de temps", rawError);
       }
     } catch (err: any) {
-      if (showToast) showToast(`Erreur: ${err.message || "Échec de l'envoi"}`, "error");
+      const rawException = err?.message || String(err);
+      console.error("💥 [FICHE DE TEMPS EXCEPTION CLIENT BRUTE]:", {
+        message: rawException,
+        stack: err?.stack,
+        errorObj: err,
+      });
+      if (showToast) showToast(rawException, "error");
+      await showErrorAlert("Exception inattendue", rawException);
     }
   };
 

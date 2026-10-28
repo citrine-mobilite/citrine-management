@@ -20,39 +20,111 @@ export interface SendThreadedEmailInput {
 export const clientMailService = {
   /**
    * Envoie une notification par e-mail rattachée au fil unique du collaborateur.
-   * Si les paramètres SMTP sont configurés dans moduleConfig, ils sont transmis.
-   * Sinon, le backend utilise les variables d'environnement SMTP.
+   * Affiche l'exception brute exacte et tous les logs console en production.
    */
   async sendThreadedEmail(
     input: SendThreadedEmailInput,
     moduleConfig?: CompanyModuleConfig
-  ): Promise<{ success: boolean; messageId?: string; simulated?: boolean; error?: string }> {
+  ): Promise<{ success: boolean; messageId?: string; simulated?: boolean; error?: string; details?: any; status?: number }> {
+    console.log("================================================================");
+    console.log("🚀 [CLIENT MAIL SERVICE] Démarrage de l'envoi de mail...", {
+      employeeName: input.employeeName,
+      employeeId: input.employeeId,
+      eventTitle: input.eventTitle,
+      threadCategory: input.threadCategory,
+      threadSubject: input.threadSubject,
+      attachmentsCount: input.attachments?.length || 0,
+      timestamp: new Date().toISOString(),
+    });
+
     // Si les notifications emails sont explicitement désactivées
     if (moduleConfig?.enableEmailNotifications === false) {
+      console.warn("⚠️ [CLIENT MAIL SERVICE] Envoi désactivé dans la configuration de l'entreprise (enableEmailNotifications=false).");
+      console.log("================================================================");
       return { success: true, simulated: true };
     }
 
     try {
+      console.log("📤 [CLIENT MAIL SERVICE] Exécution requête POST /api/mail/send-threaded...");
       const res = await fetch('/api/mail/send-threaded', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        return { success: false, error: errJson.error || 'Erreur lors de l\'envoi du mail' };
+      console.log(`📥 [CLIENT MAIL SERVICE] Réponse HTTP reçue : Status = ${res.status} (${res.statusText})`);
+
+      const rawText = await res.text();
+      let resJson: any = null;
+      try {
+        resJson = JSON.parse(rawText);
+      } catch {
+        // Le corps n'est pas du JSON (ex: HTML 404/500 ou message texte)
       }
 
-      return await res.json();
+      console.log("🔍 [CLIENT MAIL SERVICE] Corps de la réponse brute :", {
+        status: res.status,
+        statusText: res.statusText,
+        isJson: resJson !== null,
+        body: resJson || rawText,
+      });
+
+      if (!res.ok) {
+        // Extraction fidèle de la véritable exception sans masquer son contenu
+        const rawException = 
+          resJson?.error || 
+          resJson?.message || 
+          (typeof rawText === 'string' && rawText.trim() ? rawText : `Erreur serveur HTTP ${res.status} (${res.statusText})`);
+
+        console.error("❌ [CLIENT MAIL SERVICE ÉCHEC HTTP] Véritable exception retournée par le serveur :", {
+          status: res.status,
+          statusText: res.statusText,
+          exception: rawException,
+          details: resJson?.details,
+          stack: resJson?.stack,
+        });
+        console.log("================================================================");
+
+        return { 
+          success: false, 
+          error: rawException,
+          status: res.status,
+          details: resJson,
+        };
+      }
+
+      if (resJson && resJson.success === false) {
+        const rawException = resJson.error || "Échec signalé par le serveur";
+        console.error("❌ [CLIENT MAIL SERVICE ÉCHEC INTERNE] Erreur retournée :", rawException);
+        console.log("================================================================");
+        return {
+          success: false,
+          error: rawException,
+          details: resJson,
+        };
+      }
+
+      console.log("✅ [CLIENT MAIL SERVICE SUCCÈS] E-mail envoyé avec succès !", resJson);
+      console.log("================================================================");
+      return resJson || { success: true };
     } catch (err: any) {
-      console.warn('[clientMailService] Notice envoi email:', err.message);
-      return { success: false, error: err.message };
+      const rawException = err?.message || String(err);
+      console.error("💥 [CLIENT MAIL SERVICE EXCEPTION RÉSEAU / FETCH]:", {
+        message: rawException,
+        stack: err?.stack,
+        errorObj: err,
+      });
+      console.log("================================================================");
+      return { 
+        success: false, 
+        error: `Exception réseau client : ${rawException}`,
+        details: err,
+      };
     }
   },
 
   /**
-   * Teste la configuration SMTP
+   * Teste la configuration SMTP et renvoie l'exception brute en cas d'erreur
    */
   async testConnection(
     smtpConfig: {
@@ -64,7 +136,15 @@ export const clientMailService = {
       from?: string;
     },
     testRecipient?: string
-  ): Promise<{ success: boolean; messageId?: string; simulated?: boolean; error?: string }> {
+  ): Promise<{ success: boolean; messageId?: string; simulated?: boolean; error?: string; details?: any }> {
+    console.log("🧪 [CLIENT MAIL TEST] Début du test de connexion SMTP vers /api/mail/test-connection...", {
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      user: smtpConfig.user,
+      hasPass: Boolean(smtpConfig.pass),
+      testRecipient,
+    });
+
     try {
       const res = await fetch('/api/mail/test-connection', {
         method: 'POST',
@@ -75,14 +155,27 @@ export const clientMailService = {
         }),
       });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        return { success: false, error: errJson.error || 'Erreur lors du test SMTP' };
+      const rawText = await res.text();
+      let resJson: any = null;
+      try {
+        resJson = JSON.parse(rawText);
+      } catch {
+        // Non-JSON
       }
 
-      return await res.json();
+      console.log(`🧪 [CLIENT MAIL TEST RÉPONSE] Status = ${res.status}:`, resJson || rawText);
+
+      if (!res.ok) {
+        const rawError = resJson?.error || resJson?.message || rawText || `Erreur HTTP ${res.status} (${res.statusText})`;
+        console.error("❌ [CLIENT MAIL TEST ÉCHEC HTTP]:", rawError);
+        return { success: false, error: rawError, details: resJson };
+      }
+
+      return resJson || { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message };
+      const rawError = err?.message || String(err);
+      console.error("💥 [CLIENT MAIL TEST EXCEPTION]:", err);
+      return { success: false, error: `Exception test SMTP : ${rawError}`, details: err };
     }
   },
 
@@ -91,13 +184,23 @@ export const clientMailService = {
    */
   async fetchMailConfig(): Promise<{ success: boolean; config?: any; error?: string }> {
     try {
+      console.log("🔍 [CLIENT MAIL CONFIG] Chargement configuration SMTP...");
       const res = await fetch('/api/mail/config');
+      const rawText = await res.text();
+      let resJson: any = null;
+      try {
+        resJson = JSON.parse(rawText);
+      } catch {}
+
       if (!res.ok) {
-        return { success: false, error: 'Impossible de récupérer la configuration' };
+        const rawError = resJson?.error || rawText || `Erreur HTTP ${res.status}`;
+        console.error("❌ [CLIENT MAIL CONFIG FETCH ERROR]:", rawError);
+        return { success: false, error: rawError };
       }
-      return await res.json();
+      return resJson || { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message };
+      console.error("💥 [CLIENT MAIL CONFIG EXCEPTION]:", err);
+      return { success: false, error: err?.message || String(err) };
     }
   },
 
@@ -106,18 +209,28 @@ export const clientMailService = {
    */
   async saveMailConfig(config: any): Promise<{ success: boolean; config?: any; error?: string }> {
     try {
+      console.log("💾 [CLIENT MAIL CONFIG] Sauvegarde configuration SMTP...");
       const res = await fetch('/api/mail/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
+
+      const rawText = await res.text();
+      let resJson: any = null;
+      try {
+        resJson = JSON.parse(rawText);
+      } catch {}
+
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        return { success: false, error: errJson.error || 'Erreur lors de la sauvegarde' };
+        const rawError = resJson?.error || rawText || `Erreur HTTP ${res.status}`;
+        console.error("❌ [CLIENT MAIL CONFIG SAVE ERROR]:", rawError);
+        return { success: false, error: rawError };
       }
-      return await res.json();
+      return resJson || { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message };
+      console.error("💥 [CLIENT MAIL CONFIG SAVE EXCEPTION]:", err);
+      return { success: false, error: err?.message || String(err) };
     }
   },
 

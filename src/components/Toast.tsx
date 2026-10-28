@@ -40,10 +40,14 @@ const SweetAlertModal: React.FC<{
   remainingCount: number;
   onDismiss: () => void;
 }> = ({ toast, remainingCount, onDismiss }) => {
-  const duration = toast.duration || (toast.type === 'error' ? 5000 : 3500);
+  const duration = toast.duration || (toast.type === 'error' ? 20000 : 3500);
   const [progress, setProgress] = useState(100);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (toast.type === 'error') {
+      console.error("❌ [SWEETALERT MODAL - ERREUR AFFICHEE AU CLIENT]:", toast.message);
+    }
     const startTime = Date.now();
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
@@ -56,7 +60,7 @@ const SweetAlertModal: React.FC<{
     }, 40);
 
     return () => clearInterval(interval);
-  }, [toast.id, duration, onDismiss]);
+  }, [toast.id, duration, onDismiss, toast.type, toast.message]);
 
   const type = toast.type || 'success';
 
@@ -214,10 +218,34 @@ const SweetAlertModal: React.FC<{
           </h3>
         </div>
 
-        {/* Message */}
-        <div className="text-xs sm:text-sm text-stone-600 font-medium leading-relaxed px-2 break-words max-h-48 overflow-y-auto">
-          {toast.message}
-        </div>
+        {/* Message : Affichage fidèle et complet de l'exception brute en cas d'erreur */}
+        {type === 'error' ? (
+          <div className="w-full text-left space-y-2 px-1">
+            <div className="text-[11px] font-mono bg-rose-50 border border-rose-200 text-rose-950 p-3.5 rounded-2xl max-h-56 overflow-y-auto whitespace-pre-wrap select-all leading-relaxed break-words shadow-inner">
+              {toast.message}
+            </div>
+            <div className="flex justify-between items-center px-1">
+              <span className="text-[10px] text-stone-400">Détail technique brut</span>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    navigator.clipboard.writeText(toast.message);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  } catch {}
+                }}
+                className="text-[11px] text-rose-700 hover:text-rose-900 font-bold underline cursor-pointer"
+              >
+                {copied ? '✓ Exception copiée !' : 'Copier l\'exception'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs sm:text-sm text-stone-600 font-medium leading-relaxed px-2 break-words max-h-48 overflow-y-auto">
+            {toast.message}
+          </div>
+        )}
 
         {/* Confirmation Button */}
         <div className="pt-2 w-full">
