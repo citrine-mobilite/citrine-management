@@ -255,7 +255,7 @@ function preparePlanDuJourData(data: TimesheetReportData) {
 
   const managerAlertPoint = data.managerPoints.length > 0
     ? data.managerPoints.map((p) => p.content).join(' ; ')
-    : 'Aucun blocage particulier à signaler.';
+    : 'Aucun point à signaler ni bloquage aujourd’hui.';
 
   return {
     dept,

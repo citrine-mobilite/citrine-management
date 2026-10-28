@@ -489,7 +489,7 @@ export async function sendThreadedEmployeeEmail(
     }
     return {
       success: false,
-      error: userFriendlyError,
+      error: `Erreur SMTP (Production): ${rawError}. ${userFriendlyError}`,
     };
   }
 }
