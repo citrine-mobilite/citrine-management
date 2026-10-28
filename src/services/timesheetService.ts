@@ -1,6 +1,7 @@
 import { Employee, Task, Subtask, Presence, AttendanceIncident, TaskProject } from '../types';
 import { isTaskAssignedToEmployee } from '../utils/rendementCalculator';
 import { exportToExcel } from './excelExportService';
+import { isSubtaskInLast3Days, sortSubtasksNewestFirst } from '../utils/subtaskFilterUtils';
 
 export interface DailyTimesheetTaskItem {
   id?: string;
@@ -160,7 +161,12 @@ export function generateDailyTimesheet(
     }
 
     if (parentTask.subtasks && parentTask.subtasks.length > 0) {
-      parentTask.subtasks.forEach((sub) => {
+      // Prioriser les sous-tâches des 3 derniers jours glissants, triées du plus récent au plus ancien
+      const sortedSubs = sortSubtasksNewestFirst(parentTask.subtasks, parentTask.date);
+      const recentSubs = sortedSubs.filter((s) => isSubtaskInLast3Days(s, parentTask.date));
+      const subsToInclude = recentSubs.length > 0 ? recentSubs : sortedSubs;
+
+      subsToInclude.forEach((sub) => {
         let subStatus: 'Fait' | 'En cours' | 'À faire' | 'Bloqué' = 'À faire';
         if (sub.completed || sub.status === 'completed') subStatus = 'Fait';
         else if (sub.status === 'in_progress' || sub.status === 'en_cours') subStatus = 'En cours';
@@ -205,28 +211,29 @@ export function generateDailyTimesheet(
   const postponedTasks = subtaskItems.filter((t) => t.status !== 'Fait').map((t) => t.title);
   const postponedCount = postponedTasks.length;
 
-  // 4. CALCUL DE CAPACITÉ JOURNALIÈRE (8h nettes = 480 min hors pause 13h-14h)
-  const workMinutesNet = 480; // 8 heures de travail effectif
+  // 4. CALCUL DE CAPACITÉ JOURNALIÈRE (basée sur les sous-tâches, 12h max, seuil de surcharge > 10h par jour)
+  const workMinutesNet = 720; // 12 heures maximum par jour
   const plannedMinutes = subtaskItems.reduce((sum, s) => sum + s.estimatedMinutes, 0);
   const activeMilestone = sortedParentTasks.find((t) => t.isMilestone && t.status !== 'completed');
   const hasMilestone = Boolean(activeMilestone);
 
-  // Si jalon stratégique présent : on réserve 50% de la journée (4h) pour le jalon -> 3 à 4 sous-tâches max
-  // Si sans jalon : capacité standard de 5 à 6 sous-tâches par jour
-  const maxRecommendedSubtasks = hasMilestone ? 4 : 6;
+  const maxRecommendedSubtasks = hasMilestone ? 5 : 8;
 
   let capacityStatus: 'optimal' | 'overloaded' | 'available' = 'optimal';
   let capacityAdvice = '';
 
-  if (plannedMinutes > 510) {
+  if (plannedMinutes > 600) {
+    // Plus de 10h par jour (> 600 min) = Surcharge effective
     capacityStatus = 'overloaded';
-    capacityAdvice = `⚠️ Surcharge détectée : ${Math.round(plannedMinutes / 60)}h planifiées pour 8h disponibles. Risque d'inachèvement : reportez les sous-tâches non prioritaires.`;
-  } else if (plannedMinutes >= 360) {
+    capacityAdvice = `⚠️ Surcharge détectée : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (seuil de surcharge > 10h, capacité maximale 12h/jour). Risque d'inachèvement : priorisez ou déléguez certaines sous-tâches.`;
+  } else if (plannedMinutes >= 420) {
+    // 7h à 10h (420 à 600 min) = Charge équilibrée et réaliste
     capacityStatus = 'optimal';
-    capacityAdvice = `✅ Charge équilibrée et réaliste : ${Math.round(plannedMinutes / 60)}h estimées sur 8h nettes (Pause 13h-14h respectée).`;
+    capacityAdvice = `✅ Charge équilibrée et réaliste : ${Math.round(plannedMinutes / 60)}h estimées sur les sous-tâches (plage recommandée de 7h à 10h, max 12h).`;
   } else {
+    // Moins de 7h = Capacité disponible
     capacityStatus = 'available';
-    capacityAdvice = `💡 Capacité disponible : ${Math.round(plannedMinutes / 60)}h planifiées. Vous pouvez traiter encore ${Math.max(1, maxRecommendedSubtasks - totalTasks)} sous-tâche(s).`;
+    capacityAdvice = `💡 Capacité disponible : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (capacité max : 12h). Vous pouvez traiter des sous-tâches additionnelles.`;
   }
 
   const capacity: DailyCapacityMetrics = {
@@ -572,7 +579,7 @@ export function exportDailyTimesheetToExcel(data: DailyTimesheetData) {
         <x:ExcelWorkbook>
           <x:ExcelWorksheets>
             <x:ExcelWorksheet>
-              <x:Name>Plan du Jour</x:Name>
+              <x:Name>Feuil1</x:Name>
               <x:WorksheetOptions>
                 <x:DisplayGridlines/>
               </x:WorksheetOptions>
@@ -675,18 +682,21 @@ export function exportDailyTimesheetToExcel(data: DailyTimesheetData) {
       <!-- 3. PLAN HORAIRE -->
       <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
         <tr>
-          <td colspan="6" class="section-header">🕐 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus</td>
+          <td colspan="6" class="section-header">🕒 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus</td>
         </tr>
         <tr>
           <td class="col-header" style="width: 25%;">Heure</td>
           <td class="col-header" colspan="5">Ce que je fais sur ce créneau</td>
         </tr>
-        ${data.scheduleSlots.map((s) => `
-          <tr class="${s.isBuffer || s.isBreak ? 'tampon-row' : ''}">
-            <td style="font-weight: bold;">${s.timeRange}</td>
-            <td colspan="5" class="${s.isBuffer || s.isBreak ? '' : 'blue-text'}">${s.activity}</td>
-          </tr>
-        `).join('')}
+        ${data.scheduleSlots.map((s) => {
+          const isBuffer = s.isBuffer || s.isBreak || s.timeRange.includes('13:00');
+          return `
+            <tr class="${isBuffer ? 'tampon-row' : ''}">
+              <td style="font-weight: bold;">${s.timeRange}</td>
+              <td colspan="5" class="${isBuffer ? '' : 'blue-text'}">${isBuffer ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity}</td>
+            </tr>
+          `;
+        }).join('')}
       </table>
 
       <!-- 4. IMPRÉVUS SURVENUS AUJOURD'HUI -->
@@ -733,28 +743,6 @@ export function exportDailyTimesheetToExcel(data: DailyTimesheetData) {
           </td>
           <td colspan="5" class="blue-text">
             ${data.managerAlertPoint || 'Aucun point bloquant majeur à signaler.'}
-          </td>
-        </tr>
-      </table>
-
-      <!-- 6. COMMENT L'UTILISER -->
-      <table border="0" style="width: 100%; margin-top: 10px;">
-        <tr>
-          <td colspan="6" class="guide-title" style="border: none;">Comment l'utiliser</td>
-        </tr>
-        <tr>
-          <td colspan="6" class="guide-text" style="border: none;">
-            • Le matin (5 min) : écris tes 3 priorités, liste tes tâches, choisis P1/P2/P3, pose-les dans le plan horaire. Garde le créneau tampon libre.
-          </td>
-        </tr>
-        <tr>
-          <td colspan="6" class="guide-text" style="border: none;">
-            • Dans la journée : mets à jour le Statut (menu déroulant). Note chaque imprévu d'une ligne pour voir où part ton temps.
-          </td>
-        </tr>
-        <tr>
-          <td colspan="6" class="guide-text" style="border: none;">
-            • Le soir (2 min) : reporte ce qui n'est pas fait à demain, écris le point manager. Recopie les chiffres dans l'onglet « Suivi manager ».
           </td>
         </tr>
       </table>

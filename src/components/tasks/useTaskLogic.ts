@@ -15,6 +15,7 @@ import {
   TimesheetManagerPoint
 } from '../../services/timesheetReportService';
 import { getTimesheetNotes } from '../../services/timesheetNotesService';
+import { isSubtaskInLast3Days, sortSubtasksNewestFirst } from '../../utils/subtaskFilterUtils';
 
 interface UseTaskLogicProps {
   tasks: Task[];
@@ -46,6 +47,7 @@ export function useTaskLogic({
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [filterType, setFilterType] = useState<'all' | 'tasks' | 'milestones'>('all');
+  const [filterDatePeriod, setFilterDatePeriod] = useState<'all' | '3days' | 'today' | 'week' | 'month'>('all');
 
   // Modals & Drawers
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -393,9 +395,34 @@ export function useTaskLogic({
           ? !!t.isMilestone
           : !t.isMilestone;
 
-      return matchSearch && matchProject && matchPriority && matchAssignee && matchType;
+      // Filtre temporel (notamment pour les responsables et la vue d'ensemble)
+      let matchDate = true;
+      if (filterDatePeriod !== 'all' && t.date) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const taskDate = new Date(`${t.date}T12:00:00`);
+
+        if (filterDatePeriod === 'today') {
+          const todayStr = today.toISOString().split('T')[0];
+          matchDate = t.date === todayStr;
+        } else if (filterDatePeriod === '3days') {
+          const cutoff = new Date(today);
+          cutoff.setDate(cutoff.getDate() - 2); // 3 derniers jours (J, J-1, J-2)
+          matchDate = taskDate.getTime() >= cutoff.getTime();
+        } else if (filterDatePeriod === 'week') {
+          const weekCutoff = new Date(today);
+          weekCutoff.setDate(weekCutoff.getDate() - 6);
+          matchDate = taskDate.getTime() >= weekCutoff.getTime();
+        } else if (filterDatePeriod === 'month') {
+          const monthCutoff = new Date(today);
+          monthCutoff.setDate(monthCutoff.getDate() - 29);
+          matchDate = taskDate.getTime() >= monthCutoff.getTime();
+        }
+      }
+
+      return matchSearch && matchProject && matchPriority && matchAssignee && matchType && matchDate;
     });
-  }, [tasks, searchTerm, activeProjectId, filterPriority, filterAssignee, filterType, currentRole, currentUser, currentEmployee, projects]);
+  }, [tasks, searchTerm, activeProjectId, filterPriority, filterAssignee, filterType, filterDatePeriod, currentRole, currentUser, currentEmployee, projects]);
 
   const handleSendManualTimesheet = async () => {
     try {
@@ -455,9 +482,13 @@ export function useTaskLogic({
           });
         }
 
-        // Traitement des sous-tâches
+        // Traitement des sous-tâches (priorité aux sous-tâches des 3 derniers jours triées du plus récent au plus ancien)
         if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
-          t.subtasks.forEach((sub) => {
+          const sortedSubs = sortSubtasksNewestFirst(t.subtasks, t.date);
+          const recentSubs = sortedSubs.filter((s) => isSubtaskInLast3Days(s, t.date));
+          const subsToProcess = recentSubs.length > 0 ? recentSubs : sortedSubs;
+
+          subsToProcess.forEach((sub) => {
             const isBlocked = sub.status === 'blocked' || sub.isBlocked || Boolean(sub.blockerReason);
             items.push({
               index: itemIndex++,
@@ -575,7 +606,9 @@ export function useTaskLogic({
         employeeName: myName,
         employeeId: myId,
         employeeEmail: myEmail,
-        eventTitle: `Fiche de temps de la journée`,
+        eventTitle: `Feuille de temps`,
+        threadCategory: 'timesheet',
+        threadSubject: `Feuille de temps - ${myName}`,
         htmlContent,
         attachments: [
           {
@@ -624,6 +657,8 @@ export function useTaskLogic({
     setFilterAssignee,
     filterType,
     setFilterType,
+    filterDatePeriod,
+    setFilterDatePeriod,
     isCreateModalOpen,
     setIsCreateModalOpen,
     isMilestoneModalDefault,

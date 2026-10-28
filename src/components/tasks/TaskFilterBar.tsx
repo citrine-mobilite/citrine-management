@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Filter, Flag } from 'lucide-react';
+import { Search, Filter, Flag, Calendar } from 'lucide-react';
 import { Employee } from '../../types';
 
 interface TaskFilterBarProps {
@@ -11,6 +11,8 @@ interface TaskFilterBarProps {
   onAssigneeChange: (val: string) => void;
   filterType?: 'all' | 'tasks' | 'milestones';
   onTypeChange?: (val: 'all' | 'tasks' | 'milestones') => void;
+  filterDatePeriod?: 'all' | '3days' | 'today' | 'week' | 'month';
+  onDatePeriodChange?: (val: 'all' | '3days' | 'today' | 'week' | 'month') => void;
   employees: Employee[];
 }
 
@@ -21,6 +23,10 @@ export const TaskFilterBar: React.FC<TaskFilterBarProps> = ({
   onPriorityChange,
   filterAssignee,
   onAssigneeChange,
+  filterType = 'all',
+  onTypeChange,
+  filterDatePeriod = 'all',
+  onDatePeriodChange,
   employees,
 }) => {
   return (
@@ -38,6 +44,20 @@ export const TaskFilterBar: React.FC<TaskFilterBarProps> = ({
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+        {/* Period Filter (3 derniers jours, aujourd'hui, semaine, etc.) */}
+        <select
+          value={filterDatePeriod}
+          onChange={(e) => onDatePeriodChange?.(e.target.value as any)}
+          className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 focus:outline-none cursor-pointer"
+          title="Filtrer les tâches par date ou période"
+        >
+          <option value="all">📅 Toutes les dates</option>
+          <option value="3days">⏱️ 3 derniers jours</option>
+          <option value="today">☀️ Aujourd'hui</option>
+          <option value="week">🗓️ 7 derniers jours</option>
+          <option value="month">📆 Ce mois (30 jours)</option>
+        </select>
+
         {/* Priority Filter */}
         <select
           value={filterPriority}

@@ -103,6 +103,8 @@ export default function TaskPanel({
         onAssigneeChange={logic.setFilterAssignee}
         filterType={logic.filterType}
         onTypeChange={logic.setFilterType}
+        filterDatePeriod={logic.filterDatePeriod}
+        onDatePeriodChange={logic.setFilterDatePeriod}
         employees={logic.visibleEmployees}
       />
 

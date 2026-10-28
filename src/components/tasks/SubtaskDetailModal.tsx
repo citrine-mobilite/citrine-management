@@ -10,10 +10,13 @@ import {
   Clock,
   AlertTriangle,
   ShieldAlert,
-  Flag
+  Flag,
+  Filter,
+  History
 } from 'lucide-react';
 import { Subtask, Employee, TaskStatus, TaskPriority, TaskProject, Comment, AppUser, Incident } from '../../types';
 import { canManageTaskAssignment, isSelfOnlyUser } from '../../utils/roleUtils';
+import { filterAndSortSubtasks, formatSubtaskRelativeDate } from '../../utils/subtaskFilterUtils';
 
 interface SubtaskDetailModalProps {
   isOpen: boolean;
@@ -59,12 +62,17 @@ export const SubtaskDetailModal: React.FC<SubtaskDetailModalProps> = ({
   const [isBlocked, setIsBlocked] = useState(subtask.status === 'blocked' || !!subtask.blockerReason || (subtask.incidents && subtask.incidents.length > 0));
 
   const [subtasks, setSubtasks] = useState<Subtask[]>(subtask.subtasks || []);
+  const [subtaskFilterPeriod, setSubtaskFilterPeriod] = useState<'last3days' | 'all'>('last3days');
   const [comments, setComments] = useState<Comment[]>(subtask.comments || []);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
   
   // For nested subtask detail recursion
   const [selectedNestedSubtask, setSelectedNestedSubtask] = useState<Subtask | null>(null);
+
+  const { displayedSubtasks, hiddenCount, totalCount } = React.useMemo(() => {
+    return filterAndSortSubtasks(subtasks, subtaskFilterPeriod, draftDueDate);
+  }, [subtasks, subtaskFilterPeriod, draftDueDate]);
 
   useEffect(() => {
     setDraftTitle(subtask.title);
@@ -188,14 +196,16 @@ export const SubtaskDetailModal: React.FC<SubtaskDetailModalProps> = ({
 
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
+    const nowIso = new Date().toISOString();
     const newSub: Subtask = {
       id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       title: newSubtaskTitle.trim(),
       completed: false,
       priority: 'medium',
       status: 'todo',
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: nowIso.split('T')[0],
       dueDate: draftDueDate,
+      createdAt: nowIso,
       subtasks: [],
     };
     const updated = [...subtasks, newSub];
@@ -513,64 +523,129 @@ export const SubtaskDetailModal: React.FC<SubtaskDetailModalProps> = ({
 
           {/* Sous-tâches subordonnées récursives (si besoin de décomposer encore plus) */}
           <div className="space-y-2.5 bg-stone-50 p-4 rounded-2xl border border-stone-200/80">
-            <h4 className="font-bold text-stone-800 text-xs flex items-center justify-between">
-              <span>Sous-tâches subordonnées ({subtasks.length})</span>
-              <span className="text-[10px] text-stone-400 font-normal">Décomposition modulaire</span>
-            </h4>
-            <div className="space-y-1.5">
-              {subtasks.map((sub) => (
-                <div key={sub.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 gap-2">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <input
-                      type="checkbox"
-                      checked={sub.completed}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleToggleSubtask(sub.id);
-                      }}
-                      className="w-4 h-4 rounded border-stone-300 text-[#2A7B76] cursor-pointer shrink-0"
-                    />
-                    <span 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedNestedSubtask(sub);
-                      }}
-                      className={`text-xs block truncate cursor-pointer hover:underline flex-1 ${sub.completed ? 'line-through text-stone-400' : 'text-stone-800 font-bold'}`}
-                    >
-                      {sub.title}
-                    </span>
-                    {(sub.status === 'blocked' || sub.isBlocked || (sub.incidents && sub.incidents.length > 0)) && (
-                      <span className="px-1.5 py-0.5 rounded-md font-bold text-[9px] bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-0.5 shrink-0">
-                        <span>🚨</span>
-                        <span>Bloquée</span>
-                      </span>
-                    )}
-                  </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-stone-200/60">
+              <h4 className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
+                <span>Sous-tâches subordonnées</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-200/80 text-stone-700 font-semibold">
+                  {displayedSubtasks.length}/{totalCount}
+                </span>
+              </h4>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedNestedSubtask(sub);
-                      }}
-                      className="px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[10px] font-bold cursor-pointer"
-                    >
-                      Ouvrir ⚙️
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSubtasks(subtasks.filter(s => s.id !== sub.id));
-                      }}
-                      className="text-stone-400 hover:text-rose-600 p-1 cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+              <div className="flex items-center gap-1 self-start sm:self-auto bg-stone-200/70 p-0.5 rounded-xl text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setSubtaskFilterPeriod('last3days')}
+                  className={`px-2 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                    subtaskFilterPeriod === 'last3days'
+                      ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                  title="3 derniers jours uniquement"
+                >
+                  <Filter className="h-2.5 w-2.5" />
+                  <span>3 derniers jours</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubtaskFilterPeriod('all')}
+                  className={`px-2 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                    subtaskFilterPeriod === 'all'
+                      ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                  title="Toutes les sous-tâches"
+                >
+                  <History className="h-2.5 w-2.5" />
+                  <span>Toutes ({totalCount})</span>
+                </button>
+              </div>
+            </div>
+
+            {subtaskFilterPeriod === 'last3days' && hiddenCount > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1.5 text-[10px] text-amber-900 flex items-center justify-between gap-1">
+                <span>💡 {hiddenCount} sous-tâche(s) antérieure(s) masquée(s).</span>
+                <button
+                  type="button"
+                  onClick={() => setSubtaskFilterPeriod('all')}
+                  className="font-bold underline cursor-pointer"
+                >
+                  Afficher tout
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              {displayedSubtasks.length === 0 ? (
+                <div className="text-center py-4 bg-white rounded-xl border border-dashed border-stone-200 text-stone-400 text-xs">
+                  {totalCount > 0 ? `Aucune sur les 3 derniers jours (${totalCount} antérieure${totalCount > 1 ? 's' : ''}).` : 'Aucune sous-tâche subordonnée.'}
                 </div>
-              ))}
+              ) : (
+                displayedSubtasks.map((sub) => {
+                  const relDate = formatSubtaskRelativeDate(sub, draftDueDate);
+                  return (
+                    <div key={sub.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={sub.completed}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleToggleSubtask(sub.id);
+                          }}
+                          className="w-4 h-4 rounded border-stone-300 text-[#2A7B76] cursor-pointer shrink-0"
+                        />
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedNestedSubtask(sub);
+                          }}
+                          className="flex-1 min-w-0 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span 
+                              className={`text-xs block truncate hover:underline ${sub.completed ? 'line-through text-stone-400' : 'text-stone-800 font-bold'}`}
+                            >
+                              {sub.title}
+                            </span>
+                            <span className="text-[9px] font-mono px-1 rounded bg-stone-100 text-stone-500">
+                              📅 {relDate}
+                            </span>
+                          </div>
+                        </div>
+                        {(sub.status === 'blocked' || sub.isBlocked || (sub.incidents && sub.incidents.length > 0)) && (
+                          <span className="px-1.5 py-0.5 rounded-md font-bold text-[9px] bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-0.5 shrink-0">
+                            <span>🚨</span>
+                            <span>Bloquée</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedNestedSubtask(sub);
+                          }}
+                          className="px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[10px] font-bold cursor-pointer"
+                        >
+                          Ouvrir ⚙️
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSubtasks(subtasks.filter(s => s.id !== sub.id));
+                          }}
+                          className="text-stone-400 hover:text-rose-600 p-1 cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             <div className="flex items-center gap-2 pt-1">

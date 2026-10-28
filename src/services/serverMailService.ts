@@ -13,6 +13,10 @@ export interface EmailThreadingOptions {
   eventTitle: string;
   /** Contenu HTML du message */
   htmlContent: string;
+  /** Catégorie de fil pour regrouper tous les mails du même thème (ex: "timesheet", "conges", "missions") */
+  threadCategory?: string;
+  /** Sujet optionnel forcé pour le fil (sinon canonique automatique) */
+  threadSubject?: string;
   /** Nom de l'expéditeur */
   fromName?: string;
   /** Destinataires optionnels de surcharge pour les tests directs */
@@ -80,6 +84,26 @@ function sanitizeThreadKey(name: string, id?: string | number): string {
     .replace(/[^a-z0-9]/g, '-');
   const cleanId = id ? String(id).replace(/[^a-z0-9]/gi, '') : 'main';
   return `${cleanName}-${cleanId}`;
+}
+
+/**
+ * Génère un en-tête Thread-Index standard compatible Microsoft Outlook / Exchange / M365 (RFC MS-OXOMSG).
+ * Structure de base : 6 octets horodatage + 16 octets de hash déterministe (22 octets base64).
+ * Cela force Outlook à regrouper TOUS les messages du même collaborateur et même thème dans la même conversation.
+ */
+function generateOutlookThreadIndex(threadKey: string): string {
+  const buf = Buffer.alloc(22);
+  buf.writeUInt32BE(0x01da4b00, 0); // Filetime de base
+  buf.writeUInt16BE(0x0000, 4);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < threadKey.length; i++) {
+    hash ^= threadKey.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  for (let i = 6; i < 22; i++) {
+    buf[i] = ((hash >> ((i % 4) * 8)) & 0xff) ^ (threadKey.charCodeAt(i % threadKey.length) || 0x42);
+  }
+  return buf.toString('base64');
 }
 
 /**
@@ -332,9 +356,32 @@ export async function sendThreadedEmployeeEmail(
   // Format RFC 5322 strict : "Nom" <adresse@domaine.com>
   const fromAddress = `"${senderName.replace(/"/g, '')}" <${cleanFrom}>`;
 
+  // Thème du fil : détection stricte feuille de temps vs autre démarche RH
+  const isTimesheet = (options.threadCategory === 'timesheet') ||
+    /feuille|timesheet|fiche de temps|plan du jour/i.test(options.eventTitle);
+  const themeKey = isTimesheet ? 'timesheet' : (options.threadCategory || 'rh');
+
+  // RÈGLE ABSOLUE POUR LE GROUPEMENT EN CONVERSATION (GMAIL & OUTLOOK) :
+  // Le Sujet (Subject) DOIT ÊTRE STRICTEMENT CONSTANT pour tous les e-mails d'un même collaborateur sur ce thème.
+  // Jamais de date dans le titre pour ne pas ouvrir une nouvelle boucle chaque jour !
+  const threadSubject = options.threadSubject || (isTimesheet
+    ? `Feuille de temps - ${cleanCollabName}`
+    : (options.eventTitle ? `${options.eventTitle} - ${cleanCollabName}` : `Dossier RH - ${cleanCollabName}`));
+
+  // Domaine expéditeur pour identifiants RFC 2822
+  const domainMatch = cleanFrom.match(/@([^>]+)/);
+  const senderDomain = domainMatch ? domainMatch[1] : 'citrinemobilite.com';
+
+  // Identifiant racine CANONIQUE et UNIQUE par collaborateur et par thème :
+  // Exemple: <citrine-thread-timesheet-kenne-londo-doleres-emp1@citrine-mobilite.com>
+  // Tous les messages quotidiens de ce collaborateur sur ce thème font référence à cette racine.
+  const threadRootId = `<citrine-thread-${themeKey}-${threadKey}@${senderDomain}>`;
+
+  // Identifiant unique pour ce message précis du jour
+  const cleanMessageId = `<citrine-msg-${themeKey}-${threadKey}-${Date.now()}.${Math.random().toString(36).substring(2, 7)}@${senderDomain}>`;
+
   // Éviter la double encapsulation HTML si le contenu est déjà structuré
   const isAlreadyFullHtml = options.htmlContent.includes('CITRINE') || options.htmlContent.includes('<table') || options.htmlContent.includes('<!DOCTYPE');
-  const threadSubject = options.eventTitle ? `${options.eventTitle} - ${cleanCollabName}` : `Notification RH : ${cleanCollabName}`;
 
   const htmlBody = isAlreadyFullHtml
     ? `<!DOCTYPE html>
@@ -355,14 +402,14 @@ export async function sendThreadedEmployeeEmail(
         bodyHtml: options.htmlContent,
       });
 
-  // Version texte brut soignée pour éviter le score spam Outlook "MPART_ALT_DIFF / LOW_TEXT_RATIO"
+  // Version texte brut soignée pour conformité et délivrabilité
   const plainText = [
     `CITRINE MOBILITÉ — GESTION DES RESSOURCES HUMAINES`,
     `Dossier : ${cleanCollabName}`,
-    `Objet : ${options.eventTitle}`,
+    `Fil de discussion : ${threadSubject}`,
     `Date : ${new Intl.DateTimeFormat('fr-FR', { timeZone: 'Africa/Douala', dateStyle: 'full', timeStyle: 'short' }).format(new Date())}`,
     `--------------------------------------------------`,
-    `Le rapport détaillé ainsi que la feuille de temps officielle sont consultables dans le corps du message et via le fichier tableur joint (.xls).`,
+    `La feuille de temps officielle ainsi que le relevé d'activité sont consultables dans le corps du message et via le fichier tableur joint (.xlsx).`,
     ``,
     `Direction des Ressources Humaines & Opérations`,
     `Citrine Mobilité — Douala, Cameroun`,
@@ -396,11 +443,6 @@ export async function sendThreadedEmployeeEmail(
       };
     });
 
-    // Génération d'un Message-ID RFC 2822 valide basé sur le domaine de l'expéditeur
-    const domainMatch = cleanFrom.match(/@([^>]+)/);
-    const senderDomain = domainMatch ? domainMatch[1] : 'citrinemobilite.com';
-    const cleanMessageId = `<citrine-${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${senderDomain}>`;
-
     const info = await transporter.sendMail({
       from: fromAddress,
       to: recipients.join(', '),
@@ -409,10 +451,16 @@ export async function sendThreadedEmployeeEmail(
       text: plainText,
       html: htmlBody,
       messageId: cleanMessageId,
+      inReplyTo: threadRootId,
+      references: [threadRootId],
       date: new Date(),
       attachments,
       headers: {
-        // En-têtes standards professionnels (suppression d'Auto-Submitted et X-Auto-Response-Suppress qui déclenchent le filtre Junk d'Outlook)
+        'In-Reply-To': threadRootId,
+        'References': threadRootId,
+        'Thread-Topic': threadSubject,
+        'Thread-Index': generateOutlookThreadIndex(`${themeKey}-${threadKey}`),
+        'X-Entity-Ref-ID': threadRootId,
         'X-Mailer': 'Citrine RH Mail System 2.1',
         'X-Priority': '3',
         'Priority': 'normal',
@@ -420,11 +468,10 @@ export async function sendThreadedEmployeeEmail(
         'X-MSMail-Priority': 'Normal',
         'MIME-Version': '1.0',
         'Organization': 'Citrine Mobilité',
-        'X-Entity-Ref-ID': threadKey,
       },
     });
 
-    console.log(`✅ [SMTP ENVOYÉ] ID: ${info.messageId} strictement vers RH: [${recipients.join(', ')}]`);
+    console.log(`✅ [SMTP ENVOYÉ THREADÉ] ID: ${info.messageId} | Fil: "${threadSubject}" -> [${recipients.join(', ')}]`);
     return {
       success: true,
       messageId: info.messageId,

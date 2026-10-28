@@ -93,8 +93,10 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
   }, [filteredTasks]);
   const onTimeRate = totalTasks > 0 ? Math.round((onTimeTasks / totalTasks) * 100) : 100;
 
-  // Asana Workload & Velocity Calculation per Employee (Weekly standard: 35 hours)
-  const STANDARD_WEEKLY_CAPACITY = 35;
+  // Capacité et seuil de surcharge Citrine : 12h max / jour, surcharge > 10h / jour (calculée sur les sous-tâches)
+  // Sur une semaine standard de 5 jours : 60h max (12h*5), seuil de surcharge > 50h (10h*5)
+  const STANDARD_WEEKLY_CAPACITY = 60;
+  const OVERLOAD_WEEKLY_THRESHOLD = 50;
 
   const workloadStats = useMemo(() => {
     return effectiveEmployees.map((emp) => {
@@ -116,33 +118,25 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
       const totalAssignedSubtasks = empSubtasks.length;
       const completedSubtaskCount = empSubtasks.filter((s) => s.completed).length;
 
-      // Workload hours estimation
-      // 1. Hours from subtasks
-      let subtasksHours = empSubtasks.reduce((sum, s) => sum + (s.estimatedHours || 2), 0);
-      let subtasksActualHours = empSubtasks.reduce((sum, s) => sum + (s.actualHours || 0), 0);
+      // Workload hours estimation calculée EXCLUSIVEMENT sur les sous-tâches (règle opérationnelle Citrine)
+      let subtasksHours = empSubtasks.reduce((sum, s) => sum + (Number(s.estimatedHours) || 1.5), 0);
+      let subtasksActualHours = empSubtasks.reduce((sum, s) => sum + (Number(s.actualHours) || 0), 0);
 
-      // 2. Hours from main tasks without detailed subtasks
-      let mainTasksHours = empTasks.reduce((sum, t) => {
-        if (t.subtasks && t.subtasks.length > 0) return sum; // Avoid double counting
-        let h = 4;
-        if (t.priority === 'urgent') h = 10;
-        else if (t.priority === 'high') h = 7;
-        else if (t.priority === 'low') h = 2;
-        return sum + h;
-      }, 0);
+      // Si une tâche n'a pas encore été décomposée en sous-tâches, compter 1h forfaitaire
+      let mainTasksWithoutSubtasksCount = empTasks.filter(t => !t.subtasks || t.subtasks.length === 0).length;
 
-      const totalEstimatedHours = subtasksHours + mainTasksHours;
+      const totalEstimatedHours = subtasksHours + mainTasksWithoutSubtasksCount;
       const totalWorkloadHours = Math.max(totalEstimatedHours, 0);
 
       // Completion rate dynamic (Takes into account subtasks and milestones progress)
       const empDynamicProgressSum = empTasks.reduce((sum, t) => sum + getTaskDynamicProgress(t), 0);
       const combinedRate = totalAssignedTasks > 0 ? Math.round(empDynamicProgressSum / totalAssignedTasks) : 0;
 
-      // Capacity Status
+      // Capacity Status : Surcharge si plus de 10h/jour (soit > 50h/semaine sur 5 jours, capacité max 12h/jour)
       let capacityStatus: 'overloaded' | 'optimal' | 'available' = 'optimal';
-      if (totalWorkloadHours > STANDARD_WEEKLY_CAPACITY) {
+      if (totalWorkloadHours > OVERLOAD_WEEKLY_THRESHOLD) {
         capacityStatus = 'overloaded';
-      } else if (totalWorkloadHours < 18) {
+      } else if (totalWorkloadHours < 30) {
         capacityStatus = 'available';
       }
 
@@ -153,7 +147,7 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
         totalSubtasks: totalAssignedSubtasks,
         completedSubtasks: completedSubtaskCount,
         subtasksHours,
-        mainTasksHours,
+        mainTasksHours: mainTasksWithoutSubtasksCount,
         totalHours: totalWorkloadHours,
         actualHours: subtasksActualHours,
         completionRate: combinedRate,

@@ -16,6 +16,8 @@ import { pushNotificationBridgeService } from '../../services/pushNotificationBr
 import { SubtaskCreateModal } from './SubtaskCreateModal';
 import { SubtaskDetailModal } from './SubtaskDetailModal';
 import { canManageTaskAssignment, isSelfOnlyUser } from '../../utils/roleUtils';
+import { filterAndSortSubtasks, formatSubtaskRelativeDate } from '../../utils/subtaskFilterUtils';
+import { Filter, History } from 'lucide-react';
 
 interface TaskDetailDrawerProps {
   task: Task | null;
@@ -77,6 +79,11 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   const [isSavedRecently, setIsSavedRecently] = useState(false);
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
   const [selectedSubtaskForDetail, setSelectedSubtaskForDetail] = useState<Subtask | null>(null);
+  const [subtaskFilterPeriod, setSubtaskFilterPeriod] = useState<'last3days' | 'all'>('last3days');
+
+  const { displayedSubtasks, hiddenCount, totalCount } = React.useMemo(() => {
+    return filterAndSortSubtasks(subtasks, subtaskFilterPeriod, task.date);
+  }, [subtasks, subtaskFilterPeriod, task.date]);
 
   const handleCreateSubtask = (newSub: Subtask) => {
     const updated = [...subtasks, newSub];
@@ -145,10 +152,13 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   // Subtask handlers
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
+    const nowIso = new Date().toISOString();
     const newSub: Subtask = {
       id: `sub-${Date.now()}`,
       title: newSubtaskTitle.trim(),
       completed: false,
+      createdAt: nowIso,
+      dueDate: nowIso.split('T')[0],
       subtasks: [],
     };
     const updated = [...subtasks, newSub];
@@ -392,96 +402,198 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
           </div>
 
           {/* Section Sous-tâches */}
-          <div className="space-y-2.5 bg-stone-50 p-4 rounded-2xl border border-stone-200/80">
-            <h4 className="font-bold text-stone-800 text-xs">Sous-tâches</h4>
-            <div className="space-y-1.5">
-              {subtasks.map((sub: any) => (
-                <div key={sub.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 gap-2">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <input
-                      type="checkbox"
-                      checked={sub.completed}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleToggleSubtask(sub.id);
-                      }}
-                      className="w-4 h-4 rounded border-stone-300 text-[#2A7B76] cursor-pointer shrink-0"
-                    />
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedSubtaskForDetail(sub);
-                      }}
-                      className="min-w-0 flex-1 cursor-pointer group"
-                      title="Cliquer pour ouvrir le détail complet de cette sous-tâche"
-                    >
-                      <h4 
-                        className={`text-sm sm:text-base font-bold text-stone-900 group-hover:text-[#2A7B76] transition truncate ${sub.completed ? 'line-through text-stone-400 font-medium' : ''}`}
-                      >
-                        {sub.title} {sub.subtasks && sub.subtasks.length > 0 ? `(${sub.subtasks.length} sous-tâche(s))` : ''}
-                      </h4>
-                      {sub.description && (
-                        <p className="text-[11px] text-stone-500 truncate mt-0.5">{sub.description}</p>
-                      )}
-                      {(sub.status === 'blocked' || sub.isBlocked || sub.blockerReason || (sub.incidents && sub.incidents.length > 0)) && (
-                        <div className="text-[10px] text-rose-700 font-semibold bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md mt-1 inline-flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600" />
-                          <span className="truncate">Blocage : {sub.blockerReason || (sub.incidents && sub.incidents.length > 0 ? sub.incidents[sub.incidents.length - 1].title : 'Difficulté signalée')}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+          <div className="space-y-3 bg-stone-50 p-4 rounded-2xl border border-stone-200/80">
+            {/* Header avec contrôle de filtre des sous-tâches */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-stone-200/60">
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
+                  <span>📋 Sous-tâches</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-200/80 text-stone-700 font-semibold">
+                    {displayedSubtasks.length}/{totalCount}
+                  </span>
+                </h4>
+                <span className="text-[10px] text-stone-400 hidden sm:inline" title="Triées automatiquement de la plus récente à la plus ancienne">
+                  • Plus récentes d'abord
+                </span>
+              </div>
 
-                  <div className="flex items-center gap-2 text-[10px] shrink-0 self-end sm:self-auto">
-                    {(sub.status === 'blocked' || sub.isBlocked || (sub.incidents && sub.incidents.length > 0)) && (
-                      <span className="px-2 py-0.5 rounded-md font-bold text-[9px] bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 shrink-0">
-                        <AlertTriangle className="h-2.5 w-2.5 text-rose-600" />
-                        <span>Bloquée</span>
-                      </span>
-                    )}
-                    {sub.assignedTo && (
-                      <span className="bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-medium">
-                        {sub.assignedTo}
-                      </span>
-                    )}
-                    {sub.estimatedHours && (
-                      <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-mono font-bold">
-                        {sub.estimatedHours}h
-                      </span>
-                    )}
-                    {sub.priority && (
-                      <span className={`px-1.5 py-0.5 rounded-md font-bold uppercase text-[9px] ${
-                        sub.priority === 'urgent' || sub.priority === 'high' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-stone-100 text-stone-600'
-                      }`}>
-                        {sub.priority}
-                      </span>
-                    )}
+              {/* Boutons de filtre 3 derniers jours vs Toutes */}
+              <div className="flex items-center gap-1 self-start sm:self-auto bg-stone-200/70 p-0.5 rounded-xl text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setSubtaskFilterPeriod('last3days')}
+                  className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                    subtaskFilterPeriod === 'last3days'
+                      ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                  title="Afficher uniquement les sous-tâches des 3 derniers jours (glissants)"
+                >
+                  <Filter className="h-2.5 w-2.5" />
+                  <span>3 derniers jours</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubtaskFilterPeriod('all')}
+                  className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                    subtaskFilterPeriod === 'all'
+                      ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                  title="Afficher toutes les sous-tâches sans filtre temporel"
+                >
+                  <History className="h-2.5 w-2.5" />
+                  <span>Toutes ({totalCount})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Alerte si des sous-tâches antérieures sont masquées */}
+            {subtaskFilterPeriod === 'last3days' && hiddenCount > 0 && (
+              <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl px-3 py-2 text-[11px] text-amber-900 flex items-center justify-between gap-2 animate-in fade-in">
+                <span className="flex items-center gap-1.5 truncate">
+                  <span>💡</span>
+                  <span className="truncate">
+                    <strong>{hiddenCount} sous-tâche{hiddenCount > 1 ? 's' : ''} antérieure{hiddenCount > 1 ? 's' : ''}</strong> (+ de 3 jours) masquée{hiddenCount > 1 ? 's' : ''} pour la lisibilité.
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSubtaskFilterPeriod('all')}
+                  className="text-amber-800 hover:text-amber-950 font-bold underline shrink-0 cursor-pointer text-[10px]"
+                >
+                  Afficher tout
+                </button>
+              </div>
+            )}
+
+            {/* Liste des sous-tâches filtrées & ordonnées de la plus récente à la plus ancienne */}
+            <div className="space-y-1.5">
+              {displayedSubtasks.length === 0 ? (
+                <div className="text-center py-6 bg-white rounded-xl border border-dashed border-stone-200 text-stone-400 text-xs space-y-1">
+                  <p>
+                    {totalCount > 0
+                      ? `Aucune sous-tâche sur les 3 derniers jours (${totalCount} antérieure${totalCount > 1 ? 's' : ''}).`
+                      : 'Aucune sous-tâche pour le moment.'}
+                  </p>
+                  {totalCount > 0 && subtaskFilterPeriod === 'last3days' && (
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedSubtaskForDetail(sub);
-                      }}
-                      className="px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[10px] font-bold cursor-pointer"
-                      title="Ouvrir le détail complet et options de la sous-tâche"
+                      onClick={() => setSubtaskFilterPeriod('all')}
+                      className="text-[#2A7B76] font-bold hover:underline text-xs"
                     >
-                      Ouvrir ⚙️
+                      Voir les {totalCount} sous-tâches antérieures
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const updated = subtasks.filter((s) => s.id !== sub.id);
-                        setSubtasks(updated);
-                        onSaveTask({ ...task, subtasks: updated });
-                      }}
-                      className="text-stone-400 hover:text-rose-600 p-1 cursor-pointer transition"
-                      title="Supprimer cette sous-tâche"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  )}
                 </div>
-              ))}
+              ) : (
+                displayedSubtasks.map((sub: Subtask) => {
+                  const relativeDate = formatSubtaskRelativeDate(sub, task.date);
+                  return (
+                    <div
+                      key={sub.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 gap-2 hover:border-[#2A7B76]/40 transition"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={sub.completed}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleToggleSubtask(sub.id);
+                          }}
+                          className="w-4 h-4 rounded border-stone-300 text-[#2A7B76] cursor-pointer shrink-0"
+                        />
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSubtaskForDetail(sub);
+                          }}
+                          className="min-w-0 flex-1 cursor-pointer group"
+                          title="Cliquer pour ouvrir le détail complet de cette sous-tâche"
+                        >
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4
+                              className={`text-sm sm:text-base font-bold text-stone-900 group-hover:text-[#2A7B76] transition truncate ${
+                                sub.completed ? 'line-through text-stone-400 font-medium' : ''
+                              }`}
+                            >
+                              {sub.title} {sub.subtasks && sub.subtasks.length > 0 ? `(${sub.subtasks.length} sous-tâche(s))` : ''}
+                            </h4>
+                            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-stone-100 text-stone-500 font-medium">
+                              📅 {relativeDate}
+                            </span>
+                          </div>
+                          {sub.description && (
+                            <p className="text-[11px] text-stone-500 truncate mt-0.5">{sub.description}</p>
+                          )}
+                          {(sub.status === 'blocked' || sub.isBlocked || sub.blockerReason || (sub.incidents && sub.incidents.length > 0)) && (
+                            <div className="text-[10px] text-rose-700 font-semibold bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md mt-1 inline-flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600" />
+                              <span className="truncate">
+                                Blocage : {sub.blockerReason || (sub.incidents && sub.incidents.length > 0 ? sub.incidents[sub.incidents.length - 1].title : 'Difficulté signalée')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[10px] shrink-0 self-end sm:self-auto">
+                        {(sub.status === 'blocked' || sub.isBlocked || (sub.incidents && sub.incidents.length > 0)) && (
+                          <span className="px-2 py-0.5 rounded-md font-bold text-[9px] bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 shrink-0">
+                            <AlertTriangle className="h-2.5 w-2.5 text-rose-600" />
+                            <span>Bloquée</span>
+                          </span>
+                        )}
+                        {sub.assignedTo && (
+                          <span className="bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-medium">
+                            {sub.assignedTo}
+                          </span>
+                        )}
+                        {sub.estimatedHours && (
+                          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-mono font-bold">
+                            {sub.estimatedHours}h
+                          </span>
+                        )}
+                        {sub.priority && (
+                          <span
+                            className={`px-1.5 py-0.5 rounded-md font-bold uppercase text-[9px] ${
+                              sub.priority === 'urgent' || sub.priority === 'high'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-stone-100 text-stone-600'
+                            }`}
+                          >
+                            {sub.priority}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSubtaskForDetail(sub);
+                          }}
+                          className="px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[10px] font-bold cursor-pointer"
+                          title="Ouvrir le détail complet et options de la sous-tâche"
+                        >
+                          Ouvrir ⚙️
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = subtasks.filter((s) => s.id !== sub.id);
+                            setSubtasks(updated);
+                            onSaveTask({ ...task, subtasks: updated });
+                          }}
+                          className="text-stone-400 hover:text-rose-600 p-1 cursor-pointer transition"
+                          title="Supprimer cette sous-tâche"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             <div className="pt-1 pb-1">

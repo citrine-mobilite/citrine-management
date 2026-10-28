@@ -127,20 +127,17 @@ export function computeEmployeeRendement(
     }
 
     // Heures
-    let taskEstimated = 4;
-    if (t.priority === 'urgent') taskEstimated = 10;
-    else if (t.priority === 'high' || t.priority === 'haut') taskEstimated = 7;
-    else if (t.priority === 'low') taskEstimated = 2;
-
+    // Heures de charge calculées exclusivement sur les sous-tâches (règle opérationnelle Citrine)
     if (t.subtasks && t.subtasks.length > 0) {
       totalSubtasks += t.subtasks.length;
       t.subtasks.forEach((s) => {
         if (s.completed || s.status === 'completed') completedSubtasks++;
-        estimatedHoursTotal += s.estimatedHours || 2;
-        actualHoursTotal += s.actualHours || 0;
+        estimatedHoursTotal += Number(s.estimatedHours) || 1.5;
+        actualHoursTotal += Number(s.actualHours) || 0;
       });
     } else {
-      estimatedHoursTotal += taskEstimated;
+      // Tâche élémentaire sans sous-tâche découpée
+      estimatedHoursTotal += 1;
     }
 
     totalProgressSum += getTaskDynamicProgress(t);
@@ -154,11 +151,11 @@ export function computeEmployeeRendement(
     ? Math.round(0.5 * assiduiteRate + 0.5 * taskRendementRate)
     : assiduiteRate;
 
-  // Statut capacitaire (Semaine standard 35h)
+  // Statut capacitaire (Surcharge > 10h/jour, soit > 50h sur une semaine de 5 jours)
   let capacityStatus: 'overloaded' | 'optimal' | 'available' = 'optimal';
-  if (estimatedHoursTotal > 35) {
+  if (estimatedHoursTotal > 50) {
     capacityStatus = 'overloaded';
-  } else if (estimatedHoursTotal < 18) {
+  } else if (estimatedHoursTotal < 30) {
     capacityStatus = 'available';
   }
 

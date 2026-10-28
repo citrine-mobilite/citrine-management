@@ -266,7 +266,7 @@ async function startServer() {
   // ✉️ API Envoi d'Email Threadé par Collaborateur (strictement vers HR_NOTIFICATION_EMAIL)
   app.post("/api/mail/send-threaded", async (req: express.Request, res: express.Response) => {
     try {
-      const { employeeName, employeeId, eventTitle, htmlContent, attachments, smtpConfig } = req.body;
+      const { employeeName, employeeId, eventTitle, htmlContent, attachments, smtpConfig, threadCategory, threadSubject } = req.body;
       if (!employeeName || !eventTitle || !htmlContent) {
         return res.status(400).json({
           success: false,
@@ -278,6 +278,8 @@ async function startServer() {
         employeeName,
         employeeId,
         eventTitle,
+        threadCategory,
+        threadSubject,
         htmlContent,
         attachments,
       }, smtpConfig);
@@ -529,7 +531,9 @@ async function startServer() {
             employeeName: empName,
             employeeId: empId,
             employeeEmail: empEmail,
-            eventTitle: `Fiche de temps de la journée`,
+            eventTitle: `Feuille de temps`,
+            threadCategory: 'timesheet',
+            threadSubject: `Feuille de temps - ${empName}`,
             htmlContent,
             recipientEmails: adminEmails,
             attachments: [

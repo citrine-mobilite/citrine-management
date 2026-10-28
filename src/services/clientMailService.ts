@@ -5,6 +5,8 @@ export interface SendThreadedEmailInput {
   employeeId?: string | number;
   employeeEmail?: string;
   eventTitle: string;
+  threadCategory?: string;
+  threadSubject?: string;
   htmlContent: string;
   recipientEmails?: string[];
   attachments?: Array<{

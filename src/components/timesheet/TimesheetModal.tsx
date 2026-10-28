@@ -426,10 +426,12 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   </div>
 
                   <div className="text-right shrink-0 font-mono text-[11px] bg-white/90 p-2.5 rounded-xl border border-stone-200/80 shadow-3xs space-y-0.5">
-                    <div><strong>Charge nette :</strong> 8h max (480 min)</div>
-                    <div className="text-stone-500">🍽️ Pause 13h-14h décomptée</div>
+                    <div><strong>Capacité max :</strong> 12h / jour</div>
+                    <div className={dailyData.capacity.capacityStatus === 'overloaded' ? 'text-rose-600 font-bold' : 'text-stone-500'}>
+                      {dailyData.capacity.capacityStatus === 'overloaded' ? '⚠️ Surcharge (> 10h)' : 'Seuil surcharge > 10h'}
+                    </div>
                     <div className="font-bold text-[#2A7B76]">
-                      {dailyData.totalTasks} sous-tâche(s) / max conseillé : {dailyData.capacity.maxRecommendedSubtasks}
+                      {dailyData.totalTasks} sous-tâche(s) ({Math.round(dailyData.capacity.plannedMinutes / 60)}h)
                     </div>
                   </div>
                 </div>
@@ -439,7 +441,7 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   <div className="bg-[#164e4b] text-white px-3 py-2 font-bold text-xs flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span>🎯</span>
-                      <span>LES 3 PRIORITÉS DU JOUR — Missions clés &amp; Job Description</span>
+                      <span>LES 3 PRIORITÉS DU JOUR — si je ne fais que ça, la journée est réussie</span>
                     </div>
                     <span className="text-[10px] text-emerald-200 font-normal">
                       Piliers majeurs de la journée
@@ -546,59 +548,42 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   </table>
                 </div>
 
-                {/* 3. PLAN HORAIRE DYNAMIQUE (AVEC PAUSE OBLIGATOIRE 13h-14h & RÉSOLUTIONS) */}
+                {/* 3. PLAN HORAIRE DYNAMIQUE (AVEC CRÉNEAU TAMPON / PAUSE) */}
                 <div className="rounded-xl border border-stone-300 overflow-hidden">
                   <div className="bg-[#164e4b] text-white px-3 py-2 font-bold text-xs flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span>🕐</span>
-                      <span>PLAN HORAIRE — Résolution des sous-tâches &amp; Pause de midi</span>
+                      <span>🕒</span>
+                      <span>PLAN HORAIRE — garde un créneau « tampon » pour les imprévus</span>
                     </div>
-                    <span className="text-[10px] bg-sky-500/30 text-sky-200 border border-sky-400/30 px-2 py-0.5 rounded-full font-mono">
-                      13h00 – 14h00 : Pause Déjeuner
+                    <span className="text-[10px] bg-amber-400/30 text-amber-100 border border-amber-300/40 px-2 py-0.5 rounded-full font-mono">
+                      13:00 – 14:00 : TAMPON IMPRÉVUS / pause
                     </span>
                   </div>
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[#2A7B76] text-white font-bold text-[11px]">
                       <tr>
-                        <th className="py-2 px-3 w-36">Heure</th>
-                        <th className="py-2 px-3">Ce que je traite sur ce créneau</th>
-                        <th className="py-2 px-3">Comment c'est résolu / Statut</th>
+                        <th className="py-2 px-3 w-40">Heure</th>
+                        <th className="py-2 px-3">Ce que je fais sur ce créneau</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-200">
                       {dailyData.scheduleSlots.map((s, idx) => {
-                        const isBreak = s.isBreak || s.timeRange.includes('13:00');
+                        const isBuffer = s.isBreak || s.isBuffer || s.timeRange.includes('13:00');
 
                         return (
                           <tr 
                             key={idx} 
                             className={`transition ${
-                              isBreak 
-                                ? 'bg-sky-50/90 font-bold text-sky-950 border-y-2 border-sky-200' 
-                                : s.isBuffer 
-                                ? 'bg-amber-50/80 font-bold text-amber-900' 
+                              isBuffer 
+                                ? 'bg-amber-50/90 font-bold text-amber-950 border-y border-amber-200' 
                                 : 'bg-white hover:bg-stone-50/70'
                             }`}
                           >
                             <td className="py-2.5 px-3 font-mono font-bold text-stone-800">
                               {s.timeRange}
                             </td>
-                            <td className="py-2.5 px-3">
-                              <div className="flex items-center gap-1.5">
-                                {isBreak ? (
-                                  <Coffee className="w-4 h-4 text-sky-600 shrink-0" />
-                                ) : (
-                                  <Check className="w-3.5 h-3.5 text-[#2A7B76] shrink-0" />
-                                )}
-                                <span className={isBreak ? 'text-sky-900 font-bold' : 'text-blue-900 font-semibold'}>
-                                  {s.activity}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-2.5 px-3 text-stone-600">
-                              <span className={isBreak ? 'text-sky-800 italic font-medium' : 'text-stone-700'}>
-                                {s.resolutionNote}
-                              </span>
+                            <td className={`py-2.5 px-3 font-bold ${isBuffer ? 'text-amber-800' : 'text-blue-800'}`}>
+                              {isBuffer ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity}
                             </td>
                           </tr>
                         );

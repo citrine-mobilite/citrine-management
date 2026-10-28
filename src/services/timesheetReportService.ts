@@ -132,14 +132,15 @@ export function normalizeStatusBadge(status?: string, completed?: boolean): { la
 
 /**
  * Construit les données dérivées nécessaires au Plan du Jour officiel Citrine
+ * Reproduisant à 100% la structure de calcul de la feuille de temps de Statistiques
  */
 function preparePlanDuJourData(data: TimesheetReportData) {
-  const dept = (data.department || 'IT').toUpperCase();
+  const dept = (data.department || 'Direction Générale').toUpperCase();
   const dateText = data.dateStr || new Date().toLocaleDateString('fr-FR');
   const locationText = data.location || 'Douala';
   const dayText = data.dayName || dateText;
 
-  // 1. Top 3 priorités
+  // 1. Top 3 priorités (Missions majeures & Job Description)
   let topPriorities = data.topPriorities || [];
   if (topPriorities.length === 0) {
     const uniqueParents: string[] = [];
@@ -155,64 +156,98 @@ function preparePlanDuJourData(data: TimesheetReportData) {
       title: p,
       priority: idx === 0 ? 'P1' : idx === 1 ? 'P2' : 'P3',
       status: data.items.filter((i) => i.taskTitle === p).every((i) => i.status === 'completed') ? 'Fait' : 'En cours',
+      isMilestone: false,
     }));
 
     if (topPriorities.length === 0) {
       topPriorities = [
-        { title: 'Prise de contact & coordination', priority: 'P1', status: 'Fait' },
-        { title: 'Exécution des livrables clés', priority: 'P2', status: 'En cours' },
-        { title: 'Clôture et revue opérationnelle', priority: 'P3', status: 'En cours' },
+        { title: 'Prise de contact & coordination opérationnelle', priority: 'P1', status: 'Fait' },
+        { title: 'Traitement des sous-tâches prioritaires', priority: 'P2', status: 'En cours' },
+        { title: 'Clôture, bilan et transmission de la feuille de temps', priority: 'P3', status: 'En cours' },
       ];
     }
   }
 
-  // 2. Tâches détaillées
+  // 2. Tâches détaillées (Sous-tâches concrètes traitées)
   const tasks = data.items.map((item, idx) => {
-    const isDone = item.status === 'completed' || item.status === 'fait' || item.status === 'done';
-    const isInProgress = item.status === 'in_progress' || item.status === 'en_cours';
-    const statusText = isDone ? 'Fait' : isInProgress ? 'En cours' : 'À faire';
+    const isDone = item.status === 'completed' || item.status === 'fait' || item.status === 'done' || item.statusLabel?.includes('TERM');
+    const isInProgress = item.status === 'in_progress' || item.status === 'en_cours' || item.statusLabel?.includes('COURS');
+    const isBlocked = item.status === 'blocked' || item.isBlocked;
+    const statusText = isDone ? 'Fait' : isBlocked ? 'Bloqué' : isInProgress ? 'En cours' : 'À faire';
+
+    let prioLabel: 'P1' | 'P2' | 'P3' = 'P2';
+    if (idx === 0) prioLabel = 'P1';
+    else if (idx >= 3) prioLabel = 'P3';
 
     return {
       title: item.subTitle || item.taskTitle,
-      domain: item.taskTitle || 'Autre',
-      priorityLabel: (idx === 0 ? 'P1' : idx === 1 ? 'P2' : 'P3') as 'P1' | 'P2' | 'P3',
-      estimatedMinutes: Math.round((item.estimatedHours || 1) * 60),
+      parentTaskTitle: item.taskTitle || item.subTitle || 'Mission Opérationnelle',
+      domain: item.taskTitle || 'Général',
+      priorityLabel: prioLabel,
+      estimatedMinutes: Math.round((item.estimatedHours || 1.5) * 60),
       dueDate: dateText,
       status: statusText,
       isDone,
+      isBlocked,
     };
   });
 
-  const totalTasks = tasks.length || topPriorities.length;
-  const completedTasks = tasks.filter((t) => t.isDone).length || topPriorities.filter((p) => p.status === 'Fait').length;
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter((t) => t.isDone).length;
   const ratePercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   const postponedCount = Math.max(0, totalTasks - completedTasks);
 
-  // 3. Plan horaire standard Citrine avec pause 13h-14h
+  // 3. Calcul de capacité journalière (basée sur les sous-tâches, 12h max, seuil de surcharge > 10h par jour)
+  const workMinutesNet = 720; // 12h maximum par jour
+  const plannedMinutes = tasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+  const activeMilestone = topPriorities.find((p) => p.isMilestone);
+  const hasMilestone = Boolean(activeMilestone);
+  const maxRecommendedSubtasks = hasMilestone ? 5 : 8;
+
+  let capacityStatus: 'optimal' | 'overloaded' | 'available' = 'optimal';
+  let capacityAdvice = '';
+
+  if (plannedMinutes > 600) {
+    // Plus de 10h par jour (> 600 min) = Surcharge effective
+    capacityStatus = 'overloaded';
+    capacityAdvice = `⚠️ Surcharge détectée : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (dépassement du seuil de 10h/jour, capacité max 12h). Risque d'inachèvement : priorisez ou reportez certaines sous-tâches.`;
+  } else if (plannedMinutes >= 420) {
+    // 7h à 10h (420 à 600 min) = Charge nominale et équilibrée
+    capacityStatus = 'optimal';
+    capacityAdvice = `✅ Charge nominale et réaliste : ${Math.round(plannedMinutes / 60)}h estimées sur les sous-tâches (dans la plage recommandée de 7h à 10h, max 12h/jour).`;
+  } else {
+    // Moins de 7h = Capacité disponible
+    capacityStatus = 'available';
+    capacityAdvice = `💡 Capacité disponible : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (capacité max : 12h). Vous pouvez traiter des sous-tâches supplémentaires.`;
+  }
+
+  // 4. Plan horaire dynamique avec résolution et pause de midi
   let scheduleSlots = data.scheduleSlots || [];
   if (scheduleSlots.length === 0) {
-    const p1 = topPriorities[0]?.title || tasks[0]?.title || 'Prise de contact';
-    const p2 = topPriorities[1]?.title || tasks[1]?.title || 'Exécution opérationnelle';
-    const p3 = topPriorities[2]?.title || tasks[2]?.title || 'Création et finalisation des tâches';
-    const p4 = tasks[3]?.title || 'Revue et synthèse de la journée';
+    const s1 = tasks[0]?.title || topPriorities[0]?.title || 'Coordination et démarrage';
+    const s2 = tasks[1]?.title || topPriorities[1]?.title || 'Exécution des livrables opérationnels';
+    const s3 = tasks[2]?.title || 'Poursuite et finalisation des actions';
+    const s4 = tasks[3]?.title || 'Synthèse, reporting et revue de fin de journée';
 
     scheduleSlots = [
-      { timeRange: '08:00 – 09:00', activity: p1 },
-      { timeRange: '09:00 – 13:00', activity: p2 },
-      { timeRange: '11:00 – 13:00', activity: p3 },
-      { timeRange: '13:00 – 14:00', activity: '⚡ TAMPON IMPRÉVUS / pause', isBuffer: true, isBreak: true },
-      { timeRange: '14:00 – 17:00', activity: p4 },
+      { timeRange: '08:00 – 10:30', activity: s1, resolutionNote: tasks[0]?.isDone ? 'Sous-tâche finalisée avec succès' : 'Traitement en cours' },
+      { timeRange: '10:30 – 13:00', activity: s2, resolutionNote: tasks[1]?.isDone ? 'Livrables produits et vérifiés' : 'Avancement nominal' },
+      { timeRange: '13:00 – 14:00', activity: 'Pause Déjeuner / Repas & Décompression', isBreak: true, isBuffer: true, resolutionNote: 'Pause obligatoire 13h–14h respectée' },
+      { timeRange: '14:00 – 16:30', activity: s3, resolutionNote: tasks[2]?.isDone ? 'Terminé' : 'En cours d’achèvement' },
+      { timeRange: '16:30 – 17:30', activity: s4, isBuffer: true, resolutionNote: 'Revue des engagements, clôture & envoi feuille de temps' },
     ];
   }
 
-  // 4. Imprévus
+  // 5. Imprévus survenus aujourd'hui
   const unforeseenEvents = data.blockers.map((b) => ({
     time: b.time || 'Journée',
-    subject: b.sourceTask ? `[${b.sourceTask}] ${b.reason}` : b.reason,
+    subject: b.reason,
+    sourceTask: b.sourceTask || '',
+    status: b.status || 'Bloqué',
     lostMinutes: 30,
   }));
 
-  // 5. Bilan fin de journée
+  // 6. Bilan fin de journée
   let postponedTasks = data.postponedTasks || [];
   if (postponedTasks.length === 0) {
     postponedTasks = tasks.filter((t) => !t.isDone).map((t) => t.title);
@@ -220,7 +255,7 @@ function preparePlanDuJourData(data: TimesheetReportData) {
 
   const managerAlertPoint = data.managerPoints.length > 0
     ? data.managerPoints.map((p) => p.content).join(' ; ')
-    : 'Aucun blocage majeur rencontré aujourd’hui.';
+    : 'Aucun blocage particulier à signaler.';
 
   return {
     dept,
@@ -233,10 +268,18 @@ function preparePlanDuJourData(data: TimesheetReportData) {
     completedTasks,
     ratePercentage,
     postponedCount,
+    workMinutesNet,
+    plannedMinutes,
+    hasMilestone,
+    milestoneTitle: activeMilestone?.title,
+    maxRecommendedSubtasks,
+    capacityStatus,
+    capacityAdvice,
     scheduleSlots,
     unforeseenEvents,
     postponedTasks,
     managerAlertPoint,
+    managerPoints: data.managerPoints,
   };
 }
 
@@ -420,28 +463,6 @@ export function buildPlanDuJourExcelHtml(data: TimesheetReportData): string {
           </td>
         </tr>
       </table>
-
-      <!-- 6. COMMENT L'UTILISER -->
-      <table border="0" style="width: 100%; margin-top: 10px;">
-        <tr>
-          <td colspan="6" class="guide-title" style="border: none;">Comment l'utiliser</td>
-        </tr>
-        <tr>
-          <td colspan="6" class="guide-text" style="border: none;">
-            • Le matin (5 min) : écris tes 3 priorités, liste tes tâches, choisis P1/P2/P3, pose-les dans le plan horaire. Garde le créneau tampon libre.
-          </td>
-        </tr>
-        <tr>
-          <td colspan="6" class="guide-text" style="border: none;">
-            • Dans la journée : mets à jour le Statut (menu déroulant). Note chaque imprévu d'une ligne pour voir où part ton temps.
-          </td>
-        </tr>
-        <tr>
-          <td colspan="6" class="guide-text" style="border: none;">
-            • Le soir (2 min) : reporte ce qui n'est pas fait à demain, écris le point manager. Recopie les chiffres dans l'onglet « Suivi manager ».
-          </td>
-        </tr>
-      </table>
     </body>
     </html>
   `;
@@ -455,308 +476,330 @@ export function buildPlanDuJourExcelHtml(data: TimesheetReportData): string {
  * Construit le corps HTML de la fiche de temps pour le mail
  * Design Exécutif Haut de Gamme (Asana / Linear) avec KPI Flash, badges modernes et respect de l'identité Citrine
  */
+/**
+ * Construit le corps HTML de la fiche de temps pour le mail
+ * IDENTIQUE STRICTEMENT au format de la feuille de temps affichée dans l'onglet Statistiques
+ */
 export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
   const p = preparePlanDuJourData(data);
   const employeeName = data.employeeName || 'Collaborateur';
-  const hasBlockers = p.unforeseenEvents.length > 0 || (p.managerAlertPoint && !p.managerAlertPoint.toLowerCase().includes('aucun'));
-  
-  // Couleurs dynamiques selon taux de réussite
-  const rateColor = p.ratePercentage >= 80 ? '#059669' : p.ratePercentage >= 50 ? '#d97706' : '#dc2626';
-  const rateBg = p.ratePercentage >= 80 ? '#ecfdf5' : p.ratePercentage >= 50 ? '#fffbeb' : '#fef2f2';
+
+  const capacityBg = p.capacityStatus === 'overloaded' ? '#fff1f2' : (p.capacityStatus === 'optimal' ? '#ecfdf5' : '#f0fdfa');
+  const capacityBorder = p.capacityStatus === 'overloaded' ? '#fecdd3' : (p.capacityStatus === 'optimal' ? '#a7f3d0' : '#99f6e4');
+  const capacityColor = p.capacityStatus === 'overloaded' ? '#9f1239' : (p.capacityStatus === 'optimal' ? '#064e3b' : '#115e59');
 
   return `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 24px 12px; color: #1e293b;">
-      <div style="max-width: 780px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);">
+    <div style="font-family: Calibri, 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif; background-color: #f5f5f4; padding: 20px 10px; color: #1c1917;">
+      <div style="max-width: 780px; margin: 0 auto; background-color: #ffffff; padding: 24px; border-radius: 16px; border: 1px solid #d6d3d1; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05); font-size: 12px; color: #1c1917;">
         
-        <!-- EN-TÊTE CITRINE OFFICIEL -->
-        <div style="background: linear-gradient(135deg, #0e3d2f 0%, #164e4b 100%); padding: 24px 28px; color: #ffffff;">
+        <!-- EN-TÊTE CITRINE PLAN DU JOUR (IDENTIQUE AU MODAL STATISTIQUES) -->
+        <div style="border-bottom: 2px solid #164e4b; padding-bottom: 12px; margin-bottom: 16px;">
           <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
             <tr>
-              <td>
-                <div style="font-family: Georgia, serif; font-size: 26px; font-weight: bold; font-style: italic; letter-spacing: 0.5px; color: #ffffff;">
+              <td style="vertical-align: top;">
+                <div style="font-family: Georgia, serif; font-size: 26px; font-weight: 900; font-style: italic; color: #164e4b; letter-spacing: 0.5px; line-height: 1;">
                   CITRINE
                 </div>
-                <div style="font-size: 13px; font-weight: 600; color: #fde68a; letter-spacing: 0.5px; margin-top: 4px; text-transform: uppercase;">
+                <div style="font-size: 13px; font-weight: 800; color: #164e4b; margin-top: 4px; text-transform: uppercase;">
                   PLAN DU JOUR — ${p.dept}
                 </div>
               </td>
-              <td align="right" style="vertical-align: top;">
-                <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 20px; padding: 6px 14px; font-size: 12px; font-weight: 600; color: #ffffff;">
-                  📍 ${p.locationText} • ${p.dayText}
-                </div>
+              <td align="right" style="vertical-align: top; font-size: 11px; color: #44403c; line-height: 1.5; font-family: monospace;">
+                <div><strong>Collaborateur :</strong> ${employeeName}</div>
+                <div><strong>Lieu :</strong> Douala • <strong>Département :</strong> ${p.dept}</div>
+                <div><strong>Date :</strong> ${p.dateText} (${p.dayText})</div>
               </td>
             </tr>
           </table>
+        </div>
 
-          <!-- INFO CARD COLLABORATEUR -->
-          <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.18);">
+        <!-- 🎯 BANNIÈRE DE CAPACITÉ JOURNALIÈRE CALCULÉE (AVEC JALON OU SANS JALON) -->
+        <div style="padding: 12px 14px; border-radius: 12px; border: 1px solid ${capacityBorder}; background-color: ${capacityBg}; margin-bottom: 16px;">
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+            <tr>
+              <td style="vertical-align: middle;">
+                <div style="margin-bottom: 4px;">
+                  <span style="display: inline-block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; background-color: #ffffff; padding: 2px 8px; border-radius: 6px; border: 1px solid #cbd5e1; color: #1e293b;">
+                    Capacité Opérationnelle du Jour
+                  </span>
+                  ${p.hasMilestone ? `<span style="display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700; background-color: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 6px; border: 1px solid #fde68a;">🏆 Jalon Clé Détecté : ${p.milestoneTitle}</span>` : ''}
+                </div>
+                <div style="font-size: 12px; font-weight: 700; color: ${capacityColor}; line-height: 1.4;">
+                  ${p.capacityAdvice}
+                </div>
+              </td>
+              <td align="right" style="vertical-align: middle; width: 220px; font-size: 11px; background-color: #ffffff; padding: 8px 12px; border-radius: 10px; border: 1px solid #e2e8f0; line-height: 1.4; font-family: monospace;">
+                <div><strong>Capacité max :</strong> 12h / jour</div>
+                <div style="color: ${p.capacityStatus === 'overloaded' ? '#dc2626' : '#64748b'}; font-weight: ${p.capacityStatus === 'overloaded' ? '800' : 'normal'};">
+                  ${p.capacityStatus === 'overloaded' ? '⚠️ Surcharge (> 10h)' : 'Seuil surcharge > 10h'}
+                </div>
+                <div style="font-weight: 800; color: #2A7B76;">${p.totalTasks} sous-tâche(s) (${Math.round(p.plannedMinutes / 60)}h)</div>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- 1. LES 3 PRIORITÉS DU JOUR (LES GRANDES TÂCHES / JOB DESCRIPTION) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
             <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
               <tr>
-                <td style="font-size: 13px; color: #e2e8f0;">
-                  Collaborateur : <strong style="color: #ffffff;">${employeeName}</strong>
-                </td>
-                <td align="right" style="font-size: 13px; color: #e2e8f0;">
-                  Date de référence : <strong style="color: #ffffff;">${p.dateText}</strong>
+                <td>🎯 LES 3 PRIORITÉS DU JOUR — si je ne fais que ça, la journée est réussie</td>
+                <td align="right" style="font-size: 10px; color: #a7f3d0; font-weight: 600;">Piliers majeurs de la journée</td>
+              </tr>
+            </table>
+          </div>
+          <div style="background-color: #ffffff;">
+            ${p.topPriorities.map((item, idx) => `
+              <div style="padding: 10px 12px; ${idx < p.topPriorities.length - 1 ? 'border-bottom: 1px solid #e2e8f0;' : ''}">
+                <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+                  <tr>
+                    <td style="width: 28px; vertical-align: middle; font-weight: 800; color: #a8a29e;">
+                      ${idx + 1}.
+                    </td>
+                    <td style="vertical-align: middle; padding-left: 4px;">
+                      <span style="font-weight: 700; font-size: 12.5px; color: #1e40af;">
+                        ${item.title}
+                      </span>
+                      ${item.isMilestone ? '<span style="margin-left: 8px; background-color: #fef3c7; color: #92400e; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">🏆 Jalon Clé</span>' : ''}
+                    </td>
+                    <td align="right" style="vertical-align: middle; width: 140px;">
+                      <span style="display: inline-block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-right: 8px; font-family: monospace;">
+                        ${item.priority || 'P2'}
+                      </span>
+                      <span style="display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 10.5px; font-weight: 700; ${item.status === 'Fait' ? 'background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;' : 'background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a;'}">
+                        ${item.status}
+                      </span>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            `).join('')}
+            ${p.topPriorities.length === 0 ? `
+              <div style="padding: 12px; text-align: center; color: #94a3b8; font-style: italic;">
+                Aucune mission prioritaire définie pour aujourd'hui.
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- 2. TÂCHES DU JOUR (LES SOUS-TÂCHES CONCRÈTES TRAITÉES) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>📋 TÂCHES DU JOUR (Sous-tâches concrètes traitées)</td>
+                <td align="right" style="font-size: 11px; color: #a7f3d0; font-weight: 700; font-family: monospace;">
+                  ${p.completedTasks}/${p.totalTasks} terminées (${p.ratePercentage}%)
                 </td>
               </tr>
             </table>
           </div>
-        </div>
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 11.5px;">
+            <thead>
+              <tr style="background-color: #2A7B76; color: #ffffff; font-size: 11px;">
+                <th style="padding: 7px 10px; text-align: left; font-weight: 700;">Sous-Tâche</th>
+                <th style="padding: 7px 10px; text-align: left; font-weight: 700;">Mission Parente (Job Description)</th>
+                <th style="padding: 7px 6px; text-align: center; font-weight: 700; width: 45px;">Prio</th>
+                <th style="padding: 7px 8px; text-align: right; font-weight: 700; width: 85px;">Estimé (min)</th>
+                <th style="padding: 7px 8px; text-align: center; font-weight: 700; width: 85px;">Échéance</th>
+                <th style="padding: 7px 8px; text-align: center; font-weight: 700; width: 85px;">Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${p.tasks.map((t, index) => {
+                const prioColor = t.priorityLabel === 'P1' ? '#dc2626' : (t.priorityLabel === 'P2' ? '#2563eb' : '#d97706');
+                const statusBadge = t.status === 'Fait'
+                  ? '<span style="background-color: #d1fae5; color: #065f46; font-weight: 700; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid #a7f3d0;">Fait</span>'
+                  : (t.status === 'Bloqué'
+                    ? '<span style="background-color: #fee2e2; color: #991b1b; font-weight: 700; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid #fecaca;">Bloqué</span>'
+                    : (t.status === 'En cours'
+                      ? '<span style="background-color: #fef3c7; color: #92400e; font-weight: 700; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid #fde68a;">En cours</span>'
+                      : '<span style="background-color: #f1f5f9; color: #475569; font-weight: 700; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid #cbd5e1;">À faire</span>'));
 
-        <!-- ⚡ BANDEAU DE SYNTHÈSE « KPI FLASH » (3 CARTES HERO) -->
-        <div style="background-color: #f1f5f9; padding: 18px 24px; border-bottom: 1px solid #e2e8f0;">
-          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: separate; border-spacing: 12px 0;">
-            <tr>
-              <!-- CARTE 1: TAUX RÉALISATION -->
-              <td width="33.33%" style="background-color: #ffffff; border-radius: 10px; border: 1px solid #e2e8f0; padding: 14px 16px; vertical-align: top;">
-                <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Taux du jour</div>
-                <div style="font-size: 24px; font-weight: 800; color: ${rateColor}; margin: 6px 0 4px 0;">
-                  ${p.ratePercentage}%
-                </div>
-                <!-- Mini barre de progression -->
-                <div style="background-color: #e2e8f0; border-radius: 9999px; height: 6px; width: 100%; overflow: hidden; margin-bottom: 6px;">
-                  <div style="background-color: ${rateColor}; height: 6px; border-radius: 9999px; width: ${p.ratePercentage}%;"></div>
-                </div>
-                <div style="font-size: 11px; color: #64748b;">${p.completedTasks} sur ${p.totalTasks} tâche(s) faite(s)</div>
-              </td>
+                const rowBg = index % 2 === 0 ? '#ffffff' : '#fcfbf9';
 
-              <!-- CARTE 2: CHARGE HORAIRE -->
-              <td width="33.33%" style="background-color: #ffffff; border-radius: 10px; border: 1px solid #e2e8f0; padding: 14px 16px; vertical-align: top;">
-                <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Charge Traitée</div>
-                <div style="font-size: 24px; font-weight: 800; color: #0e3d2f; margin: 6px 0 4px 0;">
-                  ${data.totalActualHours || (p.completedTasks > 0 ? p.completedTasks * 2 : 8)}h
-                </div>
-                <div style="font-size: 11px; color: #475569; margin-top: 8px;">
-                  Estimé : <strong>${data.totalEstimatedHours || 8}h</strong>
-                </div>
-                <div style="font-size: 11px; color: #854d0e; font-weight: 600;">Pause tampon 13h–14h incluse</div>
-              </td>
-
-              <!-- CARTE 3: SANTÉ OPÉRATIONNELLE -->
-              <td width="33.33%" style="background-color: #ffffff; border-radius: 10px; border: 1px solid #e2e8f0; padding: 14px 16px; vertical-align: top;">
-                <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Diagnostic</div>
-                <div style="margin: 8px 0;">
-                  <span style="display: inline-block; background-color: ${hasBlockers ? '#fef3c7' : '#d1fae5'}; color: ${hasBlockers ? '#92400e' : '#065f46'}; font-weight: 700; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid ${hasBlockers ? '#fde68a' : '#a7f3d0'};">
-                    ${hasBlockers ? '⚠️ Attention requise' : '✅ Déroulement nominal'}
-                  </span>
-                </div>
-                <div style="font-size: 11px; color: #64748b; margin-top: 6px;">
-                  ${p.unforeseenEvents.length > 0 ? `${p.unforeseenEvents.length} imprévu(s) noté(s)` : '0 imprévu critique'} • ${p.postponedCount} report(s)
-                </div>
-              </td>
-            </tr>
+                return `
+                  <tr style="background-color: ${rowBg}; border-bottom: 1px solid #e7e5e4;">
+                    <td style="padding: 8px 10px; color: #1e40af; font-weight: 700;">
+                      <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: #3b82f6; margin-right: 6px; vertical-align: middle;"></span>
+                      <span style="vertical-align: middle;">${t.title}</span>
+                    </td>
+                    <td style="padding: 8px 10px; color: #57534e;">
+                      ${t.parentTaskTitle}
+                    </td>
+                    <td style="padding: 8px 6px; text-align: center; font-weight: 800; font-size: 11px; color: ${prioColor};">
+                      ${t.priorityLabel}
+                    </td>
+                    <td style="padding: 8px 8px; text-align: right; color: #1c1917; font-family: monospace; font-weight: 600;">
+                      ${t.estimatedMinutes} min
+                    </td>
+                    <td style="padding: 8px 8px; text-align: center; color: #78716c; font-family: monospace; font-size: 11px;">
+                      ${t.dueDate}
+                    </td>
+                    <td style="padding: 8px 8px; text-align: center;">
+                      ${statusBadge}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+              ${p.tasks.length === 0 ? `
+                <tr>
+                  <td colspan="6" style="padding: 16px; text-align: center; color: #a8a29e; font-style: italic;">
+                    Aucune sous-tâche planifiée aujourd'hui.
+                  </td>
+                </tr>
+              ` : ''}
+            </tbody>
+            <tfoot>
+              <tr style="background-color: #164e4b; color: #ffffff; font-weight: 800; font-size: 11.5px;">
+                <td colspan="2" style="padding: 8px 10px;">Total sous-tâches / réalisées / avancement</td>
+                <td style="text-align: center; padding: 8px 6px;">${p.totalTasks}</td>
+                <td style="text-align: right; padding: 8px 8px; font-family: monospace;">${p.completedTasks} fait</td>
+                <td style="text-align: center; padding: 8px 8px; font-family: monospace;">${p.ratePercentage}%</td>
+                <td style="text-align: center; padding: 8px 8px; color: #fde68a; font-family: monospace;">${p.postponedCount} à suivre</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
 
-        <div style="padding: 24px 28px;">
-
-          <!-- 1. LES 3 PRIORITÉS DU JOUR -->
-          <div style="margin-bottom: 24px; border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden;">
-            <div style="background-color: #0e3d2f; color: #ffffff; padding: 10px 16px; font-weight: 700; font-size: 13px; letter-spacing: 0.3px;">
-              🎯 LES 3 PRIORITÉS DU JOUR — si je ne fais que ça, la journée est réussie
-            </div>
-            <div style="background-color: #ffffff; padding: 6px 12px;">
-              ${p.topPriorities.map((item, idx) => `
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 8px; ${idx < p.topPriorities.length - 1 ? 'border-bottom: 1px solid #f1f5f9;' : ''}">
-                  <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
-                    <tr>
-                      <td style="width: 32px; vertical-align: middle;">
-                        <span style="display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center; border-radius: 50%; background-color: #fef3c7; color: #92400e; font-weight: 800; font-size: 12px;">
-                          ${idx + 1}
-                        </span>
-                      </td>
-                      <td style="vertical-align: middle; padding-left: 6px;">
-                        <span style="font-weight: 700; font-size: 13px; color: #1d4ed8; text-decoration: underline;">
-                          ${item.title}
-                        </span>
-                        ${item.isMilestone ? '<span style="margin-left: 8px; background-color: #fef3c7; color: #92400e; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🏆 JALON CLÉ</span>' : ''}
-                      </td>
-                      <td align="right" style="vertical-align: middle; width: 90px;">
-                        <span style="display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; ${item.status === 'Fait' ? 'background-color: #d1fae5; color: #065f46;' : 'background-color: #fef3c7; color: #92400e;'}">
-                          ${item.status}
-                        </span>
-                      </td>
-                    </tr>
-                  </table>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <!-- 2. TÂCHES DU JOUR (TABLEAU MODERNE & RESPONSIVE) -->
-          <div style="margin-bottom: 24px; border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden;">
-            <div style="background-color: #0e3d2f; color: #ffffff; padding: 10px 16px; font-weight: 700; font-size: 13px;">
-              📋 TÂCHES DU JOUR
-            </div>
-            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 12px;">
-              <thead>
-                <tr style="background-color: #1f514c; color: #ffffff; font-size: 11px;">
-                  <th style="padding: 9px 12px; text-align: left; font-weight: 700;">Tâche</th>
-                  <th style="padding: 9px 10px; text-align: left; font-weight: 700;">Domaine</th>
-                  <th style="padding: 9px 8px; text-align: center; font-weight: 700; width: 55px;">Prio</th>
-                  <th style="padding: 9px 8px; text-align: right; font-weight: 700; width: 85px;">Estimé</th>
-                  <th style="padding: 9px 8px; text-align: center; font-weight: 700; width: 85px;">Échéance</th>
-                  <th style="padding: 9px 10px; text-align: center; font-weight: 700; width: 95px;">Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${p.tasks.map((t, index) => {
-                  const prioBadge = t.priorityLabel === 'P1'
-                    ? '<span style="background-color: #fee2e2; color: #dc2626; font-weight: 800; font-size: 10px; padding: 3px 8px; border-radius: 4px;">P1</span>'
-                    : (t.priorityLabel === 'P2'
-                      ? '<span style="background-color: #dbeafe; color: #2563eb; font-weight: 800; font-size: 10px; padding: 3px 8px; border-radius: 4px;">P2</span>'
-                      : '<span style="background-color: #fef3c7; color: #d97706; font-weight: 800; font-size: 10px; padding: 3px 8px; border-radius: 4px;">P3</span>');
-
-                  const statusBadge = t.status === 'Fait'
-                    ? '<span style="background-color: #d1fae5; color: #065f46; font-weight: 700; font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid #a7f3d0;">✓ Fait</span>'
-                    : (t.status === 'En cours'
-                      ? '<span style="background-color: #fef3c7; color: #92400e; font-weight: 700; font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid #fde68a;">⏳ En cours</span>'
-                      : '<span style="background-color: #f1f5f9; color: #475569; font-weight: 700; font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid #cbd5e1;">À faire</span>');
-
-                  const rowBg = index % 2 === 0 ? '#ffffff' : '#f8fafc';
-
-                  return `
-                    <tr style="background-color: ${rowBg}; border-bottom: 1px solid #e2e8f0;">
-                      <td style="padding: 8px 12px; color: #1d4ed8; font-weight: 600;">${t.title}</td>
-                      <td style="padding: 8px 10px; color: #475569;">${t.domain}</td>
-                      <td style="padding: 8px 8px; text-align: center;">${prioBadge}</td>
-                      <td style="padding: 8px 8px; text-align: right; color: #334155; font-weight: 600;">${t.estimatedMinutes} min</td>
-                      <td style="padding: 8px 8px; text-align: center; color: #64748b;">${t.dueDate}</td>
-                      <td style="padding: 8px 10px; text-align: center;">${statusBadge}</td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-              <tfoot>
-                <tr style="background-color: #0e3d2f; color: #ffffff; font-weight: 700;">
-                  <td colspan="2" style="padding: 10px 12px;">Total / Réalisées / Taux global</td>
-                  <td style="text-align: center; padding: 10px 6px;">${p.totalTasks}</td>
-                  <td style="text-align: right; padding: 10px 8px;">${p.completedTasks} faites</td>
-                  <td style="text-align: center; padding: 10px 6px;">${p.ratePercentage}%</td>
-                  <td style="text-align: center; padding: 10px 6px; color: #fde68a;">${p.postponedCount} report.</td>
-                </tr>
-              </tfoot>
+        <!-- 3. PLAN HORAIRE DYNAMIQUE (AVEC PAUSE OBLIGATOIRE 13h-14h & RÉSOLUTIONS) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>🕒 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus</td>
+                <td align="right">
+                  <span style="display: inline-block; background-color: rgba(254, 240, 138, 0.4); color: #854d0e; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(254, 240, 138, 0.7); font-family: monospace;">
+                    13:00 – 14:00 : TAMPON IMPRÉVUS / pause
+                  </span>
+                </td>
+              </tr>
             </table>
           </div>
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 11.5px;">
+            <thead>
+              <tr style="background-color: #2A7B76; color: #ffffff; font-size: 11px;">
+                <th style="padding: 7px 10px; text-align: left; width: 140px; font-weight: 700;">Heure</th>
+                <th style="padding: 7px 10px; text-align: left; font-weight: 700;">Ce que je fais sur ce créneau</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${p.scheduleSlots.map((s) => {
+                const isBreak = s.isBreak || s.timeRange.includes('13:00') || s.isBuffer;
+                const rowBg = isBreak ? '#fef9c3' : '#ffffff';
+                const timeColor = isBreak ? '#854d0e' : '#1c1917';
+                const actColor = isBreak ? '#854d0e' : '#1d4ed8';
 
-          <!-- 3. PLAN HORAIRE DE LA JOURNÉE (TIMELINE ÉPURÉE) -->
-          <div style="margin-bottom: 24px; border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden;">
-            <div style="background-color: #0e3d2f; color: #ffffff; padding: 10px 16px; font-weight: 700; font-size: 13px;">
-              🕐 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus
-            </div>
-            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 12px;">
-              <thead>
-                <tr style="background-color: #1f514c; color: #ffffff; font-size: 11px;">
-                  <th style="padding: 8px 12px; text-align: left; width: 140px; font-weight: 700;">Heure</th>
-                  <th style="padding: 8px 12px; text-align: left; font-weight: 700;">Ce que je fais sur ce créneau</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${p.scheduleSlots.map((s) => {
-                  const isTampon = s.isBuffer || s.isBreak;
-                  const rowBg = isTampon ? '#fef9c3' : '#ffffff';
-                  const textColor = isTampon ? '#854d0e' : '#1d4ed8';
-
-                  return `
-                    <tr style="background-color: ${rowBg}; border-bottom: 1px solid ${isTampon ? '#fef08a' : '#e2e8f0'};">
-                      <td style="padding: 8px 12px; font-weight: 700; color: ${isTampon ? '#854d0e' : '#1e293b'};">
-                        ${s.timeRange}
-                      </td>
-                      <td style="padding: 8px 12px; font-weight: 600; color: ${textColor};">
-                        ${isTampon ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity}
-                      </td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <!-- 4. IMPRÉVUS SURVENUS AUJOURD'HUI -->
-          <div style="margin-bottom: 24px; border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden;">
-            <div style="background-color: #0e3d2f; color: #ffffff; padding: 10px 16px; font-weight: 700; font-size: 13px;">
-              ⚡ IMPRÉVUS SURVENUS AUJOURD'HUI
-            </div>
-            ${p.unforeseenEvents.length > 0 ? `
-              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 12px;">
-                <thead>
-                  <tr style="background-color: #1f514c; color: #ffffff; font-size: 11px;">
-                    <th style="padding: 8px 12px; text-align: left; width: 110px;">Heure</th>
-                    <th style="padding: 8px 12px; text-align: left;">Quoi ? (qui / quel sujet)</th>
-                    <th style="padding: 8px 12px; text-align: right; width: 140px;">Temps perdu</th>
+                return `
+                  <tr style="background-color: ${rowBg}; border-bottom: 1px solid ${isBreak ? '#fef08a' : '#e7e5e4'};">
+                    <td style="padding: 8px 10px; font-family: monospace; font-weight: 700; color: ${timeColor};">
+                      ${s.timeRange}
+                    </td>
+                    <td style="padding: 8px 10px; font-weight: 700; color: ${actColor};">
+                      ${isBreak ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  ${p.unforeseenEvents.map((u) => `
-                    <tr style="background-color: #fffbeb; border-bottom: 1px solid #fde68a;">
-                      <td style="padding: 8px 12px; font-weight: 700; color: #92400e;">${u.time}</td>
-                      <td style="padding: 8px 12px; color: #92400e; font-weight: 600;">${u.subject}</td>
-                      <td style="padding: 8px 12px; text-align: right; color: #b45309; font-weight: 700;">${u.lostMinutes} min</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            ` : `
-              <div style="background-color: #ecfdf5; padding: 12px 18px; color: #065f46; font-size: 12px; font-weight: 600;">
-                ✅ Aucun imprévu ou difficulté signalée. La journée s'est déroulée selon le planning nominal.
-              </div>
-            `}
-          </div>
-
-          <!-- 5. BILAN FIN DE JOURNÉE & POINTS MANAGER -->
-          <div style="margin-bottom: 24px; border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden;">
-            <div style="background-color: #0e3d2f; color: #ffffff; padding: 10px 16px; font-weight: 700; font-size: 13px;">
-              ☑️ BILAN FIN DE JOURNÉE (2 min)
-            </div>
-            <div style="padding: 16px; background-color: #ffffff;">
-              <!-- À reporter à demain -->
-              <div style="margin-bottom: 14px;">
-                <div style="font-weight: 700; font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 6px;">
-                  📌 À reporter à demain :
-                </div>
-                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #1d4ed8; font-weight: 600;">
-                  ${p.postponedTasks.length > 0
-                    ? p.postponedTasks.map((t) => `<div style="padding: 3px 0;">• ${t}</div>`).join('')
-                    : '<div style="color: #059669;">🎉 Aucune tâche reportée — 100% des engagements du jour ont été clôturés !</div>'}
-                </div>
-              </div>
-
-              <!-- Point à signaler au manager -->
-              <div>
-                <div style="font-weight: 700; font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 6px;">
-                  💬 Point à signaler au manager :
-                </div>
-                <div style="background-color: ${hasBlockers ? '#fffbeb' : '#f8fafc'}; border: 1px solid ${hasBlockers ? '#fde68a' : '#e2e8f0'}; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: ${hasBlockers ? '#92400e' : '#1e293b'}; font-weight: 600;">
-                  ${p.managerAlertPoint || 'Aucun blocage particulier à signaler.'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 6. COMMENT L'UTILISER (GUIDE MÉTHODOLOGIQUE) -->
-          <div style="background-color: #f1f5f9; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: 11px; color: #475569; line-height: 1.6;">
-            <div style="font-weight: 800; color: #0e3d2f; font-size: 12px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px;">
-              Comment l'utiliser au quotidien
-            </div>
-            <div>• <strong style="color: #1e293b;">Le matin (5 min) :</strong> écris tes 3 priorités, liste tes tâches, choisis P1/P2/P3, pose-les dans le plan horaire. Garde le créneau tampon libre.</div>
-            <div>• <strong style="color: #1e293b;">Dans la journée :</strong> mets à jour le Statut (menu déroulant). Note chaque imprévu d'une ligne pour voir où part ton temps.</div>
-            <div>• <strong style="color: #1e293b;">Le soir (2 min) :</strong> reporte ce qui n'est pas fait à demain, écris le point manager. Recopie les chiffres dans l'onglet « Suivi manager ».</div>
-          </div>
-
-          <!-- BOUTON D'ACTION DIRECT (CTA MANAGER) -->
-          <div style="text-align: center; margin-top: 10px; margin-bottom: 8px;">
-            <a href="https://ais-pre-b3vg5qszt7gkoqpkdf7qtf-526853028491.europe-west2.run.app" target="_blank" style="display: inline-block; background-color: #0e3d2f; color: #ffffff; font-weight: 700; font-size: 13px; text-decoration: none; padding: 12px 28px; border-radius: 8px; box-shadow: 0 2px 6px rgba(14, 61, 47, 0.25);">
-              📂 Ouvrir la feuille dans le portail Citrine ↗
-            </a>
-          </div>
-
-          <!-- FOOTER EXÉCUTIF RH -->
-          <div style="text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 14px;">
-            Rapport officiel généré par Citrine Mobilité RH • Fuseau horaire officiel Africa/Douala (UTC+1)<br/>
-            <em>Le classeur Excel officiel (.xlsx) est joint en pièce jointe pour archivage et exploitation administrative.</em>
-          </div>
-
+                `;
+              }).join('')}
+            </tbody>
+          </table>
         </div>
+
+        <!-- 4. IMPRÉVUS SURVENUS AUJOURD'HUI (BLOCAGES OPÉRATIONNELS SIGNALÉS) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>⚡ IMPRÉVUS SURVENUS AUJOURD'HUI (${p.unforeseenEvents.length})</td>
+                <td align="right" style="font-size: 10px; color: #a7f3d0; font-weight: 600;">
+                  — issus des blocages signalés par ${employeeName}
+                </td>
+              </tr>
+            </table>
+          </div>
+          ${p.unforeseenEvents.length > 0 ? `
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 11.5px;">
+              <thead>
+                <tr style="background-color: #2A7B76; color: #ffffff; font-size: 11px;">
+                  <th style="padding: 7px 10px; text-align: left; width: 90px; font-weight: 700;">Heure</th>
+                  <th style="padding: 7px 10px; text-align: left; font-weight: 700;">Origine &amp; Sujet de l'imprévu (Blocage opérationnel)</th>
+                  <th style="padding: 7px 10px; text-align: center; width: 90px; font-weight: 700;">Statut</th>
+                  <th style="padding: 7px 10px; text-align: right; width: 100px; font-weight: 700;">Temps impact</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${p.unforeseenEvents.map((u, idx) => `
+                  <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#fffbeb'}; border-bottom: 1px solid #fde68a;">
+                    <td style="padding: 8px 10px; font-family: monospace; font-weight: 700; color: #78716c;">
+                      ${u.time}
+                    </td>
+                    <td style="padding: 8px 10px; color: #1c1917;">
+                      <div style="font-weight: 700; color: #1c1917;">${u.subject}</div>
+                      ${u.sourceTask ? `<div style="font-size: 10.5px; color: #78716c; margin-top: 2px;">Tâche source : <strong style="color: #44403c;">${u.sourceTask}</strong></div>` : ''}
+                    </td>
+                    <td style="padding: 8px 10px; text-align: center;">
+                      <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; ${u.status === 'Résolu' ? 'background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;' : 'background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca;'}">
+                        ${u.status || 'Bloqué'}
+                      </span>
+                    </td>
+                    <td style="padding: 8px 10px; text-align: right; font-family: monospace; font-weight: 800; color: #dc2626;">
+                      ${u.lostMinutes} min
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          ` : `
+            <div style="background-color: #ecfdf5; padding: 12px 16px; color: #065f46; font-size: 11.5px; font-weight: 600;">
+              ✓ Aucun blocage ni imprévu opérationnel signalé par le collaborateur sur cette journée.
+            </div>
+          `}
+        </div>
+
+        <!-- 5. BILAN FIN DE JOURNÉE (2 MIN) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            ☑️ BILAN FIN DE JOURNÉE (2 min)
+          </div>
+          <div style="background-color: #ffffff; padding: 14px 16px;">
+            
+            <!-- À reporter à demain -->
+            <div style="margin-bottom: 12px;">
+              <div style="font-weight: 800; font-size: 11.5px; color: #44403c; margin-bottom: 4px;">
+                À reporter à demain :
+              </div>
+              <div style="font-size: 11.5px;">
+                ${p.postponedTasks.length > 0 ? `
+                  <ul style="margin: 0; padding-left: 18px; color: #1e40af; font-weight: 600; line-height: 1.5;">
+                    ${p.postponedTasks.map((t) => `<li>${t}</li>`).join('')}
+                  </ul>
+                ` : `
+                  <span style="color: #059669; font-weight: 700;">
+                    ✓ Toutes les sous-tâches du jour ont été clôturées avec succès !
+                  </span>
+                `}
+              </div>
+            </div>
+
+            <!-- Points à signaler au manager & direction -->
+            <div style="border-top: 1px solid #e7e5e4; padding-top: 10px;">
+              <div style="font-weight: 800; font-size: 11.5px; color: #1e293b; margin-bottom: 4px;">
+                🚩 Points à Signaler au Manager &amp; Direction :
+              </div>
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; font-size: 11.5px; color: #334155; line-height: 1.5;">
+                ${p.managerAlertPoint}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- PIÈCE JOINTE MENTION -->
+        <div style="text-align: center; margin-top: 14px; font-size: 10.5px; color: #78716c;">
+          📎 <em>Le classeur officiel Microsoft Excel (.xlsx) complet est joint à ce fil de discussion pour exploitation tabulaire.</em>
+        </div>
+
       </div>
     </div>
   `;
@@ -764,67 +807,130 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
 
 /**
  * Construit un classeur Microsoft Excel natif et valide (.xlsx - OpenXML)
- * Respecte à 100% l'organisation en 6 sections du Plan du Jour Citrine
- * et élimine tout risque de faux positif anti-spam (MIME extension mismatch).
+ * Respecte à 100% l'organisation intégrale de la feuille de temps officielle de Statistiques :
+ * 1. En-tête officiel Citrine & cartouche collaborateur
+ * 2. Capacité opérationnelle du jour (calcul 8h nettes, pause déjeuner, jalon clé)
+ * 3. Les 3 Priorités du jour (Missions clés & Job Description)
+ * 4. Tâches du jour (Sous-tâches concrètes, estimations, échéances et statuts)
+ * 5. Plan horaire dynamique (créneaux, résolution et pause 13h–14h)
+ * 6. Imprévus et blocages opérationnels (heure, sujet, tâche source, statut, temps impact)
+ * 7. Bilan fin de journée (reports et points à signaler au manager)
+ * 8. Visas et émargements officiels
  */
 export function buildTimesheetXlsxWorkbook(data: TimesheetReportData): XLSX.WorkBook {
   const p = preparePlanDuJourData(data);
   const employeeName = data.employeeName || 'Collaborateur';
 
-  const rows: any[][] = [
-    ['CITRINE MOBILITÉ'],
+  // 1. FEUILLE PRINCIPALE EXACTE : "Feuil1" (Conforme 100% à la capture de l'utilisateur)
+  const rowsFeuil1: any[][] = [
+    // Ligne 1 & 2 : En-tête Citrine
+    ['CITRINE'],
     [`PLAN DU JOUR — ${p.dept}`],
-    [`Collaborateur : ${employeeName}`, `Date : ${p.dateText}`, `Ville : ${p.locationText}`, `Jour : ${p.dayText}`],
     [],
+    [],
+    // Ligne 5 : Date & Lieu (Col A, B, C, F)
+    [`Date : ${p.dateText}`, p.locationText || 'Douala', `Jour : ${p.dayText}`, '', '', p.dateText],
+    [],
+    // Ligne 7 : Les 3 priorités du jour
     ['🎯 LES 3 PRIORITÉS DU JOUR — si je ne fais que ça, la journée est réussie'],
-    ...p.topPriorities.map((item, idx) => [`${idx + 1}.`, item.title, item.status]),
-    [],
+    ['1.', p.topPriorities[0]?.title || 'Prise de contact & revue des priorités'],
+    ['2.', p.topPriorities[1]?.title || 'Exécution des actions opérationnelles majeures'],
+    ['3.', p.topPriorities[2]?.title || 'Finalisation des livrables et synchronisation'],
+    // Ligne 11 : Tâches du jour (sous-tâches concrètes)
     ['📋 TÂCHES DU JOUR'],
     ['Tâche', 'Domaine', 'Prio', 'Estimé (min)', 'Échéance', 'Statut'],
+    [],
+    // Lignes de sous-tâches
     ...p.tasks.map((t) => [
       t.title,
-      t.domain,
-      t.priorityLabel,
+      t.parentTaskTitle || 'Autre',
+      t.priorityLabel || 'P2',
       t.estimatedMinutes,
-      t.dueDate,
+      t.dueDate || p.dateText,
       t.status,
     ]),
+    // Ligne de récapitulatif
     ['Total / réalisées / taux', '', p.totalTasks, p.completedTasks, `${p.ratePercentage}%`, `${p.postponedCount} report.`],
     [],
-    ['🕐 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus'],
+    // Plan horaire dynamique avec créneau tampon 13h–14h
+    ['🕒 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus'],
     ['Heure', 'Ce que je fais sur ce créneau'],
-    ...p.scheduleSlots.map((s) => [s.timeRange, s.isBuffer || s.isBreak ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity]),
+    ...p.scheduleSlots.map((s) => {
+      const isBreak = s.isBreak || s.timeRange.includes('13:00') || s.isBuffer;
+      return [
+        s.timeRange,
+        isBreak ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity,
+      ];
+    }),
     [],
+    // Imprévus survenus aujourd'hui
     ['⚡ IMPRÉVUS SURVENUS AUJOURD\'HUI'],
     ['Heure', 'Quoi ? (qui / quel sujet)', 'Temps perdu (min)'],
     ...(p.unforeseenEvents.length > 0
-      ? p.unforeseenEvents.map((u) => [u.time, u.subject, u.lostMinutes])
-      : [['Journée', 'Aucun imprévu ou incident majeur signalé aujourd’hui.', 0]]),
+      ? p.unforeseenEvents.map((u) => [u.time, u.subject, `${u.lostMinutes} min`])
+      : [['Journée', 'Aucun imprévu signalé aujourd\'hui.', '0 min']]),
     [],
+    // Bilan fin de journée (2 min)
     ['☑️ BILAN FIN DE JOURNÉE (2 min)'],
-    ['À reporter à demain :', p.postponedTasks.length > 0 ? p.postponedTasks.join(' ; ') : 'Aucune tâche reportée — 100% clôturé'],
-    ['Point à signaler au manager :', p.managerAlertPoint || 'Déroulement nominal, aucun blocage'],
+    ['À reporter à demain :', p.postponedTasks[0] || (p.postponedTasks.length === 0 ? '✓ Toutes les sous-tâches du jour ont été clôturées !' : '')],
+    ...(p.postponedTasks.slice(1).map((t) => ['', t])),
     [],
-    ['Comment l\'utiliser au quotidien'],
-    ['• Le matin (5 min) : écris tes 3 priorités, liste tes tâches, choisis P1/P2/P3, pose-les dans le plan horaire. Garde le créneau tampon libre.'],
-    ['• Dans la journée : mets à jour le Statut (menu déroulant). Note chaque imprévu d\'une ligne pour voir où part ton temps.'],
-    ['• Le soir (2 min) : reporte ce qui n\'est pas fait à demain, écris le point manager. Recopie les chiffres dans l\'onglet « Suivi manager ».']
+    ['Point à signaler au manager :', p.managerAlertPoint || 'Aucun blocage particulier à signaler.']
   ];
 
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const ws1 = XLSX.utils.aoa_to_sheet(rowsFeuil1);
 
-  // Largeurs de colonnes optimisées pour une lecture parfaite dans Microsoft Excel
-  ws['!cols'] = [
-    { wch: 34 },
-    { wch: 26 },
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 16 },
+  // Largeurs de colonnes de Feuil1 adaptées à la vue de l'utilisateur
+  ws1['!cols'] = [
+    { wch: 34 }, // Col A (Tâche / 1. / Heure / Titres)
+    { wch: 38 }, // Col B (Domaine / Ce que je fais sur ce créneau)
+    { wch: 12 }, // Col C (Prio / Total)
+    { wch: 16 }, // Col D (Estimé min / Réalisées)
+    { wch: 16 }, // Col E (Échéance / Taux %)
+    { wch: 18 }, // Col F (Statut / 0 report.)
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws, 'Plan du Jour');
+  // 2. DEUXIÈME FEUILLE EXACTE : "Suivi manager" (Onglet visible sur la capture d'écran)
+  const rowsManager: any[][] = [
+    ['CITRINE MOBILITÉ — SUIVI MANAGER & PILOTAGE OPÉRATIONNEL'],
+    [`Collaborateur : ${employeeName}`, `Département : ${p.dept}`, `Lieu : Douala`, `Date : ${p.dateText} (${p.dayText})`],
+    [],
+    ['📊 DIAGNOSTIC DE CHARGE & SURCHARGE (CALCULÉ SUR LES SOUS-TÂCHES)'],
+    ['Temps planifié sur les sous-tâches :', `${Math.round(p.plannedMinutes / 60)}h (${p.plannedMinutes} min)`],
+    ['Capacité journalière maximale :', '12h max / jour'],
+    ['Seuil d\'alerte de surcharge :', '> 10h / jour (600 min)'],
+    [
+      'Statut capacitaire :',
+      p.capacityStatus === 'overloaded'
+        ? '⚠️ SURCHARGE DÉTECTÉE (> 10h/jour)'
+        : (p.capacityStatus === 'optimal' ? '✅ CHARGE NOMINALE & RÉALISTE (7h à 10h)' : '💡 CAPACITÉ DISPONIBLE (< 7h)')
+    ],
+    ['Conseil opérationnel :', p.capacityAdvice],
+    [],
+    ['🚩 POINTS À SIGNALER AU MANAGER & REMONTÉES'],
+    ['Synthèse :', p.managerAlertPoint || 'Aucun blocage particulier à signaler.'],
+    [],
+    [`⚡ BLOCAGES & DIFFICULTÉS SIGNALÉS (${p.unforeseenEvents.length})`],
+    ['Heure', 'Sujet du blocage', 'Tâche source', 'Statut', 'Impact'],
+    ...(p.unforeseenEvents.length > 0
+      ? p.unforeseenEvents.map((u) => [u.time, u.subject, u.sourceTask || 'Général', u.status || 'Bloqué', `${u.lostMinutes} min`])
+      : [['Journée', 'Aucun blocage opérationnel actif.', '-', 'Nominal', '0 min']])
+  ];
+
+  const ws2 = XLSX.utils.aoa_to_sheet(rowsManager);
+  ws2['!cols'] = [
+    { wch: 36 },
+    { wch: 42 },
+    { wch: 22 },
+    { wch: 16 },
+    { wch: 16 }
+  ];
+
+  // Ajout des deux onglets : "Feuil1" en premier, puis "Suivi manager"
+  XLSX.utils.book_append_sheet(wb, ws1, 'Feuil1');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Suivi manager');
+
   return wb;
 }
 
