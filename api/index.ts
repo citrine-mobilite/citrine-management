@@ -5,14 +5,11 @@ import {
   getEffectiveSmtpConfig, 
   parseEmailList 
 } from "../src/services/serverMailService.ts";
-import { 
-  getCollectionData, 
-  saveDocumentData 
-} from "../src/db/repository.ts";
+import { supabaseAdmin } from "../src/lib/supabase.ts";
 
 const app = express();
 
-// Increase JSON body limit to 25MB for base64 email attachments (e.g. Excel timesheets)
+// Increase JSON body limit for timesheet Excel attachments (base64)
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
@@ -27,44 +24,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// --- Simple Serverless Rate Limiter (Note: resets on cold starts in Vercel) ---
-const rateLimitStore = new Map<string, { count: number; lastReset: number }>();
-function serverlessRateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const rawIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown";
-  const ip = rawIp.split(",")[0].trim();
-  const now = Date.now();
-  const windowMs = 60000; // 1 minute
-  const limit = 200;
-
-  if (!rateLimitStore.has(ip)) {
-    rateLimitStore.set(ip, { count: 1, lastReset: now });
-    return next();
-  }
-
-  const data = rateLimitStore.get(ip)!;
-  if (now - data.lastReset > windowMs) {
-    data.count = 1;
-    data.lastReset = now;
-  } else {
-    data.count++;
-  }
-
-  if (data.count > limit) {
-    return res.status(429).json({
-      error: "Too Many Requests",
-      message: "Limite de requêtes dépassée. Veuillez réessayer dans une minute."
-    });
-  }
-
-  next();
-}
-
-app.use("/api", serverlessRateLimiter);
-
 // Dedicated rate limiter for expensive notifications (allow up to 60/min)
 const notificationRateStore = new Map<string, { count: number; lastReset: number }>();
 function notificationLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const rawIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown";
+  const rawIp = (req.headers["x-forwarded-for"] as string) || req.socket?.remoteAddress || "unknown";
   const ip = rawIp.split(",")[0].trim();
   const now = Date.now();
   const entry = notificationRateStore.get(ip);
@@ -94,15 +57,16 @@ function requireClientAuth(req: express.Request, res: express.Response, next: ex
 }
 
 // -------------------------------------------------------------
-// ✉️ VERCEL SERVERLESS ENDPOINTS POUR L'ENVOI DE MAIL THREADÉ & SMTP
+// ✉️ ROUTEUR UNIFIÉ POUR TOUTES LES ROUTES D'API VERCEL
 // -------------------------------------------------------------
+const router = express.Router();
 
 // ✉️ Récupérer la configuration SMTP effective depuis la DB ou l'environnement
-app.get("/api/mail/config", async (req: express.Request, res: express.Response) => {
-  console.log("🔍 [VERCEL /api/mail/config GET] Demande de configuration SMTP...");
+router.get("/mail/config", async (req: express.Request, res: express.Response) => {
+  console.log("🔍 [VERCEL /mail/config GET] Demande de configuration SMTP...");
   try {
     const config = await getEffectiveSmtpConfig();
-    console.log("✅ [VERCEL /api/mail/config GET] Config chargée avec succès:", {
+    console.log("✅ [VERCEL /mail/config GET] Config chargée:", {
       host: config.host,
       port: config.port,
       user: config.user,
@@ -110,7 +74,7 @@ app.get("/api/mail/config", async (req: express.Request, res: express.Response) 
       from: config.from,
       hrEmail: config.hrEmail,
     });
-    res.json({
+    return res.json({
       success: true,
       config: {
         smtpHost: config.host || "",
@@ -124,8 +88,8 @@ app.get("/api/mail/config", async (req: express.Request, res: express.Response) 
       },
     });
   } catch (error: any) {
-    console.error("❌ [VERCEL /api/mail/config GET ERROR]:", error);
-    res.status(500).json({
+    console.error("❌ [VERCEL /mail/config GET ERROR]:", error);
+    return res.status(500).json({
       success: false,
       error: error?.message || String(error),
       stack: error?.stack,
@@ -134,8 +98,8 @@ app.get("/api/mail/config", async (req: express.Request, res: express.Response) 
 });
 
 // ✉️ Sauvegarder la configuration SMTP & RH en DB (accessible pour les non-développeurs)
-app.post("/api/mail/config", async (req: express.Request, res: express.Response) => {
-  console.log("💾 [VERCEL /api/mail/config POST] Sauvegarde configuration SMTP...");
+router.post("/mail/config", async (req: express.Request, res: express.Response) => {
+  console.log("💾 [VERCEL /mail/config POST] Sauvegarde configuration SMTP...");
   try {
     const {
       smtpHost,
@@ -149,8 +113,18 @@ app.post("/api/mail/config", async (req: express.Request, res: express.Response)
       enableEmailNotifications,
     } = req.body;
 
-    const settingsList = await getCollectionData("company_settings");
-    const existing = (Array.isArray(settingsList) && settingsList.find((s: any) => s.id === "main_config" || s.docId === "main_config")) || {};
+    // Récupération de l'enregistrement existant dans Supabase
+    let existing: any = {};
+    try {
+      const { data } = await supabaseAdmin.from("company_settings").select("*");
+      if (data && Array.isArray(data) && data.length > 0) {
+        const found = data.find((s: any) => s.id === "main_config" || s.doc_id === "main_config") || data[0];
+        const raw = (found.raw_data && typeof found.raw_data === "object") ? found.raw_data : (found.setting_value && typeof found.setting_value === "object" ? found.setting_value : found);
+        existing = { ...found, ...raw };
+      }
+    } catch (e) {
+      console.warn("⚠️ Impossible de lire les réglages existants, écrasement sécurisé:", e);
+    }
 
     const updatedDoc = {
       ...existing,
@@ -168,12 +142,20 @@ app.post("/api/mail/config", async (req: express.Request, res: express.Response)
       updatedAt: new Date().toISOString(),
     };
 
-    await saveDocumentData("company_settings", updatedDoc);
-    console.log("✅ [VERCEL /api/mail/config POST] Configuration sauvegardée en base de données.");
-    res.json({ success: true, message: "Configuration SMTP et RH enregistrée avec succès.", config: updatedDoc });
+    // Sauvegarde directe dans Supabase (table company_settings)
+    await supabaseAdmin.from("company_settings").upsert({
+      id: "main_config",
+      doc_id: "main_config",
+      raw_data: updatedDoc,
+      setting_value: updatedDoc,
+      updated_at: new Date().toISOString(),
+    });
+
+    console.log("✅ [VERCEL /mail/config POST] Configuration sauvegardée en base de données Supabase.");
+    return res.json({ success: true, message: "Configuration SMTP et RH enregistrée avec succès.", config: updatedDoc });
   } catch (error: any) {
-    console.error("❌ [VERCEL /api/mail/config POST ERROR]:", error);
-    res.status(500).json({
+    console.error("❌ [VERCEL /mail/config POST ERROR]:", error);
+    return res.status(500).json({
       success: false,
       error: error?.message || String(error),
       stack: error?.stack,
@@ -182,10 +164,10 @@ app.post("/api/mail/config", async (req: express.Request, res: express.Response)
 });
 
 // ✉️ Envoi d'email threadé (feuille de temps, fiche journalière, notification RH)
-app.post("/api/mail/send-threaded", notificationLimiter, async (req: express.Request, res: express.Response) => {
+router.post("/mail/send-threaded", notificationLimiter, async (req: express.Request, res: express.Response) => {
   const startTime = Date.now();
   console.log("================================================================");
-  console.log("📨 [VERCEL API /api/mail/send-threaded] Réception requête envoi email...");
+  console.log("📨 [VERCEL API /mail/send-threaded] Réception requête envoi email...");
   console.log("📋 [PAYLOAD RESUME]:", {
     employeeName: req.body?.employeeName,
     employeeId: req.body?.employeeId,
@@ -241,14 +223,14 @@ app.post("/api/mail/send-threaded", notificationLimiter, async (req: express.Req
     const duration = Date.now() - startTime;
 
     if (result.success) {
-      console.log(`✅ [VERCEL API /api/mail/send-threaded SUCCÈS en ${duration}ms]:`, {
+      console.log(`✅ [VERCEL API /mail/send-threaded SUCCÈS en ${duration}ms]:`, {
         messageId: result.messageId,
         recipients: result.recipients,
       });
       console.log("================================================================");
       return res.json(result);
     } else {
-      console.error(`❌ [VERCEL API /api/mail/send-threaded ÉCHEC en ${duration}ms]:`, result.error);
+      console.error(`❌ [VERCEL API /mail/send-threaded ÉCHEC en ${duration}ms]:`, result.error);
       console.log("================================================================");
       // Renvoyer l'erreur brute et exacte
       return res.status(500).json(result);
@@ -256,7 +238,7 @@ app.post("/api/mail/send-threaded", notificationLimiter, async (req: express.Req
   } catch (error: any) {
     const duration = Date.now() - startTime;
     const rawMessage = error?.message || String(error);
-    console.error(`💥 [VERCEL API /api/mail/send-threaded EXCEPTION NON GÉRÉE en ${duration}ms]:`, {
+    console.error(`💥 [VERCEL API /mail/send-threaded EXCEPTION NON GÉRÉE en ${duration}ms]:`, {
       message: rawMessage,
       code: error?.code,
       command: error?.command,
@@ -279,8 +261,8 @@ app.post("/api/mail/send-threaded", notificationLimiter, async (req: express.Req
 });
 
 // ✉️ Test direct de connexion SMTP
-app.post("/api/mail/test-connection", notificationLimiter, async (req: express.Request, res: express.Response) => {
-  console.log("🧪 [VERCEL /api/mail/test-connection] Test de connexion SMTP démarré...");
+router.post("/mail/test-connection", notificationLimiter, async (req: express.Request, res: express.Response) => {
+  console.log("🧪 [VERCEL /mail/test-connection] Test de connexion SMTP démarré...");
   try {
     const { testRecipient, smtpConfig } = req.body;
     const effective = await getEffectiveSmtpConfig(smtpConfig);
@@ -326,7 +308,7 @@ app.post("/api/mail/test-connection", notificationLimiter, async (req: express.R
 });
 
 // --- Email via Resend (Existant) ---
-app.post("/api/email/send", notificationLimiter, requireClientAuth, async (req, res) => {
+router.post("/email/send", notificationLimiter, requireClientAuth, async (req, res) => {
   try {
     const { to, subject, html } = req.body;
 
@@ -371,15 +353,15 @@ app.post("/api/email/send", notificationLimiter, requireClientAuth, async (req, 
       return res.status(400).json({ success: false, error: resError.message || JSON.stringify(resError), type: resError.name });
     }
 
-    res.json({ success: true, data: resData });
+    return res.json({ success: true, data: resData });
   } catch (error: any) {
     console.error("Resend error:", error);
-    res.status(500).json({ error: error?.message || "Failed to send email" });
+    return res.status(500).json({ error: error?.message || "Failed to send email" });
   }
 });
 
 // --- WhatsApp via Cloud API (Existant) ---
-app.post("/api/whatsapp/send", notificationLimiter, requireClientAuth, async (req, res) => {
+router.post("/whatsapp/send", notificationLimiter, requireClientAuth, async (req, res) => {
   try {
     const { to, message } = req.body;
 
@@ -425,16 +407,16 @@ app.post("/api/whatsapp/send", notificationLimiter, requireClientAuth, async (re
       return res.status(response.status).json({ error: data });
     }
 
-    res.json({ success: true, data });
+    return res.json({ success: true, data });
   } catch (error: any) {
     console.error("WhatsApp error:", error);
-    res.status(500).json({ error: error?.message || "Failed to send WhatsApp message" });
+    return res.status(500).json({ error: error?.message || "Failed to send WhatsApp message" });
   }
 });
 
 // Health check
-app.get("/api/health", (req, res) => {
-  res.json({
+router.get("/health", (req, res) => {
+  return res.json({
     status: "ok",
     environment: "vercel-serverless",
     timestamp: new Date().toISOString(),
@@ -444,17 +426,54 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Catch-all pour toutes les autres routes /api/* non trouvées afin de renvoyer du JSON explicite plutôt que du HTML 404
-app.all("/api/*", (req, res) => {
-  const errMsg = `Route introuvable sur le serveur Vercel : [${req.method}] ${req.originalUrl}`;
+// -------------------------------------------------------------
+// MONTAGE SUR LES DEUX PRÉFIXES : /api ET LA RACINE /
+// Cela garantit que que Vercel conserve "/api" ou le supprime, la route est trouvée !
+// -------------------------------------------------------------
+app.use("/api", router);
+app.use("/", router);
+
+// Catch-all pour toutes les autres requêtes non trouvées
+app.use((req, res) => {
+  const errMsg = `Route introuvable sur le serveur Vercel : [${req.method}] ${req.originalUrl || req.url}`;
   console.warn(`⚠️ ${errMsg}`);
-  res.status(404).json({
+  return res.status(404).json({
     success: false,
     error: errMsg,
     method: req.method,
-    url: req.originalUrl,
+    url: req.url,
+    originalUrl: req.originalUrl,
   });
 });
 
-// Export pour Vercel Serverless Function
-export default app;
+// Gestionnaire global d'erreurs pour empêcher TOUT crash du processus serverless
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("🔥 [FATAL VERCEL API ERROR]:", err);
+  if (!res.headersSent) {
+    return res.status(500).json({
+      success: false,
+      error: "Erreur interne du serveur Vercel",
+      details: err?.message || String(err),
+      stack: err?.stack,
+    });
+  }
+});
+
+// Export standard de handler Vercel (compatible toutes versions Vercel / AWS Lambda)
+export default async function handler(req: any, res: any) {
+  try {
+    return app(req, res);
+  } catch (fatalError: any) {
+    console.error("🔥 [FATAL HANDLER INVOCATION ERROR]:", fatalError);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        error: "Erreur fatale lors de l'exécution de la fonction serveur Vercel",
+        details: fatalError?.message || String(fatalError),
+        stack: fatalError?.stack,
+      });
+    }
+  }
+}
+
+export { app };

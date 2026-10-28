@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '../lib/supabase';
+import { supabaseAdmin } from '../lib/supabase.ts';
 
 // Map collection name to Supabase table name
 function mapCollectionToTable(collectionName: string): string {

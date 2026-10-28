@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
-import { getCollectionData } from '../db/repository.ts';
+import { supabaseAdmin } from '../lib/supabase.ts';
 
 dotenv.config();
 
@@ -117,12 +117,17 @@ export async function getEffectiveSmtpConfig(customConfig?: Partial<SmtpConfig>)
 
   let dbSettings: any = null;
   try {
-    const list = await getCollectionData('company_settings');
-    if (Array.isArray(list) && list.length > 0) {
-      dbSettings = list.find((s: any) => s.id === 'main_config' || s.docId === 'main_config') || list[0];
+    const { data } = await Promise.race([
+      supabaseAdmin.from('company_settings').select('*'),
+      new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Supabase timeout')), 3000)),
+    ]);
+    if (data && Array.isArray(data) && data.length > 0) {
+      const match = data.find((s: any) => s.id === 'main_config' || s.doc_id === 'main_config') || data[0];
+      const raw = (match.raw_data && typeof match.raw_data === 'object') ? match.raw_data : (match.setting_value && typeof match.setting_value === 'object' ? match.setting_value : match);
+      dbSettings = { ...match, ...raw };
     }
   } catch (err) {
-    // Erreur silencieuse de DB, fallback automatique sur les variables d'environnement
+    // Erreur silencieuse de DB, fallback automatique direct sur les variables d'environnement
   }
 
   const rawHost = customConfig?.host || dbSettings?.smtpHost || process.env.SMTP_HOST || '';
@@ -196,6 +201,9 @@ export async function getTransporter(customConfig?: Partial<SmtpConfig>): Promis
     tls: {
       rejectUnauthorized: false,
     },
+    connectionTimeout: 10000, // 10 secondes max pour connexion TCP
+    greetingTimeout: 10000,   // 10 secondes max pour handshake SMTP
+    socketTimeout: 15000,     // 15 secondes max socket
   });
 }
 
