@@ -128,7 +128,11 @@ async function startServer() {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const [id, clientRes] of sseClients.entries()) {
       try {
-        clientRes.write(payload);
+        if (!clientRes.writableEnded && !clientRes.destroyed) {
+          clientRes.write(payload);
+        } else {
+          sseClients.delete(id);
+        }
       } catch {
         sseClients.delete(id);
       }
@@ -572,6 +576,36 @@ async function startServer() {
       }
     }
   }, 60000);
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[Server] Port ${PORT} already in use. Retrying in 1s...`);
+      setTimeout(() => {
+        try {
+          server.close();
+        } catch {}
+        server.listen(PORT, "0.0.0.0");
+      }, 1000);
+    } else {
+      console.error('[Server Error]:', err);
+    }
+  });
+
+  const shutdown = () => {
+    console.log('[Server] Gracefully shutting down...');
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+  process.on('uncaughtException', (err) => {
+    console.error('[Server Uncaught Exception]:', err);
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.warn('[Server Unhandled Rejection]:', reason);
+  });
 
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
