@@ -2,11 +2,7 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    },
-    {
-      "source": "/((?!assets/|favicon\\.ico|manifest\\.webmanifest|icon-.*\\.png|.*\\..*).*)",
+      "source": "/((?!api/|assets/|favicon\\.ico|manifest\\.webmanifest|icon-.*\\.png|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]

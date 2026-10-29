@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import { supabaseAdmin } from '../lib/supabase.ts';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 export interface EmailThreadingOptions {
   /** Nom complet du collaborateur (ex: "Éric MBIDA") */
@@ -113,7 +113,7 @@ function generateOutlookThreadIndex(threadKey: string): string {
  * 3. Variables d'environnement (.env / secrets)
  */
 export async function getEffectiveSmtpConfig(customConfig?: Partial<SmtpConfig>): Promise<SmtpConfig> {
-  dotenv.config();
+  dotenv.config({ quiet: true });
 
   let dbSettings: any = null;
   try {
