@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 import { createServer as createViteServer } from "vite";
-import { requireAuth, AuthRequest } from "./src/middleware/auth.ts";
+import { requireAuth, AuthRequest } from "./src/middleware/auth";
 import { 
   getCollectionData, 
   saveDocumentData, 
@@ -13,12 +13,12 @@ import {
   getOrCreateUserRecord,
   executeCollaboratorCreationTransaction,
   executeAtomicClockingTransaction
-} from "./src/db/repository.ts";
+} from "./src/db/repository";
 import { 
   sendThreadedEmployeeEmail, 
   getEffectiveSmtpConfig, 
   parseEmailList 
-} from "./src/services/serverMailService.ts";
+} from "./src/services/serverMailService";
 import {
   getDoualaDateInfo,
   buildTimesheetHtmlReport,
@@ -26,7 +26,7 @@ import {
   TimesheetItem,
   TimesheetBlocker,
   TimesheetManagerPoint
-} from "./src/services/timesheetReportService.ts";
+} from "./src/services/timesheetReportService";
 
 async function startServer() {
   const app = express();

@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
-import { supabaseAdmin } from '../lib/supabase.ts';
+import { supabaseAdmin } from '../lib/supabase';
 
 dotenv.config({ quiet: true });
 
