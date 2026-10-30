@@ -2,7 +2,7 @@ import {
   sendThreadedEmployeeEmail, 
   getEffectiveSmtpConfig, 
   parseEmailList 
-} from "../src/services/serverMailService";
+} from "../services/serverMailService";
 import { 
   getCollectionData, 
   saveDocumentData, 
@@ -10,8 +10,8 @@ import {
   getOrCreateUserRecord,
   executeCollaboratorCreationTransaction,
   executeAtomicClockingTransaction
-} from "../src/db/repository";
-import { supabaseAdmin } from "../src/lib/supabase";
+} from "../db/repository";
+import { supabaseAdmin } from "../lib/supabase";
 import { Resend } from "resend";
 
 /**
@@ -252,6 +252,7 @@ export default async function handler(req: any, res: any) {
       const {
         employeeName,
         employeeId,
+        employeeEmail,
         eventTitle,
         htmlContent,
         attachments,
@@ -259,6 +260,7 @@ export default async function handler(req: any, res: any) {
         threadCategory,
         threadSubject,
         overrideRecipients,
+        recipientEmails,
       } = body;
 
       if (!employeeName || !eventTitle || !htmlContent) {
@@ -274,16 +276,20 @@ export default async function handler(req: any, res: any) {
         });
       }
 
+      const targetRecipients = overrideRecipients || recipientEmails;
+
       const result = await sendThreadedEmployeeEmail(
         {
           employeeName,
           employeeId,
+          employeeEmail,
           eventTitle,
           threadCategory,
           threadSubject,
           htmlContent,
           attachments,
-          overrideRecipients,
+          overrideRecipients: targetRecipients,
+          recipientEmails: targetRecipients,
         },
         smtpConfig
       );
@@ -314,6 +320,7 @@ export default async function handler(req: any, res: any) {
           eventTitle: "Test Connexion SMTP - Citrine Mobilité",
           htmlContent: `<p>Bonjour,</p><p>Ce message confirme que la configuration SMTP de votre application Citrine Mobilité est <strong>100% opérationnelle</strong>.</p><p>Destinataire(s) RH configuré(s) : <code>${targetRecipients.join(", ")}</code></p>`,
           overrideRecipients: targetRecipients,
+          recipientEmails: targetRecipients,
         },
         smtpConfig
       );

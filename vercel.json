@@ -1,10 +1,5 @@
 {
   "framework": "vite",
-  "functions": {
-    "api/index.ts": {
-      "includeFiles": "src/**/*.ts"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",

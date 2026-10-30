@@ -336,6 +336,8 @@ export async function sendThreadedEmployeeEmail(
   let recipients: string[] = [];
   if (options.overrideRecipients && options.overrideRecipients.length > 0) {
     recipients = parseEmailList(options.overrideRecipients);
+  } else if (options.recipientEmails && options.recipientEmails.length > 0) {
+    recipients = parseEmailList(options.recipientEmails);
   } else {
     recipients = parseEmailList(config.hrEmail);
   }
