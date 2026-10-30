@@ -47,7 +47,75 @@ export interface WeeklyAttendanceReportData {
   totalCollectiveHoursText: string;
   averageAttendanceRate: number;
   totalLateness: number;
+  lateThreshold: string; // Heure limite paramétrée (ex: "08:30" ou repli "08:00")
   summaries: EmployeeWeeklySummary[];
+}
+
+/**
+ * Vérifie de façon stricte si un collaborateur est un Super Administrateur.
+ * Règle d'or : Les superadmins sont TOUJOURS exclus du récapitulatif des présences.
+ * Sont inclus tous les autres : responsables, employés, chefs de projet, IT, etc.
+ */
+export function isStrictSuperAdminAccount(emp: any, users?: any[]): boolean {
+  if (!emp) return false;
+  const normalize = (str?: string | null) => (str || '').toLowerCase().replace(/[\s_-]/g, '');
+
+  const email = (emp.email || '').toLowerCase().trim();
+  if (email === 'citrinemobilite@gmail.com') return true;
+
+  const role = normalize(emp.role);
+  const roleType = normalize(emp.roleType);
+  const pos = normalize(emp.position);
+  const uRole = normalize(emp.userRole);
+
+  if (
+    role.includes('superadmin') ||
+    role.includes('superadministrateur') ||
+    roleType.includes('superadmin') ||
+    roleType.includes('superadministrateur') ||
+    pos.includes('superadmin') ||
+    pos.includes('superadministrateur') ||
+    uRole.includes('superadmin') ||
+    uRole.includes('superadministrateur')
+  ) {
+    return true;
+  }
+
+  if (users && users.length > 0) {
+    const empId = String(emp.id || '');
+    const matchedUser = users.find(u => {
+      const matchId = String(u.employeeId || u.employee_id || '') === empId;
+      const matchEmail = email && String(u.email || '').trim().toLowerCase() === email;
+      return (empId && matchId) || matchEmail;
+    });
+
+    if (matchedUser) {
+      const userNormRole = normalize(matchedUser.role);
+      const userNormRoleType = normalize(matchedUser.roleType);
+      if (
+        userNormRole.includes('superadmin') ||
+        userNormRole.includes('superadministrateur') ||
+        userNormRoleType.includes('superadmin') ||
+        userNormRoleType.includes('superadministrateur')
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Vérifie si l'heure d'arrivée est strictement supérieure à l'heure limite paramétrée.
+ * Si le seuil n'est pas fourni, le seuil de repli par défaut est 08:00.
+ */
+export function isArrivalAfterThreshold(arrivalTime?: string | null, threshold: string = '08:00'): boolean {
+  if (!arrivalTime || !arrivalTime.includes(':')) return false;
+  const [h, m] = arrivalTime.split(':').map((v) => parseInt(v, 10));
+  const [thH, thM] = threshold.split(':').map((v) => parseInt(v, 10));
+  if (isNaN(h) || isNaN(m) || isNaN(thH) || isNaN(thM)) return false;
+  return (h * 60 + m) > (thH * 60 + thM);
 }
 
 /**
@@ -181,6 +249,10 @@ function formatHours(hours: number): string {
 
 /**
  * Analyse et consolide les données de présence pour tous les collaborateurs
+ * Règle d'or :
+ * 1. Utilise l'heure limite de retard paramétrée dans les réglages d'entreprise (lateThresholdTime / workStartTime).
+ *    Si elle n'existe pas, la valeur de repli par défaut est '08:00'.
+ * 2. N'inclut JAMAIS les superadmins. Inclut tous les autres profils : responsables, gestionnaires de projet, IT, employés, etc.
  */
 export async function compileWeeklyAttendanceData(options?: {
   manual?: boolean;
@@ -192,11 +264,32 @@ export async function compileWeeklyAttendanceData(options?: {
   const employees = await getCollectionData('employees');
   const presences = await getCollectionData('presences');
   const incidents = await getCollectionData('attendance_incidents');
+  const companySettingsList = await getCollectionData('company_settings');
+  const users = await getCollectionData('users');
 
-  // Filtrer les employés actifs
-  const activeEmployees = employees.filter((e: any) => {
+  // Récupération de l'heure limite de retard paramétrée dans les réglages
+  const companySettings = companySettingsList && companySettingsList.length > 0 ? companySettingsList[0] : null;
+  let lateThreshold = '08:00';
+  if (companySettings) {
+    const candidate =
+      companySettings.lateThresholdTime ||
+      companySettings.late_threshold_time ||
+      companySettings.workStartTime ||
+      companySettings.work_start_time;
+    if (typeof candidate === 'string' && candidate.trim().includes(':')) {
+      lateThreshold = candidate.trim();
+    }
+  }
+
+  // Filtrer les collaborateurs éligibles :
+  // - Actifs (non archivés, non inactifs)
+  // - EXCLUSION STRICTE : AUCUN Super Administrateur n'est inclus
+  // - INCLUSION TOTALE : Responsables, Gestionnaires de projet, IT, Employés, Stagiaires, etc.
+  const eligibleEmployees = employees.filter((e: any) => {
     const status = String(e.status || '').toLowerCase();
-    return status !== 'archived' && status !== 'inactif' && status !== 'inactive';
+    const isActive = status !== 'archived' && status !== 'inactif' && status !== 'inactive';
+    if (!isActive) return false;
+    return !isStrictSuperAdminAccount(e, users);
   });
 
   const nowFrStr = new Intl.DateTimeFormat('fr-FR', {
@@ -207,7 +300,7 @@ export async function compileWeeklyAttendanceData(options?: {
 
   const summaries: EmployeeWeeklySummary[] = [];
 
-  for (const emp of activeEmployees) {
+  for (const emp of eligibleEmployees) {
     const empId = String(emp.id || '');
     const empName = emp.name || 'Collaborateur';
     const empEmail = emp.email || '';
@@ -261,7 +354,8 @@ export async function compileWeeklyAttendanceData(options?: {
           }
         }
 
-        const isLate = p.status === 'late' || (arr && arr > '08:00') || (inc && inc.type === 'late');
+        // Vérification du retard : par rapport à l'heure limite paramétrée (ex: 08:30 ou 08:00 par défaut)
+        const isLate = p.status === 'late' || isArrivalAfterThreshold(arr, lateThreshold) || (inc && inc.type === 'late');
         if (isLate) {
           statusType = 'late';
           statusLabel = 'Retard';
@@ -347,6 +441,7 @@ export async function compileWeeklyAttendanceData(options?: {
     totalCollectiveHoursText: formatHours(totalCollectiveHours),
     averageAttendanceRate: avgAttendance,
     totalLateness,
+    lateThreshold,
     summaries,
   };
 }
@@ -412,6 +507,9 @@ export function buildWeeklyConsolidatedEmailHtml(data: WeeklyAttendanceReportDat
           <tr>
             <td style="background-color: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 14px 30px; font-size: 12px; color: #166534; line-height: 1.5;">
               📢 <strong>Information Équipe :</strong> Ce rapport unique consolidé regroupe l’assiduité de l’ensemble des collaborateurs pour la semaine. Les responsables ont reçu le rapport en destinataires principaux et l’ensemble des collaborateurs sont en copie (CC) pour transparence opérationnelle.
+              <div style="margin-top: 6px; font-size: 11px; color: #15803d; font-weight: 600;">
+                ⏱️ <strong>Heure limite de retard appliquée :</strong> ${data.lateThreshold} (par défaut 08:00 si non configurée) • 👥 <em>Comptes Super Administrateurs exclus du récapitulatif.</em>
+              </div>
             </td>
           </tr>
 
@@ -438,7 +536,7 @@ export function buildWeeklyConsolidatedEmailHtml(data: WeeklyAttendanceReportDat
                   <td style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; width: 25%;">
                     <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Retards Signalés</div>
                     <div style="font-size: 20px; font-weight: 800; color: ${data.totalLateness > 0 ? '#b91c1c' : '#10b981'}; margin-top: 4px;">${data.totalLateness}</div>
-                    <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;">Sur la période</div>
+                    <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;">Seuil : &gt; ${data.lateThreshold}</div>
                   </td>
                 </tr>
               </table>
@@ -650,10 +748,11 @@ export async function sendWeeklyConsolidatedReport(options?: {
       else recipients.push('citrinemobilite@gmail.com');
     }
 
-    // Copie (CC) : TOUS les collaborateurs actifs possédant une adresse email
+    // Copie (CC) : TOUS les collaborateurs actifs éligibles (hors superadmins) possédant une adresse email
     const activeEmployees = employees.filter((e: any) => {
       const status = String(e.status || '').toLowerCase();
-      return status !== 'archived' && status !== 'inactif' && status !== 'inactive' && Boolean(e.email);
+      const isActive = status !== 'archived' && status !== 'inactif' && status !== 'inactive' && Boolean(e.email);
+      return isActive && !isStrictSuperAdminAccount(e, users);
     });
 
     const ccEmails = activeEmployees

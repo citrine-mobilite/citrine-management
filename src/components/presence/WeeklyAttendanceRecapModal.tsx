@@ -110,10 +110,39 @@ export default function WeeklyAttendanceRecapModal({
     }
   };
 
-  const activeEmployeesWithEmail = employees.filter((e) => {
-    const status = String(e.status || '').toLowerCase();
-    return status !== 'archived' && status !== 'inactif' && Boolean(e.email);
-  });
+  // Détection stricte des Super Administrateurs pour affichage UI
+  const isSuperAdminAccount = (e: any) => {
+    const normalize = (s?: string) => (s || '').toLowerCase().replace(/[\s_-]/g, '');
+    const email = (e.email || '').toLowerCase().trim();
+    if (email === 'citrinemobilite@gmail.com') return true;
+    const role = normalize(e.role);
+    const roleType = normalize(e.roleType);
+    const pos = normalize(e.position);
+    return (
+      role.includes('superadmin') ||
+      role.includes('superadministrateur') ||
+      roleType.includes('superadmin') ||
+      roleType.includes('superadministrateur') ||
+      pos.includes('superadmin') ||
+      pos.includes('superadministrateur')
+    );
+  };
+
+  const activeEmployeesWithEmail = (
+    reportPreview?.summaries
+      ? reportPreview.summaries.map((s: any) => ({
+          id: s.employeeId,
+          name: s.employeeName,
+          email: s.employeeEmail,
+          department: s.department,
+          position: s.position,
+        }))
+      : employees.filter((e) => {
+          const status = String(e.status || '').toLowerCase();
+          const isActive = status !== 'archived' && status !== 'inactif' && Boolean(e.email);
+          return isActive && !isSuperAdminAccount(e);
+        })
+  ).filter((e: any) => e.email && e.email.includes('@'));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -223,6 +252,21 @@ export default function WeeklyAttendanceRecapModal({
                         <div className={`text-base font-extrabold mt-0.5 ${reportPreview.totalLateness > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                           {reportPreview.totalLateness}
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Précisions sur les règles appliquées */}
+                    <div className="pt-2 border-t border-stone-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-stone-600">
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                        <span>Seuil de retard paramétré :</span>
+                        <strong className="text-stone-900 bg-amber-100/70 text-amber-900 px-1.5 py-0.5 rounded-md font-mono">
+                          {reportPreview.lateThreshold || '08:30'}
+                        </strong>
+                        <span className="text-[10px] text-stone-400">(par défaut 08:00 si non défini)</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 font-semibold w-fit">
+                        <span>🛡️ Superadmins exclus • Inclus : Responsables, IT, Employés</span>
                       </div>
                     </div>
                   </div>

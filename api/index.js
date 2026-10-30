@@ -1373,6 +1373,42 @@ function notifRowDoc(row) {
 import { Resend } from "resend";
 
 // src/services/weeklyAttendanceReportService.ts
+function isStrictSuperAdminAccount(emp, users) {
+  if (!emp) return false;
+  const normalize = (str) => (str || "").toLowerCase().replace(/[\s_-]/g, "");
+  const email = (emp.email || "").toLowerCase().trim();
+  if (email === "citrinemobilite@gmail.com") return true;
+  const role = normalize(emp.role);
+  const roleType = normalize(emp.roleType);
+  const pos = normalize(emp.position);
+  const uRole = normalize(emp.userRole);
+  if (role.includes("superadmin") || role.includes("superadministrateur") || roleType.includes("superadmin") || roleType.includes("superadministrateur") || pos.includes("superadmin") || pos.includes("superadministrateur") || uRole.includes("superadmin") || uRole.includes("superadministrateur")) {
+    return true;
+  }
+  if (users && users.length > 0) {
+    const empId = String(emp.id || "");
+    const matchedUser = users.find((u) => {
+      const matchId = String(u.employeeId || u.employee_id || "") === empId;
+      const matchEmail = email && String(u.email || "").trim().toLowerCase() === email;
+      return empId && matchId || matchEmail;
+    });
+    if (matchedUser) {
+      const userNormRole = normalize(matchedUser.role);
+      const userNormRoleType = normalize(matchedUser.roleType);
+      if (userNormRole.includes("superadmin") || userNormRole.includes("superadministrateur") || userNormRoleType.includes("superadmin") || userNormRoleType.includes("superadministrateur")) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function isArrivalAfterThreshold(arrivalTime, threshold = "08:00") {
+  if (!arrivalTime || !arrivalTime.includes(":")) return false;
+  const [h, m] = arrivalTime.split(":").map((v) => parseInt(v, 10));
+  const [thH, thM] = threshold.split(":").map((v) => parseInt(v, 10));
+  if (isNaN(h) || isNaN(m) || isNaN(thH) || isNaN(thM)) return false;
+  return h * 60 + m > thH * 60 + thM;
+}
 function getDoualaCurrentWeek(referenceDate = /* @__PURE__ */ new Date(), options) {
   const doualaFormatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Africa/Douala",
@@ -1468,9 +1504,21 @@ async function compileWeeklyAttendanceData(options) {
   const employees = await getCollectionData("employees");
   const presences = await getCollectionData("presences");
   const incidents = await getCollectionData("attendance_incidents");
-  const activeEmployees = employees.filter((e) => {
+  const companySettingsList = await getCollectionData("company_settings");
+  const users = await getCollectionData("users");
+  const companySettings = companySettingsList && companySettingsList.length > 0 ? companySettingsList[0] : null;
+  let lateThreshold = "08:00";
+  if (companySettings) {
+    const candidate = companySettings.lateThresholdTime || companySettings.late_threshold_time || companySettings.workStartTime || companySettings.work_start_time;
+    if (typeof candidate === "string" && candidate.trim().includes(":")) {
+      lateThreshold = candidate.trim();
+    }
+  }
+  const eligibleEmployees = employees.filter((e) => {
     const status = String(e.status || "").toLowerCase();
-    return status !== "archived" && status !== "inactif" && status !== "inactive";
+    const isActive = status !== "archived" && status !== "inactif" && status !== "inactive";
+    if (!isActive) return false;
+    return !isStrictSuperAdminAccount(e, users);
   });
   const nowFrStr = new Intl.DateTimeFormat("fr-FR", {
     timeZone: "Africa/Douala",
@@ -1478,7 +1526,7 @@ async function compileWeeklyAttendanceData(options) {
     timeStyle: "short"
   }).format(/* @__PURE__ */ new Date());
   const summaries = [];
-  for (const emp of activeEmployees) {
+  for (const emp of eligibleEmployees) {
     const empId = String(emp.id || "");
     const empName = emp.name || "Collaborateur";
     const empEmail = emp.email || "";
@@ -1519,7 +1567,7 @@ async function compileWeeklyAttendanceData(options) {
             workedHours = 4;
           }
         }
-        const isLate = p.status === "late" || arr && arr > "08:00" || inc && inc.type === "late";
+        const isLate = p.status === "late" || isArrivalAfterThreshold(arr, lateThreshold) || inc && inc.type === "late";
         if (isLate) {
           statusType = "late";
           statusLabel = "Retard";
@@ -1590,6 +1638,7 @@ async function compileWeeklyAttendanceData(options) {
     totalCollectiveHoursText: formatHours(totalCollectiveHours),
     averageAttendanceRate: avgAttendance,
     totalLateness,
+    lateThreshold,
     summaries
   };
 }
@@ -1647,6 +1696,9 @@ function buildWeeklyConsolidatedEmailHtml(data) {
           <tr>
             <td style="background-color: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 14px 30px; font-size: 12px; color: #166534; line-height: 1.5;">
               \u{1F4E2} <strong>Information \xC9quipe :</strong> Ce rapport unique consolid\xE9 regroupe l\u2019assiduit\xE9 de l\u2019ensemble des collaborateurs pour la semaine. Les responsables ont re\xE7u le rapport en destinataires principaux et l\u2019ensemble des collaborateurs sont en copie (CC) pour transparence op\xE9rationnelle.
+              <div style="margin-top: 6px; font-size: 11px; color: #15803d; font-weight: 600;">
+                \u23F1\uFE0F <strong>Heure limite de retard appliqu\xE9e :</strong> ${data.lateThreshold} (par d\xE9faut 08:00 si non configur\xE9e) \u2022 \u{1F465} <em>Comptes Super Administrateurs exclus du r\xE9capitulatif.</em>
+              </div>
             </td>
           </tr>
 
@@ -1673,7 +1725,7 @@ function buildWeeklyConsolidatedEmailHtml(data) {
                   <td style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; width: 25%;">
                     <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Retards Signal\xE9s</div>
                     <div style="font-size: 20px; font-weight: 800; color: ${data.totalLateness > 0 ? "#b91c1c" : "#10b981"}; margin-top: 4px;">${data.totalLateness}</div>
-                    <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;">Sur la p\xE9riode</div>
+                    <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;">Seuil : &gt; ${data.lateThreshold}</div>
                   </td>
                 </tr>
               </table>
@@ -1856,7 +1908,8 @@ async function sendWeeklyConsolidatedReport(options) {
     }
     const activeEmployees = employees.filter((e) => {
       const status = String(e.status || "").toLowerCase();
-      return status !== "archived" && status !== "inactif" && status !== "inactive" && Boolean(e.email);
+      const isActive = status !== "archived" && status !== "inactif" && status !== "inactive" && Boolean(e.email);
+      return isActive && !isStrictSuperAdminAccount(e, users);
     });
     const ccEmails = activeEmployees.map((e) => (e.email || "").trim()).filter((mail) => mail && mail.includes("@"));
     console.log(`\u{1F4E7} [RAPPORT HEBDO PR\xC9SENCES] Pr\xE9paration envoi : To: ${recipients.join(", ")} | CC: ${ccEmails.length} collaborateurs.`);
