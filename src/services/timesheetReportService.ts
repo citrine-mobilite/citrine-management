@@ -43,6 +43,18 @@ export interface TimesheetScheduleSlot {
   resolutionNote?: string;
 }
 
+export interface DailyAttendanceRecap {
+  statusLabel?: string;
+  statusType?: 'present' | 'late' | 'mission' | 'leave' | 'absent' | 'remote';
+  arrivalTime?: string;
+  pauseStart?: string;
+  pauseEnd?: string;
+  departureTime?: string;
+  hoursWorkedText?: string;
+  location?: string;
+  incidentNote?: string;
+}
+
 export interface TimesheetReportData {
   employeeName: string;
   employeeEmail?: string;
@@ -50,6 +62,7 @@ export interface TimesheetReportData {
   department?: string;
   dateStr?: string; // e.g. "21/09/2026" ou "mardi 27 octobre 2026"
   timeStr?: string; // e.g. "18:27"
+  dailyAttendance?: DailyAttendanceRecap;
   items: TimesheetItem[];
   blockers: TimesheetBlocker[];
   managerPoints: TimesheetManagerPoint[];
@@ -537,6 +550,74 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
               </td>
             </tr>
           </table>
+        </div>
+
+        <!-- 🕒 RÉCAPITULATIF DE PRÉSENCE & POINTAGE DU JOUR (DEMANDÉ PAR L'UTILISATEUR) -->
+        <div style="border-radius: 12px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px; background-color: #ffffff;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>⏱️ RÉCAPITULATIF DE PRÉSENCE &amp; POINTAGE DU JOUR</td>
+                <td align="right" style="font-size: 11px; color: #a7f3d0; font-weight: 600;">
+                  Registre Officiel Citrine Pointage
+                </td>
+              </tr>
+            </table>
+          </div>
+          <div style="padding: 12px 14px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Statut du Jour</div>
+                  <div style="margin-top: 3px;">
+                    ${(() => {
+                      const st = data.dailyAttendance?.statusType;
+                      const label = data.dailyAttendance?.statusLabel || (data.dailyAttendance?.arrivalTime ? 'Présent' : 'Non pointé');
+                      const bg = st === 'late' ? '#fef3c7' : (st === 'mission' ? '#e0e7ff' : (st === 'leave' ? '#f3e8ff' : (data.dailyAttendance?.arrivalTime ? '#d1fae5' : '#fee2e2')));
+                      const col = st === 'late' ? '#92400e' : (st === 'mission' ? '#3730a3' : (st === 'leave' ? '#6b21a8' : (data.dailyAttendance?.arrivalTime ? '#065f46' : '#991b1b')));
+                      const bor = st === 'late' ? '#fde68a' : (st === 'mission' ? '#c7d2fe' : (st === 'leave' ? '#e9d5ff' : (data.dailyAttendance?.arrivalTime ? '#a7f3d0' : '#fecaca')));
+                      return `<span style="display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 800; background-color: ${bg}; color: ${col}; border: 1px solid ${bor};">${label}</span>`;
+                    })()}
+                  </div>
+                </td>
+                <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Arrivée sur site</div>
+                  <div style="font-size: 14px; font-weight: 800; color: #0f172a; font-family: monospace; margin-top: 2px;">
+                    ${data.dailyAttendance?.arrivalTime || '—'}
+                  </div>
+                  <div style="font-size: 9.5px; color: #94a3b8; margin-top: 1px;">
+                    ${data.dailyAttendance?.location || 'Douala'}
+                  </div>
+                </td>
+                <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Pause Déjeuner</div>
+                  <div style="font-size: 12px; font-weight: 700; color: #475569; font-family: monospace; margin-top: 2px;">
+                    ${data.dailyAttendance?.pauseStart && data.dailyAttendance?.pauseEnd 
+                      ? `${data.dailyAttendance.pauseStart} – ${data.dailyAttendance.pauseEnd}` 
+                      : (data.dailyAttendance?.pauseStart ? `Dès ${data.dailyAttendance.pauseStart}` : '13:00 – 14:00')}
+                  </div>
+                  <div style="font-size: 9.5px; color: #166534; margin-top: 1px;">
+                    ${data.dailyAttendance?.pauseStart ? 'Effectuée' : 'Créneau standard'}
+                  </div>
+                </td>
+                <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Départ / Temps Réel</div>
+                  <div style="font-size: 14px; font-weight: 800; color: #164e4b; font-family: monospace; margin-top: 2px;">
+                    ${data.dailyAttendance?.departureTime || 'En poste'}
+                  </div>
+                  <div style="font-size: 10px; font-weight: 700; color: #0284c7; margin-top: 1px;">
+                    ⏱️ ${data.dailyAttendance?.hoursWorkedText || `${Math.round(p.plannedMinutes / 60)}h estimées`}
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            ${data.dailyAttendance?.incidentNote ? `
+              <div style="margin-top: 8px; padding: 6px 10px; background-color: #fffbeb; border: 1px solid #fef08a; border-radius: 6px; font-size: 10.5px; color: #854d0e;">
+                ℹ️ <strong>Observation Pointage :</strong> ${data.dailyAttendance.incidentNote}
+              </div>
+            ` : ''}
+          </div>
         </div>
 
         <!-- 1. LES 3 PRIORITÉS DU JOUR (LES GRANDES TÂCHES / JOB DESCRIPTION) -->

@@ -325,7 +325,9 @@ async function sendThreadedEmployeeEmail(options, customConfig) {
         contentDisposition: "attachment"
       };
     });
-    const info = await transporter.sendMail({
+    const rawCc = options.cc ? parseEmailList(options.cc) : [];
+    const ccList = rawCc.filter((c) => !recipients.some((r) => r.toLowerCase() === c.toLowerCase()));
+    const mailOptions = {
       from: fromAddress,
       to: recipients.join(", "),
       replyTo: cleanFrom,
@@ -351,8 +353,12 @@ async function sendThreadedEmployeeEmail(options, customConfig) {
         "MIME-Version": "1.0",
         "Organization": "Citrine Mobilit\xE9"
       }
-    });
-    console.log(`\u2705 [SMTP ENVOY\xC9 THREAD\xC9] ID: ${info.messageId} | Fil: "${threadSubject}" -> [${recipients.join(", ")}]`);
+    };
+    if (ccList.length > 0) {
+      mailOptions.cc = ccList.join(", ");
+    }
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`\u2705 [SMTP ENVOY\xC9 THREAD\xC9] ID: ${info.messageId} | Fil: "${threadSubject}" -> To: [${recipients.join(", ")}]${ccList.length > 0 ? ` | CC: [${ccList.join(", ")}]` : ""}`);
     return {
       success: true,
       messageId: info.messageId,
@@ -379,6 +385,101 @@ async function sendThreadedEmployeeEmail(options, customConfig) {
         responseCode: err?.responseCode,
         stack: err?.stack
       }
+    };
+  }
+}
+async function sendConsolidatedReportEmail(options, customConfig) {
+  const config = await getEffectiveSmtpConfig(customConfig);
+  const transporter = await getTransporter(customConfig);
+  let recipients = [];
+  if (options.recipientEmails && options.recipientEmails.length > 0) {
+    recipients = parseEmailList(options.recipientEmails);
+  } else {
+    recipients = parseEmailList(config.hrEmail);
+  }
+  if (recipients.length === 0) {
+    return {
+      success: false,
+      error: "Aucune adresse e-mail destinataire configur\xE9e dans HR_NOTIFICATION_EMAIL pour le rapport consolid\xE9."
+    };
+  }
+  if (!transporter) {
+    return {
+      success: false,
+      error: "Configuration SMTP incompl\xE8te ou introuvable : h\xF4te, utilisateur ou mot de passe non configur\xE9."
+    };
+  }
+  const rawCc = options.ccEmails ? parseEmailList(options.ccEmails) : [];
+  const ccRecipients = rawCc.filter((c) => !recipients.some((r) => r.toLowerCase() === c.toLowerCase()));
+  const effectiveSenderEmail = config.user || (config.from?.includes("<") ? config.from.match(/<([^>]+)>/)?.[1].trim() : config.from) || "citrinemobilite@gmail.com";
+  const cleanFrom = config.from?.includes("<") && config.from?.includes(">") ? config.from.match(/<([^>]+)>/)?.[1].trim() || config.from : config.from || effectiveSenderEmail;
+  const senderName = config.senderName || "Citrine Mobilit\xE9 RH";
+  const fromAddress = `"${senderName.replace(/"/g, "")}" <${cleanFrom}>`;
+  const domainMatch = cleanFrom.match(/@([^>]+)/);
+  const senderDomain = domainMatch ? domainMatch[1] : "citrinemobilite.com";
+  const cleanMessageId = `<citrine-weekly-${Date.now()}.${Math.random().toString(36).substring(2, 7)}@${senderDomain}>`;
+  const htmlBody = options.htmlContent.includes("<!DOCTYPE") || options.htmlContent.includes("<html") ? options.htmlContent : `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${options.subject}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f5f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1c1917;">
+  ${options.htmlContent}
+</body>
+</html>`;
+  const textBody = options.plainText || [
+    `CITRINE MOBILIT\xC9 \u2014 RAPPORT CONSOLID\xC9 DES PR\xC9SENCES`,
+    `Objet : ${options.subject}`,
+    `Date d'\xE9mission : ${new Intl.DateTimeFormat("fr-FR", { timeZone: "Africa/Douala", dateStyle: "full", timeStyle: "short" }).format(/* @__PURE__ */ new Date())}`,
+    `--------------------------------------------------`,
+    `Le rapport d\xE9taill\xE9 de pr\xE9sence de l'ensemble des collaborateurs de la semaine est consultable dans le corps HTML du message.`,
+    ``,
+    `Direction des Ressources Humaines & Op\xE9rations`,
+    `Citrine Mobilit\xE9 \u2014 Douala, Cameroun`
+  ].join("\n");
+  try {
+    const attachments = (options.attachments || []).map((att) => ({
+      ...att,
+      contentType: att.contentType || "application/octet-stream",
+      contentDisposition: "attachment"
+    }));
+    const mailOptions = {
+      from: fromAddress,
+      to: recipients.join(", "),
+      replyTo: cleanFrom,
+      subject: options.subject,
+      text: textBody,
+      html: htmlBody,
+      messageId: cleanMessageId,
+      date: /* @__PURE__ */ new Date(),
+      attachments,
+      headers: {
+        "X-Mailer": "Citrine RH Mail System 2.1",
+        "X-Priority": "3",
+        "Importance": "Normal",
+        "Organization": "Citrine Mobilit\xE9"
+      }
+    };
+    if (ccRecipients.length > 0) {
+      mailOptions.cc = ccRecipients.join(", ");
+    }
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`\u2705 [SMTP RAPPORT CONSOLID\xC9 ENVOY\xC9] ID: ${info.messageId} | "${options.subject}" -> To: [${recipients.join(", ")}] | CC: [${ccRecipients.length} collaborateurs]`);
+    return {
+      success: true,
+      messageId: info.messageId,
+      recipients,
+      ccRecipients
+    };
+  } catch (err) {
+    const rawError = err?.message || String(err);
+    console.error(`\u274C [SMTP RAPPORT CONSOLID\xC9 \xC9CHEC]:`, err);
+    return {
+      success: false,
+      error: rawError,
+      details: err
     };
   }
 }
@@ -1270,6 +1371,531 @@ function notifRowDoc(row) {
 
 // src/server/apiHandler.ts
 import { Resend } from "resend";
+
+// src/services/weeklyAttendanceReportService.ts
+function getDoualaCurrentWeek(referenceDate = /* @__PURE__ */ new Date(), options) {
+  const doualaFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Douala",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+  const parts = doualaFormatter.formatToParts(referenceDate);
+  const year = parseInt(parts.find((p) => p.type === "year")?.value || "2026", 10);
+  const month = parseInt(parts.find((p) => p.type === "month")?.value || "1", 10) - 1;
+  const day = parseInt(parts.find((p) => p.type === "day")?.value || "1", 10);
+  const localDate = new Date(year, month, day);
+  const dayOfWeek = localDate.getDay();
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(localDate);
+  monday.setDate(localDate.getDate() + diffToMonday);
+  let targetEndDay = dayOfWeek;
+  if (options?.forceFriday || dayOfWeek === 0 || dayOfWeek === 6 || dayOfWeek >= 5) {
+    targetEndDay = 5;
+  } else if (targetEndDay < 1) {
+    targetEndDay = 1;
+  }
+  const days = [];
+  const dayNames = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const isPastOrToday = i + 1 <= targetEndDay;
+    const isToday = i + 1 === dayOfWeek;
+    days.push({
+      date: d,
+      dateIso: iso,
+      dayName: dayNames[i],
+      isToday,
+      isPastOrToday
+    });
+  }
+  const mondayIso = days[0].dateIso;
+  const endDayItem = days[Math.min(targetEndDay - 1, 4)];
+  const endDateIso = endDayItem ? endDayItem.dateIso : days[4].dateIso;
+  const dateFrFormatter = new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  });
+  return {
+    mondayDate: days[0].date,
+    mondayIso,
+    mondayLabel: `${days[0].dayName} ${dateFrFormatter.format(days[0].date)}`,
+    endDate: endDayItem.date,
+    endDateIso,
+    endLabel: `${endDayItem.dayName} ${dateFrFormatter.format(endDayItem.date)}`,
+    targetEndDay,
+    isFullWeek: targetEndDay >= 5,
+    days
+  };
+}
+function calculateHoursWorked(arrival, departure, pauseStart, pauseEnd) {
+  if (!arrival) return 0;
+  const parseMins = (timeStr) => {
+    if (!timeStr || !timeStr.includes(":")) return null;
+    const [h, m] = timeStr.split(":").map((v) => parseInt(v, 10));
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  };
+  const arrMins = parseMins(arrival);
+  if (arrMins === null) return 0;
+  let depMins = parseMins(departure);
+  if (depMins === null) {
+    return 0;
+  }
+  let totalMins = depMins - arrMins;
+  const pStartMins = parseMins(pauseStart);
+  const pEndMins = parseMins(pauseEnd);
+  if (pStartMins !== null && pEndMins !== null && pEndMins > pStartMins) {
+    totalMins -= pEndMins - pStartMins;
+  }
+  return Math.max(0, Math.round(totalMins / 60 * 10) / 10);
+}
+function formatHours(hours) {
+  if (hours <= 0) return "0h";
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  if (m === 0) return `${h}h`;
+  return `${h}h${String(m).padStart(2, "0")}`;
+}
+async function compileWeeklyAttendanceData(options) {
+  const weekInfo = getDoualaCurrentWeek(options?.referenceDate, { forceFriday: options?.forceFriday });
+  const employees = await getCollectionData("employees");
+  const presences = await getCollectionData("presences");
+  const incidents = await getCollectionData("attendance_incidents");
+  const activeEmployees = employees.filter((e) => {
+    const status = String(e.status || "").toLowerCase();
+    return status !== "archived" && status !== "inactif" && status !== "inactive";
+  });
+  const nowFrStr = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Africa/Douala",
+    dateStyle: "full",
+    timeStyle: "short"
+  }).format(/* @__PURE__ */ new Date());
+  const summaries = [];
+  for (const emp of activeEmployees) {
+    const empId = String(emp.id || "");
+    const empName = emp.name || "Collaborateur";
+    const empEmail = emp.email || "";
+    const department = emp.department || "Op\xE9rations & Technique";
+    const position = emp.position || emp.role || "Collaborateur";
+    const dayRecords = [];
+    let employeeTotalHours = 0;
+    let employeeDaysWorked = 0;
+    let employeeLateness = 0;
+    for (const d of weekInfo.days) {
+      const isElapsed = d.isPastOrToday;
+      const p = presences.find((item) => {
+        const matchEmp = String(item.employeeId || item.employee_id || "") === empId;
+        const pDate = String(item.date || "").split("T")[0];
+        return matchEmp && pDate === d.dateIso;
+      });
+      const inc = incidents.find((item) => {
+        const matchEmp = String(item.employeeId || item.employee_id || "") === empId;
+        const incDate = String(item.date || "").split("T")[0];
+        return matchEmp && incDate === d.dateIso;
+      });
+      let statusType = "unknown";
+      let statusLabel = "Non renseign\xE9";
+      let workedHours = 0;
+      if (!isElapsed) {
+        statusType = "future";
+        statusLabel = "\xC0 venir";
+      } else if (p) {
+        const arr = p.arrivalTime || "";
+        const dep = p.departureTime || "";
+        const pStart = p.pauseStart || "";
+        const pEnd = p.pauseEnd || "";
+        if (p.hoursWorked && Number(p.hoursWorked) > 0) {
+          workedHours = Number(p.hoursWorked);
+        } else {
+          workedHours = calculateHoursWorked(arr, dep, pStart, pEnd);
+          if (workedHours === 0 && arr && !dep && d.isToday) {
+            workedHours = 4;
+          }
+        }
+        const isLate = p.status === "late" || arr && arr > "08:00" || inc && inc.type === "late";
+        if (isLate) {
+          statusType = "late";
+          statusLabel = "Retard";
+          employeeLateness++;
+        } else if (p.status === "mission") {
+          statusType = "mission";
+          statusLabel = "En mission";
+        } else if (p.status === "leave" || p.status === "conge") {
+          statusType = "leave";
+          statusLabel = "Cong\xE9";
+        } else {
+          statusType = "on_time";
+          statusLabel = "Pr\xE9sent";
+        }
+        if (arr) {
+          employeeDaysWorked++;
+          employeeTotalHours += workedHours;
+        }
+      } else {
+        statusType = "absent";
+        statusLabel = "Non point\xE9";
+      }
+      dayRecords.push({
+        dayName: d.dayName,
+        dateStr: d.dateIso,
+        formattedDate: `${d.date.getDate()}/${d.date.getMonth() + 1}`,
+        arrivalTime: p?.arrivalTime || (statusType === "future" ? "" : "\u2014"),
+        pauseStart: p?.pauseStart || "",
+        pauseEnd: p?.pauseEnd || "",
+        departureTime: p?.departureTime || (statusType === "future" ? "" : "\u2014"),
+        workedHoursText: workedHours > 0 ? formatHours(workedHours) : statusType === "future" ? "\u2014" : "0h",
+        workedHoursNumber: workedHours,
+        statusLabel,
+        statusType,
+        location: p?.location || "Douala",
+        notes: inc?.description || p?.adminBadgeReason || p?.correctionReason
+      });
+    }
+    const attendanceRate = weekInfo.targetEndDay > 0 ? Math.min(100, Math.round(employeeDaysWorked / weekInfo.targetEndDay * 100)) : 0;
+    summaries.push({
+      employeeId: empId,
+      employeeName: empName,
+      employeeEmail: empEmail,
+      department,
+      position,
+      days: dayRecords,
+      totalWorkedHours: employeeTotalHours,
+      totalWorkedHoursText: formatHours(employeeTotalHours),
+      daysWorkedCount: employeeDaysWorked,
+      totalDaysExpected: weekInfo.targetEndDay,
+      latenessCount: employeeLateness,
+      attendanceRate
+    });
+  }
+  const totalCollectiveHours = summaries.reduce((sum, s) => sum + s.totalWorkedHours, 0);
+  const totalLateness = summaries.reduce((sum, s) => sum + s.latenessCount, 0);
+  const avgAttendance = summaries.length > 0 ? Math.round(summaries.reduce((sum, s) => sum + s.attendanceRate, 0) / summaries.length) : 0;
+  const isManual = Boolean(options?.manual);
+  const title = isManual ? `Rapport d'\xC9tape des Pr\xE9sences \u2014 Semaine en cours (${weekInfo.mondayLabel} au ${weekInfo.endLabel})` : `Rapport Hebdomadaire des Pr\xE9sences \u2014 Semaine du ${weekInfo.mondayLabel} au ${weekInfo.endLabel}`;
+  return {
+    title,
+    startDateStr: weekInfo.mondayLabel,
+    endDateStr: weekInfo.endLabel,
+    isFullWeek: weekInfo.isFullWeek,
+    isManualTrigger: isManual,
+    generatedAtStr: nowFrStr,
+    totalCollaborators: summaries.length,
+    totalCollectiveHoursText: formatHours(totalCollectiveHours),
+    averageAttendanceRate: avgAttendance,
+    totalLateness,
+    summaries
+  };
+}
+function buildWeeklyConsolidatedEmailHtml(data) {
+  const badgeColor = data.isManualTrigger ? "#0284c7" : "#164e4b";
+  const badgeText = data.isManualTrigger ? "Point d\u2019\xC9tape en Cours de Semaine" : "Bilan Hebdomadaire Officiel (Cl\xF4ture)";
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${data.title}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5; padding: 30px 10px;">
+    <tr>
+      <td align="center">
+        
+        <table role="presentation" width="100%" style="max-width: 860px; background-color: #ffffff; border-radius: 20px; border: 1px solid #e4e4e7; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06);" cellspacing="0" cellpadding="0">
+          
+          <!-- EN-T\xCATE SUP\xC9RIEUR CITRINE MOBILIT\xC9 -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #164e4b 0%, #064e3b 100%); padding: 30px; text-align: left; color: #ffffff;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <div style="font-family: Georgia, serif; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">
+                      CITRINE MOBILIT\xC9
+                    </div>
+                    <div style="font-size: 11px; color: #a7f3d0; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top: 3px;">
+                      Direction des Ressources Humaines &amp; Op\xE9rations
+                    </div>
+                  </td>
+                  <td align="right" style="vertical-align: top;">
+                    <span style="display: inline-block; background-color: rgba(255,255,255,0.18); color: #ffffff; font-size: 10px; font-weight: bold; padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.3);">
+                      ${badgeText}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+              
+              <div style="margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.2);">
+                <h1 style="margin: 0; font-size: 20px; font-weight: 800; line-height: 1.3;">
+                  ${data.title}
+                </h1>
+                <div style="font-size: 12px; color: #ccfbf1; margin-top: 6px;">
+                  P\xE9riode analys\xE9e : <strong>${data.startDateStr}</strong> au <strong>${data.endDateStr}</strong>
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          <!-- NOTE D'ENVOI CONSOLID\xC9 & COPIE G\xC9N\xC9RALE -->
+          <tr>
+            <td style="background-color: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 14px 30px; font-size: 12px; color: #166534; line-height: 1.5;">
+              \u{1F4E2} <strong>Information \xC9quipe :</strong> Ce rapport unique consolid\xE9 regroupe l\u2019assiduit\xE9 de l\u2019ensemble des collaborateurs pour la semaine. Les responsables ont re\xE7u le rapport en destinataires principaux et l\u2019ensemble des collaborateurs sont en copie (CC) pour transparence op\xE9rationnelle.
+            </td>
+          </tr>
+
+          <!-- KPI FLASH COLLECTIFS -->
+          <tr>
+            <td style="padding: 24px 30px 10px 30px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: separate; border-spacing: 10px 0;">
+                <tr>
+                  <td style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; width: 25%;">
+                    <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Collaborateurs</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">${data.totalCollaborators}</div>
+                    <div style="font-size: 10px; color: #10b981; font-weight: 600; margin-top: 2px;">Actifs suivis</div>
+                  </td>
+                  <td style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; width: 25%;">
+                    <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Heures \xC9quipe</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #164e4b; margin-top: 4px;">${data.totalCollectiveHoursText}</div>
+                    <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;">Temps cumul\xE9</div>
+                  </td>
+                  <td style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; width: 25%;">
+                    <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Assiduit\xE9 Moy.</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #0284c7; margin-top: 4px;">${data.averageAttendanceRate}%</div>
+                    <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;">Pr\xE9sence globale</div>
+                  </td>
+                  <td style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; width: 25%;">
+                    <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Retards Signal\xE9s</div>
+                    <div style="font-size: 20px; font-weight: 800; color: ${data.totalLateness > 0 ? "#b91c1c" : "#10b981"}; margin-top: 4px;">${data.totalLateness}</div>
+                    <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;">Sur la p\xE9riode</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- CORPS PRINCIPAL : D\xC9TAIL PAR COLLABORATEUR (COLLABORATEUR X, COLLABORATEUR Y...) -->
+          <tr>
+            <td style="padding: 20px 30px;">
+              
+              <div style="font-size: 13px; font-weight: 800; color: #164e4b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; border-bottom: 2px solid #164e4b; padding-bottom: 6px;">
+                \u{1F4CB} Registre Individuel D\xE9taill\xE9 par Collaborateur
+              </div>
+
+              ${data.summaries.map((emp, idx) => {
+    const initial = (emp.employeeName || "C").substring(0, 2).toUpperCase();
+    const rateColor = emp.attendanceRate >= 80 ? "#10b981" : emp.attendanceRate >= 50 ? "#d97706" : "#ef4444";
+    return `
+                  <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; margin-bottom: 20px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.03);">
+                    
+                    <!-- En-t\xEAte fiche collaborateur -->
+                    <div style="background-color: #f8fafc; padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                        <tr>
+                          <td style="vertical-align: middle;">
+                            <table role="presentation" cellspacing="0" cellpadding="0">
+                              <tr>
+                                <td style="width: 36px; height: 36px; background-color: #164e4b; color: #ffffff; font-weight: 800; font-size: 12px; border-radius: 10px; text-align: center; vertical-align: middle;">
+                                  ${initial}
+                                </td>
+                                <td style="padding-left: 12px; vertical-align: middle;">
+                                  <div style="font-size: 14px; font-weight: 800; color: #0f172a;">
+                                    ${emp.employeeName}
+                                  </div>
+                                  <div style="font-size: 11px; color: #64748b;">
+                                    ${emp.position} \u2022 <span style="color: #164e4b; font-weight: 600;">${emp.department}</span>
+                                    ${emp.employeeEmail ? ` \u2022 <span style="font-family: monospace; font-size: 10px;">${emp.employeeEmail}</span>` : ""}
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                          <td align="right" style="vertical-align: middle;">
+                            <span style="display: inline-block; background-color: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; margin-right: 6px;">
+                              \u23F1\uFE0F ${emp.totalWorkedHoursText}
+                            </span>
+                            <span style="display: inline-block; background-color: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;">
+                              \u{1F4C5} ${emp.daysWorkedCount}/${emp.totalDaysExpected} j. (${emp.attendanceRate}%)
+                            </span>
+                            ${emp.latenessCount > 0 ? `
+                              <span style="display: inline-block; background-color: #fef2f2; border: 1px solid #fecaca; color: #991b1b; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; margin-left: 6px;">
+                                \u26A0\uFE0F ${emp.latenessCount} retard${emp.latenessCount > 1 ? "s" : ""}
+                              </span>
+                            ` : ""}
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+
+                    <!-- Grille des pointages Lundi -> Vendredi -->
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size: 11.5px; border-collapse: collapse; text-align: left;">
+                      <thead>
+                        <tr style="background-color: #f1f5f9; color: #475569; font-size: 10px; font-weight: 700; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">
+                          <th style="padding: 8px 14px;">Jour</th>
+                          <th style="padding: 8px 10px;">Arriv\xE9e</th>
+                          <th style="padding: 8px 10px;">Pause / Reprise</th>
+                          <th style="padding: 8px 10px;">D\xE9part</th>
+                          <th style="padding: 8px 10px; text-align: right;">Heures</th>
+                          <th style="padding: 8px 14px; text-align: center;">Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody style="color: #334155;">
+                        ${emp.days.map((day, dIdx) => {
+      let badgeBg = "#f1f5f9";
+      let badgeColor2 = "#475569";
+      let badgeBorder = "#cbd5e1";
+      if (day.statusType === "on_time") {
+        badgeBg = "#d1fae5";
+        badgeColor2 = "#065f46";
+        badgeBorder = "#a7f3d0";
+      } else if (day.statusType === "late") {
+        badgeBg = "#fef3c7";
+        badgeColor2 = "#92400e";
+        badgeBorder = "#fde68a";
+      } else if (day.statusType === "mission") {
+        badgeBg = "#e0e7ff";
+        badgeColor2 = "#3730a3";
+        badgeBorder = "#c7d2fe";
+      } else if (day.statusType === "leave") {
+        badgeBg = "#f3e8ff";
+        badgeColor2 = "#6b21a8";
+        badgeBorder = "#e9d5ff";
+      } else if (day.statusType === "absent") {
+        badgeBg = "#fee2e2";
+        badgeColor2 = "#991b1b";
+        badgeBorder = "#fecaca";
+      } else if (day.statusType === "future") {
+        badgeBg = "#f8fafc";
+        badgeColor2 = "#94a3b8";
+        badgeBorder = "#e2e8f0";
+      }
+      const pauseStr = day.pauseStart && day.pauseEnd ? `${day.pauseStart} - ${day.pauseEnd}` : day.pauseStart ? `D\xE8s ${day.pauseStart}` : "\u2014";
+      return `
+                            <tr style="border-bottom: 1px solid #f1f5f9; ${dIdx % 2 === 1 ? "background-color: #fafaf9;" : ""}">
+                              <td style="padding: 8px 14px; font-weight: 700; color: #1e293b;">
+                                ${day.dayName} <span style="font-weight: normal; color: #64748b; font-size: 10px;">(${day.formattedDate})</span>
+                              </td>
+                              <td style="padding: 8px 10px; font-family: monospace; font-weight: 600; color: ${day.arrivalTime !== "\u2014" ? "#0f172a" : "#94a3b8"};">
+                                ${day.arrivalTime}
+                              </td>
+                              <td style="padding: 8px 10px; font-family: monospace; font-size: 10.5px; color: #64748b;">
+                                ${pauseStr}
+                              </td>
+                              <td style="padding: 8px 10px; font-family: monospace; font-weight: 600; color: ${day.departureTime !== "\u2014" ? "#0f172a" : "#94a3b8"};">
+                                ${day.departureTime}
+                              </td>
+                              <td style="padding: 8px 10px; text-align: right; font-family: monospace; font-weight: 700; color: #164e4b;">
+                                ${day.workedHoursText}
+                              </td>
+                              <td style="padding: 8px 14px; text-align: center;">
+                                <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 9.5px; font-weight: 700; background-color: ${badgeBg}; color: ${badgeColor2}; border: 1px solid ${badgeBorder};">
+                                  ${day.statusLabel}
+                                </span>
+                              </td>
+                            </tr>
+                          `;
+    }).join("")}
+                      </tbody>
+                    </table>
+
+                  </div>
+                `;
+  }).join("")}
+
+            </td>
+          </tr>
+
+          <!-- PIED DE PAGE OFFICIEL -->
+          <tr>
+            <td style="background-color: #fafaf9; border-top: 1px solid #e4e4e7; padding: 24px 30px; text-align: center; font-size: 11px; color: #71717a;">
+              <div style="font-weight: 700; color: #3f3f46; font-size: 12px; margin-bottom: 4px;">
+                Citrine Mobilit\xE9 \u2014 Douala, Cameroun
+              </div>
+              <div>
+                G\xE9n\xE9r\xE9 automatiquement par le Syst\xE8me Int\xE9gr\xE9 RH &amp; Pointage le ${data.generatedAtStr}
+              </div>
+              <div style="font-size: 10px; color: #a1a1aa; margin-top: 6px;">
+                Notification interne confidentielle \u2022 Strictement r\xE9serv\xE9e aux collaborateurs et \xE0 la direction
+              </div>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+}
+async function sendWeeklyConsolidatedReport(options) {
+  try {
+    const reportData = await compileWeeklyAttendanceData(options);
+    const htmlContent = buildWeeklyConsolidatedEmailHtml(reportData);
+    const config = await getEffectiveSmtpConfig();
+    const employees = await getCollectionData("employees");
+    const users = await getCollectionData("users");
+    let recipients = [];
+    if (options?.testRecipient) {
+      recipients = parseEmailList(options.testRecipient);
+    } else {
+      const admins = users.filter((u) => u.role_id === 1 || u.role === "administrateur" || String(u.raw_data?.role).toLowerCase().includes("admin"));
+      const adminEmails = admins.map((a) => a.email).filter(Boolean);
+      recipients = Array.from(/* @__PURE__ */ new Set([...adminEmails, ...parseEmailList(config.hrEmail)]));
+    }
+    if (recipients.length === 0) {
+      if (process.env.SMTP_USER) recipients.push(process.env.SMTP_USER);
+      else recipients.push("citrinemobilite@gmail.com");
+    }
+    const activeEmployees = employees.filter((e) => {
+      const status = String(e.status || "").toLowerCase();
+      return status !== "archived" && status !== "inactif" && status !== "inactive" && Boolean(e.email);
+    });
+    const ccEmails = activeEmployees.map((e) => (e.email || "").trim()).filter((mail) => mail && mail.includes("@"));
+    console.log(`\u{1F4E7} [RAPPORT HEBDO PR\xC9SENCES] Pr\xE9paration envoi : To: ${recipients.join(", ")} | CC: ${ccEmails.length} collaborateurs.`);
+    const sendRes = await sendConsolidatedReportEmail({
+      subject: reportData.title,
+      title: reportData.title,
+      htmlContent,
+      recipientEmails: recipients,
+      ccEmails
+    });
+    if (!sendRes.success) {
+      return {
+        success: false,
+        message: sendRes.error || "\xC9chec de l'envoi de l'e-mail du rapport hebdomadaire.",
+        error: sendRes.error,
+        details: sendRes.details
+      };
+    }
+    return {
+      success: true,
+      message: `Rapport hebdomadaire des pr\xE9sences envoy\xE9 avec succ\xE8s aux responsables, et mis en copie \xE0 ${ccEmails.length} collaborateurs.`,
+      recipients: sendRes.recipients,
+      ccCount: ccEmails.length,
+      ccRecipients: sendRes.ccRecipients,
+      reportData
+    };
+  } catch (err) {
+    const rawError = err?.message || String(err);
+    console.error(`\u{1F4A5} [sendWeeklyConsolidatedReport EXCEPTION]:`, err);
+    return {
+      success: false,
+      message: `Erreur inattendue lors de la g\xE9n\xE9ration du rapport : ${rawError}`,
+      error: rawError,
+      details: err
+    };
+  }
+}
+
+// src/server/apiHandler.ts
 async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -1536,6 +2162,32 @@ async function handler(req, res) {
         return res.status(400).json({ success: false, error: resError.message || JSON.stringify(resError) });
       }
       return res.status(200).json({ success: true, data: resData });
+    }
+    if (urlPath === "/attendance/weekly-recap" && method === "GET") {
+      try {
+        const data = await compileWeeklyAttendanceData({
+          manual: true,
+          forceFriday: req.query?.forceFriday === "true"
+        });
+        return res.status(200).json({ success: true, report: data });
+      } catch (error) {
+        console.error("[API /attendance/weekly-recap GET Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || "Erreur de compilation du r\xE9capitulatif." });
+      }
+    }
+    if (urlPath === "/attendance/weekly-recap" && method === "POST") {
+      try {
+        const { forceFriday, testRecipient } = body;
+        const result = await sendWeeklyConsolidatedReport({
+          manual: true,
+          forceFriday: Boolean(forceFriday),
+          testRecipient
+        });
+        return res.status(result.success ? 200 : 500).json(result);
+      } catch (error) {
+        console.error("[API /attendance/weekly-recap POST Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || "\xC9chec de l'envoi du r\xE9capitulatif hebdomadaire." });
+      }
     }
     return res.status(404).json({
       success: false,

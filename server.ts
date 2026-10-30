@@ -27,6 +27,10 @@ import {
   TimesheetBlocker,
   TimesheetManagerPoint
 } from "./src/services/timesheetReportService";
+import {
+  sendWeeklyConsolidatedReport,
+  compileWeeklyAttendanceData
+} from "./src/services/weeklyAttendanceReportService";
 
 async function startServer() {
   const app = express();
@@ -347,6 +351,35 @@ async function startServer() {
     }
   });
 
+  // 📊 API Récapitulatif Hebdomadaire des Présences (Prévisualisation ou Envoi Consolidé RH + CC Collaborateurs)
+  app.get("/api/attendance/weekly-recap", async (req: express.Request, res: express.Response) => {
+    try {
+      const data = await compileWeeklyAttendanceData({
+        manual: req.query.manual === 'true',
+        forceFriday: req.query.forceFriday === 'true',
+      });
+      res.json({ success: true, report: data });
+    } catch (error: any) {
+      console.error("[API attendance/weekly-recap GET Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Erreur de compilation du récapitulatif." });
+    }
+  });
+
+  app.post("/api/attendance/weekly-recap", async (req: express.Request, res: express.Response) => {
+    try {
+      const { forceFriday, testRecipient } = req.body || {};
+      const result = await sendWeeklyConsolidatedReport({
+        manual: true,
+        forceFriday: Boolean(forceFriday),
+        testRecipient,
+      });
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (error: any) {
+      console.error("[API attendance/weekly-recap POST Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Échec de l'envoi du récapitulatif hebdomadaire." });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const isHmrDisabled = process.env.DISABLE_HMR === "true";
@@ -385,6 +418,8 @@ async function startServer() {
         const employees = await getCollectionData('employees');
         const users = await getCollectionData('users');
         const tasks = await getCollectionData('tasks');
+        const presences = await getCollectionData('presences');
+        const incidents = await getCollectionData('attendance_incidents');
 
         const admins = users.filter((u: any) => u.role_id === 1 || u.role === 'administrateur' || String(u.raw_data?.role).toLowerCase().includes('admin'));
         const adminEmails = admins.map((a: any) => a.email).filter(Boolean);
@@ -528,6 +563,42 @@ async function startServer() {
             .filter((t: any) => t.status !== 'completed')
             .map((t: any) => t.title);
 
+          // 🕒 Extraction et préparation du récapitulatif de présence du jour pour ce collaborateur
+          const userPres = presences.find((p: any) => {
+            const matchEmp = String(p.employeeId || p.employee_id || '') === String(empId);
+            const pDate = String(p.date || '').split('T')[0];
+            return matchEmp && pDate === doualaTime.dayIso;
+          });
+
+          const userInc = incidents.find((inc: any) => {
+            const matchEmp = String(inc.employeeId || inc.employee_id || '') === String(empId);
+            const incDate = String(inc.date || '').split('T')[0];
+            return matchEmp && incDate === doualaTime.dayIso;
+          });
+
+          let dailyAttendance: any = undefined;
+          if (userPres) {
+            const isLate = userPres.status === 'late' || (userPres.arrivalTime && userPres.arrivalTime > '08:00');
+            const workedH = userPres.hoursWorked ? `${userPres.hoursWorked}h` : undefined;
+            dailyAttendance = {
+              statusLabel: isLate ? 'Retard' : (userPres.status === 'mission' ? 'En mission' : 'Présent'),
+              statusType: isLate ? 'late' : (userPres.status || 'present'),
+              arrivalTime: userPres.arrivalTime,
+              pauseStart: userPres.pauseStart,
+              pauseEnd: userPres.pauseEnd,
+              departureTime: userPres.departureTime,
+              hoursWorkedText: workedH,
+              location: userPres.location || 'Douala',
+              incidentNote: userInc?.description || userPres.correctionReason || userPres.adminBadgeReason,
+            };
+          } else {
+            dailyAttendance = {
+              statusLabel: 'Non pointé',
+              statusType: 'absent',
+              location: 'Douala',
+            };
+          }
+
           const timesheetData = {
             employeeName: empName,
             employeeEmail: empEmail,
@@ -535,6 +606,7 @@ async function startServer() {
             department: emp.department || 'Direction Générale',
             dateStr: doualaTime.dateOnly,
             timeStr: doualaTime.timeOnly,
+            dailyAttendance,
             items,
             blockers,
             managerPoints,
@@ -570,9 +642,25 @@ async function startServer() {
           });
         }
 
-        console.log(`✅ [CRON 19:30] Feuilles de temps envoyées avec succès pour ${activeEmployees.length} collaborateurs.`);
+        console.log(`✅ [CRON 19:30] Feuilles de temps avec récapitulatif de présence envoyées avec succès pour ${activeEmployees.length} collaborateurs.`);
       } catch (cronErr) {
         console.error(`❌ [CRON 19:30 Error]:`, cronErr);
+      }
+    }
+
+    // ⏰ Tâche planifiée hebdomadaire (Vendredi soir 20h00) : Envoi consolidé de la semaine aux Responsables (CC Collaborateurs)
+    const weekdayName = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Douala', weekday: 'long' }).format(now);
+    const isFriday = weekdayName.toLowerCase() === 'friday';
+    const fridayCronKey = `weekly_recap_cron_sent_${todayStr}`;
+
+    if (isFriday && hour === 20 && minute === 0 && !(global as any)[fridayCronKey]) {
+      (global as any)[fridayCronKey] = true;
+      console.log(`⏰ [CRON VENDREDI 20:00] Exécution automatique du rapport hebdomadaire consolidé des présences...`);
+      try {
+        const weeklyRes = await sendWeeklyConsolidatedReport({ forceFriday: true });
+        console.log(`✅ [CRON VENDREDI 20:00] Succès :`, weeklyRes.message);
+      } catch (err) {
+        console.error(`❌ [CRON VENDREDI 20:00 Error]:`, err);
       }
     }
   }, 60000);

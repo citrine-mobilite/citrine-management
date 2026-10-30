@@ -13,6 +13,10 @@ import {
 } from "../db/repository";
 import { supabaseAdmin } from "../lib/supabase";
 import { Resend } from "resend";
+import { 
+  sendWeeklyConsolidatedReport, 
+  compileWeeklyAttendanceData 
+} from "../services/weeklyAttendanceReportService";
 
 /**
  * Gestionnaire Serverless Vercel universel pour Citrine Management.
@@ -348,7 +352,37 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ success: true, data: resData });
     }
 
-    // 13. Route inconnue
+    // 13. GET /attendance/weekly-recap (Prévisualisation)
+    if (urlPath === "/attendance/weekly-recap" && method === "GET") {
+      try {
+        const data = await compileWeeklyAttendanceData({
+          manual: true,
+          forceFriday: req.query?.forceFriday === "true",
+        });
+        return res.status(200).json({ success: true, report: data });
+      } catch (error: any) {
+        console.error("[API /attendance/weekly-recap GET Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || "Erreur de compilation du récapitulatif." });
+      }
+    }
+
+    // 14. POST /attendance/weekly-recap (Envoi consolidé aux Responsables avec CC Collaborateurs)
+    if (urlPath === "/attendance/weekly-recap" && method === "POST") {
+      try {
+        const { forceFriday, testRecipient } = body;
+        const result = await sendWeeklyConsolidatedReport({
+          manual: true,
+          forceFriday: Boolean(forceFriday),
+          testRecipient,
+        });
+        return res.status(result.success ? 200 : 500).json(result);
+      } catch (error: any) {
+        console.error("[API /attendance/weekly-recap POST Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || "Échec de l'envoi du récapitulatif hebdomadaire." });
+      }
+    }
+
+    // 15. Route inconnue
     return res.status(404).json({
       success: false,
       error: `Route introuvable sur le dispatcher API : [${method}] ${rawUrl}`,

@@ -21,7 +21,8 @@ import {
   ShieldCheck,
   RefreshCw,
   Sparkles,
-  FileText
+  FileText,
+  Mail
 } from 'lucide-react';
 import { Employee, Presence, NotificationLog, CompanyModuleConfig, AppUser, AttendanceIncident } from '../types';
 import { PointageMap } from './PointageMap';
@@ -34,6 +35,7 @@ import { PersonalAccessKeyModal } from './presence/PersonalAccessKeyModal';
 import { StaticDoorQrModal } from './presence/StaticDoorQrModal';
 import { PresenceIncidentsAdminView } from './presence/PresenceIncidentsAdminView';
 import PresenceRequestsView from './PresenceRequestsView';
+import WeeklyAttendanceRecapModal from './presence/WeeklyAttendanceRecapModal';
 import { extractPresenceRequests } from './presence/requests/presenceRequestsUtils';
 import { isEmployeeOnlyRole, isSelfOnlyUser, findMatchingEmployee, shouldEmployeeClock, isManagerOrAdminEmployee } from '../utils/roleUtils';
 import { realtimeSyncService } from '../services/realtimeSyncService';
@@ -106,6 +108,7 @@ export default function PresencePanel({
   const [isStaticDoorQrOpen, setIsStaticDoorQrOpen] = useState(false);
   const [isAdminClockModalOpen, setIsAdminClockModalOpen] = useState(false);
   const [isOfficeQrModalOpen, setIsOfficeQrModalOpen] = useState(false);
+  const [isWeeklyRecapModalOpen, setIsWeeklyRecapModalOpen] = useState(false);
   const [activePresenceTab, setActivePresenceTab] = useState<'presences' | 'requests' | 'incidents'>('presences');
   const [mapLayer, setMapLayer] = useState<MapLayerType>('standard');
   const [mapPeriod, setMapPeriod] = useState<'day' | 'week' | 'month' | 'all' | 'custom'>('day');
@@ -520,46 +523,58 @@ export default function PresencePanel({
       
       {/* 🚀 BARRE D'ACTIONS RAPIDES DU RESPONSABLE (Badgeage & Pointage) */}
       <div className="bg-white p-3 sm:p-4 rounded-3xl border border-stone-200/90 shadow-2xs">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 w-full">
           {/* Bouton dédié : Générer QR Code Dynamique (30 secondes) */}
           <button
             onClick={() => setIsDynamicQrModalOpen(true)}
-            className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#2A7B76] to-emerald-700 hover:from-[#20635F] hover:to-emerald-800 text-white font-extrabold text-xs shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
+            className="w-full py-3 px-3.5 rounded-2xl bg-gradient-to-r from-[#2A7B76] to-emerald-700 hover:from-[#20635F] hover:to-emerald-800 text-white font-extrabold text-xs shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
             title="Générer un QR code dynamique renouvelé toutes les 30 secondes pour le pointage des employés"
           >
             <QrCode className="h-4 w-4 text-emerald-200 animate-pulse shrink-0" />
-            <span>QR Code Dynamique (30s)</span>
+            <span>QR Code Dynamique</span>
           </button>
 
           {/* Bouton dédié : Affiche / QR Code Statique (Porte & Bureau) */}
           <button
             onClick={() => setIsStaticDoorQrOpen(true)}
-            className="w-full py-3 px-4 rounded-2xl bg-teal-50 hover:bg-teal-100 text-[#2A7B76] font-bold text-xs border border-teal-200 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
+            className="w-full py-3 px-3.5 rounded-2xl bg-teal-50 hover:bg-teal-100 text-[#2A7B76] font-bold text-xs border border-teal-200 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
             title="Afficher ou configurer le QR code statique de porte ou d'entrée fixe"
           >
             <DoorClosed className="h-4 w-4 text-[#2A7B76] shrink-0" />
-            <span>QR Code Statique (Porte / Bureau)</span>
+            <span>QR Porte / Bureau</span>
           </button>
 
           {/* Bouton : Badger pour un collaborateur */}
           <button
             onClick={() => setIsAdminClockModalOpen(true)}
-            className="w-full py-3 px-4 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs border border-stone-200 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
+            className="w-full py-3 px-3.5 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs border border-stone-200 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
             title="Effectuer un pointage administratif pour le compte d'un collaborateur"
           >
             <UserCheck className="h-4 w-4 text-[#2A7B76] shrink-0" />
-            <span>Badger pour un Collaborateur</span>
+            <span>Badger Collaborateur</span>
           </button>
 
           {/* Bouton : Clé d'Accès Personnelle (16 Caractères - 3 min) */}
           <button
             onClick={() => setIsOfficeQrModalOpen(true)}
-            className="w-full py-3 px-4 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs border border-stone-200 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
+            className="w-full py-3 px-3.5 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs border border-stone-200 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
             title="Générer une clé d'accès sécurisée de 16 caractères valide 3 minutes"
           >
             <KeyRound className="h-4 w-4 text-amber-600 shrink-0" />
-            <span>Clé d'Accès Personnelle (16 Car.)</span>
+            <span>Clé d'Accès (16 Car.)</span>
           </button>
+
+          {/* Bouton dédié : Envoyer Récapitulatif Hebdomadaire en cours */}
+          {!isRestricted && (
+            <button
+              onClick={() => setIsWeeklyRecapModalOpen(true)}
+              className="w-full py-3 px-3.5 rounded-2xl bg-gradient-to-r from-[#164e4b] to-[#0f3e3b] hover:from-[#0d3331] hover:to-[#072422] text-white font-extrabold text-xs shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 border border-emerald-900/40"
+              title="Envoyer manuellement le récapitulatif des présences de la semaine en cours aux responsables (tous les collaborateurs en copie)"
+            >
+              <Mail className="h-4 w-4 text-emerald-300 shrink-0" />
+              <span>Récap. Semaine (en cours)</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -853,13 +868,23 @@ export default function PresencePanel({
             </div>
           </div>
 
-          <div className="shrink-0 pt-4 md:pt-0 w-full md:w-auto">
+          <div className="shrink-0 pt-4 md:pt-0 w-full md:w-auto flex flex-wrap items-center gap-2">
+            {!isRestricted && (
+              <button
+                onClick={() => setIsWeeklyRecapModalOpen(true)}
+                className="w-full md:w-auto px-4 py-2 bg-gradient-to-r from-[#164e4b] to-[#2A7B76] text-white hover:from-[#0f3e3b] hover:to-[#20635F] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-3xs"
+                title="Envoyer par e-mail le récapitulatif des présences de la semaine en cours (aux responsables, avec tous les collaborateurs en copie)"
+              >
+                <Mail className="h-4 w-4 text-emerald-200" />
+                <span>Envoyer Récap. Semaine (en cours)</span>
+              </button>
+            )}
             <button
               onClick={handleExportExcel}
               className="w-full md:w-auto px-4 py-2 bg-emerald-50 text-emerald-800 hover:bg-[#2A7B76] hover:text-white border border-emerald-100 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
             >
               <Download className="h-4 w-4" />
-              Exporter vers Excel (.xls)
+              <span>Exporter vers Excel (.xls)</span>
             </button>
           </div>
         </div>
@@ -1384,6 +1409,17 @@ export default function PresencePanel({
           onClose={() => setIsStaticDoorQrOpen(false)}
           moduleConfig={moduleConfig}
           onUpdateModuleConfig={onUpdateModuleConfig}
+          showToast={showToast}
+        />
+      )}
+
+      {/* 📊 MODAL 5 : RÉCAPITULATIF HEBDOMADAIRE ENVOI MANUEL */}
+      {isWeeklyRecapModalOpen && (
+        <WeeklyAttendanceRecapModal
+          isOpen={isWeeklyRecapModalOpen}
+          onClose={() => setIsWeeklyRecapModalOpen(false)}
+          employees={employees}
+          presences={presences}
           showToast={showToast}
         />
       )}
