@@ -553,10 +553,10 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   <div className="bg-[#164e4b] text-white px-3 py-2 font-bold text-xs flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span>🕒</span>
-                      <span>PLAN HORAIRE (08:00 – 17:00) — garde un créneau « tampon » pour les imprévus</span>
+                      <span>PLAN HORAIRE (08:00 – 17:00) — Pause déjeuner obligatoire</span>
                     </div>
                     <span className="text-[10px] bg-amber-400/30 text-amber-100 border border-amber-300/40 px-2 py-0.5 rounded-full font-mono">
-                      12:00 – 13:00 : TAMPON IMPRÉVUS / pause
+                      12:00 – 13:00 : Pause Déjeuner
                     </span>
                   </div>
                   <table className="w-full text-left text-xs">
@@ -583,7 +583,7 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                               {s.timeRange}
                             </td>
                             <td className={`py-2.5 px-3 font-bold ${isBuffer ? 'text-amber-800' : 'text-blue-800'}`}>
-                              {isBuffer ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity}
+                              {isBuffer ? 'Pause Déjeuner (12h00 – 13h00)' : s.activity}
                             </td>
                           </tr>
                         );

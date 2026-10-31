@@ -268,11 +268,22 @@ function preparePlanDuJourData(data: TimesheetReportData) {
     scheduleSlots = [
       { timeRange: '08:00 – 10:00', activity: s1, resolutionNote: tasks[0]?.isDone ? 'Sous-tâche finalisée avec succès' : 'Traitement en cours' },
       { timeRange: '10:00 – 12:00', activity: s2, resolutionNote: tasks[1]?.isDone ? 'Livrables produits et vérifiés' : 'Avancement nominal' },
-      { timeRange: '12:00 – 13:00', activity: '⚡ TAMPON IMPRÉVUS / pause (Pause déjeuner officielle 12h–13h)', isBreak: true, isBuffer: true, resolutionNote: 'Pause obligatoire 12h–13h respectée' },
+      { timeRange: '12:00 – 13:00', activity: 'Pause Déjeuner Officielle (12h00 – 13h00)', isBreak: true, isBuffer: true, resolutionNote: 'Pause obligatoire 12h–13h respectée' },
       { timeRange: '13:00 – 15:30', activity: s3, resolutionNote: tasks[2]?.isDone ? 'Terminé' : 'En cours d’achèvement' },
       { timeRange: '15:30 – 17:00', activity: s4, isBuffer: true, resolutionNote: 'Revue des engagements, clôture & envoi feuille de temps' },
     ];
   }
+
+  // Nettoyer également les slots existants si le texte contient "tampon" ou "pause" en dehors de 12h-13h
+  scheduleSlots = scheduleSlots.map(s => {
+    if (s.timeRange.includes('12:00') && s.timeRange.includes('13:00')) {
+      return { ...s, activity: 'Pause Déjeuner (12h00 – 13h00)', isBreak: true, isBuffer: true };
+    }
+    if (s.activity.toLowerCase().includes('tampon') || s.activity.toLowerCase().includes('pause')) {
+      return { ...s, activity: s.activity.replace(/tampon.*?\//gi, '').replace(/pause.*?\//gi, '').trim() };
+    }
+    return s;
+  });
 
   // 5. Imprévus survenus aujourd'hui
   const unforeseenEvents = data.blockers.map((b) => ({
@@ -738,8 +749,16 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
             </table>
 
             ${data.dailyAttendance?.incidentNote ? `
-              <div style="margin-top: 8px; padding: 6px 10px; background-color: #fffbeb; border: 1px solid #fef08a; border-radius: 6px; font-size: 10.5px; color: #854d0e;">
-                ℹ️ <strong>Observation Pointage :</strong> ${data.dailyAttendance.incidentNote}
+              <div style="margin-top: 10px; padding: 10px 14px; background-color: #fef2f2; border: 1px solid #fca5a5; border-left: 4px solid #dc2626; border-radius: 8px; font-size: 11px; color: #991b1b; font-weight: 700;">
+                <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+                  <tr>
+                    <td style="width: 22px; font-size: 14px; vertical-align: top;">🚨</td>
+                    <td style="vertical-align: middle;">
+                      <span style="text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.5px; background-color: #fee2e2; color: #b91c1c; padding: 2px 6px; border-radius: 4px; font-weight: 900; margin-right: 6px;">INCIDENT / ANOMALIE CONSTATÉ(E)</span>
+                      <span style="color: #7f1d1d; font-weight: 800;">${data.dailyAttendance.incidentNote}</span>
+                    </td>
+                  </tr>
+                </table>
               </div>
             ` : ''}
           </div>
@@ -874,10 +893,10 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
           <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
             <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
               <tr>
-                <td>🕒 PLAN HORAIRE (08h00 – 17h00) — garde un créneau « tampon » pour les imprévus</td>
+                <td>🕒 PLAN HORAIRE (08h00 – 17h00) — Pause déjeuner obligatoire</td>
                 <td align="right">
                   <span style="display: inline-block; background-color: rgba(254, 240, 138, 0.4); color: #854d0e; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(254, 240, 138, 0.7); font-family: monospace;">
-                    12:00 – 13:00 : TAMPON IMPRÉVUS / pause
+                    12:00 – 13:00 : Pause Déjeuner
                   </span>
                 </td>
               </tr>
@@ -903,7 +922,7 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
                       ${s.timeRange}
                     </td>
                     <td style="padding: 8px 10px; font-weight: 700; color: ${actColor};">
-                      ${isBreak ? '⚡ TAMPON IMPRÉVUS / pause (12h–13h)' : s.activity}
+                      ${isBreak ? 'Pause Déjeuner (12h00 – 13h00)' : s.activity}
                     </td>
                   </tr>
                 `;
