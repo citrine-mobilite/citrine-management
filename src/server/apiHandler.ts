@@ -17,6 +17,8 @@ import {
   sendWeeklyConsolidatedReport, 
   compileWeeklyAttendanceData 
 } from "../services/weeklyAttendanceReportService";
+import { executeDailyTimesheetDispatch } from "../services/dailyTimesheetCronService";
+import { sendClockingNotificationEmail } from "../services/clockingNotificationMailService";
 
 /**
  * Gestionnaire Serverless Vercel universel pour Citrine Management.
@@ -382,7 +384,31 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    // 15. Route inconnue
+    // 15. GET/POST /cron/daily-timesheet (Vercel Cron quotidien 19h30 Douala / 18h30 UTC)
+    if (urlPath === "/cron/daily-timesheet" || urlPath === "/api/cron/daily-timesheet") {
+      try {
+        console.log(`⏰ [SERVERLESS CRON] Déclenchement de l'envoi automatique des feuilles de temps quotidiennes...`);
+        const result = await executeDailyTimesheetDispatch();
+        return res.status(result.success ? 200 : 500).json(result);
+      } catch (error: any) {
+        console.error("[API /cron/daily-timesheet Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || String(error) });
+      }
+    }
+
+    // 16. GET/POST /cron/weekly-recap (Vercel Cron hebdo vendredi 20h00 Douala / 19h00 UTC)
+    if (urlPath === "/cron/weekly-recap" || urlPath === "/api/cron/weekly-recap") {
+      try {
+        console.log(`⏰ [SERVERLESS CRON] Déclenchement de l'envoi du récapitulatif hebdomadaire consolidé...`);
+        const result = await sendWeeklyConsolidatedReport({ forceFriday: true });
+        return res.status(result.success ? 200 : 500).json(result);
+      } catch (error: any) {
+        console.error("[API /cron/weekly-recap Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || String(error) });
+      }
+    }
+
+    // 17. Route inconnue
     return res.status(404).json({
       success: false,
       error: `Route introuvable sur le dispatcher API : [${method}] ${rawUrl}`,

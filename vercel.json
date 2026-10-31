@@ -9,5 +9,15 @@
       "source": "/((?!api/|assets/|favicon\\.ico|manifest\\.webmanifest|icon-.*\\.png|.*\\..*).*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/daily-timesheet",
+      "schedule": "30 18 * * 1-5"
+    },
+    {
+      "path": "/api/cron/weekly-recap",
+      "schedule": "0 19 * * 5"
+    }
   ]
 }

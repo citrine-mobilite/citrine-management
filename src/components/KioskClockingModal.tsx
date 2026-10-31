@@ -192,7 +192,7 @@ export default function KioskClockingModal({
       };
     }
 
-    const res = await savePresenceAtomic(targetPresence, targetIncident, targetNotification);
+    const res = await savePresenceAtomic(targetPresence, targetIncident, targetNotification, action);
     if (!res.success) {
       console.error("Kiosk atomic save failed:", res.error);
       setToastMessage(`Erreur denregistrement atomique: ${res.error}`);

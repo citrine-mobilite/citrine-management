@@ -312,7 +312,12 @@ export async function seedDatabaseIfEmpty() {
   return;
 }
 
-export async function savePresenceAtomic(presence: any, incident?: any | null, notification?: any | null): Promise<{ success: boolean; error?: string; data?: any }> {
+export async function savePresenceAtomic(
+  presence: any, 
+  incident?: any | null, 
+  notification?: any | null,
+  action?: string
+): Promise<{ success: boolean; error?: string; data?: any }> {
   return asyncActionTrackerService.track('Enregistrement du pointage...', async () => {
   try {
     const cleanedPresence = removeUndefined(presence);
@@ -353,6 +358,10 @@ export async function savePresenceAtomic(presence: any, incident?: any | null, n
             presence: cleanedPresence,
             incident: cleanedIncident,
             notification: cleanedNotification,
+            action: action || cleanedPresence?.lastAction,
+            employeeName: cleanedPresence?.employeeName,
+            employeeEmail: cleanedPresence?.employeeEmail,
+            employeeId: cleanedPresence?.employeeId,
           }),
         });
 

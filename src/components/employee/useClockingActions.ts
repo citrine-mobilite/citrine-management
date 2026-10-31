@@ -319,7 +319,7 @@ export function useClockingActions({
       }
 
       // TRANSACTION ATOMIQUE : Sauvegarde unifiée présence, incident et notification
-      const atomicResult = await savePresenceAtomic(targetPresence, targetIncident, targetNotification);
+      const atomicResult = await savePresenceAtomic(targetPresence, targetIncident, targetNotification, action);
       if (!atomicResult.success) {
         throw new Error(atomicResult.error || 'Erreur lors de la transaction atomique de pointage.');
       }

@@ -40,6 +40,7 @@ import { extractPresenceRequests } from './presence/requests/presenceRequestsUti
 import { isEmployeeOnlyRole, isSelfOnlyUser, findMatchingEmployee, shouldEmployeeClock, isManagerOrAdminEmployee } from '../utils/roleUtils';
 import { realtimeSyncService } from '../services/realtimeSyncService';
 import { incidentService } from '../services/incidentService';
+import { savePresenceAtomic } from '../services/dataService';
 
 interface PresencePanelProps {
   employees: Employee[];
@@ -342,12 +343,20 @@ export default function PresencePanel({
 
     onUpdatePresences(updatedPresences);
 
-    // Diffusion temps réel multi-onglets / multi-appareils
+    // Diffusion temps réel multi-onglets / multi-appareils et persistance atomique avec e-mail
     const targetedPres = updatedPresences.find(p => p.employeeId === activeEmployee.id && p.date === selectedDate);
     if (targetedPres) {
       realtimeSyncService.broadcastPresencePunch({
         presence: targetedPres,
       });
+
+      // ✉️ Déclenchement de la transaction atomique avec envoi automatique d'e-mail
+      savePresenceAtomic(
+        { ...targetedPres, employeeName: activeEmployee.name, employeeEmail: activeEmployee.email },
+        null,
+        null,
+        nextStep.action
+      ).catch((err) => console.warn('[PresencePanel] savePresenceAtomic notice:', err));
     }
   };
 

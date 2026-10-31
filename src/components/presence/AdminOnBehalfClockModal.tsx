@@ -182,7 +182,7 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
       };
     }
 
-    const atomicRes = await savePresenceAtomic(targetPresence, targetIncident, targetNotification);
+    const atomicRes = await savePresenceAtomic(targetPresence, targetIncident, targetNotification, clockAction);
     if (!atomicRes.success) {
       setErrorMessage(`Erreur denregistrement atomique: ${atomicRes.error}`);
       return;

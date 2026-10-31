@@ -1948,6 +1948,1012 @@ async function sendWeeklyConsolidatedReport(options) {
   }
 }
 
+// src/services/timesheetReportService.ts
+import * as XLSX from "xlsx";
+function getDoualaDateInfo(date = /* @__PURE__ */ new Date()) {
+  const fullFormatter = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Africa/Douala",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  const dateOnlyFormatter = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Africa/Douala",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+  const timeOnlyFormatter = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Africa/Douala",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  const parts = fullFormatter.format(date);
+  const dateOnly = dateOnlyFormatter.format(date);
+  const timeOnly = timeOnlyFormatter.format(date);
+  const isoFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Douala",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const dayIso = isoFormatter.format(date);
+  return {
+    dateOnly,
+    timeOnly,
+    fullDateStr: `${parts} (Heure locale Douala, Cameroun)`,
+    dayIso
+  };
+}
+function preparePlanDuJourData(data) {
+  const dept = (data.department || "Direction G\xE9n\xE9rale").toUpperCase();
+  const dateText = data.dateStr || (/* @__PURE__ */ new Date()).toLocaleDateString("fr-FR");
+  const locationText = data.location || "Douala";
+  const dayText = data.dayName || dateText;
+  let topPriorities = data.topPriorities || [];
+  if (topPriorities.length === 0) {
+    const uniqueParents = [];
+    data.items.forEach((item) => {
+      const p = item.taskTitle || item.subTitle;
+      if (p && !uniqueParents.includes(p)) {
+        uniqueParents.push(p);
+      }
+    });
+    topPriorities = uniqueParents.slice(0, 3).map((p, idx) => ({
+      id: `prio-${idx + 1}`,
+      title: p,
+      priority: idx === 0 ? "P1" : idx === 1 ? "P2" : "P3",
+      status: data.items.filter((i) => i.taskTitle === p).every((i) => i.status === "completed") ? "Fait" : "En cours",
+      isMilestone: false
+    }));
+    if (topPriorities.length === 0) {
+      topPriorities = [
+        { title: "Prise de contact & coordination op\xE9rationnelle", priority: "P1", status: "Fait" },
+        { title: "Traitement des sous-t\xE2ches prioritaires", priority: "P2", status: "En cours" },
+        { title: "Cl\xF4ture, bilan et transmission de la feuille de temps", priority: "P3", status: "En cours" }
+      ];
+    }
+  }
+  const tasks = data.items.map((item, idx) => {
+    const isDone = item.status === "completed" || item.status === "fait" || item.status === "done" || item.statusLabel?.includes("TERM");
+    const isInProgress = item.status === "in_progress" || item.status === "en_cours" || item.statusLabel?.includes("COURS");
+    const isBlocked = item.status === "blocked" || item.isBlocked;
+    const statusText = isDone ? "Fait" : isBlocked ? "Bloqu\xE9" : isInProgress ? "En cours" : "\xC0 faire";
+    let prioLabel = "P2";
+    if (idx === 0) prioLabel = "P1";
+    else if (idx >= 3) prioLabel = "P3";
+    return {
+      title: item.subTitle || item.taskTitle,
+      parentTaskTitle: item.taskTitle || item.subTitle || "Mission Op\xE9rationnelle",
+      domain: item.taskTitle || "G\xE9n\xE9ral",
+      priorityLabel: prioLabel,
+      estimatedMinutes: Math.round((item.estimatedHours || 1.5) * 60),
+      dueDate: dateText,
+      status: statusText,
+      isDone,
+      isBlocked
+    };
+  });
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter((t) => t.isDone).length;
+  const inProgressTasks = tasks.filter((t) => t.status === "En cours").length;
+  const todoTasks = tasks.filter((t) => t.status === "\xC0 faire").length;
+  const blockedTasks = tasks.filter((t) => t.isBlocked).length;
+  const ratePercentage = totalTasks > 0 ? Math.round(completedTasks / totalTasks * 100) : 0;
+  const taskInProgressRate = totalTasks > 0 ? Math.round(inProgressTasks / totalTasks * 100) : 0;
+  const taskTodoRate = totalTasks > 0 ? Math.round(todoTasks / totalTasks * 100) : 0;
+  const taskBlockedRate = totalTasks > 0 ? Math.round(blockedTasks / totalTasks * 100) : 0;
+  const postponedCount = Math.max(0, totalTasks - completedTasks);
+  const prioritiesTotal = topPriorities.length;
+  const prioritiesCompleted = topPriorities.filter((p) => p.status === "Fait" || p.status === "completed").length;
+  const prioritiesInProgress = topPriorities.filter((p) => p.status === "En cours" || p.status === "in_progress").length;
+  const prioritiesRate = prioritiesTotal > 0 ? Math.round(prioritiesCompleted / prioritiesTotal * 100) : 0;
+  const prioritiesEngagementRate = prioritiesTotal > 0 ? Math.round((prioritiesCompleted + prioritiesInProgress) / prioritiesTotal * 100) : 0;
+  const officialDailyNetHours = 8;
+  const plannedMinutes = tasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+  const activeMilestone = topPriorities.find((p) => p.isMilestone);
+  const hasMilestone = Boolean(activeMilestone);
+  const maxRecommendedSubtasks = hasMilestone ? 5 : 8;
+  const parsedHoursWorked = data.dailyAttendance?.hoursWorkedText ? parseFloat(data.dailyAttendance.hoursWorkedText.replace("h", ".")) : data.totalActualHours > 0 ? data.totalActualHours : Math.round(plannedMinutes / 60 * 10) / 10;
+  const hoursWorkedNumber = isNaN(parsedHoursWorked) ? 8 : parsedHoursWorked;
+  const hoursRate = Math.min(100, Math.round(hoursWorkedNumber / officialDailyNetHours * 100));
+  let capacityStatus = "optimal";
+  let capacityAdvice = "";
+  if (plannedMinutes > 600) {
+    capacityStatus = "overloaded";
+    capacityAdvice = `\u26A0\uFE0F Surcharge d\xE9tect\xE9e : ${Math.round(plannedMinutes / 60)}h planifi\xE9es sur les sous-t\xE2ches (d\xE9passement du seuil de 10h/jour, capacit\xE9 max 12h). Risque d'inach\xE8vement : priorisez ou reportez certaines sous-t\xE2ches.`;
+  } else if (plannedMinutes >= 420) {
+    capacityStatus = "optimal";
+    capacityAdvice = `\u2705 Charge nominale et r\xE9aliste : ${Math.round(plannedMinutes / 60)}h estim\xE9es sur les sous-t\xE2ches (dans la plage recommand\xE9e de 7h \xE0 10h, max 12h/jour).`;
+  } else {
+    capacityStatus = "available";
+    capacityAdvice = `\u{1F4A1} Capacit\xE9 disponible : ${Math.round(plannedMinutes / 60)}h planifi\xE9es sur les sous-t\xE2ches (capacit\xE9 max : 12h). Vous pouvez traiter des sous-t\xE2ches suppl\xE9mentaires.`;
+  }
+  let scheduleSlots = data.scheduleSlots || [];
+  if (scheduleSlots.length === 0 || scheduleSlots.some((s) => s.timeRange.includes("13:00 \u2013 14:00"))) {
+    const s1 = tasks[0]?.title || topPriorities[0]?.title || "Prise de contact, cadrage & d\xE9marrage";
+    const s2 = tasks[1]?.title || topPriorities[1]?.title || "Ex\xE9cution des livrables op\xE9rationnels P1";
+    const s3 = tasks[2]?.title || "Reprise & finalisation active des dossiers";
+    const s4 = tasks[3]?.title || "Cl\xF4ture de journ\xE9e, synth\xE8se & transmission feuille de temps";
+    scheduleSlots = [
+      { timeRange: "08:00 \u2013 10:00", activity: s1, resolutionNote: tasks[0]?.isDone ? "Sous-t\xE2che finalis\xE9e avec succ\xE8s" : "Traitement en cours" },
+      { timeRange: "10:00 \u2013 12:00", activity: s2, resolutionNote: tasks[1]?.isDone ? "Livrables produits et v\xE9rifi\xE9s" : "Avancement nominal" },
+      { timeRange: "12:00 \u2013 13:00", activity: "\u26A1 TAMPON IMPR\xC9VUS / pause (Pause d\xE9jeuner officielle 12h\u201313h)", isBreak: true, isBuffer: true, resolutionNote: "Pause obligatoire 12h\u201313h respect\xE9e" },
+      { timeRange: "13:00 \u2013 15:30", activity: s3, resolutionNote: tasks[2]?.isDone ? "Termin\xE9" : "En cours d\u2019ach\xE8vement" },
+      { timeRange: "15:30 \u2013 17:00", activity: s4, isBuffer: true, resolutionNote: "Revue des engagements, cl\xF4ture & envoi feuille de temps" }
+    ];
+  }
+  const unforeseenEvents = data.blockers.map((b) => ({
+    time: b.time || "Journ\xE9e",
+    subject: b.reason,
+    sourceTask: b.sourceTask || "",
+    status: b.status || "Bloqu\xE9",
+    lostMinutes: 30
+  }));
+  const totalLostMinutes = unforeseenEvents.reduce((acc, u) => acc + (u.lostMinutes || 0), 0);
+  const availabilityRate = Math.max(0, Math.min(100, Math.round((480 - totalLostMinutes) / 480 * 100)));
+  const isLateToday = data.dailyAttendance?.statusType === "late";
+  const punctualityRate = isLateToday ? 75 : data.dailyAttendance?.arrivalTime ? 100 : 0;
+  let postponedTasks = data.postponedTasks || [];
+  if (postponedTasks.length === 0) {
+    postponedTasks = tasks.filter((t) => !t.isDone).map((t) => t.title);
+  }
+  const managerAlertPoint = data.managerPoints.length > 0 ? data.managerPoints.map((p) => p.content).join(" ; ") : "Aucun point \xE0 signaler ni bloquage aujourd\u2019hui.";
+  return {
+    dept,
+    dateText,
+    locationText,
+    dayText,
+    topPriorities,
+    prioritiesTotal,
+    prioritiesCompleted,
+    prioritiesInProgress,
+    prioritiesRate,
+    prioritiesEngagementRate,
+    tasks,
+    totalTasks,
+    completedTasks,
+    inProgressTasks,
+    todoTasks,
+    blockedTasks,
+    ratePercentage,
+    taskInProgressRate,
+    taskTodoRate,
+    taskBlockedRate,
+    postponedCount,
+    officialDailyNetHours,
+    hoursWorkedNumber,
+    hoursRate,
+    plannedMinutes,
+    hasMilestone,
+    milestoneTitle: activeMilestone?.title,
+    maxRecommendedSubtasks,
+    capacityStatus,
+    capacityAdvice,
+    scheduleSlots,
+    unforeseenEvents,
+    totalLostMinutes,
+    availabilityRate,
+    punctualityRate,
+    isLateToday,
+    postponedTasks,
+    managerAlertPoint,
+    managerPoints: data.managerPoints
+  };
+}
+function buildTimesheetHtmlReport(data) {
+  const p = preparePlanDuJourData(data);
+  const employeeName = data.employeeName || "Collaborateur";
+  const capacityBg = p.capacityStatus === "overloaded" ? "#fff1f2" : p.capacityStatus === "optimal" ? "#ecfdf5" : "#f0fdfa";
+  const capacityBorder = p.capacityStatus === "overloaded" ? "#fecdd3" : p.capacityStatus === "optimal" ? "#a7f3d0" : "#99f6e4";
+  const capacityColor = p.capacityStatus === "overloaded" ? "#9f1239" : p.capacityStatus === "optimal" ? "#064e3b" : "#115e59";
+  return `
+    <div style="font-family: Calibri, 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif; background-color: #f5f5f4; padding: 20px 10px; color: #1c1917;">
+      <div style="max-width: 780px; margin: 0 auto; background-color: #ffffff; padding: 24px; border-radius: 16px; border: 1px solid #d6d3d1; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05); font-size: 12px; color: #1c1917;">
+        
+        <!-- EN-T\xCATE CITRINE PLAN DU JOUR (IDENTIQUE AU MODAL STATISTIQUES) -->
+        <div style="border-bottom: 2px solid #164e4b; padding-bottom: 12px; margin-bottom: 16px;">
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+            <tr>
+              <td style="vertical-align: top;">
+                <div style="font-family: Georgia, serif; font-size: 26px; font-weight: 900; font-style: italic; color: #164e4b; letter-spacing: 0.5px; line-height: 1;">
+                  CITRINE
+                </div>
+                <div style="font-size: 13px; font-weight: 800; color: #164e4b; margin-top: 4px; text-transform: uppercase;">
+                  PLAN DU JOUR \u2014 ${p.dept}
+                </div>
+              </td>
+              <td align="right" style="vertical-align: top; font-size: 11px; color: #44403c; line-height: 1.5; font-family: monospace;">
+                <div><strong>Collaborateur :</strong> ${employeeName}</div>
+                <div><strong>Lieu :</strong> Douala \u2022 <strong>D\xE9partement :</strong> ${p.dept}</div>
+                <div><strong>Date :</strong> ${p.dateText} (${p.dayText})</div>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- \u{1F4CA} TABLEAU DE BORD STATISTIQUE & POURCENTAGES DE PERFORMANCE DU JOUR -->
+        <div style="background-color: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+          <div style="font-size: 12px; font-weight: 800; color: #164e4b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+            \u{1F4CA} STATISTIQUES &amp; POURCENTAGES DE PERFORMANCE DU JOUR
+          </div>
+
+          <!-- 4 Cartouches KPI avec pourcentages en gros -->
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: separate; border-spacing: 8px 0; margin-bottom: 12px;">
+            <tr>
+              <td style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; width: 25%;">
+                <div style="font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase;">Avancement T\xE2ches</div>
+                <div style="font-size: 24px; font-weight: 900; color: #164e4b; margin: 4px 0 2px 0;">${p.ratePercentage}%</div>
+                <div style="font-size: 10px; color: #10b981; font-weight: 700;">${p.completedTasks}/${p.totalTasks} sous-t\xE2che(s) faites</div>
+              </td>
+              <td style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; width: 25%;">
+                <div style="font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase;">Priorit\xE9s P1-P3</div>
+                <div style="font-size: 24px; font-weight: 900; color: #1d4ed8; margin: 4px 0 2px 0;">${p.prioritiesRate}%</div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600;">${p.prioritiesCompleted}/${p.prioritiesTotal} finalis\xE9es (${p.prioritiesEngagementRate}% trait\xE9es)</div>
+              </td>
+              <td style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; width: 25%;">
+                <div style="font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase;">Cadence (08h\u201317h)</div>
+                <div style="font-size: 24px; font-weight: 900; color: #0f766e; margin: 4px 0 2px 0;">${p.hoursRate}%</div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600;">${p.hoursWorkedNumber}h / 8h nettes contractuelles</div>
+              </td>
+              <td style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; width: 25%;">
+                <div style="font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase;">Disponibilit\xE9 Nette</div>
+                <div style="font-size: 24px; font-weight: 900; color: ${p.totalLostMinutes > 0 ? "#b45309" : "#059669"}; margin: 4px 0 2px 0;">${p.availabilityRate}%</div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600;">${p.totalLostMinutes > 0 ? `${p.totalLostMinutes} min impr\xE9vus` : "Z\xE9ro blocage"}</div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Barre de progression visuelle multi-segments -->
+          <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 10px; font-weight: 700; color: #475569; margin-bottom: 6px;">
+              <span>R\xE9partition de l'effort op\xE9rationnel : </span>
+              <strong style="color: #065f46;">${p.ratePercentage}% Fait</strong> \u2022 
+              <strong style="color: #92400e;">${p.taskInProgressRate}% En cours</strong> \u2022 
+              <strong style="color: #64748b;">${p.taskTodoRate}% \xC0 faire</strong>
+              ${p.taskBlockedRate > 0 ? ` \u2022 <strong style="color: #b91c1c;">${p.taskBlockedRate}% Bloqu\xE9</strong>` : ""}
+            </div>
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; height: 10px; border-radius: 5px; overflow: hidden; background-color: #e2e8f0;">
+              <tr>
+                ${p.ratePercentage > 0 ? `<td style="width: ${p.ratePercentage}%; background-color: #10b981; height: 10px;"></td>` : ""}
+                ${p.taskInProgressRate > 0 ? `<td style="width: ${p.taskInProgressRate}%; background-color: #f59e0b; height: 10px;"></td>` : ""}
+                ${p.taskBlockedRate > 0 ? `<td style="width: ${p.taskBlockedRate}%; background-color: #ef4444; height: 10px;"></td>` : ""}
+                ${p.taskTodoRate > 0 ? `<td style="width: ${p.taskTodoRate}%; background-color: #cbd5e1; height: 10px;"></td>` : ""}
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- \u{1F3AF} BANNI\xC8RE DE CAPACIT\xC9 JOURNALI\xC8RE CALCUL\xC9E (AVEC JALON OU SANS JALON) -->
+        <div style="padding: 12px 14px; border-radius: 12px; border: 1px solid ${capacityBorder}; background-color: ${capacityBg}; margin-bottom: 16px;">
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+            <tr>
+              <td style="vertical-align: middle;">
+                <div style="margin-bottom: 4px;">
+                  <span style="display: inline-block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; background-color: #ffffff; padding: 2px 8px; border-radius: 6px; border: 1px solid #cbd5e1; color: #1e293b;">
+                    Capacit\xE9 Op\xE9rationnelle du Jour
+                  </span>
+                  ${p.hasMilestone ? `<span style="display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700; background-color: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 6px; border: 1px solid #fde68a;">\u{1F3C6} Jalon Cl\xE9 D\xE9tect\xE9 : ${p.milestoneTitle}</span>` : ""}
+                </div>
+                <div style="font-size: 12px; font-weight: 700; color: ${capacityColor}; line-height: 1.4;">
+                  ${p.capacityAdvice}
+                </div>
+              </td>
+              <td align="right" style="vertical-align: middle; width: 220px; font-size: 11px; background-color: #ffffff; padding: 8px 12px; border-radius: 10px; border: 1px solid #e2e8f0; line-height: 1.4; font-family: monospace;">
+                <div><strong>Horaires officiels :</strong> 08h00 \u2013 17h00</div>
+                <div style="color: ${p.capacityStatus === "overloaded" ? "#dc2626" : "#64748b"}; font-weight: ${p.capacityStatus === "overloaded" ? "800" : "normal"};">
+                  Pause obligatoire : 12h00 \u2013 13h00
+                </div>
+                <div style="font-weight: 800; color: #2A7B76;">${p.totalTasks} sous-t\xE2che(s) (${Math.round(p.plannedMinutes / 60)}h)</div>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- \u{1F552} R\xC9CAPITULATIF DE PR\xC9SENCE & POINTAGE DU JOUR (DEMAND\xC9 PAR L'UTILISATEUR) -->
+        <div style="border-radius: 12px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px; background-color: #ffffff;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>\u23F1\uFE0F R\xC9CAPITULATIF DE PR\xC9SENCE &amp; POINTAGE DU JOUR (08h00 \u2013 17h00)</td>
+                <td align="right" style="font-size: 11px; color: #a7f3d0; font-weight: 600;">
+                  Registre Officiel Citrine Pointage
+                </td>
+              </tr>
+            </table>
+          </div>
+          <div style="padding: 12px 14px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Statut du Jour</div>
+                  <div style="margin-top: 3px;">
+                    ${(() => {
+    const st = data.dailyAttendance?.statusType;
+    const label = data.dailyAttendance?.statusLabel || (data.dailyAttendance?.arrivalTime ? "Pr\xE9sent" : "Non point\xE9");
+    const bg = st === "late" ? "#fef3c7" : st === "mission" ? "#e0e7ff" : st === "leave" ? "#f3e8ff" : data.dailyAttendance?.arrivalTime ? "#d1fae5" : "#fee2e2";
+    const col = st === "late" ? "#92400e" : st === "mission" ? "#3730a3" : st === "leave" ? "#6b21a8" : data.dailyAttendance?.arrivalTime ? "#065f46" : "#991b1b";
+    const bor = st === "late" ? "#fde68a" : st === "mission" ? "#c7d2fe" : st === "leave" ? "#e9d5ff" : data.dailyAttendance?.arrivalTime ? "#a7f3d0" : "#fecaca";
+    return `<span style="display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 800; background-color: ${bg}; color: ${col}; border: 1px solid ${bor};">${label}</span>`;
+  })()}
+                  </div>
+                </td>
+                <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Arriv\xE9e sur site</div>
+                  <div style="font-size: 14px; font-weight: 800; color: #0f172a; font-family: monospace; margin-top: 2px;">
+                    ${data.dailyAttendance?.arrivalTime || "\u2014"}
+                  </div>
+                  <div style="font-size: 9.5px; color: #94a3b8; margin-top: 1px;">
+                    ${data.dailyAttendance?.location || "Douala"} (D\xE8s 08h00)
+                  </div>
+                </td>
+                <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Pause D\xE9jeuner (12h\u201313h)</div>
+                  <div style="font-size: 12px; font-weight: 700; color: #475569; font-family: monospace; margin-top: 2px;">
+                    ${data.dailyAttendance?.pauseStart && data.dailyAttendance?.pauseEnd ? `${data.dailyAttendance.pauseStart} \u2013 ${data.dailyAttendance.pauseEnd}` : data.dailyAttendance?.pauseStart ? `D\xE8s ${data.dailyAttendance.pauseStart}` : "12:00 \u2013 13:00"}
+                  </div>
+                  <div style="font-size: 9.5px; color: #166534; margin-top: 1px;">
+                    ${data.dailyAttendance?.pauseStart ? "Effectu\xE9e" : "Pause officielle (12h\u201313h)"}
+                  </div>
+                </td>
+                <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">D\xE9part / Fin de Journ\xE9e</div>
+                  <div style="font-size: 14px; font-weight: 800; color: #164e4b; font-family: monospace; margin-top: 2px;">
+                    ${data.dailyAttendance?.departureTime || "En poste (fin 17:00)"}
+                  </div>
+                  <div style="font-size: 10px; font-weight: 700; color: #0284c7; margin-top: 1px;">
+                    \u23F1\uFE0F ${data.dailyAttendance?.hoursWorkedText || `${p.hoursWorkedNumber}h nettes`}
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            ${data.dailyAttendance?.incidentNote ? `
+              <div style="margin-top: 8px; padding: 6px 10px; background-color: #fffbeb; border: 1px solid #fef08a; border-radius: 6px; font-size: 10.5px; color: #854d0e;">
+                \u2139\uFE0F <strong>Observation Pointage :</strong> ${data.dailyAttendance.incidentNote}
+              </div>
+            ` : ""}
+          </div>
+        </div>
+
+        <!-- 1. LES 3 PRIORIT\xC9S DU JOUR (LES GRANDES T\xC2CHES / JOB DESCRIPTION) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>\u{1F3AF} LES 3 PRIORIT\xC9S DU JOUR \u2014 si je ne fais que \xE7a, la journ\xE9e est r\xE9ussie</td>
+                <td align="right" style="font-size: 10px; color: #a7f3d0; font-weight: 600;">Piliers majeurs de la journ\xE9e</td>
+              </tr>
+            </table>
+          </div>
+          <div style="background-color: #ffffff;">
+            ${p.topPriorities.map((item, idx) => `
+              <div style="padding: 10px 12px; ${idx < p.topPriorities.length - 1 ? "border-bottom: 1px solid #e2e8f0;" : ""}">
+                <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+                  <tr>
+                    <td style="width: 28px; vertical-align: middle; font-weight: 800; color: #a8a29e;">
+                      ${idx + 1}.
+                    </td>
+                    <td style="vertical-align: middle; padding-left: 4px;">
+                      <span style="font-weight: 700; font-size: 12.5px; color: #1e40af;">
+                        ${item.title}
+                      </span>
+                      ${item.isMilestone ? '<span style="margin-left: 8px; background-color: #fef3c7; color: #92400e; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">\u{1F3C6} Jalon Cl\xE9</span>' : ""}
+                    </td>
+                    <td align="right" style="vertical-align: middle; width: 140px;">
+                      <span style="display: inline-block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-right: 8px; font-family: monospace;">
+                        ${item.priority || "P2"}
+                      </span>
+                      <span style="display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 10.5px; font-weight: 700; ${item.status === "Fait" ? "background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;" : "background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a;"}">
+                        ${item.status}
+                      </span>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            `).join("")}
+            ${p.topPriorities.length === 0 ? `
+              <div style="padding: 12px; text-align: center; color: #94a3b8; font-style: italic;">
+                Aucune mission prioritaire d\xE9finie pour aujourd'hui.
+              </div>
+            ` : ""}
+          </div>
+        </div>
+
+        <!-- 2. T\xC2CHES DU JOUR (LES SOUS-T\xC2CHES CONCR\xC8TES TRAIT\xC9ES) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>\u{1F4CB} T\xC2CHES DU JOUR (Sous-t\xE2ches concr\xE8tes trait\xE9es)</td>
+                <td align="right" style="font-size: 11px; color: #a7f3d0; font-weight: 700; font-family: monospace;">
+                  ${p.completedTasks}/${p.totalTasks} termin\xE9es (${p.ratePercentage}%)
+                </td>
+              </tr>
+            </table>
+          </div>
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 11.5px;">
+            <thead>
+              <tr style="background-color: #2A7B76; color: #ffffff; font-size: 11px;">
+                <th style="padding: 7px 10px; text-align: left; font-weight: 700;">Sous-T\xE2che</th>
+                <th style="padding: 7px 10px; text-align: left; font-weight: 700;">Mission Parente (Job Description)</th>
+                <th style="padding: 7px 6px; text-align: center; font-weight: 700; width: 45px;">Prio</th>
+                <th style="padding: 7px 8px; text-align: right; font-weight: 700; width: 85px;">Estim\xE9 (min)</th>
+                <th style="padding: 7px 8px; text-align: center; font-weight: 700; width: 85px;">\xC9ch\xE9ance</th>
+                <th style="padding: 7px 8px; text-align: center; font-weight: 700; width: 85px;">Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${p.tasks.map((t, index) => {
+    const prioColor = t.priorityLabel === "P1" ? "#dc2626" : t.priorityLabel === "P2" ? "#2563eb" : "#d97706";
+    const statusBadge = t.status === "Fait" ? '<span style="background-color: #d1fae5; color: #065f46; font-weight: 700; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid #a7f3d0;">Fait</span>' : t.status === "Bloqu\xE9" ? '<span style="background-color: #fee2e2; color: #991b1b; font-weight: 700; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid #fecaca;">Bloqu\xE9</span>' : t.status === "En cours" ? '<span style="background-color: #fef3c7; color: #92400e; font-weight: 700; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid #fde68a;">En cours</span>' : '<span style="background-color: #f1f5f9; color: #475569; font-weight: 700; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid #cbd5e1;">\xC0 faire</span>';
+    const rowBg = index % 2 === 0 ? "#ffffff" : "#fcfbf9";
+    return `
+                  <tr style="background-color: ${rowBg}; border-bottom: 1px solid #e7e5e4;">
+                    <td style="padding: 8px 10px; color: #1e40af; font-weight: 700;">
+                      <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: #3b82f6; margin-right: 6px; vertical-align: middle;"></span>
+                      <span style="vertical-align: middle;">${t.title}</span>
+                    </td>
+                    <td style="padding: 8px 10px; color: #57534e;">
+                      ${t.parentTaskTitle}
+                    </td>
+                    <td style="padding: 8px 6px; text-align: center; font-weight: 800; font-size: 11px; color: ${prioColor};">
+                      ${t.priorityLabel}
+                    </td>
+                    <td style="padding: 8px 8px; text-align: right; color: #1c1917; font-family: monospace; font-weight: 600;">
+                      ${t.estimatedMinutes} min
+                    </td>
+                    <td style="padding: 8px 8px; text-align: center; color: #78716c; font-family: monospace; font-size: 11px;">
+                      ${t.dueDate}
+                    </td>
+                    <td style="padding: 8px 8px; text-align: center;">
+                      ${statusBadge}
+                    </td>
+                  </tr>
+                `;
+  }).join("")}
+              ${p.tasks.length === 0 ? `
+                <tr>
+                  <td colspan="6" style="padding: 16px; text-align: center; color: #a8a29e; font-style: italic;">
+                    Aucune sous-t\xE2che planifi\xE9e aujourd'hui.
+                  </td>
+                </tr>
+              ` : ""}
+            </tbody>
+            <tfoot>
+              <tr style="background-color: #164e4b; color: #ffffff; font-weight: 800; font-size: 11.5px;">
+                <td colspan="2" style="padding: 8px 10px;">Total sous-t\xE2ches / r\xE9alis\xE9es / avancement</td>
+                <td style="text-align: center; padding: 8px 6px;">${p.totalTasks}</td>
+                <td style="text-align: right; padding: 8px 8px; font-family: monospace;">${p.completedTasks} fait</td>
+                <td style="text-align: center; padding: 8px 8px; font-family: monospace;">${p.ratePercentage}%</td>
+                <td style="text-align: center; padding: 8px 8px; color: #fde68a; font-family: monospace;">${p.postponedCount} \xE0 suivre</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- 3. PLAN HORAIRE DYNAMIQUE (HORAIRES 08H00 \u2013 17H00, PAUSE STRICTE 12H\u201313H) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>\u{1F552} PLAN HORAIRE (08h00 \u2013 17h00) \u2014 garde un cr\xE9neau \xAB tampon \xBB pour les impr\xE9vus</td>
+                <td align="right">
+                  <span style="display: inline-block; background-color: rgba(254, 240, 138, 0.4); color: #854d0e; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(254, 240, 138, 0.7); font-family: monospace;">
+                    12:00 \u2013 13:00 : TAMPON IMPR\xC9VUS / pause
+                  </span>
+                </td>
+              </tr>
+            </table>
+          </div>
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 11.5px;">
+            <thead>
+              <tr style="background-color: #2A7B76; color: #ffffff; font-size: 11px;">
+                <th style="padding: 7px 10px; text-align: left; width: 140px; font-weight: 700;">Heure</th>
+                <th style="padding: 7px 10px; text-align: left; font-weight: 700;">Ce que je fais sur ce cr\xE9neau</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${p.scheduleSlots.map((s) => {
+    const isBreak = s.isBreak || s.timeRange.includes("12:00") || s.isBuffer;
+    const rowBg = isBreak ? "#fef9c3" : "#ffffff";
+    const timeColor = isBreak ? "#854d0e" : "#1c1917";
+    const actColor = isBreak ? "#854d0e" : "#1d4ed8";
+    return `
+                  <tr style="background-color: ${rowBg}; border-bottom: 1px solid ${isBreak ? "#fef08a" : "#e7e5e4"};">
+                    <td style="padding: 8px 10px; font-family: monospace; font-weight: 700; color: ${timeColor};">
+                      ${s.timeRange}
+                    </td>
+                    <td style="padding: 8px 10px; font-weight: 700; color: ${actColor};">
+                      ${isBreak ? "\u26A1 TAMPON IMPR\xC9VUS / pause (12h\u201313h)" : s.activity}
+                    </td>
+                  </tr>
+                `;
+  }).join("")}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 4. IMPR\xC9VUS SURVENUS AUJOURD'HUI (BLOCAGES OP\xC9RATIONNELS SIGNAL\xC9S) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>\u26A1 IMPR\xC9VUS SURVENUS AUJOURD'HUI (${p.unforeseenEvents.length})</td>
+                <td align="right" style="font-size: 10px; color: #a7f3d0; font-weight: 600;">
+                  \u2014 issus des blocages signal\xE9s par ${employeeName}
+                </td>
+              </tr>
+            </table>
+          </div>
+          ${p.unforeseenEvents.length > 0 ? `
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 11.5px;">
+              <thead>
+                <tr style="background-color: #2A7B76; color: #ffffff; font-size: 11px;">
+                  <th style="padding: 7px 10px; text-align: left; width: 90px; font-weight: 700;">Heure</th>
+                  <th style="padding: 7px 10px; text-align: left; font-weight: 700;">Origine &amp; Sujet de l'impr\xE9vu (Blocage op\xE9rationnel)</th>
+                  <th style="padding: 7px 10px; text-align: center; width: 90px; font-weight: 700;">Statut</th>
+                  <th style="padding: 7px 10px; text-align: right; width: 100px; font-weight: 700;">Temps impact</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${p.unforeseenEvents.map((u, idx) => `
+                  <tr style="background-color: ${idx % 2 === 0 ? "#ffffff" : "#fffbeb"}; border-bottom: 1px solid #fde68a;">
+                    <td style="padding: 8px 10px; font-family: monospace; font-weight: 700; color: #78716c;">
+                      ${u.time}
+                    </td>
+                    <td style="padding: 8px 10px; color: #1c1917;">
+                      <div style="font-weight: 700; color: #1c1917;">${u.subject}</div>
+                      ${u.sourceTask ? `<div style="font-size: 10.5px; color: #78716c; margin-top: 2px;">T\xE2che source : <strong style="color: #44403c;">${u.sourceTask}</strong></div>` : ""}
+                    </td>
+                    <td style="padding: 8px 10px; text-align: center;">
+                      <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; ${u.status === "R\xE9solu" ? "background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;" : "background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca;"}">
+                        ${u.status || "Bloqu\xE9"}
+                      </span>
+                    </td>
+                    <td style="padding: 8px 10px; text-align: right; font-family: monospace; font-weight: 800; color: #dc2626;">
+                      ${u.lostMinutes} min
+                    </td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          ` : `
+            <div style="background-color: #ecfdf5; padding: 12px 16px; color: #065f46; font-size: 11.5px; font-weight: 600;">
+              \u2713 Aucun blocage ni impr\xE9vu op\xE9rationnel signal\xE9 par le collaborateur sur cette journ\xE9e.
+            </div>
+          `}
+        </div>
+
+        <!-- 5. BILAN FIN DE JOURN\xC9E (2 MIN) -->
+        <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
+          <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            \u2611\uFE0F BILAN FIN DE JOURN\xC9E (2 min)
+          </div>
+          <div style="background-color: #ffffff; padding: 14px 16px;">
+            
+            <!-- \xC0 reporter \xE0 demain -->
+            <div style="margin-bottom: 12px;">
+              <div style="font-weight: 800; font-size: 11.5px; color: #44403c; margin-bottom: 4px;">
+                \xC0 reporter \xE0 demain :
+              </div>
+              <div style="font-size: 11.5px;">
+                ${p.postponedTasks.length > 0 ? `
+                  <ul style="margin: 0; padding-left: 18px; color: #1e40af; font-weight: 600; line-height: 1.5;">
+                    ${p.postponedTasks.map((t) => `<li>${t}</li>`).join("")}
+                  </ul>
+                ` : `
+                  <span style="color: #059669; font-weight: 700;">
+                    \u2713 Toutes les sous-t\xE2ches du jour ont \xE9t\xE9 cl\xF4tur\xE9es avec succ\xE8s !
+                  </span>
+                `}
+              </div>
+            </div>
+
+            <!-- Points \xE0 signaler au manager & direction -->
+            <div style="border-top: 1px solid #e7e5e4; padding-top: 10px;">
+              <div style="font-weight: 800; font-size: 11.5px; color: #1e293b; margin-bottom: 4px;">
+                \u{1F6A9} Points \xE0 Signaler au Manager &amp; Direction :
+              </div>
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; font-size: 11.5px; color: #334155; line-height: 1.5;">
+                ${p.managerAlertPoint}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- PI\xC8CE JOINTE MENTION -->
+        <div style="text-align: center; margin-top: 14px; font-size: 10.5px; color: #78716c;">
+          \u{1F4CE} <em>Le classeur officiel Microsoft Excel (.xlsx) complet est joint \xE0 ce fil de discussion pour exploitation tabulaire.</em>
+        </div>
+
+      </div>
+    </div>
+  `;
+}
+function buildTimesheetXlsxWorkbook(data) {
+  const p = preparePlanDuJourData(data);
+  const employeeName = data.employeeName || "Collaborateur";
+  const rowsFeuil1 = [
+    // Ligne 1 & 2 : En-tête Citrine
+    ["CITRINE"],
+    [`PLAN DU JOUR \u2014 ${p.dept}`],
+    [],
+    // Statistiques & pourcentages clés du jour
+    ["\u{1F4CA} STATISTIQUES DU JOUR", `Avancement : ${p.ratePercentage}%`, `Priorit\xE9s P1-P3 : ${p.prioritiesRate}%`, `Cadence (08h\u201317h) : ${p.hoursRate}%`, `Disponibilit\xE9 : ${p.availabilityRate}%`],
+    [],
+    // Ligne 5 : Date & Lieu (Col A, B, C, F)
+    [`Date : ${p.dateText}`, p.locationText || "Douala", `Jour : ${p.dayText}`, "", "", p.dateText],
+    [],
+    // Ligne 7 : Les 3 priorités du jour
+    ["\u{1F3AF} LES 3 PRIORIT\xC9S DU JOUR \u2014 si je ne fais que \xE7a, la journ\xE9e est r\xE9ussie"],
+    ["1.", p.topPriorities[0]?.title || "Prise de contact & revue des priorit\xE9s"],
+    ["2.", p.topPriorities[1]?.title || "Ex\xE9cution des actions op\xE9rationnelles majeures"],
+    ["3.", p.topPriorities[2]?.title || "Finalisation des livrables et synchronisation"],
+    // Ligne 11 : Tâches du jour (sous-tâches concrètes)
+    ["\u{1F4CB} T\xC2CHES DU JOUR"],
+    ["T\xE2che", "Domaine", "Prio", "Estim\xE9 (min)", "\xC9ch\xE9ance", "Statut"],
+    [],
+    // Lignes de sous-tâches
+    ...p.tasks.map((t) => [
+      t.title,
+      t.parentTaskTitle || "Autre",
+      t.priorityLabel || "P2",
+      t.estimatedMinutes,
+      t.dueDate || p.dateText,
+      t.status
+    ]),
+    // Ligne de récapitulatif
+    ["Total / r\xE9alis\xE9es / taux", "", p.totalTasks, p.completedTasks, `${p.ratePercentage}%`, `${p.postponedCount} report.`],
+    [],
+    // Plan horaire dynamique (08h00 – 17h00) avec pause officielle 12h–13h
+    ["\u{1F552} PLAN HORAIRE (08:00 \u2013 17:00) \u2014 garde un cr\xE9neau \xAB tampon \xBB pour les impr\xE9vus"],
+    ["Heure", "Ce que je fais sur ce cr\xE9neau"],
+    ...p.scheduleSlots.map((s) => {
+      const isBreak = s.isBreak || s.timeRange.includes("12:00") || s.isBuffer;
+      return [
+        s.timeRange,
+        isBreak ? "\u26A1 TAMPON IMPR\xC9VUS / pause (12h\u201313h)" : s.activity
+      ];
+    }),
+    [],
+    // Imprévus survenus aujourd'hui
+    ["\u26A1 IMPR\xC9VUS SURVENUS AUJOURD'HUI"],
+    ["Heure", "Quoi ? (qui / quel sujet)", "Temps perdu (min)"],
+    ...p.unforeseenEvents.length > 0 ? p.unforeseenEvents.map((u) => [u.time, u.subject, `${u.lostMinutes} min`]) : [["Journ\xE9e", "Aucun impr\xE9vu signal\xE9 aujourd'hui.", "0 min"]],
+    [],
+    // Bilan fin de journée (2 min)
+    ["\u2611\uFE0F BILAN FIN DE JOURN\xC9E (2 min)"],
+    ["\xC0 reporter \xE0 demain :", p.postponedTasks[0] || (p.postponedTasks.length === 0 ? "\u2713 Toutes les sous-t\xE2ches du jour ont \xE9t\xE9 cl\xF4tur\xE9es !" : "")],
+    ...p.postponedTasks.slice(1).map((t) => ["", t]),
+    [],
+    ["Point \xE0 signaler au manager :", p.managerAlertPoint || "Aucun blocage particulier \xE0 signaler."]
+  ];
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.aoa_to_sheet(rowsFeuil1);
+  ws1["!cols"] = [
+    { wch: 34 },
+    // Col A (Tâche / 1. / Heure / Titres)
+    { wch: 38 },
+    // Col B (Domaine / Ce que je fais sur ce créneau)
+    { wch: 12 },
+    // Col C (Prio / Total)
+    { wch: 16 },
+    // Col D (Estimé min / Réalisées)
+    { wch: 16 },
+    // Col E (Échéance / Taux %)
+    { wch: 18 }
+    // Col F (Statut / 0 report.)
+  ];
+  const rowsManager = [
+    ["CITRINE MOBILIT\xC9 \u2014 SUIVI MANAGER & PILOTAGE OP\xC9RATIONNEL"],
+    [`Collaborateur : ${employeeName}`, `D\xE9partement : ${p.dept}`, `Lieu : Douala`, `Date : ${p.dateText} (${p.dayText})`],
+    [],
+    ["\u{1F4CA} DIAGNOSTIC DE CHARGE & SURCHARGE (CALCUL\xC9 SUR LES SOUS-T\xC2CHES)"],
+    ["Temps planifi\xE9 sur les sous-t\xE2ches :", `${Math.round(p.plannedMinutes / 60)}h (${p.plannedMinutes} min)`],
+    ["Capacit\xE9 journali\xE8re maximale :", "12h max / jour"],
+    ["Seuil d'alerte de surcharge :", "> 10h / jour (600 min)"],
+    [
+      "Statut capacitaire :",
+      p.capacityStatus === "overloaded" ? "\u26A0\uFE0F SURCHARGE D\xC9TECT\xC9E (> 10h/jour)" : p.capacityStatus === "optimal" ? "\u2705 CHARGE NOMINALE & R\xC9ALISTE (7h \xE0 10h)" : "\u{1F4A1} CAPACIT\xC9 DISPONIBLE (< 7h)"
+    ],
+    ["Conseil op\xE9rationnel :", p.capacityAdvice],
+    [],
+    ["\u{1F6A9} POINTS \xC0 SIGNALER AU MANAGER & REMONT\xC9ES"],
+    ["Synth\xE8se :", p.managerAlertPoint || "Aucun blocage particulier \xE0 signaler."],
+    [],
+    [`\u26A1 BLOCAGES & DIFFICULT\xC9S SIGNAL\xC9S (${p.unforeseenEvents.length})`],
+    ["Heure", "Sujet du blocage", "T\xE2che source", "Statut", "Impact"],
+    ...p.unforeseenEvents.length > 0 ? p.unforeseenEvents.map((u) => [u.time, u.subject, u.sourceTask || "G\xE9n\xE9ral", u.status || "Bloqu\xE9", `${u.lostMinutes} min`]) : [["Journ\xE9e", "Aucun blocage op\xE9rationnel actif.", "-", "Nominal", "0 min"]]
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(rowsManager);
+  ws2["!cols"] = [
+    { wch: 36 },
+    { wch: 42 },
+    { wch: 22 },
+    { wch: 16 },
+    { wch: 16 }
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, "Feuil1");
+  XLSX.utils.book_append_sheet(wb, ws2, "Suivi manager");
+  return wb;
+}
+function buildTimesheetExcelBuffer(data) {
+  const wb = buildTimesheetXlsxWorkbook(data);
+  return XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+}
+
+// src/services/dailyTimesheetCronService.ts
+async function executeDailyTimesheetDispatch(options) {
+  const sentEmployees = [];
+  const errors = [];
+  const doualaTime = getDoualaDateInfo();
+  const now = /* @__PURE__ */ new Date();
+  const weekdayName = new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Douala", weekday: "long" }).format(now).toLowerCase();
+  const isWeekend = weekdayName === "saturday" || weekdayName === "sunday";
+  if (isWeekend && !options?.forceWeekday) {
+    const msg = `\u23F8\uFE0F [CRON FEUILLES DE TEMPS] Ignor\xE9 aujourd'hui (${weekdayName}) : les feuilles de temps sont strictement programm\xE9es du lundi au vendredi.`;
+    console.log(msg);
+    return {
+      success: true,
+      message: msg,
+      processedCount: 0,
+      sentEmployees: [],
+      errors: [],
+      timestamp: doualaTime.fullDateStr
+    };
+  }
+  console.log(`\u23F0 [CRON FEUILLES DE TEMPS 19:30] D\xE9but d'ex\xE9cution (${doualaTime.fullDateStr})...`);
+  try {
+    const employees = await getCollectionData("employees");
+    const users = await getCollectionData("users");
+    const tasks = await getCollectionData("tasks");
+    const presences = await getCollectionData("presences");
+    const incidents = await getCollectionData("attendance_incidents");
+    const companySettingsList = await getCollectionData("company_settings");
+    const companySettings = companySettingsList && companySettingsList.length > 0 ? companySettingsList[0] : null;
+    let lateThreshold = "08:00";
+    if (companySettings) {
+      const rawVal = companySettings.lateThresholdTime || companySettings.late_threshold_time || companySettings.workStartTime || companySettings.work_start_time;
+      if (typeof rawVal === "string" && rawVal.trim().includes(":")) {
+        lateThreshold = rawVal.trim();
+      }
+    }
+    const admins = users.filter((u) => u.role_id === 1 || u.role === "administrateur" || String(u.raw_data?.role).toLowerCase().includes("admin"));
+    const adminEmails = admins.map((a) => a.email).filter(Boolean);
+    if (adminEmails.length === 0) {
+      if (process.env.HR_NOTIFICATION_EMAIL) adminEmails.push(process.env.HR_NOTIFICATION_EMAIL);
+      else if (process.env.SMTP_USER) adminEmails.push(process.env.SMTP_USER);
+      else adminEmails.push("citrinemobilite@gmail.com");
+    }
+    const activeEmployees = employees.filter((emp) => {
+      const empName = (emp.name || "").toLowerCase();
+      const empEmail = (emp.email || "").toLowerCase();
+      const empId = String(emp.id || "");
+      const status = String(emp.status || "").toLowerCase();
+      if (status === "archived" || status === "inactif" || status === "inactive") return false;
+      if (isStrictSuperAdminAccount(emp, users)) return false;
+      const hasTasks = tasks.some((t) => {
+        const assigned = (t.assignedTo || "").toLowerCase();
+        return assigned.includes(empName) || assigned.includes(empEmail) || String(t.employeeId || "") === empId;
+      });
+      const hasPresence = presences.some((p) => {
+        const matchEmp = String(p.employeeId || p.employee_id || "") === empId;
+        const pDate = String(p.date || "").split("T")[0];
+        return matchEmp && pDate === doualaTime.dayIso;
+      });
+      return hasTasks || hasPresence;
+    });
+    console.log(`\u{1F4CB} [CRON 19:30] ${activeEmployees.length} collaborateurs \xE9ligibles identifi\xE9s pour la transmission.`);
+    for (const emp of activeEmployees) {
+      const empName = emp.name || "Collaborateur";
+      const empEmail = emp.email || "";
+      const empId = emp.id;
+      try {
+        const empTasks = tasks.filter((t) => {
+          const assigned = (t.assignedTo || "").toLowerCase();
+          return assigned.includes(empName.toLowerCase()) || assigned.includes(empEmail.toLowerCase()) || String(t.employeeId || "") === String(empId);
+        });
+        let itemIndex = 1;
+        const items = [];
+        const blockers = [];
+        const managerPoints = [];
+        empTasks.forEach((t) => {
+          if (t.incidents && Array.isArray(t.incidents) && t.incidents.length > 0) {
+            t.incidents.forEach((inc) => {
+              blockers.push({
+                sourceTask: t.title,
+                reason: inc.title || inc.description || "Incident signal\xE9",
+                status: inc.resolved ? "R\xE9solu" : "Bloqu\xE9"
+              });
+            });
+          } else if (t.status === "blocked") {
+            blockers.push({
+              sourceTask: t.title,
+              reason: "T\xE2che d\xE9clar\xE9e bloqu\xE9e",
+              status: "Bloqu\xE9"
+            });
+          }
+          if (t.comment && typeof t.comment === "string" && t.comment.trim()) {
+            managerPoints.push({
+              sourceTask: t.title,
+              content: t.comment.trim(),
+              author: empName
+            });
+          }
+          if (Array.isArray(t.comments) && t.comments.length > 0) {
+            t.comments.forEach((c) => {
+              managerPoints.push({
+                sourceTask: t.title,
+                content: c.text || c.content || "",
+                author: c.author || empName,
+                time: c.timestamp || ""
+              });
+            });
+          }
+          if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
+            t.subtasks.forEach((sub) => {
+              const isBlocked = sub.status === "blocked" || sub.isBlocked || Boolean(sub.blockerReason);
+              items.push({
+                index: itemIndex++,
+                taskTitle: t.title,
+                subTitle: sub.title,
+                status: sub.status || (sub.completed ? "completed" : "todo"),
+                statusLabel: sub.completed ? "Fait" : sub.status === "in_progress" ? "En cours" : "\xC0 faire",
+                estimatedHours: Number(sub.estimatedHours) || 0,
+                actualHours: Number(sub.actualHours) || 0,
+                blockerReason: sub.blockerReason,
+                isBlocked
+              });
+              if (isBlocked) {
+                blockers.push({
+                  sourceTask: `${sub.title} (sur "${t.title}")`,
+                  reason: sub.blockerReason || "Difficult\xE9 op\xE9rationnelle signal\xE9e",
+                  status: "Bloqu\xE9"
+                });
+              }
+              if (Array.isArray(sub.comments)) {
+                sub.comments.forEach((c) => {
+                  managerPoints.push({
+                    sourceTask: `${sub.title} (sur "${t.title}")`,
+                    content: c.text || c.content || "",
+                    author: c.author || empName,
+                    time: c.timestamp || ""
+                  });
+                });
+              }
+            });
+          } else {
+            const isBlocked = t.status === "blocked";
+            items.push({
+              index: itemIndex++,
+              taskTitle: t.title,
+              subTitle: t.title,
+              status: t.status || "todo",
+              statusLabel: t.status === "completed" ? "Fait" : t.status === "in_progress" ? "En cours" : "\xC0 faire",
+              estimatedHours: Number(t.estimatedHours) || 1,
+              actualHours: Number(t.actualHours) || 0,
+              blockerReason: isBlocked ? "T\xE2che bloqu\xE9e" : void 0,
+              isBlocked
+            });
+          }
+        });
+        const totalEstimated = items.reduce((sum, i) => sum + i.estimatedHours, 0);
+        const totalActual = items.reduce((sum, i) => sum + i.actualHours, 0);
+        const topPriorities = empTasks.slice(0, 3).map((t, idx) => ({
+          id: t.id,
+          title: t.title,
+          priority: idx === 0 ? "P1" : idx === 1 ? "P2" : "P3",
+          status: t.status === "completed" ? "Fait" : t.status === "in_progress" ? "En cours" : "\xC0 faire",
+          isMilestone: !!t.isMilestone
+        }));
+        const postponedTasks = empTasks.filter((t) => t.status !== "completed").map((t) => t.title);
+        const userPres = presences.find((p) => {
+          const matchEmp = String(p.employeeId || p.employee_id || "") === String(empId);
+          const pDate = String(p.date || "").split("T")[0];
+          return matchEmp && pDate === doualaTime.dayIso;
+        });
+        const userInc = incidents.find((inc) => {
+          const matchEmp = String(inc.employeeId || inc.employee_id || "") === String(empId);
+          const incDate = String(inc.date || "").split("T")[0];
+          return matchEmp && incDate === doualaTime.dayIso;
+        });
+        let dailyAttendance = void 0;
+        if (userPres) {
+          const isLate = userPres.status === "late" || isArrivalAfterThreshold(userPres.arrivalTime, lateThreshold);
+          const workedH = userPres.hoursWorked ? `${userPres.hoursWorked}h` : void 0;
+          dailyAttendance = {
+            statusLabel: isLate ? "Retard" : userPres.status === "mission" ? "En mission" : "Pr\xE9sent",
+            statusType: isLate ? "late" : userPres.status || "present",
+            arrivalTime: userPres.arrivalTime,
+            pauseStart: userPres.pauseStart || "12:00",
+            pauseEnd: userPres.pauseEnd || "13:00",
+            departureTime: userPres.departureTime || "17:00",
+            hoursWorkedText: workedH,
+            location: userPres.location || "Douala",
+            incidentNote: userInc?.description || userPres.correctionReason || userPres.adminBadgeReason
+          };
+        } else {
+          dailyAttendance = {
+            statusLabel: "Non point\xE9",
+            statusType: "absent",
+            pauseStart: "12:00",
+            pauseEnd: "13:00",
+            location: "Douala"
+          };
+        }
+        const timesheetData = {
+          employeeName: empName,
+          employeeEmail: empEmail,
+          employeeId: empId,
+          department: emp.department || "Direction G\xE9n\xE9rale",
+          dateStr: doualaTime.dateOnly,
+          timeStr: doualaTime.timeOnly,
+          dailyAttendance,
+          items,
+          blockers,
+          managerPoints,
+          totalEstimatedHours: totalEstimated,
+          totalActualHours: totalActual,
+          topPriorities,
+          postponedTasks
+        };
+        const htmlContent = buildTimesheetHtmlReport(timesheetData);
+        const excelBuffer = buildTimesheetExcelBuffer(timesheetData);
+        const safeCollabName = empName.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+        const safeDate = doualaTime.dayIso.replace(/-/g, "_");
+        const excelFilename = `feuille_de_temps_${safeCollabName}_${safeDate}.xlsx`;
+        await sendThreadedEmployeeEmail({
+          employeeName: empName,
+          employeeId: empId,
+          employeeEmail: empEmail,
+          eventTitle: `Feuille de temps`,
+          threadCategory: "timesheet",
+          threadSubject: `Feuille de temps - ${empName}`,
+          htmlContent,
+          recipientEmails: adminEmails,
+          attachments: [
+            {
+              filename: excelFilename,
+              content: excelBuffer,
+              contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+          ]
+        });
+        sentEmployees.push(empName);
+        console.log(`\u2705 [CRON 19:30] Feuille de temps envoy\xE9e pour ${empName} (${empEmail}).`);
+      } catch (empErr) {
+        const msg = `Erreur envoi feuille pour ${empName}: ${empErr?.message || String(empErr)}`;
+        console.error(`\u274C [CRON 19:30 Error]:`, msg);
+        errors.push(msg);
+      }
+    }
+    return {
+      success: errors.length === 0,
+      message: `Feuilles de temps transmises avec succ\xE8s pour ${sentEmployees.length} collaborateur(s).`,
+      processedCount: sentEmployees.length,
+      sentEmployees,
+      errors,
+      timestamp: doualaTime.fullDateStr
+    };
+  } catch (error) {
+    const rawError = error?.message || String(error);
+    console.error(`\u{1F4A5} [executeDailyTimesheetDispatch Critical Error]:`, error);
+    return {
+      success: false,
+      message: `Erreur critique lors de l'ex\xE9cution du cron : ${rawError}`,
+      processedCount: sentEmployees.length,
+      sentEmployees,
+      errors: [rawError, ...errors],
+      timestamp: doualaTime.fullDateStr
+    };
+  }
+}
+
 // src/server/apiHandler.ts
 async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -2240,6 +3246,26 @@ async function handler(req, res) {
       } catch (error) {
         console.error("[API /attendance/weekly-recap POST Error]:", error);
         return res.status(500).json({ success: false, error: error.message || "\xC9chec de l'envoi du r\xE9capitulatif hebdomadaire." });
+      }
+    }
+    if (urlPath === "/cron/daily-timesheet" || urlPath === "/api/cron/daily-timesheet") {
+      try {
+        console.log(`\u23F0 [SERVERLESS CRON] D\xE9clenchement de l'envoi automatique des feuilles de temps quotidiennes...`);
+        const result = await executeDailyTimesheetDispatch();
+        return res.status(result.success ? 200 : 500).json(result);
+      } catch (error) {
+        console.error("[API /cron/daily-timesheet Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || String(error) });
+      }
+    }
+    if (urlPath === "/cron/weekly-recap" || urlPath === "/api/cron/weekly-recap") {
+      try {
+        console.log(`\u23F0 [SERVERLESS CRON] D\xE9clenchement de l'envoi du r\xE9capitulatif hebdomadaire consolid\xE9...`);
+        const result = await sendWeeklyConsolidatedReport({ forceFriday: true });
+        return res.status(result.success ? 200 : 500).json(result);
+      } catch (error) {
+        console.error("[API /cron/weekly-recap Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || String(error) });
       }
     }
     return res.status(404).json({
