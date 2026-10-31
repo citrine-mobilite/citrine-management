@@ -59,15 +59,15 @@ export const EmployeeCustomTimeModal: React.FC<EmployeeCustomTimeModalProps> = (
                 const typedVal = val as any;
                 setClockFieldToEdit(typedVal);
                 if (typedVal === 'arrival') setCustomTimeValue(moduleConfig?.workStartTime || '08:00');
-                else if (typedVal === 'pauseStart') setCustomTimeValue('13:00');
-                else if (typedVal === 'pauseEnd') setCustomTimeValue('14:00');
+                else if (typedVal === 'pauseStart') setCustomTimeValue('12:00');
+                else if (typedVal === 'pauseEnd') setCustomTimeValue('13:00');
                 else setCustomTimeValue('17:00');
               }}
               options={[
                 { value: 'arrival', label: '1. Arrivée au bureau (Défaut 08h00)' },
-                { value: 'pauseStart', label: '2. Départ en pause (Défaut 13h00)' },
-                { value: 'pauseEnd', label: '3. Retour de pause (Défaut 14h00)' },
-                { value: 'departure', label: '4. Départ / Rentrer (Défaut 17h00)' }
+                { value: 'pauseStart', label: '2. Départ en pause (Défaut 12h00)' },
+                { value: 'pauseEnd', label: '3. Retour de pause (Défaut 13h00)' },
+                { value: 'departure', label: '4. Départ / Fin de journée (Défaut 17h00)' }
               ]}
               placeholder="Sélectionner l'événement..."
               searchPlaceholder="Rechercher étape..."

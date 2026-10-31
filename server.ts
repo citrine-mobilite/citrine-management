@@ -29,7 +29,9 @@ import {
 } from "./src/services/timesheetReportService";
 import {
   sendWeeklyConsolidatedReport,
-  compileWeeklyAttendanceData
+  compileWeeklyAttendanceData,
+  isStrictSuperAdminAccount,
+  isArrivalAfterThreshold
 } from "./src/services/weeklyAttendanceReportService";
 
 async function startServer() {
@@ -420,6 +422,21 @@ async function startServer() {
         const tasks = await getCollectionData('tasks');
         const presences = await getCollectionData('presences');
         const incidents = await getCollectionData('attendance_incidents');
+        const companySettingsList = await getCollectionData('company_settings');
+
+        // Récupération de l'heure limite de retard paramétrée
+        const companySettings = companySettingsList && companySettingsList.length > 0 ? companySettingsList[0] : null;
+        let lateThreshold = '08:00';
+        if (companySettings) {
+          const rawVal =
+            companySettings.lateThresholdTime ||
+            companySettings.late_threshold_time ||
+            companySettings.workStartTime ||
+            companySettings.work_start_time;
+          if (typeof rawVal === 'string' && rawVal.trim().includes(':')) {
+            lateThreshold = rawVal.trim();
+          }
+        }
 
         const admins = users.filter((u: any) => u.role_id === 1 || u.role === 'administrateur' || String(u.raw_data?.role).toLowerCase().includes('admin'));
         const adminEmails = admins.map((a: any) => a.email).filter(Boolean);
@@ -428,22 +445,32 @@ async function startServer() {
           else if (process.env.SMTP_USER) adminEmails.push(process.env.SMTP_USER);
         }
 
+        const doualaTime = getDoualaDateInfo();
+
         const activeEmployees = employees.filter((emp: any) => {
           const empName = (emp.name || '').toLowerCase();
           const empEmail = (emp.email || '').toLowerCase();
           const empId = String(emp.id || '');
+          const status = String(emp.status || '').toLowerCase();
+          if (status === 'archived' || status === 'inactif' || status === 'inactive') return false;
 
-          const hasSubtasks = tasks.some((t: any) => {
+          // Exclusion stricte des superadmins
+          if (isStrictSuperAdminAccount(emp, users)) return false;
+
+          // Collaborateur éligible s'il a au moins une tâche assignée OU s'il a pointé aujourd'hui
+          const hasTasks = tasks.some((t: any) => {
             const assigned = (t.assignedTo || '').toLowerCase();
-            const isAssigned = assigned.includes(empName) || assigned.includes(empEmail) || t.employeeId === empId;
-            const hasSubs = Array.isArray(t.subtasks) && t.subtasks.length > 0;
-            return isAssigned && hasSubs;
+            return assigned.includes(empName) || assigned.includes(empEmail) || String(t.employeeId || '') === empId;
           });
 
-          return hasSubtasks;
-        });
+          const hasPresence = presences.some((p: any) => {
+            const matchEmp = String(p.employeeId || p.employee_id || '') === empId;
+            const pDate = String(p.date || '').split('T')[0];
+            return matchEmp && pDate === doualaTime.dayIso;
+          });
 
-        const doualaTime = getDoualaDateInfo();
+          return hasTasks || hasPresence;
+        });
 
         for (const emp of activeEmployees) {
           const empName = emp.name || 'Collaborateur';
@@ -578,7 +605,7 @@ async function startServer() {
 
           let dailyAttendance: any = undefined;
           if (userPres) {
-            const isLate = userPres.status === 'late' || (userPres.arrivalTime && userPres.arrivalTime > '08:00');
+            const isLate = userPres.status === 'late' || isArrivalAfterThreshold(userPres.arrivalTime, lateThreshold);
             const workedH = userPres.hoursWorked ? `${userPres.hoursWorked}h` : undefined;
             dailyAttendance = {
               statusLabel: isLate ? 'Retard' : (userPres.status === 'mission' ? 'En mission' : 'Présent'),

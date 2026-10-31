@@ -548,15 +548,15 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   </table>
                 </div>
 
-                {/* 3. PLAN HORAIRE DYNAMIQUE (AVEC CRÉNEAU TAMPON / PAUSE) */}
+                {/* 3. PLAN HORAIRE DYNAMIQUE (HORAIRES 08H00 – 17H00, PAUSE STRICTE 12H–13H) */}
                 <div className="rounded-xl border border-stone-300 overflow-hidden">
                   <div className="bg-[#164e4b] text-white px-3 py-2 font-bold text-xs flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span>🕒</span>
-                      <span>PLAN HORAIRE — garde un créneau « tampon » pour les imprévus</span>
+                      <span>PLAN HORAIRE (08:00 – 17:00) — garde un créneau « tampon » pour les imprévus</span>
                     </div>
                     <span className="text-[10px] bg-amber-400/30 text-amber-100 border border-amber-300/40 px-2 py-0.5 rounded-full font-mono">
-                      13:00 – 14:00 : TAMPON IMPRÉVUS / pause
+                      12:00 – 13:00 : TAMPON IMPRÉVUS / pause
                     </span>
                   </div>
                   <table className="w-full text-left text-xs">
@@ -568,7 +568,7 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                     </thead>
                     <tbody className="divide-y divide-stone-200">
                       {dailyData.scheduleSlots.map((s, idx) => {
-                        const isBuffer = s.isBreak || s.isBuffer || s.timeRange.includes('13:00');
+                        const isBuffer = s.isBreak || s.isBuffer || s.timeRange.includes('12:00');
 
                         return (
                           <tr 

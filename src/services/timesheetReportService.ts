@@ -207,15 +207,36 @@ function preparePlanDuJourData(data: TimesheetReportData) {
 
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((t) => t.isDone).length;
+  const inProgressTasks = tasks.filter((t) => t.status === 'En cours').length;
+  const todoTasks = tasks.filter((t) => t.status === 'À faire').length;
+  const blockedTasks = tasks.filter((t) => t.isBlocked).length;
+
+  // 📊 CALCUL DES POURCENTAGES DE PERFORMANCE DU JOUR
   const ratePercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const taskInProgressRate = totalTasks > 0 ? Math.round((inProgressTasks / totalTasks) * 100) : 0;
+  const taskTodoRate = totalTasks > 0 ? Math.round((todoTasks / totalTasks) * 100) : 0;
+  const taskBlockedRate = totalTasks > 0 ? Math.round((blockedTasks / totalTasks) * 100) : 0;
   const postponedCount = Math.max(0, totalTasks - completedTasks);
 
-  // 3. Calcul de capacité journalière (basée sur les sous-tâches, 12h max, seuil de surcharge > 10h par jour)
-  const workMinutesNet = 720; // 12h maximum par jour
+  // 🎯 Taux de succès sur les 3 Priorités du jour (P1, P2, P3)
+  const prioritiesTotal = topPriorities.length;
+  const prioritiesCompleted = topPriorities.filter((p) => p.status === 'Fait' || p.status === 'completed').length;
+  const prioritiesInProgress = topPriorities.filter((p) => p.status === 'En cours' || p.status === 'in_progress').length;
+  const prioritiesRate = prioritiesTotal > 0 ? Math.round((prioritiesCompleted / prioritiesTotal) * 100) : 0;
+  const prioritiesEngagementRate = prioritiesTotal > 0 ? Math.round(((prioritiesCompleted + prioritiesInProgress) / prioritiesTotal) * 100) : 0;
+
+  // ⏱️ Calcul de capacité journalière & cadence horaire (Base officielle : 08h00 – 17h00 = 8h nettes hors pause 12h–13h)
+  const officialDailyNetHours = 8; // 8h nettes officielles
   const plannedMinutes = tasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
   const activeMilestone = topPriorities.find((p) => p.isMilestone);
   const hasMilestone = Boolean(activeMilestone);
   const maxRecommendedSubtasks = hasMilestone ? 5 : 8;
+
+  const parsedHoursWorked = data.dailyAttendance?.hoursWorkedText
+    ? parseFloat(data.dailyAttendance.hoursWorkedText.replace('h', '.'))
+    : (data.totalActualHours > 0 ? data.totalActualHours : Math.round((plannedMinutes / 60) * 10) / 10);
+  const hoursWorkedNumber = isNaN(parsedHoursWorked) ? 8 : parsedHoursWorked;
+  const hoursRate = Math.min(100, Math.round((hoursWorkedNumber / officialDailyNetHours) * 100));
 
   let capacityStatus: 'optimal' | 'overloaded' | 'available' = 'optimal';
   let capacityAdvice = '';
@@ -234,20 +255,22 @@ function preparePlanDuJourData(data: TimesheetReportData) {
     capacityAdvice = `💡 Capacité disponible : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (capacité max : 12h). Vous pouvez traiter des sous-tâches supplémentaires.`;
   }
 
-  // 4. Plan horaire dynamique avec résolution et pause de midi
+  // 🕒 4. Plan horaire dynamique STRICTEMENT CONFORME AUX RÈGLES DE CITRINE :
+  // - Heures de travail : 08h00 à 17h00 (8h effectives)
+  // - Pause déjeuner : STRICTEMENT 12h00 – 13h00 (aucune autre pause après 13h)
   let scheduleSlots = data.scheduleSlots || [];
-  if (scheduleSlots.length === 0) {
-    const s1 = tasks[0]?.title || topPriorities[0]?.title || 'Coordination et démarrage';
-    const s2 = tasks[1]?.title || topPriorities[1]?.title || 'Exécution des livrables opérationnels';
-    const s3 = tasks[2]?.title || 'Poursuite et finalisation des actions';
-    const s4 = tasks[3]?.title || 'Synthèse, reporting et revue de fin de journée';
+  if (scheduleSlots.length === 0 || scheduleSlots.some(s => s.timeRange.includes('13:00 – 14:00'))) {
+    const s1 = tasks[0]?.title || topPriorities[0]?.title || 'Prise de contact, cadrage & démarrage';
+    const s2 = tasks[1]?.title || topPriorities[1]?.title || 'Exécution des livrables opérationnels P1';
+    const s3 = tasks[2]?.title || 'Reprise & finalisation active des dossiers';
+    const s4 = tasks[3]?.title || 'Clôture de journée, synthèse & transmission feuille de temps';
 
     scheduleSlots = [
-      { timeRange: '08:00 – 10:30', activity: s1, resolutionNote: tasks[0]?.isDone ? 'Sous-tâche finalisée avec succès' : 'Traitement en cours' },
-      { timeRange: '10:30 – 13:00', activity: s2, resolutionNote: tasks[1]?.isDone ? 'Livrables produits et vérifiés' : 'Avancement nominal' },
-      { timeRange: '13:00 – 14:00', activity: 'Pause Déjeuner / Repas & Décompression', isBreak: true, isBuffer: true, resolutionNote: 'Pause obligatoire 13h–14h respectée' },
-      { timeRange: '14:00 – 16:30', activity: s3, resolutionNote: tasks[2]?.isDone ? 'Terminé' : 'En cours d’achèvement' },
-      { timeRange: '16:30 – 17:30', activity: s4, isBuffer: true, resolutionNote: 'Revue des engagements, clôture & envoi feuille de temps' },
+      { timeRange: '08:00 – 10:00', activity: s1, resolutionNote: tasks[0]?.isDone ? 'Sous-tâche finalisée avec succès' : 'Traitement en cours' },
+      { timeRange: '10:00 – 12:00', activity: s2, resolutionNote: tasks[1]?.isDone ? 'Livrables produits et vérifiés' : 'Avancement nominal' },
+      { timeRange: '12:00 – 13:00', activity: '⚡ TAMPON IMPRÉVUS / pause (Pause déjeuner officielle 12h–13h)', isBreak: true, isBuffer: true, resolutionNote: 'Pause obligatoire 12h–13h respectée' },
+      { timeRange: '13:00 – 15:30', activity: s3, resolutionNote: tasks[2]?.isDone ? 'Terminé' : 'En cours d’achèvement' },
+      { timeRange: '15:30 – 17:00', activity: s4, isBuffer: true, resolutionNote: 'Revue des engagements, clôture & envoi feuille de temps' },
     ];
   }
 
@@ -259,6 +282,14 @@ function preparePlanDuJourData(data: TimesheetReportData) {
     status: b.status || 'Bloqué',
     lostMinutes: 30,
   }));
+
+  // Disponibilité opérationnelle nette (%)
+  const totalLostMinutes = unforeseenEvents.reduce((acc, u) => acc + (u.lostMinutes || 0), 0);
+  const availabilityRate = Math.max(0, Math.min(100, Math.round(((480 - totalLostMinutes) / 480) * 100)));
+
+  // Ponctualité & Assiduité
+  const isLateToday = data.dailyAttendance?.statusType === 'late';
+  const punctualityRate = isLateToday ? 75 : (data.dailyAttendance?.arrivalTime ? 100 : 0);
 
   // 6. Bilan fin de journée
   let postponedTasks = data.postponedTasks || [];
@@ -276,12 +307,25 @@ function preparePlanDuJourData(data: TimesheetReportData) {
     locationText,
     dayText,
     topPriorities,
+    prioritiesTotal,
+    prioritiesCompleted,
+    prioritiesInProgress,
+    prioritiesRate,
+    prioritiesEngagementRate,
     tasks,
     totalTasks,
     completedTasks,
+    inProgressTasks,
+    todoTasks,
+    blockedTasks,
     ratePercentage,
+    taskInProgressRate,
+    taskTodoRate,
+    taskBlockedRate,
     postponedCount,
-    workMinutesNet,
+    officialDailyNetHours,
+    hoursWorkedNumber,
+    hoursRate,
     plannedMinutes,
     hasMilestone,
     milestoneTitle: activeMilestone?.title,
@@ -290,6 +334,10 @@ function preparePlanDuJourData(data: TimesheetReportData) {
     capacityAdvice,
     scheduleSlots,
     unforeseenEvents,
+    totalLostMinutes,
+    availabilityRate,
+    punctualityRate,
+    isLateToday,
     postponedTasks,
     managerAlertPoint,
     managerPoints: data.managerPoints,
@@ -363,6 +411,31 @@ export function buildPlanDuJourExcelHtml(data: TimesheetReportData): string {
         <tr><td colspan="6" style="height: 6px; border: none;"></td></tr>
       </table>
 
+      <!-- 📊 STATISTIQUES & POURCENTAGES DE PERFORMANCE DU JOUR -->
+      <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px; background-color: #f8fafc;">
+        <tr>
+          <td colspan="6" class="section-header">📊 STATISTIQUES &amp; TAUX DE PERFORMANCE DU JOUR</td>
+        </tr>
+        <tr style="text-align: center; font-weight: bold; background-color: #f1f5f9;">
+          <td style="width: 25%; padding: 6px;">Avancement Tâches</td>
+          <td style="width: 25%; padding: 6px;">Priorités P1-P3</td>
+          <td style="width: 25%; padding: 6px;">Cadence (08h–17h)</td>
+          <td colspan="3" style="width: 25%; padding: 6px;">Disponibilité Nette</td>
+        </tr>
+        <tr style="text-align: center; font-size: 14pt; font-weight: bold;">
+          <td style="color: #064e3b; padding: 8px;">${p.ratePercentage}%</td>
+          <td style="color: #1d4ed8; padding: 8px;">${p.prioritiesRate}%</td>
+          <td style="color: #0f766e; padding: 8px;">${p.hoursRate}%</td>
+          <td colspan="3" style="color: ${p.totalLostMinutes > 0 ? '#b45309' : '#059669'}; padding: 8px;">${p.availabilityRate}%</td>
+        </tr>
+        <tr style="text-align: center; font-size: 8.5pt; color: #64748b; background-color: #ffffff;">
+          <td style="padding: 4px;">${p.completedTasks}/${p.totalTasks} sous-tâche(s) faites</td>
+          <td style="padding: 4px;">${p.prioritiesCompleted}/${p.prioritiesTotal} finalisées</td>
+          <td style="padding: 4px;">${p.hoursWorkedNumber}h / 8h contractuelles</td>
+          <td colspan="3" style="padding: 4px;">${p.totalLostMinutes > 0 ? `${p.totalLostMinutes} min imprévus` : 'Zéro blocage'}</td>
+        </tr>
+      </table>
+
       <!-- 1. LES 3 PRIORITÉS DU JOUR -->
       <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
         <tr>
@@ -415,7 +488,7 @@ export function buildPlanDuJourExcelHtml(data: TimesheetReportData): string {
       <!-- 3. PLAN HORAIRE -->
       <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
         <tr>
-          <td colspan="6" class="section-header">🕐 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus</td>
+          <td colspan="6" class="section-header">🕐 PLAN HORAIRE (08:00 – 17:00) — créneau tampon &amp; pause officielle 12h–13h</td>
         </tr>
         <tr>
           <td class="col-header" style="width: 25%;">Heure</td>
@@ -424,7 +497,7 @@ export function buildPlanDuJourExcelHtml(data: TimesheetReportData): string {
         ${p.scheduleSlots.map((s) => `
           <tr class="${s.isBuffer || s.isBreak ? 'tampon-row' : ''}">
             <td style="font-weight: bold;">${s.timeRange}</td>
-            <td colspan="5" class="${s.isBuffer || s.isBreak ? '' : 'blue-text'}">${s.activity}</td>
+            <td colspan="5" class="${s.isBuffer || s.isBreak ? '' : 'blue-text'}">${s.isBreak ? '⚡ TAMPON IMPRÉVUS / pause (12h–13h)' : s.activity}</td>
           </tr>
         `).join('')}
       </table>
@@ -526,6 +599,58 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
           </table>
         </div>
 
+        <!-- 📊 TABLEAU DE BORD STATISTIQUE & POURCENTAGES DE PERFORMANCE DU JOUR -->
+        <div style="background-color: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+          <div style="font-size: 12px; font-weight: 800; color: #164e4b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+            📊 STATISTIQUES &amp; POURCENTAGES DE PERFORMANCE DU JOUR
+          </div>
+
+          <!-- 4 Cartouches KPI avec pourcentages en gros -->
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: separate; border-spacing: 8px 0; margin-bottom: 12px;">
+            <tr>
+              <td style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; width: 25%;">
+                <div style="font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase;">Avancement Tâches</div>
+                <div style="font-size: 24px; font-weight: 900; color: #164e4b; margin: 4px 0 2px 0;">${p.ratePercentage}%</div>
+                <div style="font-size: 10px; color: #10b981; font-weight: 700;">${p.completedTasks}/${p.totalTasks} sous-tâche(s) faites</div>
+              </td>
+              <td style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; width: 25%;">
+                <div style="font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase;">Priorités P1-P3</div>
+                <div style="font-size: 24px; font-weight: 900; color: #1d4ed8; margin: 4px 0 2px 0;">${p.prioritiesRate}%</div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600;">${p.prioritiesCompleted}/${p.prioritiesTotal} finalisées (${p.prioritiesEngagementRate}% traitées)</div>
+              </td>
+              <td style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; width: 25%;">
+                <div style="font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase;">Cadence (08h–17h)</div>
+                <div style="font-size: 24px; font-weight: 900; color: #0f766e; margin: 4px 0 2px 0;">${p.hoursRate}%</div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600;">${p.hoursWorkedNumber}h / 8h nettes contractuelles</div>
+              </td>
+              <td style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; width: 25%;">
+                <div style="font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase;">Disponibilité Nette</div>
+                <div style="font-size: 24px; font-weight: 900; color: ${p.totalLostMinutes > 0 ? '#b45309' : '#059669'}; margin: 4px 0 2px 0;">${p.availabilityRate}%</div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600;">${p.totalLostMinutes > 0 ? `${p.totalLostMinutes} min imprévus` : 'Zéro blocage'}</div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Barre de progression visuelle multi-segments -->
+          <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 10px; font-weight: 700; color: #475569; margin-bottom: 6px;">
+              <span>Répartition de l'effort opérationnel : </span>
+              <strong style="color: #065f46;">${p.ratePercentage}% Fait</strong> • 
+              <strong style="color: #92400e;">${p.taskInProgressRate}% En cours</strong> • 
+              <strong style="color: #64748b;">${p.taskTodoRate}% À faire</strong>
+              ${p.taskBlockedRate > 0 ? ` • <strong style="color: #b91c1c;">${p.taskBlockedRate}% Bloqué</strong>` : ''}
+            </div>
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; height: 10px; border-radius: 5px; overflow: hidden; background-color: #e2e8f0;">
+              <tr>
+                ${p.ratePercentage > 0 ? `<td style="width: ${p.ratePercentage}%; background-color: #10b981; height: 10px;"></td>` : ''}
+                ${p.taskInProgressRate > 0 ? `<td style="width: ${p.taskInProgressRate}%; background-color: #f59e0b; height: 10px;"></td>` : ''}
+                ${p.taskBlockedRate > 0 ? `<td style="width: ${p.taskBlockedRate}%; background-color: #ef4444; height: 10px;"></td>` : ''}
+                ${p.taskTodoRate > 0 ? `<td style="width: ${p.taskTodoRate}%; background-color: #cbd5e1; height: 10px;"></td>` : ''}
+              </tr>
+            </table>
+          </div>
+        </div>
+
         <!-- 🎯 BANNIÈRE DE CAPACITÉ JOURNALIÈRE CALCULÉE (AVEC JALON OU SANS JALON) -->
         <div style="padding: 12px 14px; border-radius: 12px; border: 1px solid ${capacityBorder}; background-color: ${capacityBg}; margin-bottom: 16px;">
           <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
@@ -542,9 +667,9 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
                 </div>
               </td>
               <td align="right" style="vertical-align: middle; width: 220px; font-size: 11px; background-color: #ffffff; padding: 8px 12px; border-radius: 10px; border: 1px solid #e2e8f0; line-height: 1.4; font-family: monospace;">
-                <div><strong>Capacité max :</strong> 12h / jour</div>
+                <div><strong>Horaires officiels :</strong> 08h00 – 17h00</div>
                 <div style="color: ${p.capacityStatus === 'overloaded' ? '#dc2626' : '#64748b'}; font-weight: ${p.capacityStatus === 'overloaded' ? '800' : 'normal'};">
-                  ${p.capacityStatus === 'overloaded' ? '⚠️ Surcharge (> 10h)' : 'Seuil surcharge > 10h'}
+                  Pause obligatoire : 12h00 – 13h00
                 </div>
                 <div style="font-weight: 800; color: #2A7B76;">${p.totalTasks} sous-tâche(s) (${Math.round(p.plannedMinutes / 60)}h)</div>
               </td>
@@ -557,7 +682,7 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
           <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
             <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
               <tr>
-                <td>⏱️ RÉCAPITULATIF DE PRÉSENCE &amp; POINTAGE DU JOUR</td>
+                <td>⏱️ RÉCAPITULATIF DE PRÉSENCE &amp; POINTAGE DU JOUR (08h00 – 17h00)</td>
                 <td align="right" style="font-size: 11px; color: #a7f3d0; font-weight: 600;">
                   Registre Officiel Citrine Pointage
                 </td>
@@ -586,27 +711,27 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
                     ${data.dailyAttendance?.arrivalTime || '—'}
                   </div>
                   <div style="font-size: 9.5px; color: #94a3b8; margin-top: 1px;">
-                    ${data.dailyAttendance?.location || 'Douala'}
+                    ${data.dailyAttendance?.location || 'Douala'} (Dès 08h00)
                   </div>
                 </td>
                 <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
-                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Pause Déjeuner</div>
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Pause Déjeuner (12h–13h)</div>
                   <div style="font-size: 12px; font-weight: 700; color: #475569; font-family: monospace; margin-top: 2px;">
                     ${data.dailyAttendance?.pauseStart && data.dailyAttendance?.pauseEnd 
                       ? `${data.dailyAttendance.pauseStart} – ${data.dailyAttendance.pauseEnd}` 
-                      : (data.dailyAttendance?.pauseStart ? `Dès ${data.dailyAttendance.pauseStart}` : '13:00 – 14:00')}
+                      : (data.dailyAttendance?.pauseStart ? `Dès ${data.dailyAttendance.pauseStart}` : '12:00 – 13:00')}
                   </div>
                   <div style="font-size: 9.5px; color: #166534; margin-top: 1px;">
-                    ${data.dailyAttendance?.pauseStart ? 'Effectuée' : 'Créneau standard'}
+                    ${data.dailyAttendance?.pauseStart ? 'Effectuée' : 'Pause officielle (12h–13h)'}
                   </div>
                 </td>
                 <td style="width: 25%; padding: 4px 6px; vertical-align: top;">
-                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Départ / Temps Réel</div>
+                  <div style="font-size: 9.5px; color: #64748b; font-weight: 700; text-transform: uppercase;">Départ / Fin de Journée</div>
                   <div style="font-size: 14px; font-weight: 800; color: #164e4b; font-family: monospace; margin-top: 2px;">
-                    ${data.dailyAttendance?.departureTime || 'En poste'}
+                    ${data.dailyAttendance?.departureTime || 'En poste (fin 17:00)'}
                   </div>
                   <div style="font-size: 10px; font-weight: 700; color: #0284c7; margin-top: 1px;">
-                    ⏱️ ${data.dailyAttendance?.hoursWorkedText || `${Math.round(p.plannedMinutes / 60)}h estimées`}
+                    ⏱️ ${data.dailyAttendance?.hoursWorkedText || `${p.hoursWorkedNumber}h nettes`}
                   </div>
                 </td>
               </tr>
@@ -744,15 +869,15 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
           </table>
         </div>
 
-        <!-- 3. PLAN HORAIRE DYNAMIQUE (AVEC PAUSE OBLIGATOIRE 13h-14h & RÉSOLUTIONS) -->
+        <!-- 3. PLAN HORAIRE DYNAMIQUE (HORAIRES 08H00 – 17H00, PAUSE STRICTE 12H–13H) -->
         <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
           <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
             <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
               <tr>
-                <td>🕒 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus</td>
+                <td>🕒 PLAN HORAIRE (08h00 – 17h00) — garde un créneau « tampon » pour les imprévus</td>
                 <td align="right">
                   <span style="display: inline-block; background-color: rgba(254, 240, 138, 0.4); color: #854d0e; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(254, 240, 138, 0.7); font-family: monospace;">
-                    13:00 – 14:00 : TAMPON IMPRÉVUS / pause
+                    12:00 – 13:00 : TAMPON IMPRÉVUS / pause
                   </span>
                 </td>
               </tr>
@@ -767,7 +892,7 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
             </thead>
             <tbody>
               ${p.scheduleSlots.map((s) => {
-                const isBreak = s.isBreak || s.timeRange.includes('13:00') || s.isBuffer;
+                const isBreak = s.isBreak || s.timeRange.includes('12:00') || s.isBuffer;
                 const rowBg = isBreak ? '#fef9c3' : '#ffffff';
                 const timeColor = isBreak ? '#854d0e' : '#1c1917';
                 const actColor = isBreak ? '#854d0e' : '#1d4ed8';
@@ -778,7 +903,7 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
                       ${s.timeRange}
                     </td>
                     <td style="padding: 8px 10px; font-weight: 700; color: ${actColor};">
-                      ${isBreak ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity}
+                      ${isBreak ? '⚡ TAMPON IMPRÉVUS / pause (12h–13h)' : s.activity}
                     </td>
                   </tr>
                 `;
@@ -908,6 +1033,8 @@ export function buildTimesheetXlsxWorkbook(data: TimesheetReportData): XLSX.Work
     ['CITRINE'],
     [`PLAN DU JOUR — ${p.dept}`],
     [],
+    // Statistiques & pourcentages clés du jour
+    ['📊 STATISTIQUES DU JOUR', `Avancement : ${p.ratePercentage}%`, `Priorités P1-P3 : ${p.prioritiesRate}%`, `Cadence (08h–17h) : ${p.hoursRate}%`, `Disponibilité : ${p.availabilityRate}%`],
     [],
     // Ligne 5 : Date & Lieu (Col A, B, C, F)
     [`Date : ${p.dateText}`, p.locationText || 'Douala', `Jour : ${p.dayText}`, '', '', p.dateText],
@@ -933,14 +1060,14 @@ export function buildTimesheetXlsxWorkbook(data: TimesheetReportData): XLSX.Work
     // Ligne de récapitulatif
     ['Total / réalisées / taux', '', p.totalTasks, p.completedTasks, `${p.ratePercentage}%`, `${p.postponedCount} report.`],
     [],
-    // Plan horaire dynamique avec créneau tampon 13h–14h
-    ['🕒 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus'],
+    // Plan horaire dynamique (08h00 – 17h00) avec pause officielle 12h–13h
+    ['🕒 PLAN HORAIRE (08:00 – 17:00) — garde un créneau « tampon » pour les imprévus'],
     ['Heure', 'Ce que je fais sur ce créneau'],
     ...p.scheduleSlots.map((s) => {
-      const isBreak = s.isBreak || s.timeRange.includes('13:00') || s.isBuffer;
+      const isBreak = s.isBreak || s.timeRange.includes('12:00') || s.isBuffer;
       return [
         s.timeRange,
-        isBreak ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity,
+        isBreak ? '⚡ TAMPON IMPRÉVUS / pause (12h–13h)' : s.activity,
       ];
     }),
     [],
