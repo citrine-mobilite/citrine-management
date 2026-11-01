@@ -119,6 +119,8 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
       };
       onUpdateModuleConfig(updated);
 
+      setIsSaving(false);
+
       if (saveRes.success) {
         await showSuccessAlert(
           'Configuration enregistrée !', 
@@ -131,6 +133,7 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
         );
       }
     } catch (err: any) {
+      setIsSaving(false);
       await showErrorAlert(
         'Erreur critique',
         'Erreur lors de la sauvegarde : ' + err.message
@@ -161,6 +164,8 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
         testRecipient || formData.hrNotificationEmail
       );
 
+      setIsTesting(false);
+
       if (res.success) {
         console.log("✅ [TEST SMTP SUCCÈS] Réponse du serveur :", res);
         setTestResult({
@@ -188,6 +193,7 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
         );
       }
     } catch (err: any) {
+      setIsTesting(false);
       const rawException = err?.message || String(err);
       console.error("💥 [TEST SMTP EXCEPTION CLIENT]:", err);
       setTestResult({

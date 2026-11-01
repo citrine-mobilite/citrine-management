@@ -39,6 +39,8 @@ import OfflineStatusBanner from './components/OfflineStatusBanner';
 import { GlobalTooltipContainer } from './components/common/GlobalTooltipContainer';
 import { PushNotificationPopupContainer } from './components/notifications/PushNotificationPopupContainer';
 import { GlobalActionLoader } from './components/common/GlobalActionLoader';
+import { showSuccessAlert, showErrorAlert, showPendingAlert } from './utils/sweetAlert';
+import { asyncActionTrackerService } from './services/asyncActionTrackerService';
 
 export default function App() {
   const initialData = useAppInitialData();
@@ -129,18 +131,33 @@ export default function App() {
     }
 
     const now = Date.now();
-    if (lastToastRef.current.message === resolvedMessage && now - lastToastRef.current.time < 5000) {
-      return; // Ignore duplicate toast within 5 seconds for the same action
+    if (lastToastRef.current.message === resolvedMessage && now - lastToastRef.current.time < 3500) {
+      return; // Ignore duplicate feedback within 3.5 seconds
     }
     lastToastRef.current = { message: resolvedMessage, time: now };
 
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
-    setToasts((prev) => [...prev, { id, title: resolvedTitle, message: resolvedMessage, type: resolvedType }]);
+    // Règle stricte : attendre que tout loader serveur en cours soit achevé et invisible.
+    // Le loader et le SweetAlert ne doivent jamais s'afficher au même moment.
+    (async () => {
+      try {
+        await asyncActionTrackerService.waitForIdle();
+        // Délai pour transition de rendu propre
+        await new Promise((r) => setTimeout(r, 60));
+
+        if (resolvedType === 'error') {
+          await showErrorAlert(resolvedTitle || "Échec de l'opération", resolvedMessage);
+        } else if (resolvedType === 'warning' || resolvedType === 'info') {
+          await showPendingAlert(resolvedTitle || 'Information Citrine', resolvedMessage);
+        } else {
+          await showSuccessAlert(resolvedTitle || 'Opération confirmée', resolvedMessage);
+        }
+      } catch (err) {
+        console.warn('[App] Erreur lors de l\'affichage de SweetAlert:', err);
+      }
+    })();
   };
 
-  const dismissToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  const dismissToast = (_id: string) => {};
 
   // Clock
   const [currentTime, setCurrentTime] = useState<string>(() => {

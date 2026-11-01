@@ -26,7 +26,7 @@ import { DisciplinaryDetailView } from './disciplinary/DisciplinaryDetailView';
 import { EmployeeDisciplinarySummary } from './disciplinary/EmployeeDisciplinarySummary';
 import { RecognitionPanel } from './disciplinary/RecognitionPanel';
 import { logSystemAudit } from '../services/adminAuditService';
-import { showSuccessAlert, showErrorAlert } from '../utils/sweetAlert';
+import { showSuccessAlert, showErrorAlert, executeOperationWithLoading } from '../utils/sweetAlert';
 import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
 
 interface DisciplinaryPanelProps {
@@ -90,50 +90,52 @@ export default function DisciplinaryPanel({
   ]);
 
   const handleAddIncident = async (newIncident: DisciplinaryIncident) => {
-    try {
-      onUpdateIncidents([newIncident, ...incidents]);
-      
-      // Log dans le journal d'audit
-      logSystemAudit({
-        authorName: currentUser?.name || 'Responsable RH',
-        authorRole: currentUser?.role || 'admin',
-        targetName: newIncident.employeeName,
-        targetEmployeeId: newIncident.employeeId,
-        operationType: 'conseil_discipline',
-        operationLabel: `Ouverture dossier disciplinaire [${newIncident.id}]`,
-        details: `${newIncident.title} — Gravité: ${newIncident.severity.toUpperCase()}. Signalé par ${newIncident.reportedBy}`,
-        level: newIncident.severity === 'critique' || newIncident.severity === 'grave' ? 'warning' : 'info',
-      });
-
-      if (showToast) showToast('Nouveau fait disciplinaire consigné avec succès.');
-      await showSuccessAlert('Incident enregistré !', `Le dossier disciplinaire pour "${newIncident.employeeName}" a été ouvert.`);
-    } catch (err: any) {
-      await showErrorAlert('Erreur', err?.message || 'Erreur lors de l\'enregistrement de l\'incident.');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement du dossier...',
+      loadingText: 'Consignation du fait disciplinaire en base de données...',
+      action: async () => {
+        onUpdateIncidents([newIncident, ...incidents]);
+        
+        // Log dans le journal d'audit
+        logSystemAudit({
+          authorName: currentUser?.name || 'Responsable RH',
+          authorRole: currentUser?.role || 'admin',
+          targetName: newIncident.employeeName,
+          targetEmployeeId: newIncident.employeeId,
+          operationType: 'conseil_discipline',
+          operationLabel: `Ouverture dossier disciplinaire [${newIncident.id}]`,
+          details: `${newIncident.title} — Gravité: ${newIncident.severity.toUpperCase()}. Signalé par ${newIncident.reportedBy}`,
+          level: newIncident.severity === 'critique' || newIncident.severity === 'grave' ? 'warning' : 'info',
+        });
+      },
+      successTitle: 'Incident consigné !',
+      successMessage: `Le dossier disciplinaire pour "${newIncident.employeeName}" a été ouvert avec succès.`,
+    });
   };
 
   const handleUpdateIncident = async (updated: DisciplinaryIncident) => {
-    try {
-      onUpdateIncidents(incidents.map((i) => (i.id === updated.id ? updated : i)));
-      setSelectedIncident(updated);
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour du dossier...',
+      loadingText: 'Enregistrement des délibérations sur le serveur...',
+      action: async () => {
+        onUpdateIncidents(incidents.map((i) => (i.id === updated.id ? updated : i)));
+        setSelectedIncident(updated);
 
-      // Log dans le journal d'audit
-      logSystemAudit({
-        authorName: currentUser?.name || 'Responsable RH',
-        authorRole: currentUser?.role || 'admin',
-        targetName: updated.employeeName,
-        targetEmployeeId: updated.employeeId,
-        operationType: 'conseil_discipline',
-        operationLabel: `Mise à jour dossier disciplinaire [${updated.id}]`,
-        details: `Statut : ${updated.status}. Sanction : ${updated.sanctionType || 'En délibéré'}.`,
-        level: updated.status === 'sanctionne' ? 'warning' : 'info',
-      });
-
-      if (showToast) showToast('Dossier disciplinaire mis à jour.');
-      await showSuccessAlert('Dossier mis à jour !', `Le dossier disciplinaire pour "${updated.employeeName}" a été mis à jour.`);
-    } catch (err: any) {
-      await showErrorAlert('Erreur', err?.message || 'Erreur lors de la mise à jour du dossier.');
-    }
+        // Log dans le journal d'audit
+        logSystemAudit({
+          authorName: currentUser?.name || 'Responsable RH',
+          authorRole: currentUser?.role || 'admin',
+          targetName: updated.employeeName,
+          targetEmployeeId: updated.employeeId,
+          operationType: 'conseil_discipline',
+          operationLabel: `Mise à jour dossier disciplinaire [${updated.id}]`,
+          details: `Statut : ${updated.status}. Sanction : ${updated.sanctionType || 'En délibéré'}.`,
+          level: updated.status === 'sanctionne' ? 'warning' : 'info',
+        });
+      },
+      successTitle: 'Dossier mis à jour !',
+      successMessage: `Le dossier disciplinaire pour "${updated.employeeName}" a été mis à jour avec succès.`,
+    });
   };
 
   const handleUpdateStatus = (incident: DisciplinaryIncident, newStatus: DisciplinaryStatus) => {
@@ -156,13 +158,15 @@ export default function DisciplinaryPanel({
   };
 
   const handleAddRecognition = async (rec: EmployeeRecognition) => {
-    try {
-      setRecognitions([rec, ...recognitions]);
-      if (showToast) showToast('Distinction ou titre décerné avec succès !');
-      await showSuccessAlert('Distinction décernée !', `La distinction a été attribuée avec succès.`);
-    } catch (err: any) {
-      await showErrorAlert('Erreur', err?.message || 'Erreur lors de l\'attribution de la distinction.');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: 'Attribution de distinction...',
+      loadingText: 'Enregistrement de la distinction en base de données...',
+      action: async () => {
+        setRecognitions([rec, ...recognitions]);
+      },
+      successTitle: 'Distinction décernée !',
+      successMessage: `La distinction a été attribuée avec succès.`,
+    });
   };
 
   const isRestricted = isSelfOnlyUser(currentUser, currentRole);

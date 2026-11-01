@@ -11,7 +11,7 @@ import { InventoryReturnModal } from './inventory/InventoryReturnModal';
 import { InventoryDonationsPanel } from './inventory/InventoryDonationsPanel';
 import { InventoryDetailDrawer } from './inventory/InventoryDetailDrawer';
 import { InventoryDonateModal } from './inventory/InventoryDonateModal';
-import { showSuccessAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
+import { showSuccessAlert, executeOperationWithLoading, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface InventoryPanelProps {
   inventoryItems: InventoryItem[];
@@ -54,14 +54,19 @@ export default function InventoryPanel({
 
   const handleSaveItem = async (item: InventoryItem) => {
     const exists = effectiveItems.some((i) => i.id === item.id);
-    if (exists) {
-      onUpdateInventoryItems(effectiveItems.map((i) => (i.id === item.id ? item : i)));
-      await showSuccessAlert('Article modifié !', `L'article "${item.designation}" a été mis à jour.`);
-    } else {
-      onUpdateInventoryItems([item, ...effectiveItems]);
-      await showSuccessAlert('Article enregistré !', `L'article "${item.designation}" a été ajouté à l'inventaire.`);
-    }
-    if (showToast) showToast('Matériel enregistré avec succès.');
+    await executeOperationWithLoading({
+      loadingTitle: exists ? 'Mise à jour du matériel...' : 'Ajout au stock...',
+      loadingText: 'Enregistrement de l\'équipement en base de données...',
+      action: async () => {
+        if (exists) {
+          onUpdateInventoryItems(effectiveItems.map((i) => (i.id === item.id ? item : i)));
+        } else {
+          onUpdateInventoryItems([item, ...effectiveItems]);
+        }
+      },
+      successTitle: exists ? 'Article modifié !' : 'Article enregistré !',
+      successMessage: `L'article "${item.designation}" a été enregistré avec succès dans l'inventaire.`,
+    });
   };
 
   const handleDeleteItem = async (id: string) => {
@@ -78,10 +83,10 @@ export default function InventoryPanel({
     });
   };
 
-  const handleItemUpdated = (updated: InventoryItem) => {
+  const handleItemUpdated = async (updated: InventoryItem) => {
     onUpdateInventoryItems(effectiveItems.map((i) => (i.id === updated.id ? updated : i)));
     if (historyItem?.id === updated.id) setHistoryItem(updated);
-    if (showToast) showToast('Inventaire mis à jour.');
+    await showSuccessAlert('Inventaire synchronisé', `L'équipement "${updated.designation}" a été mis à jour.`);
   };
 
   // Unique locations for dropdown

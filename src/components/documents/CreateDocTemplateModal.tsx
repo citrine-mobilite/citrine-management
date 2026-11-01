@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { RHDocTemplate, TemplateField, DocumentCategory } from '../../types';
 import { saveRHDocumentTemplate } from '../../services/rhDocumentTemplateService';
+import { showSuccessAlert, showErrorAlert } from '../../utils/sweetAlert';
 
 interface CreateDocTemplateModalProps {
   isOpen: boolean;
@@ -146,18 +147,19 @@ La présente pièce lui est délivrée pour servir et valoir ce que de droit.`);
         updatedAt: new Date().toISOString(),
       };
 
-      // Sauvegarde directe en Base de Données Firestore !
+      // Sauvegarde directe en Base de Données
       await saveRHDocumentTemplate(newTemplate);
 
-      if (showToast) {
-        showToast(`Modèle "${newTemplate.name}" enregistré avec succès en base de données !`);
-      }
+      setIsSubmitting(false);
       if (onTemplateCreated) {
         onTemplateCreated(newTemplate);
       }
       onClose();
+      await showSuccessAlert('Modèle enregistré !', `Le modèle officiel "${newTemplate.name}" a été enregistré avec succès en base de données.`);
     } catch (err: any) {
+      setIsSubmitting(false);
       setError(err?.message || "Erreur lors de l'enregistrement du modèle en base de données.");
+      await showErrorAlert('Erreur d\'enregistrement', err?.message || 'Impossible d\'enregistrer le modèle.');
     } finally {
       setIsSubmitting(false);
     }

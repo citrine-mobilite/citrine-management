@@ -122,6 +122,36 @@ class AsyncActionTrackerService {
     return this.state;
   }
 
+  /**
+   * Attend que toutes les opérations en cours soient achevées et le loader invisible.
+   * Garantit que le SweetAlert ne s'affiche jamais en même temps que le loader.
+   */
+  public waitForIdle(): Promise<void> {
+    if (!this.state.isLoading && this.activeActions.size === 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      let resolved = false;
+      const unsub = this.subscribe((state) => {
+        if (!state.isLoading && this.activeActions.size === 0) {
+          if (!resolved) {
+            resolved = true;
+            unsub();
+            resolve();
+          }
+        }
+      });
+      // Timeout de sécurité max 4s pour ne jamais bloquer l'interface
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          unsub();
+          resolve();
+        }
+      }, 4000);
+    });
+  }
+
   private updateState(): void {
     const isVisible = this.visibleActions.size > 0;
     const activeCount = this.activeActions.size;

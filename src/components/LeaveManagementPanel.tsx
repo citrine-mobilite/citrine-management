@@ -213,6 +213,7 @@ export default function LeaveManagementPanel({
           onAddNotification
         );
         showToast?.('Demande validée', `Le congé de ${selectedRequest.employeeName} a été validé.`, 'success');
+        setIsProcessing(false);
         await showSuccessAlert('Demande validée !', `La demande de ${selectedRequest.employeeName} a été validée avec succès.`);
       } else if (actionType === 'reject') {
         if (!managerComment.trim()) {
@@ -235,6 +236,7 @@ export default function LeaveManagementPanel({
           onAddNotification
         );
         showToast?.('Demande refusée', `La demande de ${selectedRequest.employeeName} a été refusée.`, 'info');
+        setIsProcessing(false);
         await showSuccessAlert('Demande refusée', `La demande de ${selectedRequest.employeeName} a été refusée.`);
       } else if (actionType === 'modify') {
         const days = modifiedDaysCount > 0 ? modifiedDaysCount : calculateDaysBetween(modifiedStartDate, modifiedEndDate);
@@ -255,6 +257,7 @@ export default function LeaveManagementPanel({
           onAddNotification
         );
         showToast?.('Durée ajustée', `La durée accordée a été ajustée à ${days} jour(s).`, 'success');
+        setIsProcessing(false);
         await showSuccessAlert('Durée ajustée !', `La durée accordée pour ${selectedRequest.employeeName} a été ajustée à ${days} jour(s).`);
       }
 
@@ -276,7 +279,9 @@ export default function LeaveManagementPanel({
 
       closeModal();
     } catch {
+      setIsProcessing(false);
       showToast?.('Erreur', 'Impossible de traiter la demande.', 'warning');
+    } finally {
       setIsProcessing(false);
     }
   };
@@ -311,6 +316,8 @@ export default function LeaveManagementPanel({
         onAddNotification
       );
 
+      setIsSubmittingCreate(false);
+
       showToast?.(
         createStatus === 'approved' ? 'Congé accordé et validé' : 'Demande enregistrée',
         `Congé / Permission créé(e) avec succès pour ${empName}.`,
@@ -324,6 +331,7 @@ export default function LeaveManagementPanel({
       setCreateReason('');
       setCreateManagerComment('');
     } catch (err: any) {
+      setIsSubmittingCreate(false);
       showToast?.('Erreur', 'Impossible de créer la demande de congé.', 'warning');
       await showErrorAlert('Erreur', err?.message || 'Impossible de créer la demande de congé.');
     } finally {

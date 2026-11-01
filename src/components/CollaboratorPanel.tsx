@@ -456,9 +456,9 @@ export default function CollaboratorPanel({
       }
 
       setAuditOpsList(getAdminAuditOperations());
-      if (showToast) showToast(`Fiche collaborateur et compte utilisateur synchronisés avec succès.`, 'success');
-      await showSuccessAlert('Fiche modifiée !', `La fiche de "${formData.name.trim()}" et ses accès associés ont été mis à jour avec succès.`);
+      setIsSaving(false);
       setIsModalOpen(false);
+      await showSuccessAlert('Fiche modifiée !', `La fiche de "${formData.name.trim()}" et ses accès associés ont été mis à jour avec succès.`);
       return;
     } else {
       setIsSaving(true);
@@ -467,12 +467,6 @@ export default function CollaboratorPanel({
         const userEmail = formData.email.trim() ? formData.email.trim() : `collab_${Date.now()}@citrinemgmt.cm`;
         const initialPassword = formData.userPassword.trim() || 'Collab@2026';
 
-        // FLUX TRANSACTIONNEL STRICT :
-        // 1. Création du collaborateur initial dans la table 'employees' (sans user_id)
-        // 2. Automatiquement, création du compte utilisateur dans la table 'users'
-        // 3. Modification du collaborateur pour lui assigner user_id et role_id
-        // 4. Émission et enregistrement de la notification officielle avec logs
-        // Si l'une quelconque de ces étapes échoue -> ROLLBACK TOTAL
         const result = await createCollaboratorWithUserTransactional({
           name: formData.name.trim(),
           firstName: (formData as any).firstName,
@@ -533,23 +527,12 @@ export default function CollaboratorPanel({
 
         setAuditOpsList(getAdminAuditOperations());
 
-        if (showToast) {
-          showToast(
-            `Collaborateur et compte utilisateur créés et liés avec succès ! User ID: ${result.user.id} | Notification émise.`,
-            'success'
-          );
-        }
-        await showSuccessAlert('Collaborateur créé !', `Le collaborateur "${formData.name.trim()}" et son compte d'accès ont été créés avec succès.`);
-
+        setIsSaving(false);
         setIsModalOpen(false);
+        await showSuccessAlert('Collaborateur créé !', `Le collaborateur "${formData.name.trim()}" et son compte d'accès ont été créés avec succès.`);
       } catch (err: any) {
+        setIsSaving(false);
         console.error('❌ [CollaboratorPanel] Échec de la création transactionnelle:', err);
-        if (showToast) {
-          showToast(
-            `Échec création : ${err?.message || 'Erreur inconnue'}. Rollback effectué (aucune donnée orpheline).`,
-            'error'
-          );
-        }
         await showErrorAlert('Échec de la création', err?.message || 'Erreur lors de la création du collaborateur.');
       } finally {
         setIsSaving(false);

@@ -18,7 +18,8 @@ export const GlobalActionLoader: React.FC = () => {
     return unsubscribe;
   }, []);
 
-  if (!state.isLoading || isDismissed) {
+  const isSwalActive = typeof document !== 'undefined' && Boolean(document.querySelector('.swal2-container'));
+  if (!state.isLoading || isDismissed || isSwalActive) {
     return null;
   }
 

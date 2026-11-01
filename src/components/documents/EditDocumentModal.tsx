@@ -83,9 +83,10 @@ export const EditDocumentModal: React.FC<EditDocumentModalProps> = ({
       };
 
       onSave(updatedDoc);
-      if (showToast) showToast('Document modifié et enregistré en base de données avec succès.', 'success');
+      setIsSubmitting(false);
       onClose();
     } catch (err) {
+      setIsSubmitting(false);
       console.error('Erreur mise à jour document:', err);
       if (showToast) showToast('Erreur lors de la modification du document.', 'error');
     } finally {

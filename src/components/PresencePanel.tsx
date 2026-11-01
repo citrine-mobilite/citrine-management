@@ -41,6 +41,7 @@ import { isEmployeeOnlyRole, isSelfOnlyUser, findMatchingEmployee, shouldEmploye
 import { realtimeSyncService } from '../services/realtimeSyncService';
 import { incidentService } from '../services/incidentService';
 import { savePresenceAtomic } from '../services/dataService';
+import { showSuccessAlert, showErrorAlert, executeOperationWithLoading } from '../utils/sweetAlert';
 
 interface PresencePanelProps {
   employees: Employee[];
@@ -499,7 +500,7 @@ export default function PresencePanel({
   };
 
   // Save manual pointage modifications
-  const handleSaveManualEdit = (e: React.FormEvent) => {
+  const handleSaveManualEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPresence) return;
 
@@ -510,16 +511,29 @@ export default function PresencePanel({
       editForm.departureTime !== (editingPresence.departureTime || '');
 
     if (isTimeModified && !editForm.correctionReason.trim()) {
-      if (showToast) showToast('Un motif est obligatoire pour toute modification d\'heure de pointage.', 'error');
+      await showErrorAlert('Motif obligatoire', 'Un motif est obligatoire pour toute modification d\'heure de pointage.');
       return;
     }
 
     const updated = presences.map((p) =>
       p.id === editingPresence.id ? { ...p, ...editForm } : p
     );
-    onUpdatePresences(updated);
-    if (showToast) showToast('Pointage collaborateur mis à jour avec succès.', 'success');
+
     setIsEditModalOpen(false);
+
+    await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement de la modification...',
+      loadingText: 'Synchronisation du pointage en base de données...',
+      action: async () => {
+        onUpdatePresences(updated);
+        const targetPresence = updated.find(p => p.id === editingPresence.id);
+        if (targetPresence) {
+          await savePresenceAtomic(targetPresence);
+        }
+      },
+      successTitle: 'Pointage mis à jour !',
+      successMessage: 'Les modifications de pointage ont été enregistrées avec succès en base de données.',
+    });
   };
 
   // Export Excel placeholder

@@ -19,7 +19,7 @@ import {
   ReminderModal, 
   ActiveAlarmBanner 
 } from './reminders';
-import { showSuccessAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
+import { showSuccessAlert, executeOperationWithLoading, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface ReminderPanelProps {
   reminders: Reminder[];
@@ -160,29 +160,31 @@ export default function ReminderPanel({
     setIsModalOpen(true);
   };
 
-  // Save (Create or Edit)
   const handleSaveReminder = async (
     reminderData: Omit<Reminder, 'id' | 'createdAt'> & { id?: string }
   ) => {
-    if (reminderData.id) {
-      // Modification
-      const updated = reminders.map((r) =>
-        r.id === reminderData.id ? ({ ...r, ...reminderData } as Reminder) : r
-      );
-      onUpdateReminders(updated);
-      if (showToast) showToast('Alerte modifiée avec succès.', 'success');
-      await showSuccessAlert('Rappel modifié !', `Le rappel "${reminderData.title}" a été mis à jour.`);
-    } else {
-      // Création
-      const newReminderItem: Reminder = {
-        id: `rem-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        ...reminderData,
-      } as Reminder;
-      onUpdateReminders([newReminderItem, ...reminders]);
-      if (showToast) showToast('Nouvelle alerte programmée.', 'success');
-      await showSuccessAlert('Alerte programmée !', `Le rappel "${newReminderItem.title}" a été programmé avec succès.`);
-    }
+    const isEdit = Boolean(reminderData.id);
+    await executeOperationWithLoading({
+      loadingTitle: isEdit ? 'Modification du rappel...' : 'Programmation de l\'alerte...',
+      loadingText: 'Synchronisation de l\'alerte en base de données...',
+      action: async () => {
+        if (reminderData.id) {
+          const updated = reminders.map((r) =>
+            r.id === reminderData.id ? ({ ...r, ...reminderData } as Reminder) : r
+          );
+          onUpdateReminders(updated);
+        } else {
+          const newReminderItem: Reminder = {
+            id: `rem-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            ...reminderData,
+          } as Reminder;
+          onUpdateReminders([newReminderItem, ...reminders]);
+        }
+      },
+      successTitle: isEdit ? 'Rappel modifié !' : 'Alerte programmée !',
+      successMessage: `L'alerte "${reminderData.title}" a été enregistrée avec succès.`,
+    });
   };
 
   // Delete with Confirmation Modal -> Loader -> SweetAlert

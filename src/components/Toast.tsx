@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 
 export interface ToastMessage {
   id: string;
@@ -15,39 +15,22 @@ interface ToastProps {
 }
 
 /**
- * SweetAlert Universal Alert Component for all modules across Citrine
- * Renders centered, animated SweetAlert dialogs for success, failure, warning, and info
+ * Remplacement définitif des Toasts par les SweetAlerts :
+ * Aucun toast n'est affiché. Les retours applicatifs utilisent exclusivement
+ * le flux officiel : Loader synchrone -> Disparition du loader -> SweetAlert (Succès, Échec ou En attente).
  */
-export default function ToastContainer({ toasts, onDismiss }: ToastProps) {
-  if (!toasts || toasts.length === 0) return null;
-
-  // Active toast is the last one added (queue)
-  const currentToast = toasts[toasts.length - 1];
-  const remainingCount = toasts.length - 1;
-
-  return (
-    <SweetAlertModal
-      key={currentToast.id}
-      toast={currentToast}
-      remainingCount={remainingCount}
-      onDismiss={() => onDismiss(currentToast.id)}
-    />
-  );
+export default function ToastContainer(_props?: ToastProps) {
+  return null;
 }
 
-const SweetAlertModal: React.FC<{
+const ToastItem: React.FC<{
   toast: ToastMessage;
-  remainingCount: number;
   onDismiss: () => void;
-}> = ({ toast, remainingCount, onDismiss }) => {
-  const duration = toast.duration || (toast.type === 'error' ? 20000 : 3500);
+}> = ({ toast, onDismiss }) => {
+  const duration = toast.duration || (toast.type === 'error' ? 6000 : 3500);
   const [progress, setProgress] = useState(100);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (toast.type === 'error') {
-      console.error("❌ [SWEETALERT MODAL - ERREUR AFFICHEE AU CLIENT]:", toast.message);
-    }
     const startTime = Date.now();
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
@@ -57,214 +40,66 @@ const SweetAlertModal: React.FC<{
         clearInterval(interval);
         onDismiss();
       }
-    }, 40);
+    }, 50);
 
     return () => clearInterval(interval);
-  }, [toast.id, duration, onDismiss, toast.type, toast.message]);
+  }, [toast.id, duration, onDismiss]);
 
-  const type = toast.type || 'success';
+  const type = toast.type || 'info';
 
-  const config = {
-    success: {
-      titleDefault: 'Opération réussie !',
-      btnText: 'OK, Continuer',
-      btnColor: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 ring-emerald-500/20',
-      progressBarBg: 'bg-emerald-500',
-      ringColor: 'border-emerald-500',
-      bgColor: 'bg-emerald-50',
-      textColor: 'text-emerald-600',
-      badgeText: 'Succès',
-      badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      accentGlow: 'shadow-emerald-900/10',
-    },
-    error: {
-      titleDefault: 'Échec de l\'opération',
-      btnText: 'Fermer',
-      btnColor: 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30 ring-rose-500/20',
-      progressBarBg: 'bg-rose-500',
-      ringColor: 'border-rose-500',
-      bgColor: 'bg-rose-50',
-      textColor: 'text-rose-600',
-      badgeText: 'Erreur',
-      badgeClass: 'bg-rose-100 text-rose-800 border-rose-200',
-      accentGlow: 'shadow-rose-900/10',
-    },
-    warning: {
-      titleDefault: 'Avertissement',
-      btnText: 'Compris',
-      btnColor: 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/30 ring-amber-500/20',
-      progressBarBg: 'bg-amber-500',
-      ringColor: 'border-amber-500',
-      bgColor: 'bg-amber-50',
-      textColor: 'text-amber-600',
-      badgeText: 'Attention',
-      badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
-      accentGlow: 'shadow-amber-900/10',
-    },
-    info: {
-      titleDefault: 'Information',
-      btnText: 'D\'accord',
-      btnColor: 'bg-[#2A7B76] hover:bg-[#20635F] text-white shadow-teal-700/30 ring-teal-500/20',
-      progressBarBg: 'bg-[#2A7B76]',
-      ringColor: 'border-[#2A7B76]',
-      bgColor: 'bg-teal-50',
-      textColor: 'text-[#2A7B76]',
-      badgeText: 'Info',
-      badgeClass: 'bg-teal-100 text-teal-800 border-teal-200',
-      accentGlow: 'shadow-teal-900/10',
-    },
-  }[type];
+  const icons = {
+    success: <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />,
+    error: <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />,
+    warning: <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />,
+    info: <Info className="w-4 h-4 text-[#2A7B76] shrink-0" />,
+  };
 
-  const title = toast.title || config.titleDefault;
+  const borders = {
+    success: 'border-emerald-200 bg-white/95 text-stone-800',
+    error: 'border-rose-200 bg-white/95 text-stone-800',
+    warning: 'border-amber-200 bg-white/95 text-stone-800',
+    info: 'border-stone-200 bg-white/95 text-stone-800',
+  };
+
+  const progressColors = {
+    success: 'bg-emerald-500',
+    error: 'bg-rose-500',
+    warning: 'bg-amber-500',
+    info: 'bg-[#2A7B76]',
+  };
 
   return (
     <div
-      className="fixed inset-0 z-[9999] bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
-      onClick={onDismiss}
-      role="alertdialog"
-      aria-modal="true"
+      role="status"
+      className={`pointer-events-auto rounded-2xl border shadow-xl backdrop-blur-md p-3.5 pr-8 relative overflow-hidden transition-all duration-200 animate-in slide-in-from-bottom-2 fade-in ${borders[type]}`}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className={`bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-6 sm:p-7 shadow-2xl border border-stone-200/90 text-center flex flex-col items-center space-y-4 animate-in zoom-in-95 duration-200 relative overflow-hidden ${config.accentGlow}`}
-      >
-        {/* Dismiss 'X' Button */}
-        <button
-          onClick={onDismiss}
-          className="absolute top-4 right-4 p-1.5 rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition cursor-pointer"
-          title="Fermer"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        {/* Counter Badge if multiple alerts queued */}
-        {remainingCount > 0 && (
-          <div className="absolute top-4 left-4 px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
-            +{remainingCount} autre{remainingCount > 1 ? 's' : ''}
-          </div>
-        )}
-
-        {/* SweetAlert Iconic Animated Circle */}
-        <div className="pt-2">
-          {type === 'success' && (
-            <div className="w-20 h-20 rounded-full border-4 border-emerald-500/30 bg-emerald-50/80 flex items-center justify-center relative animate-in zoom-in-75 duration-300 shadow-md shadow-emerald-500/10">
-              <span className="absolute inset-0 rounded-full border-2 border-emerald-500 animate-ping opacity-25" />
-              <svg
-                className="w-10 h-10 text-emerald-600 animate-in zoom-in duration-300"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={3}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
+      <div className="flex items-start gap-2.5">
+        <div className="mt-0.5">{icons[type]}</div>
+        <div className="flex-1 min-w-0">
+          {toast.title && (
+            <h4 className="font-serif font-bold text-xs text-stone-900 leading-snug truncate">
+              {toast.title}
+            </h4>
           )}
-
-          {type === 'error' && (
-            <div className="w-20 h-20 rounded-full border-4 border-rose-500/30 bg-rose-50/80 flex items-center justify-center relative animate-in zoom-in-75 duration-300 shadow-md shadow-rose-500/10">
-              <span className="absolute inset-0 rounded-full border-2 border-rose-500 animate-ping opacity-25" />
-              <svg
-                className="w-10 h-10 text-rose-600 animate-in zoom-in duration-300"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={3}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-          )}
-
-          {type === 'warning' && (
-            <div className="w-20 h-20 rounded-full border-4 border-amber-500/30 bg-amber-50/80 flex items-center justify-center relative animate-in zoom-in-75 duration-300 shadow-md shadow-amber-500/10">
-              <span className="absolute inset-0 rounded-full border-2 border-amber-500 animate-ping opacity-25" />
-              <svg
-                className="w-10 h-10 text-amber-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={3}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-          )}
-
-          {type === 'info' && (
-            <div className="w-20 h-20 rounded-full border-4 border-teal-500/30 bg-teal-50/80 flex items-center justify-center relative animate-in zoom-in-75 duration-300 shadow-md shadow-teal-500/10">
-              <svg
-                className="w-10 h-10 text-[#2A7B76]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={3}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          )}
-        </div>
-
-        {/* Title and Tag */}
-        <div className="space-y-1">
-          <div className="inline-block mb-1">
-            <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full border ${config.badgeClass}`}>
-              {config.badgeText}
-            </span>
-          </div>
-          <h3 className="font-serif font-bold text-lg sm:text-xl text-stone-900 leading-tight">
-            {title}
-          </h3>
-        </div>
-
-        {/* Message : Affichage fidèle et complet de l'exception brute en cas d'erreur */}
-        {type === 'error' ? (
-          <div className="w-full text-left space-y-2 px-1">
-            <div className="text-[11px] font-mono bg-rose-50 border border-rose-200 text-rose-950 p-3.5 rounded-2xl max-h-56 overflow-y-auto whitespace-pre-wrap select-all leading-relaxed break-words shadow-inner">
-              {toast.message}
-            </div>
-            <div className="flex justify-between items-center px-1">
-              <span className="text-[10px] text-stone-400">Détail technique brut</span>
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    navigator.clipboard.writeText(toast.message);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  } catch {}
-                }}
-                className="text-[11px] text-rose-700 hover:text-rose-900 font-bold underline cursor-pointer"
-              >
-                {copied ? '✓ Exception copiée !' : 'Copier l\'exception'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="text-xs sm:text-sm text-stone-600 font-medium leading-relaxed px-2 break-words max-h-48 overflow-y-auto">
+          <p className="text-[11px] text-stone-600 leading-relaxed mt-0.5 line-clamp-2">
             {toast.message}
-          </div>
-        )}
-
-        {/* Confirmation Button */}
-        <div className="pt-2 w-full">
-          <button
-            type="button"
-            onClick={onDismiss}
-            className={`w-full py-3 px-6 rounded-2xl font-extrabold text-xs tracking-wide shadow-md transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 ${config.btnColor}`}
-          >
-            <span>{config.btnText}</span>
-          </button>
+          </p>
         </div>
+      </div>
 
-        {/* Auto-Dismiss Countdown Bar */}
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-stone-100 overflow-hidden">
-          <div
-            className={`h-full transition-all duration-75 ease-linear ${config.progressBarBg}`}
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+      <button
+        onClick={onDismiss}
+        className="absolute top-2.5 right-2.5 p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition cursor-pointer"
+        title="Fermer"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-stone-100/70 overflow-hidden">
+        <div
+          className={`h-full transition-all duration-75 ease-linear ${progressColors[type]}`}
+          style={{ width: `${progress}%` }}
+        />
       </div>
     </div>
   );

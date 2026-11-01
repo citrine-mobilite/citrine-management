@@ -103,12 +103,26 @@ export async function confirmActionAlert(options: {
 
 /**
  * Affichage d'un loader SweetAlert immédiat et synchrone pendant une opération serveur.
+ * Tourne jusqu'à ce que la réponse du serveur soit reçue.
  */
-export function showLoadingAlert(title: string = 'Traitement en cours...', text: string = 'Communication avec le serveur en cours...') {
+export function showLoadingAlert(
+  titleOrOptions: string | { title?: string; text?: string } = 'Traitement en cours...',
+  text: string = 'Communication avec le serveur en cours...'
+) {
+  let title = 'Traitement en cours...';
+  let message = text;
+
+  if (typeof titleOrOptions === 'object' && titleOrOptions !== null) {
+    title = titleOrOptions.title || title;
+    message = titleOrOptions.text || message;
+  } else if (typeof titleOrOptions === 'string') {
+    title = titleOrOptions;
+  }
+
   Swal.fire({
     ...baseSwalConfig,
     title,
-    text,
+    text: message,
     allowOutsideClick: false,
     allowEscapeKey: false,
     showConfirmButton: false,
@@ -119,7 +133,14 @@ export function showLoadingAlert(title: string = 'Traitement en cours...', text:
 }
 
 /**
- * Affichage d'un SweetAlert de succès immédiat après réponse serveur.
+ * Ferme toute alerte ou loader actif.
+ */
+export function closeAlert() {
+  Swal.close();
+}
+
+/**
+ * Affichage d'un SweetAlert de succès (uniquement APRÈS réception de la réponse du serveur).
  */
 export async function showSuccessAlert(title: string = 'Succès !', text: string = 'Opération effectuée avec succès.') {
   return Swal.fire({
@@ -128,7 +149,7 @@ export async function showSuccessAlert(title: string = 'Succès !', text: string
     iconColor: '#10B981',
     title,
     text,
-    confirmButtonText: 'OK',
+    confirmButtonText: 'OK, Continuer',
     confirmButtonColor: '#00796B',
     customClass: {
       ...baseSwalConfig.customClass,
@@ -140,7 +161,7 @@ export async function showSuccessAlert(title: string = 'Succès !', text: string
 /**
  * Affichage d'un SweetAlert d'échec affichant la véritable exception du serveur.
  */
-export async function showErrorAlert(title: string = 'Erreur', text: string = 'Une erreur est survenue.') {
+export async function showErrorAlert(title: string = 'Échec de l\'opération', text: string = 'Une erreur est survenue.') {
   console.error("❌ [SWEETALERT ERROR POPUP]:", { title, text });
   return Swal.fire({
     ...baseSwalConfig,
@@ -148,7 +169,7 @@ export async function showErrorAlert(title: string = 'Erreur', text: string = 'U
     iconColor: '#E11D48',
     title,
     html: `<div class="text-left font-mono text-xs bg-rose-50 border border-rose-200 text-rose-900 p-3.5 rounded-xl max-h-64 overflow-y-auto whitespace-pre-wrap select-all leading-relaxed break-words shadow-2xs">${text}</div>`,
-    confirmButtonText: 'Compris',
+    confirmButtonText: 'Fermer',
     customClass: {
       ...baseSwalConfig.customClass,
       confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-700 shadow-sm cursor-pointer transition mx-1.5',
@@ -157,10 +178,35 @@ export async function showErrorAlert(title: string = 'Erreur', text: string = 'U
 }
 
 /**
- * Exécute une action asynchrone (création, modification, suppression...) avec :
- * 1. Loader synchrone immédiat (sans délai)
- * 2. Attente de la réponse du serveur
- * 3. Affichage d'une alerte de succès OU d'erreur selon le résultat réel du serveur.
+ * Affichage d'un SweetAlert pour un statut en attente / différé / validation requise.
+ */
+export async function showPendingAlert(
+  title: string = 'En attente de traitement',
+  text: string = 'Votre demande a été transmise et est en attente de validation.'
+) {
+  return Swal.fire({
+    ...baseSwalConfig,
+    icon: 'info',
+    iconColor: '#3B82F6',
+    title,
+    text,
+    confirmButtonText: 'Compris',
+    confirmButtonColor: '#2563EB',
+    customClass: {
+      ...baseSwalConfig.customClass,
+      confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-blue-600 hover:bg-blue-700 shadow-sm cursor-pointer transition mx-1.5',
+    },
+  });
+}
+
+/**
+ * Exécute une action asynchrone (création, modification, validation...) selon la règle d'or :
+ * 1. Affiche IMMÉDIATEMENT le loader (le spinner tourne pendant que le serveur travaille).
+ * 2. Attend la réponse effective du serveur.
+ * 3. En fonction de la réponse du serveur, affiche le SweetAlert approprié :
+ *    - Succès (success)
+ *    - Échec (error avec véritable exception)
+ *    - En attente (pending)
  */
 export async function executeOperationWithLoading<T = any>(options: {
   loadingTitle?: string;
@@ -169,7 +215,10 @@ export async function executeOperationWithLoading<T = any>(options: {
   successTitle?: string;
   successMessage?: string;
   errorMessage?: string;
-}): Promise<{ success: boolean; data?: T; error?: any }> {
+  pendingTitle?: string;
+  pendingMessage?: string;
+  isPendingCheck?: (result: T) => boolean;
+}): Promise<{ success: boolean; data?: T; error?: any; isPending?: boolean }> {
   const {
     loadingTitle = 'Traitement en cours...',
     loadingText = 'Communication avec le serveur en cours...',
@@ -177,6 +226,9 @@ export async function executeOperationWithLoading<T = any>(options: {
     successTitle = 'Succès !',
     successMessage = 'Opération effectuée avec succès.',
     errorMessage = 'Une erreur est survenue lors de la communication avec le serveur.',
+    pendingTitle = 'Demande en attente',
+    pendingMessage = 'L\'opération a été transmise et est en cours de validation.',
+    isPendingCheck,
   } = options;
 
   // 1. Afficher immédiatement le loader bloquant
@@ -185,6 +237,23 @@ export async function executeOperationWithLoading<T = any>(options: {
   try {
     // 2. Attendre la réponse du serveur
     const result = await action();
+
+    // Vérifier si le résultat indique un échec explicite du backend
+    if (result && typeof result === 'object' && ((result as any).success === false || (result as any).error)) {
+      const errMsg = (result as any).error || errorMessage;
+      await showErrorAlert('Échec de l\'opération', errMsg);
+      return { success: false, error: errMsg, data: result };
+    }
+
+    // Vérifier si le statut est "pending" (en attente)
+    const isPending = isPendingCheck
+      ? isPendingCheck(result)
+      : (result && typeof result === 'object' && ((result as any).status === 'pending' || (result as any).isPending === true));
+
+    if (isPending) {
+      await showPendingAlert(pendingTitle, pendingMessage);
+      return { success: true, data: result, isPending: true };
+    }
 
     // 3. Afficher le succès
     await showSuccessAlert(successTitle, successMessage);

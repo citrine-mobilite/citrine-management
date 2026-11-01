@@ -18,6 +18,7 @@ import { HseIncidentsGrid } from './HseIncidentsGrid';
 import { HseDetailModal } from './HseDetailModal';
 import { HseIncidentModal } from './HseIncidentModal';
 import { SearchableSelect, SelectOption } from '../common/SearchableSelect';
+import { executeOperationWithLoading, executeDeleteWithSweetAlert } from '../../utils/sweetAlert';
 
 interface HsePanelProps {
   currentUser?: AppUser | null;
@@ -120,69 +121,74 @@ export const HsePanel: React.FC<HsePanelProps> = ({
       return;
     }
 
-    try {
-      if (editingIncident) {
-        // Update existing incident
-        const updated: HseIncident = {
-          ...editingIncident,
-          ...incidentData,
-          id: editingIncident.id,
-          reference: editingIncident.reference,
-          createdAt: editingIncident.createdAt,
-        };
-        await saveHseIncident(updated);
-        setIsModalOpen(false);
-        setEditingIncident(null);
-        setSelectedIncident(null);
-        showToast?.('Incident HSE mis à jour avec succès !', 'success');
-      } else {
-        // Create new incident
-        const incToSave: HseIncident = {
-          id: `hse-${Date.now()}`,
-          reference: `HSE-2026-${String(incidents.length + 1).padStart(4, '0')}`,
-          site: incidentData.site || 'Base Japoma - Carrefour Matango',
-          zonePrecise: incidentData.zonePrecise || 'Zone générale',
-          type: (incidentData.type as HseIncidentType) || 'presque_accident',
-          severity: (incidentData.severity as HseSeverity) || 'faible',
-          date: incidentData.date || new Date().toISOString().split('T')[0],
-          time: incidentData.time || '10:00',
-          title: incidentData.title || '',
-          description: incidentData.description || '',
-          reportedBy: currentUser?.name || 'Agent Citrine',
-          reportedByRole: currentUser?.role || 'Collaborateur',
-          immediateActionTaken: incidentData.immediateActionTaken || '',
-          rootCause: incidentData.rootCause || '',
-          victimName: incidentData.victimName || '',
-          victimInjury: incidentData.victimInjury || '',
-          daysLost: incidentData.daysLost || 0,
-          status: incidentData.status || 'signale',
-          correctiveActions: [],
-          createdAt: new Date().toISOString(),
-        };
+    const isEdit = Boolean(editingIncident);
+    await executeOperationWithLoading({
+      loadingTitle: isEdit ? 'Mise à jour de l\'incident...' : 'Enregistrement du signalement...',
+      loadingText: 'Synchronisation du registre HSE avec le serveur...',
+      action: async () => {
+        if (editingIncident) {
+          const updated: HseIncident = {
+            ...editingIncident,
+            ...incidentData,
+            id: editingIncident.id,
+            reference: editingIncident.reference,
+            createdAt: editingIncident.createdAt,
+          };
+          await saveHseIncident(updated);
+          setIsModalOpen(false);
+          setEditingIncident(null);
+          setSelectedIncident(null);
+        } else {
+          const incToSave: HseIncident = {
+            id: `hse-${Date.now()}`,
+            reference: `HSE-2026-${String(incidents.length + 1).padStart(4, '0')}`,
+            site: incidentData.site || 'Base Japoma - Carrefour Matango',
+            zonePrecise: incidentData.zonePrecise || 'Zone générale',
+            type: (incidentData.type as HseIncidentType) || 'presque_accident',
+            severity: (incidentData.severity as HseSeverity) || 'faible',
+            date: incidentData.date || new Date().toISOString().split('T')[0],
+            time: incidentData.time || '10:00',
+            title: incidentData.title || '',
+            description: incidentData.description || '',
+            reportedBy: currentUser?.name || 'Agent Citrine',
+            reportedByRole: currentUser?.role || 'Collaborateur',
+            immediateActionTaken: incidentData.immediateActionTaken || '',
+            rootCause: incidentData.rootCause || '',
+            victimName: incidentData.victimName || '',
+            victimInjury: incidentData.victimInjury || '',
+            daysLost: incidentData.daysLost || 0,
+            status: incidentData.status || 'signale',
+            correctiveActions: [],
+            createdAt: new Date().toISOString(),
+          };
 
-        await saveHseIncident(incToSave);
-        setIsModalOpen(false);
-        showToast?.('Signalement HSE enregistré avec succès !', 'success');
-        onAddNotification?.({
-          title: 'Nouveau Signalement HSE',
-          message: `${incToSave.reference} : "${incToSave.title}" sur le site de ${incToSave.site}.`,
-          type: incToSave.severity === 'grave' || incToSave.severity === 'critique' ? 'warning' : 'info',
-        });
-      }
-    } catch (err: any) {
-      console.error('[HSE Save Error]:', err);
-      showToast?.(err?.message || 'Erreur lors de l\'enregistrement.', 'error');
-    }
+          await saveHseIncident(incToSave);
+          setIsModalOpen(false);
+          onAddNotification?.({
+            title: 'Nouveau Signalement HSE',
+            message: `${incToSave.reference} : "${incToSave.title}" sur le site de ${incToSave.site}.`,
+            type: incToSave.severity === 'grave' || incToSave.severity === 'critique' ? 'warning' : 'info',
+          });
+        }
+      },
+      successTitle: isEdit ? 'Incident mis à jour !' : 'Signalement enregistré !',
+      successMessage: isEdit ? 'Le rapport d\'incident a été mis à jour.' : 'Le signalement HSE a été consigné avec succès dans le registre.',
+    });
   };
 
   const handleDeleteIncident = async (incidentId: string) => {
-    try {
-      await deleteHseIncident(incidentId);
-      setSelectedIncident(null);
-      showToast?.('Incident supprimé avec succès.', 'success');
-    } catch {
-      showToast?.('Erreur lors de la suppression.', 'error');
-    }
+    const inc = incidents.find((i) => i.id === incidentId);
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer ce signalement ?',
+      text: 'Voulez-vous vraiment supprimer cet événement du registre HSE ?',
+      itemName: inc?.title,
+      action: async () => {
+        await deleteHseIncident(incidentId);
+        setSelectedIncident(null);
+      },
+      successTitle: 'Signalement supprimé',
+      successMessage: 'L\'incident a été retiré du registre HSE.',
+    });
   };
 
   const siteFilterOptions: SelectOption[] = [

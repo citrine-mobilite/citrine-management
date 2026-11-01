@@ -273,6 +273,8 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
         onAddNotification
       );
 
+      setIsSubmitting(false);
+
       if (isMission) {
         showToast?.(
           'Ordre de mission transmis 🚀',
@@ -300,6 +302,7 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
       setMissionLocation('');
       setAttachmentName('');
     } catch (err: any) {
+      setIsSubmitting(false);
       showToast?.(
         'Échec de transmission',
         'Impossible de transmettre la demande pour le moment. Veuillez vérifier votre connexion.',

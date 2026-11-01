@@ -22,6 +22,7 @@ import { NewVisitorModal } from './NewVisitorModal';
 import { VisitorsTable } from './VisitorsTable';
 import { SupervisorConfigModal } from './SupervisorConfigModal';
 import { SearchableSelect, SelectOption } from '../common/SearchableSelect';
+import { executeOperationWithLoading, executeDeleteWithSweetAlert, showSuccessAlert, showPendingAlert } from '../../utils/sweetAlert';
 
 interface VisitorsPanelProps {
   currentUser?: AppUser | null;
@@ -167,71 +168,75 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
       return;
     }
 
-    try {
-      const selectedHost = employees.find((emp) => emp.id === visitorData.hostEmployeeId);
-      const now = new Date();
-      const checkInTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const checkInDate = now.toISOString().split('T')[0];
+    const selectedHost = employees.find((emp) => emp.id === visitorData.hostEmployeeId);
+    const now = new Date();
+    const checkInTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const checkInDate = now.toISOString().split('T')[0];
 
-      const pType: PersonType = visitorData.personType || 'visiteur';
+    const pType: PersonType = visitorData.personType || 'visiteur';
 
-      const visitorToSave: VisitorLog = {
-        id: `vis-${Date.now()}`,
-        personType: pType,
-        workerDomain: pType === 'travailleur' ? visitorData.workerDomain : undefined,
-        supervisorName: pType === 'travailleur' ? visitorData.supervisorName : undefined,
-        interventionPerimeter: pType === 'travailleur' ? visitorData.interventionPerimeter : undefined,
-        isPreAuthorized: visitorData.isPreAuthorized,
-        authorizationConfirmed: visitorData.authorizationConfirmed,
-        visitorName: visitorData.visitorName,
-        visitorCompany: visitorData.visitorCompany || (pType === 'travailleur' ? 'Prestataire BTP' : 'Particulier'),
-        visitorPhone: visitorData.visitorPhone,
-        idCardNumber: visitorData.idCardNumber || '',
-        siteLocation: visitorData.siteLocation || 'Siège Japoma (Carrefour Matango)',
-        purpose: (visitorData.purpose as VisitorPurpose) || 'rdv_commercial',
-        hostEmployeeId: selectedHost?.id || '',
-        hostEmployeeName: selectedHost ? selectedHost.name : (visitorData.hostEmployeeName || (pType === 'travailleur' ? (visitorData.supervisorName || 'Superviseur Bâtiment') : 'Accueil Citrine')),
-        hostDepartment: selectedHost?.department || (pType === 'travailleur' ? 'Technique & Bâtiment' : 'Général'),
-        badgeNumber: visitorData.badgeNumber || `BADGE-${String(visitors.length + 1).padStart(2, '0')}`,
-        vehiclePlate: visitorData.vehiclePlate || '',
-        checkInTime,
-        checkInDate,
-        status: visitorData.status || 'sur_site',
-        notes: visitorData.notes || '',
-        createdAt: now.toISOString(),
-      };
+    const visitorToSave: VisitorLog = {
+      id: `vis-${Date.now()}`,
+      personType: pType,
+      workerDomain: pType === 'travailleur' ? visitorData.workerDomain : undefined,
+      supervisorName: pType === 'travailleur' ? visitorData.supervisorName : undefined,
+      interventionPerimeter: pType === 'travailleur' ? visitorData.interventionPerimeter : undefined,
+      isPreAuthorized: visitorData.isPreAuthorized,
+      authorizationConfirmed: visitorData.authorizationConfirmed,
+      visitorName: visitorData.visitorName,
+      visitorCompany: visitorData.visitorCompany || (pType === 'travailleur' ? 'Prestataire BTP' : 'Particulier'),
+      visitorPhone: visitorData.visitorPhone,
+      idCardNumber: visitorData.idCardNumber || '',
+      siteLocation: visitorData.siteLocation || 'Siège Japoma (Carrefour Matango)',
+      purpose: (visitorData.purpose as VisitorPurpose) || 'rdv_commercial',
+      hostEmployeeId: selectedHost?.id || '',
+      hostEmployeeName: selectedHost ? selectedHost.name : (visitorData.hostEmployeeName || (pType === 'travailleur' ? (visitorData.supervisorName || 'Superviseur Bâtiment') : 'Accueil Citrine')),
+      hostDepartment: selectedHost?.department || (pType === 'travailleur' ? 'Technique & Bâtiment' : 'Général'),
+      badgeNumber: visitorData.badgeNumber || `BADGE-${String(visitors.length + 1).padStart(2, '0')}`,
+      vehiclePlate: visitorData.vehiclePlate || '',
+      checkInTime,
+      checkInDate,
+      status: visitorData.status || 'sur_site',
+      notes: visitorData.notes || '',
+      createdAt: now.toISOString(),
+    };
 
-      await saveVisitorLog(visitorToSave);
-      setIsNewModalOpen(false);
+    await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement à l\'accueil...',
+      loadingText: 'Synchronisation de la fiche de visite avec le serveur...',
+      action: async () => {
+        await saveVisitorLog(visitorToSave);
+        setIsNewModalOpen(false);
 
-      if (visitorToSave.status === 'sur_site') {
-        showToast?.(`${pType === 'travailleur' ? 'Travailleur' : 'Visiteur'} ${visitorToSave.visitorName} autorisé et enregistré !`, 'success');
-      } else {
-        showToast?.(`${visitorToSave.visitorName} enregistré en attente d'accord à l'accueil.`, 'success');
-      }
-
-      onAddNotification?.({
-        title: pType === 'travailleur' ? 'Arrivée Travailleur Bâtiment' : 'Arrivée Visiteur',
-        message: `${visitorToSave.visitorName} (${visitorToSave.visitorCompany}) est enregistré sur le site ${visitorToSave.siteLocation}.`,
-        type: 'info',
-      });
-    } catch (err: any) {
-      showToast?.(err.message || 'Erreur lors de l\'enregistrement en base de données.', 'error');
-    }
+        onAddNotification?.({
+          title: pType === 'travailleur' ? 'Arrivée Travailleur Bâtiment' : 'Arrivée Visiteur',
+          message: `${visitorToSave.visitorName} (${visitorToSave.visitorCompany}) est enregistré sur le site ${visitorToSave.siteLocation}.`,
+          type: 'info',
+        });
+      },
+      isPendingCheck: () => visitorToSave.status !== 'sur_site',
+      pendingTitle: 'Visiteur en attente',
+      pendingMessage: `${visitorToSave.visitorName} a été enregistré en attente d'accord à l'accueil.`,
+      successTitle: 'Accès autorisé !',
+      successMessage: `${pType === 'travailleur' ? 'Le travailleur' : 'Le visiteur'} "${visitorToSave.visitorName}" a été enregistré et autorisé sur le site.`,
+    });
   };
 
   const handleDeleteVisitor = async (visitor: VisitorLog) => {
-    try {
-      const vId = visitor.id || visitor.docId;
-      if (!vId) return;
-      await deleteVisitorLog(vId);
-      setVisitors((prev) => prev.filter((v) => v.id !== vId && v.docId !== vId));
-      showToast?.(`Visiteur ${visitor.visitorName} supprimé de la base de données.`, 'success');
-    } catch (err: any) {
-      console.error('Error deleting visitor:', err);
-      showToast?.(err.message || 'Erreur lors de la suppression en base de données.', 'error');
-      throw err;
-    }
+    const vId = visitor.id || visitor.docId;
+    if (!vId) return;
+
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer cette fiche visite ?',
+      text: 'Voulez-vous vraiment retirer cet enregistrement du registre des visiteurs ?',
+      itemName: visitor.visitorName,
+      action: async () => {
+        await deleteVisitorLog(vId);
+        setVisitors((prev) => prev.filter((v) => v.id !== vId && v.docId !== vId));
+      },
+      successTitle: 'Fiche supprimée',
+      successMessage: `La fiche de ${visitor.visitorName} a été supprimée du registre.`,
+    });
   };
 
   // Options Select2 (SearchableSelect) pour les filtres

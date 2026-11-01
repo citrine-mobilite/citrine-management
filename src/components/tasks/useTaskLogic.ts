@@ -4,7 +4,7 @@ import { DEFAULT_TASK_PROJECTS } from './taskConstants';
 import { taskService } from '../../services/taskService';
 import { clientMailService } from '../../services/clientMailService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
-import { showSuccessAlert, showErrorAlert, confirmDeleteAlert } from '../../utils/sweetAlert';
+import { showSuccessAlert, showErrorAlert, confirmDeleteAlert, executeOperationWithLoading, executeDeleteWithSweetAlert } from '../../utils/sweetAlert';
 import { isSelfOnlyUser } from '../../utils/roleUtils';
 import {
   getDoualaDateInfo,
@@ -154,51 +154,58 @@ export function useTaskLogic({
   };
 
   const handleCreateProject = async (newProject: TaskProject) => {
-    const updated = [...projects, newProject];
-    saveProjects(updated);
-    setActiveProjectId(newProject.id);
-    if (showToast) showToast(`Projet "${newProject.name}" créé avec succès !`, 'success');
+    await executeOperationWithLoading({
+      loadingTitle: 'Création du projet...',
+      loadingText: 'Enregistrement du projet en base...',
+      action: async () => {
+        const updated = [...projects, newProject];
+        saveProjects(updated);
+        setActiveProjectId(newProject.id);
+      },
+      successTitle: 'Projet créé !',
+      successMessage: `Le projet "${newProject.name}" a été créé avec succès.`,
+    });
   };
 
   const handleCreateTask = async (taskData: Omit<Task, 'id' | 'comments' | 'incidents'> & { subtasks?: Subtask[] }) => {
-    try {
-      const taskItem: Task = {
-        id: `task-${Date.now()}`,
-        ...taskData,
-        subtasks: taskData.subtasks || [],
-        comments: [],
-        incidents: [],
-        lastUpdatedTime: new Date().toISOString(),
-      };
+    const taskItem: Task = {
+      id: `task-${Date.now()}`,
+      ...taskData,
+      subtasks: taskData.subtasks || [],
+      comments: [],
+      incidents: [],
+      lastUpdatedTime: new Date().toISOString(),
+    };
 
-      await taskService.saveTask(taskItem);
-      const updatedTasks = [taskItem, ...tasks];
-      onUpdateTasks(updatedTasks);
+    await executeOperationWithLoading({
+      loadingTitle: 'Création de la tâche...',
+      loadingText: 'Enregistrement et synchronisation en base de données...',
+      action: async () => {
+        await taskService.saveTask(taskItem);
+        const updatedTasks = [taskItem, ...tasks];
+        onUpdateTasks(updatedTasks);
 
-      onAddNotification({
-        id: `notif-${Date.now()}`,
-        recipient: taskItem.assignedTo || 'Équipe',
-        type: 'system',
-        title: 'Nouvelle Tâche Assignée',
-        content: `${taskItem.title} (${taskItem.date})`,
-        payload: '{}',
-        timestamp: new Date().toISOString(),
-      });
+        onAddNotification({
+          id: `notif-${Date.now()}`,
+          recipient: taskItem.assignedTo || 'Équipe',
+          type: 'system',
+          title: 'Nouvelle Tâche Assignée',
+          content: `${taskItem.title} (${taskItem.date})`,
+          payload: '{}',
+          timestamp: new Date().toISOString(),
+        });
 
-      pushNotificationBridgeService.sendPush({
-        title: 'Nouvelle Tâche Assignée 📋',
-        message: `${taskItem.title} vous a été assignée pour le ${taskItem.date}.`,
-        senderName: currentRole || 'Responsable',
-        type: 'task_assigned',
-        link: 'tasks',
-      });
-
-      if (showToast) {
-        showToast('Tâche créée et enregistrée en base avec succès.', 'success');
-      }
-    } catch (err: any) {
-      await showErrorAlert('Erreur de création', err?.message || 'Impossible d\'enregistrer la tâche.');
-    }
+        pushNotificationBridgeService.sendPush({
+          title: 'Nouvelle Tâche Assignée 📋',
+          message: `${taskItem.title} vous a été assignée pour le ${taskItem.date}.`,
+          senderName: currentRole || 'Responsable',
+          type: 'task_assigned',
+          link: 'tasks',
+        });
+      },
+      successTitle: 'Tâche créée !',
+      successMessage: `La tâche "${taskItem.title}" a été enregistrée avec succès.`,
+    });
   };
 
   const handleOpenCreateSubtask = (task?: Task) => {
@@ -291,54 +298,66 @@ export function useTaskLogic({
   };
 
   const handleSaveTask = async (updatedTask: Task) => {
-    try {
-      const prevTask = tasks.find((t) => t.id === updatedTask.id);
-      const finalizedTask = { ...updatedTask, updatedAt: new Date().toISOString() };
+    const prevTask = tasks.find((t) => t.id === updatedTask.id);
+    const finalizedTask = { ...updatedTask, updatedAt: new Date().toISOString() };
 
-      await taskService.saveTask(finalizedTask);
-      const updated = tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t));
-      onUpdateTasks(updated);
-      setSelectedTaskForDetail(finalizedTask);
+    await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement de la tâche...',
+      loadingText: 'Mise à jour et synchronisation sur le serveur...',
+      action: async () => {
+        await taskService.saveTask(finalizedTask);
+        const updated = tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t));
+        onUpdateTasks(updated);
+        setSelectedTaskForDetail(finalizedTask);
 
-      if (finalizedTask.assignedTo) {
-        const isStatusChanged = prevTask && prevTask.status !== finalizedTask.status;
-        const isPriorityChanged = prevTask && prevTask.priority !== finalizedTask.priority;
-        if (isStatusChanged || isPriorityChanged || !prevTask) {
-          onAddNotification({
-            id: `notif-task-update-${Date.now()}-${finalizedTask.id}`,
-            recipient: finalizedTask.assignedTo,
-            type: 'system',
-            title: `Mise à jour de tâche : ${finalizedTask.title}`,
-            content: isStatusChanged 
-              ? `Statut modifié : passage à « ${finalizedTask.status} »` 
-              : `Détails de la tâche mis à jour.`,
-            payload: JSON.stringify({
-              source: 'task_movement',
-              taskId: finalizedTask.id,
-              employeeId: finalizedTask.assignedTo,
-              newStatus: finalizedTask.status,
-            }),
-            timestamp: new Date().toISOString(),
-            read: false,
-          });
+        if (finalizedTask.assignedTo) {
+          const isStatusChanged = prevTask && prevTask.status !== finalizedTask.status;
+          const isPriorityChanged = prevTask && prevTask.priority !== finalizedTask.priority;
+          if (isStatusChanged || isPriorityChanged || !prevTask) {
+            onAddNotification({
+              id: `notif-task-update-${Date.now()}-${finalizedTask.id}`,
+              recipient: finalizedTask.assignedTo,
+              type: 'system',
+              title: `Mise à jour de tâche : ${finalizedTask.title}`,
+              content: isStatusChanged 
+                ? `Statut modifié : passage à « ${finalizedTask.status} »` 
+                : `Détails de la tâche mis à jour.`,
+              payload: JSON.stringify({
+                source: 'task_movement',
+                taskId: finalizedTask.id,
+                employeeId: finalizedTask.assignedTo,
+                newStatus: finalizedTask.status,
+              }),
+              timestamp: new Date().toISOString(),
+              read: false,
+            });
 
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+            }
           }
         }
-      }
-      if (showToast) showToast('Tâche mise à jour avec succès.', 'success');
-    } catch (err: any) {
-      await showErrorAlert('Erreur', err?.message || 'Impossible d\'enregistrer les modifications.');
-    }
+      },
+      successTitle: 'Tâche mise à jour !',
+      successMessage: `La tâche "${finalizedTask.title}" a été enregistrée avec succès.`,
+    });
   };
 
   const handleDeleteTask = async (id: string) => {
-    await taskService.deleteTask(id);
-    const updated = tasks.filter((t) => t.id !== id);
-    onUpdateTasks(updated);
-    setSelectedTaskForDetail(null);
-    if (showToast) showToast('Tâche supprimée avec succès.');
+    const taskToDelete = tasks.find((t) => t.id === id);
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer la tâche ?',
+      text: 'Voulez-vous vraiment supprimer définitivement cette tâche ?',
+      itemName: taskToDelete?.title,
+      action: async () => {
+        await taskService.deleteTask(id);
+        const updated = tasks.filter((t) => t.id !== id);
+        onUpdateTasks(updated);
+        setSelectedTaskForDetail(null);
+      },
+      successTitle: 'Tâche supprimée !',
+      successMessage: 'La tâche a été retirée avec succès.',
+    });
   };
 
   // Filter tasks based on search, project permissions, priority, assignee, and milestone filter
