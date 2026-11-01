@@ -32,6 +32,7 @@ export interface EmailThreadingOptions {
     content: any;
     encoding?: string;
     contentType?: string;
+    cid?: string;
   }>;
 }
 
@@ -440,18 +441,22 @@ export async function sendThreadedEmployeeEmail(
         }
       }
 
+      const disposition = att.cid ? 'inline' : 'attachment';
+
       if (typeof att.content === 'string' && att.encoding === 'base64') {
         return {
           filename: att.filename,
           content: Buffer.from(att.content, 'base64'),
           contentType,
-          contentDisposition: 'attachment',
+          contentDisposition: disposition,
+          cid: att.cid,
         };
       }
       return {
         ...att,
         contentType,
-        contentDisposition: 'attachment',
+        contentDisposition: disposition,
+        cid: att.cid,
       };
     });
 

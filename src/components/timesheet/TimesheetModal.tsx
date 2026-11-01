@@ -436,6 +436,70 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   </div>
                 </div>
 
+                {/* 🚨 SIGNALEMENT DES INCIDENTS DE PRÉSENCE (RETARD, SORTIE, DÉPART ANTICIPÉ...) */}
+                <div className={`rounded-xl border overflow-hidden ${
+                  dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0
+                    ? 'border-orange-400 bg-orange-50/60'
+                    : 'border-emerald-300 bg-emerald-50/60'
+                }`}>
+                  <div className={`px-3 py-2 font-bold text-xs flex items-center justify-between text-white ${
+                    dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0
+                      ? 'bg-orange-700'
+                      : 'bg-emerald-700'
+                  }`}>
+                    <div className="flex items-center gap-1.5">
+                      <span>{dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0 ? '⚠️' : '✅'}</span>
+                      <span>
+                        SIGNALEMENT DES INCIDENTS &amp; HORAIRES DE PRÉSENCE ({dailyData.presenceIncidents ? dailyData.presenceIncidents.length : 0})
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-semibold opacity-90">
+                      {dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0
+                        ? 'Retards, sorties ou écarts constatés'
+                        : 'Ponctualité et assiduité conformes'}
+                    </span>
+                  </div>
+
+                  <div className="p-3">
+                    {dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0 ? (
+                      <div className="space-y-2">
+                        {dailyData.presenceIncidents.map((inc, iIdx) => (
+                          <div 
+                            key={iIdx} 
+                            className="bg-white p-2.5 rounded-lg border border-orange-200 flex items-center justify-between gap-3 text-xs shadow-3xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-mono font-bold text-orange-900 bg-orange-100 px-2 py-0.5 rounded text-[11px] shrink-0">
+                                {inc.time || 'Pointage'}
+                              </span>
+                              <span className="font-bold text-orange-700 uppercase text-[10px] bg-orange-100/70 border border-orange-300 px-1.5 py-0.5 rounded shrink-0">
+                                {inc.label}
+                              </span>
+                              <span className="text-stone-700 font-medium truncate">
+                                {inc.description}
+                              </span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded font-bold text-[10px] shrink-0 ${
+                              inc.isJustified
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                            }`}>
+                              {inc.isJustified ? '✓ Justifié' : '⚠️ Non régularisé'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-emerald-900 font-semibold text-xs">
+                        <span className="text-base">✅</span>
+                        <span>
+                          Aucun incident de présence constaté : ponctualité respectée (dès 08h00), pause déjeuner 12h–13h conforme, aucune sortie non justifiée.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* 1. LES 3 PRIORITÉS DU JOUR (LES GRANDES TÂCHES / JOB DESCRIPTION) */}
                 <div className="rounded-xl border border-stone-300 overflow-hidden">
                   <div className="bg-[#164e4b] text-white px-3 py-2 font-bold text-xs flex items-center justify-between">
@@ -553,7 +617,7 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   <div className="bg-[#164e4b] text-white px-3 py-2 font-bold text-xs flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span>🕒</span>
-                      <span>PLAN HORAIRE (08:00 – 17:00) — Pause déjeuner obligatoire</span>
+                      <span>PLAN HORAIRE (08:00 – 17:00) — Pause déjeuner obligatoire 12h00 – 13h00</span>
                     </div>
                     <span className="text-[10px] bg-amber-400/30 text-amber-100 border border-amber-300/40 px-2 py-0.5 rounded-full font-mono">
                       12:00 – 13:00 : Pause Déjeuner
@@ -568,13 +632,13 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                     </thead>
                     <tbody className="divide-y divide-stone-200">
                       {dailyData.scheduleSlots.map((s, idx) => {
-                        const isBuffer = s.isBreak || s.isBuffer || s.timeRange.includes('12:00');
+                        const isLunchBreak = s.isBreak || (s.timeRange.startsWith('12:00') && s.timeRange.includes('13:00'));
 
                         return (
                           <tr 
                             key={idx} 
                             className={`transition ${
-                              isBuffer 
+                              isLunchBreak 
                                 ? 'bg-amber-50/90 font-bold text-amber-950 border-y border-amber-200' 
                                 : 'bg-white hover:bg-stone-50/70'
                             }`}
@@ -582,8 +646,8 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                             <td className="py-2.5 px-3 font-mono font-bold text-stone-800">
                               {s.timeRange}
                             </td>
-                            <td className={`py-2.5 px-3 font-bold ${isBuffer ? 'text-amber-800' : 'text-blue-800'}`}>
-                              {isBuffer ? 'Pause Déjeuner (12h00 – 13h00)' : s.activity}
+                            <td className={`py-2.5 px-3 font-bold ${isLunchBreak ? 'text-amber-800' : 'text-blue-800'}`}>
+                              {isLunchBreak ? '🍽️ Pause Déjeuner Officielle (12h00 – 13h00)' : s.activity}
                             </td>
                           </tr>
                         );

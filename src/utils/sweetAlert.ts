@@ -102,9 +102,9 @@ export async function confirmActionAlert(options: {
 }
 
 /**
- * Affichage d'un loader SweetAlert pendant une opération asynchrone
+ * Affichage d'un loader SweetAlert immédiat et synchrone pendant une opération serveur.
  */
-export function showLoadingAlert(title: string = 'Opération en cours...', text: string = 'Veuillez patienter...') {
+export function showLoadingAlert(title: string = 'Traitement en cours...', text: string = 'Communication avec le serveur en cours...') {
   Swal.fire({
     ...baseSwalConfig,
     title,
@@ -119,19 +119,17 @@ export function showLoadingAlert(title: string = 'Opération en cours...', text:
 }
 
 /**
- * Affichage d'un SweetAlert de succès
+ * Affichage d'un SweetAlert de succès immédiat après réponse serveur.
  */
-export async function showSuccessAlert(title: string = 'Succès !', text: string = 'Opération effectuée avec succès.', timer: number = 2200) {
+export async function showSuccessAlert(title: string = 'Succès !', text: string = 'Opération effectuée avec succès.') {
   return Swal.fire({
     ...baseSwalConfig,
     icon: 'success',
     iconColor: '#10B981',
     title,
     text,
-    timer,
-    timerProgressBar: true,
-    showConfirmButton: timer <= 0,
-    confirmButtonText: 'Fermer',
+    confirmButtonText: 'OK',
+    confirmButtonColor: '#00796B',
     customClass: {
       ...baseSwalConfig.customClass,
       confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-[#2A7B76] hover:bg-[#20635F] shadow-sm cursor-pointer transition mx-1.5',
@@ -140,7 +138,7 @@ export async function showSuccessAlert(title: string = 'Succès !', text: string
 }
 
 /**
- * Affichage d'un SweetAlert d'échec affichant la véritable exception sans masquer son contenu
+ * Affichage d'un SweetAlert d'échec affichant la véritable exception du serveur.
  */
 export async function showErrorAlert(title: string = 'Erreur', text: string = 'Une erreur est survenue.') {
   console.error("❌ [SWEETALERT ERROR POPUP]:", { title, text });
@@ -159,10 +157,49 @@ export async function showErrorAlert(title: string = 'Erreur', text: string = 'U
 }
 
 /**
- * Exécute une suppression complète :
- * - Confirmation Modal
- * - Loader affiché UNIQUEMENT si l'action prend plus de 1 seconde (règle des 1000ms)
- * - Fermeture immédiate et propre, sans pop-up de succès redondant
+ * Exécute une action asynchrone (création, modification, suppression...) avec :
+ * 1. Loader synchrone immédiat (sans délai)
+ * 2. Attente de la réponse du serveur
+ * 3. Affichage d'une alerte de succès OU d'erreur selon le résultat réel du serveur.
+ */
+export async function executeOperationWithLoading<T = any>(options: {
+  loadingTitle?: string;
+  loadingText?: string;
+  action: () => Promise<T> | T;
+  successTitle?: string;
+  successMessage?: string;
+  errorMessage?: string;
+}): Promise<{ success: boolean; data?: T; error?: any }> {
+  const {
+    loadingTitle = 'Traitement en cours...',
+    loadingText = 'Communication avec le serveur en cours...',
+    action,
+    successTitle = 'Succès !',
+    successMessage = 'Opération effectuée avec succès.',
+    errorMessage = 'Une erreur est survenue lors de la communication avec le serveur.',
+  } = options;
+
+  // 1. Afficher immédiatement le loader bloquant
+  showLoadingAlert(loadingTitle, loadingText);
+
+  try {
+    // 2. Attendre la réponse du serveur
+    const result = await action();
+
+    // 3. Afficher le succès
+    await showSuccessAlert(successTitle, successMessage);
+    return { success: true, data: result };
+  } catch (error: any) {
+    console.error('❌ [OPERATION ERROR]:', error);
+    const finalErrorMsg = error?.message || String(error) || errorMessage;
+    // 4. Afficher l'erreur exacte
+    await showErrorAlert('Échec de l\'opération', finalErrorMsg);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Exécute une suppression complète avec confirmation préalable, loader immédiat et retour serveur.
  */
 export async function executeDeleteWithSweetAlert(options: {
   title?: string;
@@ -178,6 +215,8 @@ export async function executeDeleteWithSweetAlert(options: {
     text = 'Voulez-vous vraiment supprimer cet élément ? Cette action est irréversible.',
     itemName,
     action,
+    successTitle = 'Supprimé !',
+    successMessage = 'L\'élément a été supprimé avec succès.',
     errorMessage = 'Échec de la suppression.',
   } = options;
 
@@ -185,91 +224,21 @@ export async function executeDeleteWithSweetAlert(options: {
   const isConfirmed = await confirmDeleteAlert({ title, text, itemName });
   if (!isConfirmed) return false;
 
-  // 2. Déclenchement du Loader SI ET SEULEMENT SI l'action prend plus de 1 seconde
-  let loaderTimer: any = setTimeout(() => {
-    showLoadingAlert('Suppression en cours...', 'Veuillez patienter pendant la mise à jour...');
-  }, 1000);
+  // 2. Loader immédiat sans délai
+  showLoadingAlert('Suppression en cours...', 'Suppression définitive sur le serveur...');
 
   try {
-    // 3. Exécution de l'action
+    // 3. Attente de la réponse du serveur
     await action();
 
-    // 4. Fermeture propre : annulation du loader s'il n'a pas encore été déclenché, ou fermeture
-    clearTimeout(loaderTimer);
-    if (Swal.isVisible()) {
-      Swal.close();
-    }
+    // 4. Succès
+    await showSuccessAlert(successTitle, successMessage);
     return true;
   } catch (error: any) {
-    clearTimeout(loaderTimer);
-    console.error('Erreur lors de la suppression :', error);
+    console.error('❌ [DELETE ERROR]:', error);
     const finalErrorMsg = error?.message || errorMessage;
     await showErrorAlert('Échec de la suppression', finalErrorMsg);
     return false;
-  }
-}
-
-/**
- * Exécute une action générale :
- * - Confirmation Modal
- * - Loader affiché UNIQUEMENT si l'action prend plus de 1 seconde (règle des 1000ms)
- * - Fermeture propre
- */
-export async function executeActionWithSweetAlert<T = any>(options: {
-  title: string;
-  text?: string;
-  html?: string;
-  confirmButtonText?: string;
-  isDestructive?: boolean;
-  loadingTitle?: string;
-  loadingText?: string;
-  action: () => Promise<T> | T;
-  successTitle?: string;
-  successMessage?: string;
-  errorMessage?: string;
-}): Promise<{ success: boolean; data?: T; error?: any }> {
-  const {
-    title,
-    text,
-    html,
-    confirmButtonText = 'Confirmer',
-    isDestructive = false,
-    loadingTitle = 'Traitement en cours...',
-    loadingText = 'Veuillez patienter...',
-    action,
-    errorMessage = 'Une erreur est survenue lors du traitement.',
-  } = options;
-
-  // 1. Demande de confirmation
-  const isConfirmed = await confirmActionAlert({
-    title,
-    text,
-    html,
-    confirmButtonText,
-    isDestructive,
-  });
-  if (!isConfirmed) return { success: false };
-
-  // 2. Déclenchement du Loader SI ET SEULEMENT SI l'action prend plus de 1 seconde
-  let loaderTimer: any = setTimeout(() => {
-    showLoadingAlert(loadingTitle, loadingText);
-  }, 1000);
-
-  try {
-    // 3. Action
-    const result = await action();
-
-    // 4. Fermeture directe
-    clearTimeout(loaderTimer);
-    if (Swal.isVisible()) {
-      Swal.close();
-    }
-    return { success: true, data: result };
-  } catch (error: any) {
-    clearTimeout(loaderTimer);
-    console.error('Erreur lors du traitement :', error);
-    await showErrorAlert('Erreur', error?.message || errorMessage);
-    return { success: false, error };
   }
 }
 

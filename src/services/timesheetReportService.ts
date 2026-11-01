@@ -43,6 +43,14 @@ export interface TimesheetScheduleSlot {
   resolutionNote?: string;
 }
 
+export interface DailyPresenceIncident {
+  time?: string;
+  type: string; // 'retard' | 'sortie' | 'depart_anticipe' | 'permission' | 'absence' | 'autre';
+  label: string; // 'Retard à l\'arrivée', 'Sortie temporaire', 'Départ anticipé', 'Permission spéciale', 'Absence'
+  description: string;
+  isJustified?: boolean;
+}
+
 export interface DailyAttendanceRecap {
   statusLabel?: string;
   statusType?: 'present' | 'late' | 'mission' | 'leave' | 'absent' | 'remote';
@@ -53,6 +61,7 @@ export interface DailyAttendanceRecap {
   hoursWorkedText?: string;
   location?: string;
   incidentNote?: string;
+  incidents?: DailyPresenceIncident[];
 }
 
 export interface TimesheetReportData {
@@ -63,6 +72,7 @@ export interface TimesheetReportData {
   dateStr?: string; // e.g. "21/09/2026" ou "mardi 27 octobre 2026"
   timeStr?: string; // e.g. "18:27"
   dailyAttendance?: DailyAttendanceRecap;
+  presenceIncidents?: DailyPresenceIncident[];
   items: TimesheetItem[];
   blockers: TimesheetBlocker[];
   managerPoints: TimesheetManagerPoint[];
@@ -256,36 +266,91 @@ function preparePlanDuJourData(data: TimesheetReportData) {
   }
 
   // 🕒 4. Plan horaire dynamique STRICTEMENT CONFORME AUX RÈGLES DE CITRINE :
-  // - Heures de travail : 08h00 à 17h00 (8h effectives)
-  // - Pause déjeuner : STRICTEMENT 12h00 – 13h00 (aucune autre pause après 13h)
+  // - Heures de travail : 08h00 à 17h00 (8h effectives nettes)
+  // - Pause déjeuner : STRICTEMENT et UNIQUEMENT 12h00 – 13h00 (aucune autre pause)
+  // - Aucun créneau tampon imprévus : les imprévus opérationnels ont leur section dédiée
   let scheduleSlots = data.scheduleSlots || [];
   if (scheduleSlots.length === 0 || scheduleSlots.some(s => s.timeRange.includes('13:00 – 14:00'))) {
     const s1 = tasks[0]?.title || topPriorities[0]?.title || 'Prise de contact, cadrage & démarrage';
     const s2 = tasks[1]?.title || topPriorities[1]?.title || 'Exécution des livrables opérationnels P1';
     const s3 = tasks[2]?.title || 'Reprise & finalisation active des dossiers';
-    const s4 = tasks[3]?.title || 'Clôture de journée, synthèse & transmission feuille de temps';
+    const s4 = tasks[3]?.title || 'Clôture opérationnelle de journée, bilan & transmission feuille de temps';
 
     scheduleSlots = [
       { timeRange: '08:00 – 10:00', activity: s1, resolutionNote: tasks[0]?.isDone ? 'Sous-tâche finalisée avec succès' : 'Traitement en cours' },
       { timeRange: '10:00 – 12:00', activity: s2, resolutionNote: tasks[1]?.isDone ? 'Livrables produits et vérifiés' : 'Avancement nominal' },
-      { timeRange: '12:00 – 13:00', activity: 'Pause Déjeuner Officielle (12h00 – 13h00)', isBreak: true, isBuffer: true, resolutionNote: 'Pause obligatoire 12h–13h respectée' },
+      { timeRange: '12:00 – 13:00', activity: 'Pause Déjeuner (12h00 – 13h00)', isBreak: true, isBuffer: false, resolutionNote: 'Pause obligatoire 12h–13h respectée' },
       { timeRange: '13:00 – 15:30', activity: s3, resolutionNote: tasks[2]?.isDone ? 'Terminé' : 'En cours d’achèvement' },
-      { timeRange: '15:30 – 17:00', activity: s4, isBuffer: true, resolutionNote: 'Revue des engagements, clôture & envoi feuille de temps' },
+      { timeRange: '15:30 – 17:00', activity: s4, isBreak: false, isBuffer: false, resolutionNote: 'Revue des engagements, clôture & envoi feuille de temps' },
     ];
   }
 
-  // Nettoyer également les slots existants si le texte contient "tampon" ou "pause" en dehors de 12h-13h
+  // Nettoyer rigoureusement les slots existants : seul 12h00-13h00 est une pause, aucun créneau tampon
   scheduleSlots = scheduleSlots.map(s => {
-    if (s.timeRange.includes('12:00') && s.timeRange.includes('13:00')) {
-      return { ...s, activity: 'Pause Déjeuner (12h00 – 13h00)', isBreak: true, isBuffer: true };
+    const isLunchBreak = (s.timeRange.startsWith('12:00') && s.timeRange.includes('13:00')) || (s.isBreak && s.timeRange.includes('12:00'));
+    if (isLunchBreak) {
+      return { ...s, timeRange: '12:00 – 13:00', activity: 'Pause Déjeuner (12h00 – 13h00)', isBreak: true, isBuffer: false };
     }
-    if (s.activity.toLowerCase().includes('tampon') || s.activity.toLowerCase().includes('pause')) {
-      return { ...s, activity: s.activity.replace(/tampon.*?\//gi, '').replace(/pause.*?\//gi, '').trim() };
+    // Si c'est un autre créneau, supprimer tout reliquat "tampon" ou "pause"
+    let cleanActivity = s.activity;
+    if (cleanActivity.toLowerCase().includes('tampon') || cleanActivity.toLowerCase().includes('pause')) {
+      cleanActivity = cleanActivity
+        .replace(/⚡?\s*tampon\s*imprévus?\s*\/?\s*(pause\s*\(?12h[–-]13h\)?)?/gi, '')
+        .replace(/pause.*?\//gi, '')
+        .replace(/⚡\s*tampon.*/gi, '')
+        .trim();
+      if (!cleanActivity) {
+        cleanActivity = s.timeRange.includes('15:30')
+          ? 'Clôture opérationnelle de journée, bilan & transmission feuille de temps'
+          : 'Traitement des sous-tâches prioritaires';
+      }
     }
-    return s;
+    return { ...s, activity: cleanActivity, isBreak: false, isBuffer: false };
   });
 
-  // 5. Imprévus survenus aujourd'hui
+  // 🚨 5. Incidents de présence et pointage du jour (Retards, Sorties, Départs anticipés...)
+  const presenceIncidents: DailyPresenceIncident[] = [];
+  if (Array.isArray(data.presenceIncidents)) {
+    presenceIncidents.push(...data.presenceIncidents);
+  }
+  if (Array.isArray(data.dailyAttendance?.incidents)) {
+    data.dailyAttendance.incidents.forEach((inc) => {
+      if (!presenceIncidents.some(p => p.time === inc.time && p.description === inc.description)) {
+        presenceIncidents.push(inc);
+      }
+    });
+  }
+
+  // Détection automatique du retard à l'arrivée
+  if (data.dailyAttendance?.statusType === 'late') {
+    const alreadyHasRetard = presenceIncidents.some(p => p.type === 'retard');
+    if (!alreadyHasRetard) {
+      presenceIncidents.push({
+        time: data.dailyAttendance.arrivalTime || 'Matin',
+        type: 'retard',
+        label: "Retard à l'arrivée",
+        description: `Arrivée constatée à ${data.dailyAttendance.arrivalTime || 'retard'} (au lieu de 08h00)${data.dailyAttendance.incidentNote ? ` — ${data.dailyAttendance.incidentNote}` : ''}`,
+        isJustified: false,
+      });
+    }
+  }
+
+  // Incident ou anomalie consigné(e) par l'admin ou le collaborateur
+  if (data.dailyAttendance?.incidentNote) {
+    const note = data.dailyAttendance.incidentNote;
+    const alreadyConsigned = presenceIncidents.some(p => p.description.includes(note));
+    if (!alreadyConsigned) {
+      presenceIncidents.push({
+        time: data.dailyAttendance.arrivalTime || 'Journée',
+        type: 'autre',
+        label: "Incident de présence",
+        description: note,
+        isJustified: false,
+      });
+    }
+  }
+
+  // 6. Imprévus et blocages survenus sur les tâches opérationnelles
   const unforeseenEvents = data.blockers.map((b) => ({
     time: b.time || 'Journée',
     subject: b.reason,
@@ -299,10 +364,10 @@ function preparePlanDuJourData(data: TimesheetReportData) {
   const availabilityRate = Math.max(0, Math.min(100, Math.round(((480 - totalLostMinutes) / 480) * 100)));
 
   // Ponctualité & Assiduité
-  const isLateToday = data.dailyAttendance?.statusType === 'late';
+  const isLateToday = data.dailyAttendance?.statusType === 'late' || presenceIncidents.some(p => p.type === 'retard');
   const punctualityRate = isLateToday ? 75 : (data.dailyAttendance?.arrivalTime ? 100 : 0);
 
-  // 6. Bilan fin de journée
+  // 7. Bilan fin de journée
   let postponedTasks = data.postponedTasks || [];
   if (postponedTasks.length === 0) {
     postponedTasks = tasks.filter((t) => !t.isDone).map((t) => t.title);
@@ -344,6 +409,7 @@ function preparePlanDuJourData(data: TimesheetReportData) {
     capacityStatus,
     capacityAdvice,
     scheduleSlots,
+    presenceIncidents,
     unforeseenEvents,
     totalLostMinutes,
     availabilityRate,
@@ -499,18 +565,21 @@ export function buildPlanDuJourExcelHtml(data: TimesheetReportData): string {
       <!-- 3. PLAN HORAIRE -->
       <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
         <tr>
-          <td colspan="6" class="section-header">🕐 PLAN HORAIRE (08:00 – 17:00) — créneau tampon &amp; pause officielle 12h–13h</td>
+          <td colspan="6" class="section-header">🕐 PLAN HORAIRE (08:00 – 17:00) — Pause déjeuner officielle 12h00 – 13h00</td>
         </tr>
         <tr>
           <td class="col-header" style="width: 25%;">Heure</td>
           <td class="col-header" colspan="5">Ce que je fais sur ce créneau</td>
         </tr>
-        ${p.scheduleSlots.map((s) => `
-          <tr class="${s.isBuffer || s.isBreak ? 'tampon-row' : ''}">
-            <td style="font-weight: bold;">${s.timeRange}</td>
-            <td colspan="5" class="${s.isBuffer || s.isBreak ? '' : 'blue-text'}">${s.isBreak ? '⚡ TAMPON IMPRÉVUS / pause (12h–13h)' : s.activity}</td>
-          </tr>
-        `).join('')}
+        ${p.scheduleSlots.map((s) => {
+          const isLunchBreak = s.isBreak || (s.timeRange.startsWith('12:00') && s.timeRange.includes('13:00'));
+          return `
+            <tr class="${isLunchBreak ? 'tampon-row' : ''}">
+              <td style="font-weight: bold;">${s.timeRange}</td>
+              <td colspan="5" class="${isLunchBreak ? '' : 'blue-text'}">${isLunchBreak ? '🍽️ Pause Déjeuner Officielle (12h00 – 13h00)' : s.activity}</td>
+            </tr>
+          `;
+        }).join('')}
       </table>
 
       <!-- 4. IMPRÉVUS SURVENUS AUJOURD'HUI -->
@@ -764,6 +833,71 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
           </div>
         </div>
 
+        <!-- 🚨 SIGNALEMENT DES INCIDENTS & ANOMALIES DE PRÉSENCE (RETARD, SORTIE, DÉPART ANTICIPÉ...) -->
+        <div style="border-radius: 12px; border: 1.5px solid ${p.presenceIncidents.length > 0 ? '#ea580c' : '#86efac'}; overflow: hidden; margin-bottom: 16px; background-color: #ffffff;">
+          <div style="background-color: ${p.presenceIncidents.length > 0 ? '#c2410c' : '#15803d'}; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>
+                  ${p.presenceIncidents.length > 0 ? '⚠️' : '✅'} SIGNALEMENT DES INCIDENTS DE PRÉSENCE &amp; HORAIRES (${p.presenceIncidents.length})
+                </td>
+                <td align="right" style="font-size: 10px; color: ${p.presenceIncidents.length > 0 ? '#ffedd5' : '#bbf7d0'}; font-weight: 700;">
+                  ${p.presenceIncidents.length > 0 ? 'Retards, sorties ou écarts constatés' : 'Ponctualité et assiduité conformes'}
+                </td>
+              </tr>
+            </table>
+          </div>
+          <div style="padding: 10px 14px; background-color: ${p.presenceIncidents.length > 0 ? '#fff7ed' : '#f0fdf4'};">
+            ${p.presenceIncidents.length > 0 ? `
+              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 11.5px;">
+                <thead>
+                  <tr style="background-color: #fdba74; color: #7c2d12; font-size: 10.5px;">
+                    <th style="padding: 6px 10px; text-align: left; width: 85px; font-weight: 800;">Heure</th>
+                    <th style="padding: 6px 10px; text-align: left; width: 160px; font-weight: 800;">Type d'incident</th>
+                    <th style="padding: 6px 10px; text-align: left; font-weight: 800;">Détail &amp; Motif constaté</th>
+                    <th style="padding: 6px 10px; text-align: center; width: 110px; font-weight: 800;">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${p.presenceIncidents.map((inc) => `
+                    <tr style="border-bottom: 1px solid #fed7aa; background-color: #ffffff;">
+                      <td style="padding: 8px 10px; font-family: monospace; font-weight: 800; color: #9a3412;">
+                        ${inc.time || 'Pointage'}
+                      </td>
+                      <td style="padding: 8px 10px;">
+                        <span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; background-color: #ffedd5; color: #c2410c; border: 1px solid #f97316;">
+                          ${inc.label}
+                        </span>
+                      </td>
+                      <td style="padding: 8px 10px; font-weight: 700; color: #431407;">
+                        ${inc.description}
+                      </td>
+                      <td style="padding: 8px 10px; text-align: center;">
+                        <span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 9.5px; font-weight: 800; ${
+                          inc.isJustified
+                            ? 'background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;'
+                            : 'background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;'
+                        }">
+                          ${inc.isJustified ? '✓ Justifié' : '⚠️ Non régularisé'}
+                        </span>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : `
+              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+                <tr>
+                  <td style="width: 24px; font-size: 15px; vertical-align: middle;">✅</td>
+                  <td style="vertical-align: middle; color: #166534; font-weight: 700; font-size: 11.5px;">
+                    Aucun incident de présence à signaler sur cette journée : ponctualité respectée (dès 08h00), pause 12h–13h conforme, aucune sortie non justifiée.
+                  </td>
+                </tr>
+              </table>
+            `}
+          </div>
+        </div>
+
         <!-- 1. LES 3 PRIORITÉS DU JOUR (LES GRANDES TÂCHES / JOB DESCRIPTION) -->
         <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
           <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
@@ -893,7 +1027,7 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
           <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
             <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
               <tr>
-                <td>🕒 PLAN HORAIRE (08h00 – 17h00) — Pause déjeuner obligatoire</td>
+                <td>🕒 PLAN HORAIRE (08h00 – 17h00) — Pause déjeuner obligatoire 12h00 – 13h00</td>
                 <td align="right">
                   <span style="display: inline-block; background-color: rgba(254, 240, 138, 0.4); color: #854d0e; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(254, 240, 138, 0.7); font-family: monospace;">
                     12:00 – 13:00 : Pause Déjeuner
@@ -911,18 +1045,18 @@ export function buildTimesheetHtmlReport(data: TimesheetReportData): string {
             </thead>
             <tbody>
               ${p.scheduleSlots.map((s) => {
-                const isBreak = s.isBreak || s.timeRange.includes('12:00') || s.isBuffer;
-                const rowBg = isBreak ? '#fef9c3' : '#ffffff';
-                const timeColor = isBreak ? '#854d0e' : '#1c1917';
-                const actColor = isBreak ? '#854d0e' : '#1d4ed8';
+                const isLunchBreak = s.isBreak || (s.timeRange.startsWith('12:00') && s.timeRange.includes('13:00'));
+                const rowBg = isLunchBreak ? '#fef9c3' : '#ffffff';
+                const timeColor = isLunchBreak ? '#854d0e' : '#1c1917';
+                const actColor = isLunchBreak ? '#854d0e' : '#1d4ed8';
 
                 return `
-                  <tr style="background-color: ${rowBg}; border-bottom: 1px solid ${isBreak ? '#fef08a' : '#e7e5e4'};">
-                    <td style="padding: 8px 10px; font-family: monospace; font-weight: 700; color: ${timeColor};">
+                  <tr style="background-color: ${rowBg}; border-bottom: 1px solid ${isLunchBreak ? '#fde047' : '#e7e5e4'};">
+                    <td style="padding: 8px 10px; font-family: monospace; font-weight: 700; color: ${timeColor}; width: 140px;">
                       ${s.timeRange}
                     </td>
                     <td style="padding: 8px 10px; font-weight: 700; color: ${actColor};">
-                      ${isBreak ? 'Pause Déjeuner (12h00 – 13h00)' : s.activity}
+                      ${isLunchBreak ? '🍽️ Pause Déjeuner Officielle (12h00 – 13h00)' : s.activity}
                     </td>
                   </tr>
                 `;
@@ -1080,18 +1214,30 @@ export function buildTimesheetXlsxWorkbook(data: TimesheetReportData): XLSX.Work
     ['Total / réalisées / taux', '', p.totalTasks, p.completedTasks, `${p.ratePercentage}%`, `${p.postponedCount} report.`],
     [],
     // Plan horaire dynamique (08h00 – 17h00) avec pause officielle 12h–13h
-    ['🕒 PLAN HORAIRE (08:00 – 17:00) — garde un créneau « tampon » pour les imprévus'],
+    ['🕒 PLAN HORAIRE (08:00 – 17:00) — Pause déjeuner officielle 12h00 – 13h00'],
     ['Heure', 'Ce que je fais sur ce créneau'],
     ...p.scheduleSlots.map((s) => {
-      const isBreak = s.isBreak || s.timeRange.includes('12:00') || s.isBuffer;
+      const isLunchBreak = s.isBreak || (s.timeRange.startsWith('12:00') && s.timeRange.includes('13:00'));
       return [
         s.timeRange,
-        isBreak ? '⚡ TAMPON IMPRÉVUS / pause (12h–13h)' : s.activity,
+        isLunchBreak ? '🍽️ Pause Déjeuner Officielle (12h00 – 13h00)' : s.activity,
       ];
     }),
     [],
+    // Signalement des incidents de présence (Retards, Sorties...)
+    ['🚨 INCIDENTS & ANOMALIES DE PRÉSENCE DU JOUR (Retards, Sorties...)'],
+    ['Heure', 'Type incident', 'Détails & Motif constaté', 'Statut régularisation'],
+    ...(p.presenceIncidents.length > 0
+      ? p.presenceIncidents.map((inc) => [
+          inc.time || 'Pointage',
+          inc.label,
+          inc.description,
+          inc.isJustified ? 'Justifié' : 'Non régularisé',
+        ])
+      : [['Journée', 'Aucun incident', 'Ponctualité respectée dès 08h00, pause 12h–13h conforme, aucune sortie non justifiée', 'Normal']]),
+    [],
     // Imprévus survenus aujourd'hui
-    ['⚡ IMPRÉVUS SURVENUS AUJOURD\'HUI'],
+    ['⚡ BLOCAGES & IMPRÉVUS OPÉRATIONNELS SIGNALÉS'],
     ['Heure', 'Quoi ? (qui / quel sujet)', 'Temps perdu (min)'],
     ...(p.unforeseenEvents.length > 0
       ? p.unforeseenEvents.map((u) => [u.time, u.subject, `${u.lostMinutes} min`])

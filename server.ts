@@ -35,6 +35,7 @@ import {
 } from "./src/services/weeklyAttendanceReportService";
 import { executeDailyTimesheetDispatch } from "./src/services/dailyTimesheetCronService";
 import { sendClockingNotificationEmail } from "./src/services/clockingNotificationMailService";
+import { sendMondayGreetingToAllEmployees } from "./src/services/mondayGreetingMailService";
 
 async function startServer() {
   const app = express();
@@ -340,15 +341,12 @@ async function startServer() {
         });
       }
       
-      const result = await sendThreadedEmployeeEmail({
-        employeeName: "Test Connexion Citrine",
-        employeeId: "citrine-test",
-        eventTitle: "Test Connexion SMTP - Citrine Mobilité",
-        htmlContent: `<p>Bonjour,</p><p>Ce message confirme que la configuration SMTP de votre application Citrine Mobilité est <strong>100% opérationnelle</strong>.</p><p>Destinataire(s) RH configuré(s) : <code>${targetRecipients.join(', ')}</code></p>`,
-        overrideRecipients: targetRecipients,
-      }, smtpConfig);
+      const result = await sendMondayGreetingToAllEmployees({
+        testRecipient: targetRecipients.join(', '),
+        forceMonday: true,
+      });
 
-      res.json(result);
+      res.status(result.success ? 200 : 500).json(result);
     } catch (error: any) {
       console.error("[API Mail Test Connection Error]:", error);
       res.status(500).json({ success: false, error: error.message || "Échec du test de connexion SMTP." });
@@ -407,6 +405,19 @@ async function startServer() {
     }
   });
 
+  app.all("/api/cron/monday-greeting", async (req: express.Request, res: express.Response) => {
+    try {
+      console.log(`⏰ [API /api/cron/monday-greeting] Déclenchement message bon début de semaine...`);
+      const forceMonday = req.query.force === 'true' || req.body?.force === true;
+      const testRecipient = (req.query.testRecipient as string) || req.body?.testRecipient;
+      const result = await sendMondayGreetingToAllEmployees({ forceMonday, testRecipient });
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (err: any) {
+      console.error("[API /api/cron/monday-greeting Error]:", err);
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const isHmrDisabled = process.env.DISABLE_HMR === "true";
@@ -440,6 +451,20 @@ async function startServer() {
 
     const todayStr = now.toISOString().split('T')[0];
     const cronKey = `timesheet_cron_sent_${todayStr}`;
+    const isMonday = weekdayName === 'monday';
+    const mondayGreetingCronKey = `monday_greeting_cron_sent_${todayStr}`;
+
+    // 🌅 Lundi matin 08h00 Douala : Message de bon début de semaine à tous les collaborateurs
+    if (isMonday && hour === 8 && minute === 0 && !(global as any)[mondayGreetingCronKey]) {
+      (global as any)[mondayGreetingCronKey] = true;
+      console.log(`⏰ [CRON LOCAL LUNDI 08:00] Exécution automatique du message de bon début de semaine...`);
+      try {
+        const greetingRes = await sendMondayGreetingToAllEmployees({ forceMonday: true });
+        console.log(`✅ [CRON LOCAL LUNDI 08:00] Succès :`, greetingRes.message);
+      } catch (err) {
+        console.error(`❌ [CRON LOCAL LUNDI 08:00 Error]:`, err);
+      }
+    }
 
     // 19h30 Douala : Feuilles de temps individuelles quotidiennes (Lundi à Vendredi uniquement)
     if (isWeekday && hour === 19 && minute === 30 && !(global as any)[cronKey]) {

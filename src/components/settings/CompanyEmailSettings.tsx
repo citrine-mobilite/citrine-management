@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
 import { clientMailService } from '../../services/clientMailService';
+import { showLoadingAlert, showSuccessAlert, showErrorAlert } from '../../services/sweetAlertService';
 
 interface CompanyEmailSettingsProps {
   moduleConfig: CompanyModuleConfig;
@@ -98,9 +99,13 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    showLoadingAlert({
+      title: 'Enregistrement en cours...',
+      text: 'Mise à jour des paramètres SMTP et RH sur le serveur...'
+    });
 
     try {
-      // 1. Sauvegarde côté serveur en base de données (accessible et prioritaire pour les non-développeurs)
+      // 1. Sauvegarde côté serveur en base de données
       const saveRes = await clientMailService.saveMailConfig({
         ...formData,
         smtpPort: Number(formData.smtpPort),
@@ -115,18 +120,21 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
       onUpdateModuleConfig(updated);
 
       if (saveRes.success) {
-        if (showToast) {
-          showToast('Configuration SMTP & RH enregistrée avec succès en base de données.', 'success');
-        }
+        await showSuccessAlert(
+          'Configuration enregistrée !', 
+          'Les paramètres SMTP & RH ont été mis à jour avec succès en base de données.'
+        );
       } else {
-        if (showToast) {
-          showToast('Sauvegardé localement. ' + (saveRes.error || ''), 'error');
-        }
+        await showErrorAlert(
+          'Avertissement de sauvegarde',
+          'Sauvegardé localement. ' + (saveRes.error || '')
+        );
       }
     } catch (err: any) {
-      if (showToast) {
-        showToast('Erreur lors de la sauvegarde : ' + err.message, 'error');
-      }
+      await showErrorAlert(
+        'Erreur critique',
+        'Erreur lors de la sauvegarde : ' + err.message
+      );
     } finally {
       setIsSaving(false);
     }
@@ -135,6 +143,10 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
   const handleTestSmtp = async () => {
     setIsTesting(true);
     setTestResult({ status: 'idle' });
+    showLoadingAlert({
+      title: 'Test SMTP en cours...',
+      text: 'Connexion au serveur de messagerie et envoi de l\'e-mail de bonjour du lundi...'
+    });
 
     try {
       const res = await clientMailService.testConnection(
@@ -156,9 +168,10 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
           message: 'Connexion SMTP établie avec succès ! Le message réel de test a été transmis à la boîte de réception.',
           recipients: (res as any).recipients,
         });
-        if (showToast) {
-          showToast('E-mail de test réel envoyé avec succès !', 'success');
-        }
+        await showSuccessAlert(
+          'E-mail de test envoyé avec succès !',
+          'Connexion SMTP établie. Le message de bonjour du lundi a bien été transmis à votre boîte.'
+        );
       } else {
         const rawError = res.error || 'Échec de la connexion au serveur SMTP.';
         console.error("❌ [TEST SMTP ÉCHEC] Véritable exception :", {
@@ -169,9 +182,10 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
           status: 'error',
           message: rawError,
         });
-        if (showToast) {
-          showToast(rawError, 'error');
-        }
+        await showErrorAlert(
+          'Échec du Test SMTP',
+          rawError
+        );
       }
     } catch (err: any) {
       const rawException = err?.message || String(err);
@@ -180,9 +194,10 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
         status: 'error',
         message: rawException,
       });
-      if (showToast) {
-        showToast(rawException, 'error');
-      }
+      await showErrorAlert(
+        'Erreur de connexion',
+        rawException
+      );
     } finally {
       setIsTesting(false);
     }
@@ -205,10 +220,7 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
                 <RefreshCw className="h-3.5 w-3.5 text-stone-400 animate-spin" />
               )}
             </div>
-            <p className="text-xs text-stone-500">
-              Configuration modifiable directement par l'équipe Citrine Mobilité sans nécessiter de développeur.
-            </p>
-          </div>
+        </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -231,20 +243,7 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
         </div>
       </div>
 
-      {/* Règle stricte de confidentialité */}
-      <div className="bg-gradient-to-r from-teal-50 via-emerald-50/50 to-stone-50 p-4 rounded-3xl border border-teal-200/80 flex items-start gap-3">
-        <div className="p-2 bg-[#1F625E] text-white rounded-xl shrink-0 shadow-xs">
-          <ShieldCheck className="h-4 w-4" />
-        </div>
-        <div className="space-y-1 text-xs">
-          <h4 className="font-bold text-[#1F625E] flex items-center gap-1.5">
-            Règle Stricte de Confidentialité & Non-Dispersion
-          </h4>
-          <p className="text-stone-700 leading-relaxed">
-            <strong>Personne en dehors des adresses spécifiées dans « E-mails de Notification RH » ne recevra d'e-mails</strong> (ni les employés, ni d'autres collaborateurs). Les rapports journaliers, fiches de temps et alertes sont strictement acheminés vers ces adresses déclarées.
-          </p>
-        </div>
-      </div>
+
 
       <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Colonne Paramètres SMTP */}
@@ -277,9 +276,6 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
               placeholder="ex: Doleres.Kenne@citrine-mobilite.com, direction@citrine-mobilite.com"
               className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-xs outline-none focus:ring-2 focus:ring-[#1F625E] font-medium"
             />
-            <p className="text-[11px] text-stone-500 leading-normal">
-              Vous pouvez renseigner <strong>un ou plusieurs e-mails</strong> séparés par des virgules (,) ou des points-virgules (;). <strong>Seules ces adresses</strong> recevront les fiches de temps et notifications RH.
-            </p>
 
             {/* Badges d'affichage direct des e-mails reconnus */}
             {parsedHrEmails.length > 0 && (
@@ -395,9 +391,7 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
           </div>
 
           <div className="pt-4 border-t border-stone-100 flex items-center justify-between">
-            <span className="text-[11px] text-stone-400">
-              Modifications effectives immédiatement pour tous les envois automatiques.
-            </span>
+
             <button
               type="submit"
               disabled={isSaving}
@@ -427,7 +421,7 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
             </h4>
 
             <p className="text-stone-500 leading-relaxed">
-              Vérifiez la bonne transmission de l'e-mail vers votre boîte sans passer par les courriels indésirables.
+              Envoie instantanément l'e-mail officiel du lundi matin (modèle « Bon début de semaine » avec illustration Humaans et charte Material Design) pour valider vos paramètres SMTP.
             </p>
 
             <div className="space-y-1.5">
@@ -455,7 +449,7 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
               ) : (
                 <>
                   <Send className="h-4 w-4" />
-                  Envoyer un E-mail de Test Réel
+                  Envoyer l'E-mail de Bonjour du Lundi (Test)
                 </>
               )}
             </button>
@@ -490,15 +484,7 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
             )}
           </div>
 
-          <div className="bg-stone-50 p-5 rounded-3xl border border-stone-200/80 space-y-2 text-xs">
-            <span className="font-bold text-stone-800 flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-[#1F625E]" />
-              Autonomie Complète de l'Entreprise
-            </span>
-            <p className="text-stone-500 text-[11px] leading-relaxed">
-              Toutes les modifications saisies ici sont directement enregistrées en base de données. Même sans développeur, les responsables RH peuvent changer le mot de passe, l'expéditeur ou la liste des destinataires à tout moment en toute autonomie.
-            </p>
-          </div>
+
         </div>
       </form>
     </div>

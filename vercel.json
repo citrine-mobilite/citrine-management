@@ -12,6 +12,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/monday-greeting",
+      "schedule": "0 7 * * 1"
+    },
+    {
       "path": "/api/cron/daily-timesheet",
       "schedule": "30 18 * * 1-5"
     },

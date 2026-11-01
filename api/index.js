@@ -311,18 +311,21 @@ async function sendThreadedEmployeeEmail(options, customConfig) {
           contentType = "application/octet-stream";
         }
       }
+      const disposition = att.cid ? "inline" : "attachment";
       if (typeof att.content === "string" && att.encoding === "base64") {
         return {
           filename: att.filename,
           content: Buffer.from(att.content, "base64"),
           contentType,
-          contentDisposition: "attachment"
+          contentDisposition: disposition,
+          cid: att.cid
         };
       }
       return {
         ...att,
         contentType,
-        contentDisposition: "attachment"
+        contentDisposition: disposition,
+        cid: att.cid
       };
     });
     const rawCc = options.cc ? parseEmailList(options.cc) : [];
@@ -2077,24 +2080,65 @@ function preparePlanDuJourData(data) {
     const s1 = tasks[0]?.title || topPriorities[0]?.title || "Prise de contact, cadrage & d\xE9marrage";
     const s2 = tasks[1]?.title || topPriorities[1]?.title || "Ex\xE9cution des livrables op\xE9rationnels P1";
     const s3 = tasks[2]?.title || "Reprise & finalisation active des dossiers";
-    const s4 = tasks[3]?.title || "Cl\xF4ture de journ\xE9e, synth\xE8se & transmission feuille de temps";
+    const s4 = tasks[3]?.title || "Cl\xF4ture op\xE9rationnelle de journ\xE9e, bilan & transmission feuille de temps";
     scheduleSlots = [
       { timeRange: "08:00 \u2013 10:00", activity: s1, resolutionNote: tasks[0]?.isDone ? "Sous-t\xE2che finalis\xE9e avec succ\xE8s" : "Traitement en cours" },
       { timeRange: "10:00 \u2013 12:00", activity: s2, resolutionNote: tasks[1]?.isDone ? "Livrables produits et v\xE9rifi\xE9s" : "Avancement nominal" },
-      { timeRange: "12:00 \u2013 13:00", activity: "Pause D\xE9jeuner Officielle (12h00 \u2013 13h00)", isBreak: true, isBuffer: true, resolutionNote: "Pause obligatoire 12h\u201313h respect\xE9e" },
+      { timeRange: "12:00 \u2013 13:00", activity: "Pause D\xE9jeuner (12h00 \u2013 13h00)", isBreak: true, isBuffer: false, resolutionNote: "Pause obligatoire 12h\u201313h respect\xE9e" },
       { timeRange: "13:00 \u2013 15:30", activity: s3, resolutionNote: tasks[2]?.isDone ? "Termin\xE9" : "En cours d\u2019ach\xE8vement" },
-      { timeRange: "15:30 \u2013 17:00", activity: s4, isBuffer: true, resolutionNote: "Revue des engagements, cl\xF4ture & envoi feuille de temps" }
+      { timeRange: "15:30 \u2013 17:00", activity: s4, isBreak: false, isBuffer: false, resolutionNote: "Revue des engagements, cl\xF4ture & envoi feuille de temps" }
     ];
   }
   scheduleSlots = scheduleSlots.map((s) => {
-    if (s.timeRange.includes("12:00") && s.timeRange.includes("13:00")) {
-      return { ...s, activity: "Pause D\xE9jeuner (12h00 \u2013 13h00)", isBreak: true, isBuffer: true };
+    const isLunchBreak = s.timeRange.startsWith("12:00") && s.timeRange.includes("13:00") || s.isBreak && s.timeRange.includes("12:00");
+    if (isLunchBreak) {
+      return { ...s, timeRange: "12:00 \u2013 13:00", activity: "Pause D\xE9jeuner (12h00 \u2013 13h00)", isBreak: true, isBuffer: false };
     }
-    if (s.activity.toLowerCase().includes("tampon") || s.activity.toLowerCase().includes("pause")) {
-      return { ...s, activity: s.activity.replace(/tampon.*?\//gi, "").replace(/pause.*?\//gi, "").trim() };
+    let cleanActivity = s.activity;
+    if (cleanActivity.toLowerCase().includes("tampon") || cleanActivity.toLowerCase().includes("pause")) {
+      cleanActivity = cleanActivity.replace(/⚡?\s*tampon\s*imprévus?\s*\/?\s*(pause\s*\(?12h[–-]13h\)?)?/gi, "").replace(/pause.*?\//gi, "").replace(/⚡\s*tampon.*/gi, "").trim();
+      if (!cleanActivity) {
+        cleanActivity = s.timeRange.includes("15:30") ? "Cl\xF4ture op\xE9rationnelle de journ\xE9e, bilan & transmission feuille de temps" : "Traitement des sous-t\xE2ches prioritaires";
+      }
     }
-    return s;
+    return { ...s, activity: cleanActivity, isBreak: false, isBuffer: false };
   });
+  const presenceIncidents = [];
+  if (Array.isArray(data.presenceIncidents)) {
+    presenceIncidents.push(...data.presenceIncidents);
+  }
+  if (Array.isArray(data.dailyAttendance?.incidents)) {
+    data.dailyAttendance.incidents.forEach((inc) => {
+      if (!presenceIncidents.some((p) => p.time === inc.time && p.description === inc.description)) {
+        presenceIncidents.push(inc);
+      }
+    });
+  }
+  if (data.dailyAttendance?.statusType === "late") {
+    const alreadyHasRetard = presenceIncidents.some((p) => p.type === "retard");
+    if (!alreadyHasRetard) {
+      presenceIncidents.push({
+        time: data.dailyAttendance.arrivalTime || "Matin",
+        type: "retard",
+        label: "Retard \xE0 l'arriv\xE9e",
+        description: `Arriv\xE9e constat\xE9e \xE0 ${data.dailyAttendance.arrivalTime || "retard"} (au lieu de 08h00)${data.dailyAttendance.incidentNote ? ` \u2014 ${data.dailyAttendance.incidentNote}` : ""}`,
+        isJustified: false
+      });
+    }
+  }
+  if (data.dailyAttendance?.incidentNote) {
+    const note = data.dailyAttendance.incidentNote;
+    const alreadyConsigned = presenceIncidents.some((p) => p.description.includes(note));
+    if (!alreadyConsigned) {
+      presenceIncidents.push({
+        time: data.dailyAttendance.arrivalTime || "Journ\xE9e",
+        type: "autre",
+        label: "Incident de pr\xE9sence",
+        description: note,
+        isJustified: false
+      });
+    }
+  }
   const unforeseenEvents = data.blockers.map((b) => ({
     time: b.time || "Journ\xE9e",
     subject: b.reason,
@@ -2104,7 +2148,7 @@ function preparePlanDuJourData(data) {
   }));
   const totalLostMinutes = unforeseenEvents.reduce((acc, u) => acc + (u.lostMinutes || 0), 0);
   const availabilityRate = Math.max(0, Math.min(100, Math.round((480 - totalLostMinutes) / 480 * 100)));
-  const isLateToday = data.dailyAttendance?.statusType === "late";
+  const isLateToday = data.dailyAttendance?.statusType === "late" || presenceIncidents.some((p) => p.type === "retard");
   const punctualityRate = isLateToday ? 75 : data.dailyAttendance?.arrivalTime ? 100 : 0;
   let postponedTasks = data.postponedTasks || [];
   if (postponedTasks.length === 0) {
@@ -2143,6 +2187,7 @@ function preparePlanDuJourData(data) {
     capacityStatus,
     capacityAdvice,
     scheduleSlots,
+    presenceIncidents,
     unforeseenEvents,
     totalLostMinutes,
     availabilityRate,
@@ -2336,6 +2381,67 @@ function buildTimesheetHtmlReport(data) {
           </div>
         </div>
 
+        <!-- \u{1F6A8} SIGNALEMENT DES INCIDENTS & ANOMALIES DE PR\xC9SENCE (RETARD, SORTIE, D\xC9PART ANTICIP\xC9...) -->
+        <div style="border-radius: 12px; border: 1.5px solid ${p.presenceIncidents.length > 0 ? "#ea580c" : "#86efac"}; overflow: hidden; margin-bottom: 16px; background-color: #ffffff;">
+          <div style="background-color: ${p.presenceIncidents.length > 0 ? "#c2410c" : "#15803d"}; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr>
+                <td>
+                  ${p.presenceIncidents.length > 0 ? "\u26A0\uFE0F" : "\u2705"} SIGNALEMENT DES INCIDENTS DE PR\xC9SENCE &amp; HORAIRES (${p.presenceIncidents.length})
+                </td>
+                <td align="right" style="font-size: 10px; color: ${p.presenceIncidents.length > 0 ? "#ffedd5" : "#bbf7d0"}; font-weight: 700;">
+                  ${p.presenceIncidents.length > 0 ? "Retards, sorties ou \xE9carts constat\xE9s" : "Ponctualit\xE9 et assiduit\xE9 conformes"}
+                </td>
+              </tr>
+            </table>
+          </div>
+          <div style="padding: 10px 14px; background-color: ${p.presenceIncidents.length > 0 ? "#fff7ed" : "#f0fdf4"};">
+            ${p.presenceIncidents.length > 0 ? `
+              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 11.5px;">
+                <thead>
+                  <tr style="background-color: #fdba74; color: #7c2d12; font-size: 10.5px;">
+                    <th style="padding: 6px 10px; text-align: left; width: 85px; font-weight: 800;">Heure</th>
+                    <th style="padding: 6px 10px; text-align: left; width: 160px; font-weight: 800;">Type d'incident</th>
+                    <th style="padding: 6px 10px; text-align: left; font-weight: 800;">D\xE9tail &amp; Motif constat\xE9</th>
+                    <th style="padding: 6px 10px; text-align: center; width: 110px; font-weight: 800;">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${p.presenceIncidents.map((inc) => `
+                    <tr style="border-bottom: 1px solid #fed7aa; background-color: #ffffff;">
+                      <td style="padding: 8px 10px; font-family: monospace; font-weight: 800; color: #9a3412;">
+                        ${inc.time || "Pointage"}
+                      </td>
+                      <td style="padding: 8px 10px;">
+                        <span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; background-color: #ffedd5; color: #c2410c; border: 1px solid #f97316;">
+                          ${inc.label}
+                        </span>
+                      </td>
+                      <td style="padding: 8px 10px; font-weight: 700; color: #431407;">
+                        ${inc.description}
+                      </td>
+                      <td style="padding: 8px 10px; text-align: center;">
+                        <span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 9.5px; font-weight: 800; ${inc.isJustified ? "background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;" : "background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;"}">
+                          ${inc.isJustified ? "\u2713 Justifi\xE9" : "\u26A0\uFE0F Non r\xE9gularis\xE9"}
+                        </span>
+                      </td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            ` : `
+              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+                <tr>
+                  <td style="width: 24px; font-size: 15px; vertical-align: middle;">\u2705</td>
+                  <td style="vertical-align: middle; color: #166534; font-weight: 700; font-size: 11.5px;">
+                    Aucun incident de pr\xE9sence \xE0 signaler sur cette journ\xE9e : ponctualit\xE9 respect\xE9e (d\xE8s 08h00), pause 12h\u201313h conforme, aucune sortie non justifi\xE9e.
+                  </td>
+                </tr>
+              </table>
+            `}
+          </div>
+        </div>
+
         <!-- 1. LES 3 PRIORIT\xC9S DU JOUR (LES GRANDES T\xC2CHES / JOB DESCRIPTION) -->
         <div style="border-radius: 10px; border: 1px solid #cbd5e1; overflow: hidden; margin-bottom: 16px;">
           <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
@@ -2457,7 +2563,7 @@ function buildTimesheetHtmlReport(data) {
           <div style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
             <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
               <tr>
-                <td>\u{1F552} PLAN HORAIRE (08h00 \u2013 17h00) \u2014 Pause d\xE9jeuner obligatoire</td>
+                <td>\u{1F552} PLAN HORAIRE (08h00 \u2013 17h00) \u2014 Pause d\xE9jeuner obligatoire 12h00 \u2013 13h00</td>
                 <td align="right">
                   <span style="display: inline-block; background-color: rgba(254, 240, 138, 0.4); color: #854d0e; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(254, 240, 138, 0.7); font-family: monospace;">
                     12:00 \u2013 13:00 : Pause D\xE9jeuner
@@ -2475,17 +2581,17 @@ function buildTimesheetHtmlReport(data) {
             </thead>
             <tbody>
               ${p.scheduleSlots.map((s) => {
-    const isBreak = s.isBreak || s.timeRange.includes("12:00") || s.isBuffer;
-    const rowBg = isBreak ? "#fef9c3" : "#ffffff";
-    const timeColor = isBreak ? "#854d0e" : "#1c1917";
-    const actColor = isBreak ? "#854d0e" : "#1d4ed8";
+    const isLunchBreak = s.isBreak || s.timeRange.startsWith("12:00") && s.timeRange.includes("13:00");
+    const rowBg = isLunchBreak ? "#fef9c3" : "#ffffff";
+    const timeColor = isLunchBreak ? "#854d0e" : "#1c1917";
+    const actColor = isLunchBreak ? "#854d0e" : "#1d4ed8";
     return `
-                  <tr style="background-color: ${rowBg}; border-bottom: 1px solid ${isBreak ? "#fef08a" : "#e7e5e4"};">
-                    <td style="padding: 8px 10px; font-family: monospace; font-weight: 700; color: ${timeColor};">
+                  <tr style="background-color: ${rowBg}; border-bottom: 1px solid ${isLunchBreak ? "#fde047" : "#e7e5e4"};">
+                    <td style="padding: 8px 10px; font-family: monospace; font-weight: 700; color: ${timeColor}; width: 140px;">
                       ${s.timeRange}
                     </td>
                     <td style="padding: 8px 10px; font-weight: 700; color: ${actColor};">
-                      ${isBreak ? "Pause D\xE9jeuner (12h00 \u2013 13h00)" : s.activity}
+                      ${isLunchBreak ? "\u{1F37D}\uFE0F Pause D\xE9jeuner Officielle (12h00 \u2013 13h00)" : s.activity}
                     </td>
                   </tr>
                 `;
@@ -2628,18 +2734,28 @@ function buildTimesheetXlsxWorkbook(data) {
     ["Total / r\xE9alis\xE9es / taux", "", p.totalTasks, p.completedTasks, `${p.ratePercentage}%`, `${p.postponedCount} report.`],
     [],
     // Plan horaire dynamique (08h00 – 17h00) avec pause officielle 12h–13h
-    ["\u{1F552} PLAN HORAIRE (08:00 \u2013 17:00) \u2014 garde un cr\xE9neau \xAB tampon \xBB pour les impr\xE9vus"],
+    ["\u{1F552} PLAN HORAIRE (08:00 \u2013 17:00) \u2014 Pause d\xE9jeuner officielle 12h00 \u2013 13h00"],
     ["Heure", "Ce que je fais sur ce cr\xE9neau"],
     ...p.scheduleSlots.map((s) => {
-      const isBreak = s.isBreak || s.timeRange.includes("12:00") || s.isBuffer;
+      const isLunchBreak = s.isBreak || s.timeRange.startsWith("12:00") && s.timeRange.includes("13:00");
       return [
         s.timeRange,
-        isBreak ? "\u26A1 TAMPON IMPR\xC9VUS / pause (12h\u201313h)" : s.activity
+        isLunchBreak ? "\u{1F37D}\uFE0F Pause D\xE9jeuner Officielle (12h00 \u2013 13h00)" : s.activity
       ];
     }),
     [],
+    // Signalement des incidents de présence (Retards, Sorties...)
+    ["\u{1F6A8} INCIDENTS & ANOMALIES DE PR\xC9SENCE DU JOUR (Retards, Sorties...)"],
+    ["Heure", "Type incident", "D\xE9tails & Motif constat\xE9", "Statut r\xE9gularisation"],
+    ...p.presenceIncidents.length > 0 ? p.presenceIncidents.map((inc) => [
+      inc.time || "Pointage",
+      inc.label,
+      inc.description,
+      inc.isJustified ? "Justifi\xE9" : "Non r\xE9gularis\xE9"
+    ]) : [["Journ\xE9e", "Aucun incident", "Ponctualit\xE9 respect\xE9e d\xE8s 08h00, pause 12h\u201313h conforme, aucune sortie non justifi\xE9e", "Normal"]],
+    [],
     // Imprévus survenus aujourd'hui
-    ["\u26A1 IMPR\xC9VUS SURVENUS AUJOURD'HUI"],
+    ["\u26A1 BLOCAGES & IMPR\xC9VUS OP\xC9RATIONNELS SIGNAL\xC9S"],
     ["Heure", "Quoi ? (qui / quel sujet)", "Temps perdu (min)"],
     ...p.unforeseenEvents.length > 0 ? p.unforeseenEvents.map((u) => [u.time, u.subject, `${u.lostMinutes} min`]) : [["Journ\xE9e", "Aucun impr\xE9vu signal\xE9 aujourd'hui.", "0 min"]],
     [],
@@ -2874,15 +2990,59 @@ async function executeDailyTimesheetDispatch(options) {
           const pDate = String(p.date || "").split("T")[0];
           return matchEmp && pDate === doualaTime.dayIso;
         });
-        const userInc = incidents.find((inc) => {
+        const userIncs = incidents.filter((inc) => {
           const matchEmp = String(inc.employeeId || inc.employee_id || "") === String(empId);
           const incDate = String(inc.date || "").split("T")[0];
           return matchEmp && incDate === doualaTime.dayIso;
+        });
+        const presenceIncidents = [];
+        userIncs.forEach((inc) => {
+          let label = "Incident de pr\xE9sence";
+          if (inc.type === "retard") label = "Retard \xE0 l'arriv\xE9e";
+          else if (inc.type === "sortie_professionnelle" || inc.type === "sortie_prematuree") label = "Sortie en cours de journ\xE9e";
+          else if (inc.type === "depart_anticipe") label = "D\xE9part anticip\xE9";
+          else if (inc.type === "permission") label = "Permission d'absence";
+          else if (inc.type === "pause_anticipee" || inc.type === "rallonge_pause") label = "Anomalie pause";
+          else if (inc.type === "absence_injustifiee") label = "Absence non justifi\xE9e";
+          presenceIncidents.push({
+            time: inc.timeString || "Pointage",
+            type: inc.type || "autre",
+            label,
+            description: inc.reason || inc.description || "Anomalie signal\xE9e",
+            isJustified: inc.isJustified || inc.status === "justifie"
+          });
         });
         let dailyAttendance = void 0;
         if (userPres) {
           const isLate = userPres.status === "late" || isArrivalAfterThreshold(userPres.arrivalTime, lateThreshold);
           const workedH = userPres.hoursWorked ? `${userPres.hoursWorked}h` : void 0;
+          if (isLate && !presenceIncidents.some((p) => p.type === "retard")) {
+            presenceIncidents.push({
+              time: userPres.arrivalTime || "Matin",
+              type: "retard",
+              label: "Retard \xE0 l'arriv\xE9e",
+              description: `Arriv\xE9e constat\xE9e \xE0 ${userPres.arrivalTime || "retard"} (au lieu de ${lateThreshold})${userPres.correctionReason ? ` \u2014 Motif : ${userPres.correctionReason}` : ""}`,
+              isJustified: Boolean(userPres.correctionReason && userPres.correctionReasonStatus === "approved")
+            });
+          }
+          if (userPres.sortieProStart && !presenceIncidents.some((p) => p.type.includes("sortie"))) {
+            presenceIncidents.push({
+              time: userPres.sortieProStart,
+              type: "sortie",
+              label: "Sortie temporaire",
+              description: `Sortie de ${userPres.sortieProStart} \xE0 ${userPres.sortieProEnd || "en cours"}${userPres.sortieProReason ? ` \u2014 Motif : ${userPres.sortieProReason}` : ""}`,
+              isJustified: true
+            });
+          }
+          if (userPres.departureTime && userPres.departureTime < "17:00" && userPres.departureReason && !presenceIncidents.some((p) => p.type.includes("depart"))) {
+            presenceIncidents.push({
+              time: userPres.departureTime,
+              type: "depart_anticipe",
+              label: "D\xE9part anticip\xE9",
+              description: `D\xE9part enregistr\xE9 \xE0 ${userPres.departureTime} (avant 17h00) \u2014 Motif : ${userPres.departureReason}`,
+              isJustified: userPres.departureReasonStatus === "approved"
+            });
+          }
           dailyAttendance = {
             statusLabel: isLate ? "Retard" : userPres.status === "mission" ? "En mission" : "Pr\xE9sent",
             statusType: isLate ? "late" : userPres.status || "present",
@@ -2892,7 +3052,8 @@ async function executeDailyTimesheetDispatch(options) {
             departureTime: userPres.departureTime || "17:00",
             hoursWorkedText: workedH,
             location: userPres.location || "Douala",
-            incidentNote: userInc?.description || userPres.correctionReason || userPres.adminBadgeReason
+            incidentNote: userPres.correctionReason || userPres.adminBadgeReason,
+            incidents: presenceIncidents
           };
         } else {
           dailyAttendance = {
@@ -2900,7 +3061,8 @@ async function executeDailyTimesheetDispatch(options) {
             statusType: "absent",
             pauseStart: "12:00",
             pauseEnd: "13:00",
-            location: "Douala"
+            location: "Douala",
+            incidents: presenceIncidents
           };
         }
         const timesheetData = {
@@ -2911,6 +3073,7 @@ async function executeDailyTimesheetDispatch(options) {
           dateStr: doualaTime.dateOnly,
           timeStr: doualaTime.timeOnly,
           dailyAttendance,
+          presenceIncidents,
           items,
           blockers,
           managerPoints,
@@ -2966,6 +3129,396 @@ async function executeDailyTimesheetDispatch(options) {
       processedCount: sentEmployees.length,
       sentEmployees,
       errors: [rawError, ...errors],
+      timestamp: doualaTime.fullDateStr
+    };
+  }
+}
+
+// src/services/mondayGreetingMailService.ts
+import fs from "fs";
+import path from "path";
+var COOL_MONDAY_QUOTES = [
+  "\xAB Le meilleur moyen de pr\xE9dire l\u2019avenir, c\u2019est de le cr\xE9er avec enthousiasme. Donnons le ton d\xE8s ce lundi ! \xBB",
+  "\xAB Les grandes r\xE9ussites ne sont pas le fruit du hasard, mais d'une suite de petits pas r\xE9guliers et ma\xEEtris\xE9s. \xBB",
+  "\xAB Un bon caf\xE9, un grand sourire et une dose d\u2019\xE9nergie positive : le trio parfait pour conqu\xE9rir la semaine ! \xBB",
+  "\xAB Seul on va vite, ensemble on va plus loin et avec le sourire c'est encore plus puissant. Belle semaine \xE0 toute l'\xE9quipe ! \xBB",
+  "\xAB Chaque lundi est une nouvelle page blanche pr\xEAte \xE0 accueillir nos plus belles victoires. \xC9crivons du lourd ensemble ! \xBB",
+  "\xAB L'\xE9nergie et la bonne humeur que tu investis le matin, c'est ce qui illumine toute ta journ\xE9e. Fonce ! \xBB",
+  "\xAB Il n'y a pas d'obstacle insurmontable, il n'y a que des d\xE9fis stimulants et des solutions qu'on construit en \xE9quipe. \xBB",
+  "\xAB La motivation te fait d\xE9marrer, les bonnes habitudes te font avancer, l'esprit d'\xE9quipe te fait briller. \xBB",
+  "\xAB Fais de chaque heure une opportunit\xE9 d\u2019apprendre, de progresser et de c\xE9l\xE9brer les petits succ\xE8s du quotidien ! \xBB",
+  "\xAB Le secret d'une semaine r\xE9ussie ? Aimer ce que l'on fait, s'entraider sans h\xE9siter et garder la p\xEAche quoi qu'il arrive ! \xBB"
+];
+function getWeeklyCoolQuote(date = /* @__PURE__ */ new Date()) {
+  const target = new Date(date.valueOf());
+  const dayNr = (date.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + (4 - target.getDay() + 7) % 7);
+  }
+  const weekNumber = 1 + Math.ceil((firstThursday - target.valueOf()) / 6048e5);
+  const quoteIndex = Math.abs(weekNumber - 1) % COOL_MONDAY_QUOTES.length;
+  return {
+    quote: COOL_MONDAY_QUOTES[quoteIndex],
+    index: quoteIndex + 1
+  };
+}
+function extractFirstName(fullName) {
+  if (!fullName) return "l'\xE9quipe";
+  const clean = fullName.trim();
+  const parts = clean.split(/\s+/);
+  if (parts.length > 1) {
+    return parts.slice(1).join(" ");
+  }
+  return parts[0] || "l'\xE9quipe";
+}
+function getHumaansImageAttachment() {
+  try {
+    const candidatePaths = [
+      path.join(process.cwd(), "public", "assets", "humaans_monday.jpg"),
+      path.join(process.cwd(), "src", "assets", "humaans_monday.jpg"),
+      path.join(process.cwd(), "dist", "assets", "humaans_monday.jpg")
+    ];
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        const fileBuf = fs.readFileSync(p);
+        return {
+          filename: "humaans_monday.jpg",
+          content: fileBuf,
+          contentType: "image/jpeg",
+          cid: "humaans_monday"
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("[Monday Greeting] Impossible de charger l'image Humaans locale:", err);
+  }
+  return null;
+}
+function buildMondayGreetingHtml(options) {
+  const firstName = extractFirstName(options.employeeName);
+  const doualaTime = getDoualaDateInfo();
+  const dateDisplay = options.dateStr || doualaTime.dateOnly;
+  const quote = options.quote || getWeeklyCoolQuote().quote;
+  const appUrl = options.appUrl || "https://citrine-management.vercel.app";
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bon d\xE9but de semaine \u2014 Citrine Mobilit\xE9</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9; padding: 32px 14px;">
+    <tr>
+      <td align="center">
+        
+        <!-- Conteneur Carte Material Design 3 -->
+        <table role="presentation" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 28px; overflow: hidden; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0;" cellspacing="0" cellpadding="0">
+          
+          <!-- En-t\xEAte Sup\xE9rieur Material You (Gradient Teal & Emerald) -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #004D40 0%, #00695C 60%, #00897B 100%); padding: 32px 36px 24px 36px; text-align: left; position: relative;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <!-- Pill Badge Material 3 -->
+                    <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.16); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.28); color: #E0F2F1; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 5px 14px; border-radius: 20px; margin-bottom: 12px;">
+                      \u2600\uFE0F Bon d\xE9but de semaine
+                    </div>
+                    <div style="font-family: Georgia, serif; font-size: 26px; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; line-height: 1.2;">
+                      CITRINE MOBILIT\xC9
+                    </div>
+                    <div style="font-size: 13px; color: #A7F3D0; font-weight: 500; margin-top: 4px;">
+                      Lundi ${dateDisplay} \xB7 Douala, Cameroun
+                    </div>
+                  </td>
+                  <td align="right" valign="top">
+                    <!-- Cercle d\xE9coratif Material -->
+                    <div style="width: 48px; height: 48px; background-color: rgba(255, 255, 255, 0.14); border-radius: 50%; text-align: center; line-height: 48px; font-size: 22px;">
+                      \u2615
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Bloc Illustration Humaans avec Halo Doux -->
+          <tr>
+            <td align="center" style="padding: 26px 36px 12px 36px; background-color: #ffffff;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center">
+                    <div style="background: radial-gradient(circle, #E0F2F1 0%, #ffffff 70%); border-radius: 24px; padding: 12px; display: inline-block;">
+                      <img src="cid:humaans_monday" alt="Personnage Humaans vous souhaitant un bon lundi" width="260" height="260" style="display: block; max-width: 260px; width: 100%; height: auto; border-radius: 18px; box-shadow: 0 8px 24px rgba(0, 105, 92, 0.12); border: 2px solid #ffffff;" />
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Message Chaleureux Exact & Personnalis\xE9 (Pr\xE9nom \xE0 partir du 2e mot) -->
+          <tr>
+            <td style="padding: 16px 36px 24px 36px; text-align: left;">
+              
+              <!-- Salutation avec pr\xE9nom -->
+              <h1 style="font-size: 26px; font-weight: 900; color: #0F172A; margin: 0 0 16px 0; line-height: 1.25;">
+                \u2600\uFE0F Hello ${firstName} !
+              </h1>
+
+              <p style="font-size: 15.5px; color: #1e293b; line-height: 1.6; margin: 0 0 14px 0; font-weight: 600;">
+                Un nouveau lundi, une nouvelle semaine et plein de belles choses \xE0 accomplir ! \u{1F60E}
+              </p>
+
+              <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 14px 0;">
+                On esp\xE8re que tu es pr\xEAt(e) \xE0 attaquer cette semaine avec le plein d'\xE9nergie, de motivation et de bonne humeur.
+              </p>
+
+              <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 20px 0;">
+                Que les id\xE9es fusent, que les objectifs avancent et que les petites victoires s'encha\xEEnent ! \u{1F680}
+              </p>
+
+              <!-- Banni\xE8re verte de r\xE9ussite Citrine -->
+              <div style="background-color: #E0F2F1; border: 1.5px solid #80CBC4; border-radius: 14px; padding: 14px 20px; margin-bottom: 24px; text-align: center;">
+                <span style="font-size: 15.5px; font-weight: 800; color: #004D40;">
+                  On se souhaite une belle semaine de r\xE9ussite chez Citrine Mobilit\xE9 ! \u{1F49A}
+                </span>
+              </div>
+
+              <!-- Carte Proverbe Cool de la Semaine (Rotation parmi 10 proverbes cools) -->
+              <div style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; border-radius: 12px; padding: 14px 18px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.08);">
+                <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #B45309; margin-bottom: 5px;">
+                  \u2728 La pens\xE9e cool de la semaine
+                </div>
+                <div style="font-size: 14px; font-style: italic; color: #78350F; line-height: 1.5; font-weight: 600;">
+                  ${quote}
+                </div>
+              </div>
+
+              <!-- 3 Cl\xE9s Amicales pour la semaine -->
+              <div style="margin-bottom: 26px;">
+                <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #004D40; margin-bottom: 12px;">
+                  \u2728 3 petits tips bienveillants pour une semaine au top :
+                </div>
+
+                <!-- Cl\xE9 1 : Priorit\xE9s au calme -->
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px 16px; margin-bottom: 10px;">
+                  <tr>
+                    <td width="36" valign="top" style="font-size: 20px;">\u{1F3AF}</td>
+                    <td style="font-size: 13.5px; color: #1E293B; line-height: 1.45;">
+                      <strong style="color: #00695C;">On pose les priorit\xE9s au calme :</strong> Un pas apr\xE8s l'autre ! Commence par les 2 ou 3 dossiers qui comptent le plus, avance \xE0 ton rythme et valide tes \xE9tapes sans stress.
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Cl\xE9 2 : Entraide & Bonne humeur -->
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px 16px; margin-bottom: 10px;">
+                  <tr>
+                    <td width="36" valign="top" style="font-size: 20px;">\u{1F91D}</td>
+                    <td style="font-size: 13.5px; color: #1E293B; line-height: 1.45;">
+                      <strong style="color: #00695C;">L'esprit d'\xE9quipe avant tout :</strong> Une question, un petit blocage ou une bonne id\xE9e ? N'h\xE9site pas \xE0 \xE9changer, on est toute une \xE9quipe pr\xEAte \xE0 s'\xE9pauler avec le sourire !
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Cl\xE9 3 : \xC9nergie & Pause sacr\xE9e -->
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px 16px;">
+                  <tr>
+                    <td width="36" valign="top" style="font-size: 20px;">\u26A1</td>
+                    <td style="font-size: 13.5px; color: #1E293B; line-height: 1.45;">
+                      <strong style="color: #00695C;">Prends soin de ton \xE9nergie :</strong> On d\xE9marre motiv\xE9s d\xE8s 08h00, et \xE0 midi pile (12h00 \u2013 13h00), pause d\xE9jeuner sacr\xE9e pour recharger les batteries, d\xE9connecter et souffler !
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- Bouton d'action Material You vers https://citrine-management.vercel.app -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center" style="padding: 10px 0 16px 0;">
+                    <a href="${appUrl}" target="_blank" style="display: inline-block; background-color: #00796B; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 14px 34px; border-radius: 28px; box-shadow: 0 4px 14px rgba(0, 121, 107, 0.35); letter-spacing: 0.3px;">
+                      \u{1F680} Ouvrir mon espace Citrine
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Pied de page Material Design 3 (Subtle Neutral) -->
+          <tr>
+            <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 22px 36px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; font-weight: 700; color: #004D40;">
+                CITRINE MOBILIT\xC9 \xB7 DIRECTION DES RESSOURCES HUMAINES
+              </p>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+}
+async function sendMondayGreetingToAllEmployees(options) {
+  const doualaTime = getDoualaDateInfo();
+  const errors = [];
+  const recipientEmails = [];
+  let sentCount = 0;
+  const now = /* @__PURE__ */ new Date();
+  const weekdayName = new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Douala", weekday: "long" }).format(now).toLowerCase();
+  const isMonday = weekdayName === "monday";
+  if (!isMonday && !options?.forceMonday) {
+    const skipMsg = `\u23F8\uFE0F [GREETING LUNDI] Envoi ignor\xE9 : nous sommes ${weekdayName} et le message de bon d\xE9but de semaine est programm\xE9 chaque lundi \xE0 08h00.`;
+    console.log(skipMsg);
+    return {
+      success: true,
+      message: skipMsg,
+      sentCount: 0,
+      recipientEmails: [],
+      errors: [],
+      timestamp: doualaTime.fullDateStr
+    };
+  }
+  console.log(`\u{1F305} [GREETING LUNDI 08:00] D\xE9marrage de l'envoi du message de bon d\xE9but de semaine (${doualaTime.fullDateStr})...`);
+  try {
+    const humaansAttachment = getHumaansImageAttachment();
+    const attachments = humaansAttachment ? [humaansAttachment] : [];
+    const coolQuote = getWeeklyCoolQuote();
+    const appUrl = "https://citrine-management.vercel.app";
+    if (options?.testRecipient && options.testRecipient.trim()) {
+      const targetEmails = parseEmailList(options.testRecipient);
+      if (targetEmails.length === 0) {
+        return {
+          success: false,
+          message: "Adresse e-mail destinataire invalide.",
+          sentCount: 0,
+          recipientEmails: [],
+          errors: ["Adresse e-mail destinataire invalide"],
+          timestamp: doualaTime.fullDateStr
+        };
+      }
+      const testEmployeeName = "\xC9quipe Citrine";
+      const testFirstName = extractFirstName(testEmployeeName);
+      const htmlContent = buildMondayGreetingHtml({
+        employeeName: testEmployeeName,
+        dateStr: doualaTime.dateOnly,
+        quote: coolQuote.quote,
+        appUrl
+      });
+      console.log(`\u2709\uFE0F [GREETING LUNDI TEST] Envoi du mail de bonjour vers : ${targetEmails.join(", ")}...`);
+      const result = await sendThreadedEmployeeEmail({
+        employeeName: testEmployeeName,
+        employeeId: "greeting-test",
+        eventTitle: "Bon d\xE9but de semaine \u2014 Citrine Mobilit\xE9",
+        threadCategory: "greeting",
+        threadSubject: `\u2600\uFE0F Hello ${testFirstName} ! Bon d\xE9but de semaine chez Citrine Mobilit\xE9`,
+        htmlContent,
+        attachments,
+        overrideRecipients: targetEmails,
+        recipientEmails: targetEmails
+      });
+      if (!result.success) {
+        return {
+          success: false,
+          message: `\xC9chec d'envoi du message de bonjour : ${result.error}`,
+          sentCount: 0,
+          recipientEmails: targetEmails,
+          errors: [result.error || "Erreur inconnue"],
+          timestamp: doualaTime.fullDateStr
+        };
+      }
+      return {
+        success: true,
+        message: `Message de bon d\xE9but de semaine envoy\xE9 avec succ\xE8s \xE0 ${targetEmails.join(", ")}.`,
+        sentCount: 1,
+        recipientEmails: targetEmails,
+        errors: [],
+        timestamp: doualaTime.fullDateStr
+      };
+    }
+    const employees = await getCollectionData("employees");
+    const activeEmployees = employees.filter((emp) => {
+      const status = String(emp.status || emp.employmentStatus || "").toLowerCase();
+      if (status === "archived" || status === "inactif" || status === "inactive" || status === "parti") {
+        return false;
+      }
+      return Boolean(emp.email && emp.email.includes("@"));
+    });
+    if (activeEmployees.length === 0) {
+      console.warn("\u26A0\uFE0F [GREETING LUNDI] Aucun collaborateur avec e-mail valide trouv\xE9.");
+      return {
+        success: true,
+        message: "Aucun collaborateur \xE9ligible trouv\xE9.",
+        sentCount: 0,
+        recipientEmails: [],
+        errors: [],
+        timestamp: doualaTime.fullDateStr
+      };
+    }
+    console.log(`\u{1F680} [GREETING LUNDI] Envoi personnalis\xE9 \xE0 ${activeEmployees.length} collaborateur(s)...`);
+    for (const emp of activeEmployees) {
+      const empName = emp.name || "Collaborateur";
+      const empEmail = emp.email?.trim();
+      const empId = emp.id;
+      if (!empEmail) continue;
+      const empFirstName = extractFirstName(empName);
+      try {
+        const htmlContent = buildMondayGreetingHtml({
+          employeeName: empName,
+          dateStr: doualaTime.dateOnly,
+          quote: coolQuote.quote,
+          appUrl
+        });
+        await sendThreadedEmployeeEmail({
+          employeeName: empName,
+          employeeId: empId,
+          employeeEmail: empEmail,
+          eventTitle: "Bon d\xE9but de semaine \u2014 Citrine Mobilit\xE9",
+          threadCategory: "greeting",
+          threadSubject: `\u2600\uFE0F Hello ${empFirstName} ! Bon d\xE9but de semaine chez Citrine Mobilit\xE9`,
+          htmlContent,
+          attachments,
+          overrideRecipients: [empEmail],
+          recipientEmails: [empEmail]
+        });
+        sentCount++;
+        recipientEmails.push(empEmail);
+        console.log(`\u2713 [GREETING LUNDI] E-mail transmis \xE0 ${empName} (Pr\xE9nom: ${empFirstName}, Email: ${empEmail})`);
+      } catch (err) {
+        const msg = `Erreur pour ${empName} (${empEmail}) : ${err?.message || err}`;
+        console.error(`\u274C [GREETING LUNDI Error]:`, msg);
+        errors.push(msg);
+      }
+    }
+    const summaryMsg = `Message de bon d\xE9but de semaine envoy\xE9 avec succ\xE8s \xE0 ${sentCount}/${activeEmployees.length} collaborateurs.`;
+    console.log(`\u2705 [GREETING LUNDI 08:00 TERMIN\xC9] ${summaryMsg}`);
+    return {
+      success: errors.length === 0 || sentCount > 0,
+      message: summaryMsg,
+      sentCount,
+      recipientEmails,
+      errors,
+      timestamp: doualaTime.fullDateStr
+    };
+  } catch (globalErr) {
+    const rawError = globalErr?.message || String(globalErr);
+    console.error("\u{1F4A5} [GREETING LUNDI FATAL ERROR]:", globalErr);
+    return {
+      success: false,
+      message: `Erreur g\xE9n\xE9rale lors de l'envoi du message de bon d\xE9but de semaine : ${rawError}`,
+      sentCount,
+      recipientEmails,
+      errors: [rawError],
       timestamp: doualaTime.fullDateStr
     };
   }
@@ -3208,17 +3761,10 @@ async function handler(req, res) {
           error: "Aucun destinataire sp\xE9cifi\xE9 et la variable HR_NOTIFICATION_EMAIL n'est pas configur\xE9e."
         });
       }
-      const result = await sendThreadedEmployeeEmail(
-        {
-          employeeName: "Test Connexion Citrine",
-          employeeId: "citrine-test",
-          eventTitle: "Test Connexion SMTP - Citrine Mobilit\xE9",
-          htmlContent: `<p>Bonjour,</p><p>Ce message confirme que la configuration SMTP de votre application Citrine Mobilit\xE9 est <strong>100% op\xE9rationnelle</strong>.</p><p>Destinataire(s) RH configur\xE9(s) : <code>${targetRecipients.join(", ")}</code></p>`,
-          overrideRecipients: targetRecipients,
-          recipientEmails: targetRecipients
-        },
-        smtpConfig
-      );
+      const result = await sendMondayGreetingToAllEmployees({
+        testRecipient: targetRecipients.join(", "),
+        forceMonday: true
+      });
       return res.status(result.success ? 200 : 500).json(result);
     }
     if (urlPath === "/email/send" && method === "POST") {
@@ -3282,6 +3828,18 @@ async function handler(req, res) {
         return res.status(result.success ? 200 : 500).json(result);
       } catch (error) {
         console.error("[API /cron/weekly-recap Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || String(error) });
+      }
+    }
+    if (urlPath === "/cron/monday-greeting" || urlPath === "/api/cron/monday-greeting") {
+      try {
+        console.log(`\u23F0 [SERVERLESS CRON] D\xE9clenchement message bon d\xE9but de semaine du lundi 08h00...`);
+        const forceMonday = req.query?.force === "true" || body?.force === true;
+        const testRecipient = req.query?.testRecipient || body?.testRecipient;
+        const result = await sendMondayGreetingToAllEmployees({ forceMonday, testRecipient });
+        return res.status(result.success ? 200 : 500).json(result);
+      } catch (error) {
+        console.error("[API /cron/monday-greeting Error]:", error);
         return res.status(500).json({ success: false, error: error.message || String(error) });
       }
     }

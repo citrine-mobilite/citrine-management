@@ -47,6 +47,13 @@ export interface DailyTimesheetData {
     isBuffer?: boolean;
     statusBadge?: string;
   }[];
+  presenceIncidents: {
+    time?: string;
+    type: string;
+    label: string;
+    description: string;
+    isJustified?: boolean;
+  }[];
   unforeseenEvents: {
     time: string;
     subject: string;
@@ -269,9 +276,10 @@ export function generateDailyTimesheet(
     },
     {
       timeRange: '12:00 – 13:00',
-      activity: '🍽️ PAUSE DÉJEUNER & REPOS (Pause obligatoire 12h–13h)',
+      activity: '🍽️ Pause Déjeuner Officielle (12h00 – 13h00)',
       resolutionNote: 'Coupure obligatoire — aucune tâche planifiée sur ce créneau',
       isBreak: true,
+      isBuffer: false,
       statusBadge: 'Pause',
     },
     {
@@ -282,29 +290,76 @@ export function generateDailyTimesheet(
     },
     {
       timeRange: '15:30 – 17:00',
-      activity: s4 ? `${s4.title} (${s4.parentTaskTitle})` : 'Tampon pour imprévus, bilan fin de journée & compte-rendu manager',
+      activity: s4 ? `${s4.title} (${s4.parentTaskTitle})` : 'Clôture opérationnelle de journée, bilan & transmission feuille de temps',
       resolutionNote: 'Revue des critères d’acceptation et reporting au manager (fin à 17h00)',
-      isBuffer: true,
+      isBuffer: false,
       statusBadge: 'Bilan',
     },
   ];
 
-  // 6. IMPRÉVUS DU JOUR (Blocages signalés par l'employé) & POINTS À SIGNALER (Commentaires)
-  const empIncidents = incidents.filter((i) => i.employeeId === employee.id && i.date === date);
-  const unforeseenEvents: DailyTimesheetData['unforeseenEvents'] = [];
-  const managerComments: DailyTimesheetData['managerComments'] = [];
+  // 6. INCIDENTS DE PRÉSENCE DU JOUR (Retards, Sorties, Départs anticipés...)
+  const dayPres = presences.find((p) => String(p.employeeId) === String(employee.id) && p.date === date);
+  const empIncidents = incidents.filter((i) => String(i.employeeId) === String(employee.id) && i.date === date);
+  const presenceIncidents: DailyTimesheetData['presenceIncidents'] = [];
 
-  // Incidents RH/Présence de l'employé
+  // Incidents déclarés dans la collection attendance_incidents
   empIncidents.forEach((i) => {
-    unforeseenEvents.push({
-      time: i.timeString || (i.createdAt ? new Date(i.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '08:30'),
-      subject: `⚠️ [Incident présence] ${i.reason || i.description || 'Imprévu opérationnel'}`,
-      lostMinutes: 30,
-      sourceTask: 'Pointage / Présence',
-      isFromBlockage: false,
-      status: i.status || 'Signalé',
+    let typeLabel = "Incident de présence";
+    if (i.type === 'retard') typeLabel = "Retard à l'arrivée";
+    else if (i.type === 'sortie_professionnelle' || i.type === 'sortie_prematuree') typeLabel = "Sortie en cours de journée";
+    else if (i.type === 'depart_anticipe') typeLabel = "Départ anticipé";
+    else if (i.type === 'permission') typeLabel = "Permission d'absence";
+    else if (i.type === 'pause_anticipee' || i.type === 'rallonge_pause' || i.type === 'pause_prolongee') typeLabel = "Dépassement / Anomalie Pause";
+    else if (i.type === 'absence_injustifiee' || i.type === 'absence_non_autorisee') typeLabel = "Absence non autorisée";
+
+    presenceIncidents.push({
+      time: i.timeString || 'Pointage',
+      type: i.type,
+      label: typeLabel,
+      description: i.reason || i.description || 'Anomalie constatée sur les horaires',
+      isJustified: i.isJustified || i.status === 'justifie',
     });
   });
+
+  // Retard constaté sur le pointage (si pas déjà listé)
+  if (dayPres) {
+    const isLate = dayPres.status === 'late' || (dayPres.arrivalTime && dayPres.arrivalTime > '08:00');
+    if (isLate && !presenceIncidents.some(p => p.type === 'retard')) {
+      presenceIncidents.push({
+        time: dayPres.arrivalTime || 'Matin',
+        type: 'retard',
+        label: "Retard à l'arrivée",
+        description: `Arrivée constatée à ${dayPres.arrivalTime} (horaire officiel 08h00)${dayPres.correctionReason ? ` — Motif : ${dayPres.correctionReason}` : ''}`,
+        isJustified: Boolean(dayPres.correctionReason && dayPres.correctionReasonStatus === 'approved'),
+      });
+    }
+
+    // Sortie professionnelle / temporaire
+    if (dayPres.sortieProStart && !presenceIncidents.some(p => p.type.includes('sortie'))) {
+      presenceIncidents.push({
+        time: dayPres.sortieProStart,
+        type: 'sortie',
+        label: "Sortie temporaire",
+        description: `Sortie de ${dayPres.sortieProStart} à ${dayPres.sortieProEnd || 'en cours'}${dayPres.sortieProReason ? ` — Motif : ${dayPres.sortieProReason}` : ''}`,
+        isJustified: true,
+      });
+    }
+
+    // Départ anticipé
+    if (dayPres.departureTime && dayPres.departureTime < '17:00' && dayPres.departureReason && !presenceIncidents.some(p => p.type.includes('depart'))) {
+      presenceIncidents.push({
+        time: dayPres.departureTime,
+        type: 'depart_anticipe',
+        label: "Départ anticipé",
+        description: `Départ enregistré à ${dayPres.departureTime} (avant 17h00) — Motif : ${dayPres.departureReason}`,
+        isJustified: dayPres.departureReasonStatus === 'approved',
+      });
+    }
+  }
+
+  // 7. BLOCAGES & IMPRÉVUS SUR LES TÂCHES OPÉRATIONNELLES
+  const unforeseenEvents: DailyTimesheetData['unforeseenEvents'] = [];
+  const managerComments: DailyTimesheetData['managerComments'] = [];
 
   // Remontée des blocages (= Imprévus) et des commentaires (= Points à signaler au manager)
   sortedParentTasks.forEach((t) => {
@@ -415,6 +470,7 @@ export function generateDailyTimesheet(
     postponedCount,
     capacity,
     scheduleSlots,
+    presenceIncidents,
     unforeseenEvents,
     postponedTasks,
     managerAlertPoint,
@@ -624,6 +680,39 @@ export function exportDailyTimesheetToExcel(data: DailyTimesheetData) {
         <tr><td colspan="6" style="height: 6px; border: none;"></td></tr>
       </table>
 
+      <!-- 🚨 SIGNALEMENT DES INCIDENTS & ANOMALIES DE PRÉSENCE (RETARD, SORTIE, DÉPART ANTICIPÉ...) -->
+      <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px; border: 1.5px solid ${data.presenceIncidents && data.presenceIncidents.length > 0 ? '#ea580c' : '#86efac'};">
+        <tr>
+          <td colspan="6" style="background-color: ${data.presenceIncidents && data.presenceIncidents.length > 0 ? '#c2410c' : '#15803d'}; color: #ffffff; font-weight: bold; font-size: 10.5pt; padding: 6px 10px;">
+            ${data.presenceIncidents && data.presenceIncidents.length > 0 ? '⚠️ SIGNALEMENT DES INCIDENTS DE PRÉSENCE & HORAIRES' : '✅ PONCTUALITÉ & HORAIRES DE PRÉSENCE'} (${data.presenceIncidents ? data.presenceIncidents.length : 0})
+          </td>
+        </tr>
+        ${data.presenceIncidents && data.presenceIncidents.length > 0 ? `
+          <tr style="background-color: #fdba74; color: #7c2d12; font-weight: bold;">
+            <td style="width: 15%; padding: 5px;">Heure</td>
+            <td style="width: 25%; padding: 5px;">Type</td>
+            <td colspan="3" style="padding: 5px;">Détails & Motif constaté</td>
+            <td style="width: 15%; text-align: center; padding: 5px;">Statut</td>
+          </tr>
+          ${data.presenceIncidents.map((inc) => `
+            <tr style="background-color: #fff7ed; color: #7c2d12;">
+              <td style="font-weight: bold; font-family: monospace;">${inc.time || 'Pointage'}</td>
+              <td style="font-weight: bold; color: #c2410c;">${inc.label}</td>
+              <td colspan="3">${inc.description}</td>
+              <td style="text-align: center; font-weight: bold; ${inc.isJustified ? 'color: #065f46;' : 'color: #991b1b;'}">
+                ${inc.isJustified ? '✓ Justifié' : '⚠️ Non régularisé'}
+              </td>
+            </tr>
+          `).join('')}
+        ` : `
+          <tr style="background-color: #f0fdf4;">
+            <td colspan="6" style="color: #166534; font-weight: bold; padding: 7px 10px;">
+              ✓ Aucun incident de présence : ponctualité respectée (dès 08h00), pause 12h–13h conforme, aucune sortie irrégulière.
+            </td>
+          </tr>
+        `}
+      </table>
+
       <!-- 1. LES 3 PRIORITÉS DU JOUR -->
       <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
         <tr>
@@ -676,18 +765,18 @@ export function exportDailyTimesheetToExcel(data: DailyTimesheetData) {
       <!-- 3. PLAN HORAIRE -->
       <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
         <tr>
-          <td colspan="6" class="section-header">🕒 PLAN HORAIRE — garde un créneau « tampon » pour les imprévus</td>
+          <td colspan="6" class="section-header">🕒 PLAN HORAIRE (08:00 – 17:00) — Pause déjeuner officielle 12h00 – 13h00</td>
         </tr>
         <tr>
           <td class="col-header" style="width: 25%;">Heure</td>
           <td class="col-header" colspan="5">Ce que je fais sur ce créneau</td>
         </tr>
         ${data.scheduleSlots.map((s) => {
-          const isBuffer = s.isBuffer || s.isBreak || s.timeRange.includes('13:00');
+          const isLunchBreak = s.isBreak || (s.timeRange.startsWith('12:00') && s.timeRange.includes('13:00'));
           return `
-            <tr class="${isBuffer ? 'tampon-row' : ''}">
+            <tr class="${isLunchBreak ? 'tampon-row' : ''}">
               <td style="font-weight: bold;">${s.timeRange}</td>
-              <td colspan="5" class="${isBuffer ? '' : 'blue-text'}">${isBuffer ? '⚡ TAMPON IMPRÉVUS / pause' : s.activity}</td>
+              <td colspan="5" class="${isLunchBreak ? '' : 'blue-text'}">${isLunchBreak ? '🍽️ Pause Déjeuner Officielle (12h00 – 13h00)' : s.activity}</td>
             </tr>
           `;
         }).join('')}

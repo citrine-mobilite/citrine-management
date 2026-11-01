@@ -19,6 +19,7 @@ import {
 } from "../services/weeklyAttendanceReportService";
 import { executeDailyTimesheetDispatch } from "../services/dailyTimesheetCronService";
 import { sendClockingNotificationEmail } from "../services/clockingNotificationMailService";
+import { sendMondayGreetingToAllEmployees } from "../services/mondayGreetingMailService";
 
 /**
  * Gestionnaire Serverless Vercel universel pour Citrine Management.
@@ -319,17 +320,10 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      const result = await sendThreadedEmployeeEmail(
-        {
-          employeeName: "Test Connexion Citrine",
-          employeeId: "citrine-test",
-          eventTitle: "Test Connexion SMTP - Citrine Mobilité",
-          htmlContent: `<p>Bonjour,</p><p>Ce message confirme que la configuration SMTP de votre application Citrine Mobilité est <strong>100% opérationnelle</strong>.</p><p>Destinataire(s) RH configuré(s) : <code>${targetRecipients.join(", ")}</code></p>`,
-          overrideRecipients: targetRecipients,
-          recipientEmails: targetRecipients,
-        },
-        smtpConfig
-      );
+      const result = await sendMondayGreetingToAllEmployees({
+        testRecipient: targetRecipients.join(", "),
+        forceMonday: true,
+      });
 
       return res.status(result.success ? 200 : 500).json(result);
     }
@@ -408,7 +402,21 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    // 17. Route inconnue
+    // 17. GET/POST /cron/monday-greeting (Vercel Cron hebdo lundi 08h00 Douala / 07h00 UTC)
+    if (urlPath === "/cron/monday-greeting" || urlPath === "/api/cron/monday-greeting") {
+      try {
+        console.log(`⏰ [SERVERLESS CRON] Déclenchement message bon début de semaine du lundi 08h00...`);
+        const forceMonday = req.query?.force === "true" || body?.force === true;
+        const testRecipient = (req.query?.testRecipient as string) || body?.testRecipient;
+        const result = await sendMondayGreetingToAllEmployees({ forceMonday, testRecipient });
+        return res.status(result.success ? 200 : 500).json(result);
+      } catch (error: any) {
+        console.error("[API /cron/monday-greeting Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || String(error) });
+      }
+    }
+
+    // 18. Route inconnue
     return res.status(404).json({
       success: false,
       error: `Route introuvable sur le dispatcher API : [${method}] ${rawUrl}`,
