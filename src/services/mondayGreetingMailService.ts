@@ -20,42 +20,73 @@ export interface MondayGreetingResult {
 }
 
 /**
- * 🌟 Liste des 10 proverbes & pensées cools pour le lundi matin.
+ * Liste des 20 proverbes & pensées cools pour le lundi matin.
  * Chaque semaine, un proverbe différent est pioché en rotation automatique selon le numéro de semaine.
  */
 export const COOL_MONDAY_QUOTES = [
-  "« Le meilleur moyen de prédire l’avenir, c’est de le créer avec enthousiasme. Donnons le ton dès ce lundi ! »",
-  "« Les grandes réussites ne sont pas le fruit du hasard, mais d'une suite de petits pas réguliers et maîtrisés. »",
-  "« Un bon café, un grand sourire et une dose d’énergie positive : le trio parfait pour conquérir la semaine ! »",
-  "« Seul on va vite, ensemble on va plus loin et avec le sourire c'est encore plus puissant. Belle semaine à toute l'équipe ! »",
-  "« Chaque lundi est une nouvelle page blanche prête à accueillir nos plus belles victoires. Écrivons du lourd ensemble ! »",
-  "« L'énergie et la bonne humeur que tu investis le matin, c'est ce qui illumine toute ta journée. Fonce ! »",
-  "« Il n'y a pas d'obstacle insurmontable, il n'y a que des défis stimulants et des solutions qu'on construit en équipe. »",
-  "« La motivation te fait démarrer, les bonnes habitudes te font avancer, l'esprit d'équipe te fait briller. »",
-  "« Fais de chaque heure une opportunité d’apprendre, de progresser et de célébrer les petits succès du quotidien ! »",
-  "« Le secret d'une semaine réussie ? Aimer ce que l'on fait, s'entraider sans hésiter et garder la pêche quoi qu'il arrive ! »",
+  "« Nouveau lundi, nouvelles opportunités ! On laisse les excuses au week-end et on démarre en beauté. 😎 »",
+
+  "« Le lundi n'est pas ton ennemi, c'est juste le bouton RESET de tes ambitions. Bonne semaine ! 🚀 »",
+
+  "« Pas besoin d'être parfait dès lundi. Juste d'être prêt à donner le meilleur de soi. 💪 »",
+
+  "« Un lundi avec le sourire, une équipe au top et des objectifs en ligne de mire… Ça sent la belle semaine ! 🔥 »",
+
+  "« Les grandes choses commencent souvent par un simple lundi. Alors, autant bien commencer ! 😉 »",
+
+  "« Ton café est prêt, tes idées aussi ? Alors, il ne manque plus que toi pour faire de cette semaine une réussite ! ☕ »",
+
+  "« On ne cherche pas à faire des miracles en une journée. On avance, on apprend et on fait mieux chaque jour ! 🌱 »",
+
+  "« La bonne humeur est contagieuse. Aujourd'hui, soyons tous des porteurs de bonnes nouvelles ! 😁 »",
+
+  "« Nouvelle semaine, même équipe, encore plus d'idées et toujours cette envie de faire la différence ! ✨ »",
+
+  "« Petit rappel du lundi : tu es capable de plus que tu ne le penses. Alors, montre à cette semaine de quoi tu es capable ! 💥 »",
+
+  "« Les objectifs ne vont pas s'atteindre tout seuls… Mais avec une bonne équipe, ça devient tout de suite plus sympa ! 🤝 »",
+
+  "« On ne contrôle pas toujours le programme de la semaine, mais on peut toujours choisir son état d'esprit. 😉 »",
+
+  "« Que cette semaine soit remplie de bonnes idées, de petites victoires et de grandes raisons de sourire ! 🌟 »",
+
+  "« Pas de pression inutile : on respire, on s'organise et on avance. Chaque chose en son temps ! 😌 »",
+
+  "« Le meilleur moment pour faire bouger les choses ? Ce lundi. La meilleure équipe pour le faire ? La nôtre ! 🚀 »",
+
+  "« Le lundi est arrivé… On fait comme si on l'attendait avec impatience ! 😂 »",
+
+  "« Les batteries sont chargées ? Les objectifs sont prêts ? Alors, que la semaine commence ! ⚡ »",
+
+  "« On ne demande pas une semaine parfaite, juste une équipe qui se serre les coudes et qui avance ensemble. ❤️ »",
+
+  "« Objectif de la semaine : faire du bon travail, garder le sourire et ne pas oublier de respirer ! 😅 »",
+
+  "« Une nouvelle semaine, c'est 5 nouvelles occasions de faire la différence. À nous de jouer ! 🎯 »",
 ];
 
-/**
- * Pioche automatiquement l'un des 10 proverbes en fonction de la semaine ISO de l'année.
- */
-export function getWeeklyCoolQuote(date: Date = new Date()): { quote: string; index: number } {
-  const target = new Date(date.valueOf());
-  const dayNr = (date.getDay() + 6) % 7;
-  target.setDate(target.getDate() - dayNr + 3);
-  const firstThursday = target.valueOf();
-  target.setMonth(0, 1);
-  if (target.getDay() !== 4) {
-    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
-  }
-  const weekNumber = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
 
-  const quoteIndex = Math.abs(weekNumber - 1) % COOL_MONDAY_QUOTES.length;
+/**
+ * Sélectionne aléatoirement une citation parmi les 10 citations
+ * disponibles pour le mail du lundi.
+ *
+ * @returns La citation sélectionnée et son index (à partir de 1).
+ */
+export function getWeeklyCoolQuote(): { quote: string; index: number } {
+  const totalQuotes = COOL_MONDAY_QUOTES.length;
+
+  if (totalQuotes === 0) {
+    return { quote: "", index: 0 };
+  }
+
+  const quoteIndex = Math.floor(Math.random() * totalQuotes);
+
   return {
     quote: COOL_MONDAY_QUOTES[quoteIndex],
     index: quoteIndex + 1,
   };
 }
+
 
 /**
  * Extrait le prénom à partir du nom complet de l'employé.
@@ -147,7 +178,7 @@ export function buildMondayGreetingHtml(options: {
                   <td>
                     <!-- Pill Badge Material 3 -->
                     <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.16); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.28); color: #E0F2F1; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 5px 14px; border-radius: 20px; margin-bottom: 12px;">
-                      ☀️ Bon début de semaine
+                      Bon début de semaine
                     </div>
                     <div style="font-family: Georgia, serif; font-size: 26px; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; line-height: 1.2;">
                       CITRINE MOBILITÉ
@@ -188,7 +219,7 @@ export function buildMondayGreetingHtml(options: {
               
               <!-- Salutation avec prénom -->
               <h1 style="font-size: 26px; font-weight: 900; color: #0F172A; margin: 0 0 16px 0; line-height: 1.25;">
-                ☀️ Hello ${firstName} !
+                Hello ${firstName} !
               </h1>
 
               <p style="font-size: 15.5px; color: #1e293b; line-height: 1.6; margin: 0 0 14px 0; font-weight: 600;">
@@ -213,7 +244,7 @@ export function buildMondayGreetingHtml(options: {
               <!-- Carte Proverbe Cool de la Semaine (Rotation parmi 10 proverbes cools) -->
               <div style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; border-radius: 12px; padding: 14px 18px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.08);">
                 <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #B45309; margin-bottom: 5px;">
-                  ✨ La pensée cool de la semaine
+                  Il faut garder en tete que:
                 </div>
                 <div style="font-size: 14px; font-style: italic; color: #78350F; line-height: 1.5; font-weight: 600;">
                   ${quote}
@@ -223,7 +254,7 @@ export function buildMondayGreetingHtml(options: {
               <!-- 3 Clés Amicales pour la semaine -->
               <div style="margin-bottom: 26px;">
                 <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #004D40; margin-bottom: 12px;">
-                  ✨ 3 petits tips bienveillants pour une semaine au top :
+                  3 petits tips bienveillants pour une semaine au top :
                 </div>
 
                 <!-- Clé 1 : Priorités au calme -->
@@ -251,7 +282,7 @@ export function buildMondayGreetingHtml(options: {
                   <tr>
                     <td width="36" valign="top" style="font-size: 20px;">⚡</td>
                     <td style="font-size: 13.5px; color: #1E293B; line-height: 1.45;">
-                      <strong style="color: #00695C;">Prends soin de ton énergie :</strong> On démarre motivés dès 08h00, et à midi pile (12h00 – 13h00), pause déjeuner sacrée pour recharger les batteries, déconnecter et souffler !
+                      <strong style="color: #00695C;">Prends soin de ton énergie :</strong> On démarre motivés dès 08h00, et à midi, pause déjeuner sacrée pour recharger les batteries, déconnecter et souffler !
                     </td>
                   </tr>
                 </table>
@@ -358,7 +389,7 @@ export async function sendMondayGreetingToAllEmployees(options?: MondayGreetingO
         employeeId: "greeting-test",
         eventTitle: "Bon début de semaine — Citrine Mobilité",
         threadCategory: "greeting",
-        threadSubject: `☀️ Hello ${testFirstName} ! Bon début de semaine chez Citrine Mobilité`,
+        threadSubject: `Hello ${testFirstName} ! Bon début de semaine chez Citrine Mobilité`,
         htmlContent,
         attachments,
         overrideRecipients: targetEmails,
@@ -435,7 +466,7 @@ export async function sendMondayGreetingToAllEmployees(options?: MondayGreetingO
           employeeEmail: empEmail,
           eventTitle: "Bon début de semaine — Citrine Mobilité",
           threadCategory: "greeting",
-          threadSubject: `☀️ Hello ${empFirstName} ! Bon début de semaine chez Citrine Mobilité`,
+          threadSubject: `Hello ${empFirstName} ! Bon début de semaine chez Citrine Mobilité`,
           htmlContent,
           attachments,
           overrideRecipients: [empEmail],
