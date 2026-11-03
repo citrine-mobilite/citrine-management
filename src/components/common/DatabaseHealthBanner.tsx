@@ -3,8 +3,26 @@ import { Database, AlertTriangle, CheckCircle2, Copy, Check, ExternalLink, Refre
 import { checkDatabaseHealth, DatabaseHealthStatus } from '../../services/dataService';
 
 export const UNLOCK_SQL_SCRIPT = `-- ==============================================================================
--- DÉBLOCAGE IMMÉDIAT DES PERMISSIONS SUPABASE (À EXÉCUTER DANS LE SQL EDITOR)
+-- RÉSOLUTION SÉCURITÉ RLS & DÉBLOCAGE COMPLET SUPABASE (SQL EDITOR)
 -- ==============================================================================
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOR t IN 
+        SELECT table_name FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    LOOP
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t);
+        EXECUTE format('DROP POLICY IF EXISTS "citrine_allow_authenticated_anon_full_access" ON public.%I;', t);
+        EXECUTE format('
+            CREATE POLICY "citrine_allow_authenticated_anon_full_access" ON public.%I 
+            FOR ALL TO anon, authenticated, service_role 
+            USING (true) WITH CHECK (true);
+        ', t);
+    END LOOP;
+END $$;
+
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
@@ -13,7 +31,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authentic
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;`;
 
-export const SUPABASE_SQL_URL = 'https://supabase.com/dashboard/project/svvgziqcdahkgyugqlvk/sql/new';
+export const SUPABASE_SQL_URL = 'https://supabase.com/dashboard/project/npwauvoacscumdzpbjoc/sql/new';
 
 export function DatabaseHealthBanner() {
   const [status, setStatus] = useState<DatabaseHealthStatus | null>(null);

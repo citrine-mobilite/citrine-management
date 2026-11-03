@@ -38,12 +38,14 @@ BEGIN
         WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     LOOP
         EXECUTE format('
+            ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;
             DROP POLICY IF EXISTS "allow_all_for_all_roles" ON public.%I;
             DROP POLICY IF EXISTS "service_role_full_access" ON public.%I;
-            CREATE POLICY "allow_all_for_all_roles" ON public.%I 
+            DROP POLICY IF EXISTS "citrine_allow_authenticated_anon_full_access" ON public.%I;
+            CREATE POLICY "citrine_allow_authenticated_anon_full_access" ON public.%I 
             FOR ALL TO anon, authenticated, service_role 
             USING (true) WITH CHECK (true);
-        ', t, t, t);
+        ', t, t, t, t, t);
     END LOOP;
 END $$;
 
