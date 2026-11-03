@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, CheckSquare, Clock, Trophy, ShieldCheck, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
-import { Employee, Task, Subtask } from '../../../types';
+import { Employee, Task, Subtask, TaskStatus } from '../../../types';
 import { haptic } from '../../../services/hapticService';
 
 interface EmployeeRendementDetailModalProps {
@@ -60,11 +60,24 @@ export const EmployeeRendementDetailModal: React.FC<EmployeeRendementDetailModal
 
   const handleToggleSubtask = (task: Task, subtaskId: string) => {
     haptic.light();
-    const updatedSubtasks = (task.subtasks || []).map((sub) =>
-      sub.id === subtaskId ? { ...sub, completed: !sub.completed } : sub
-    );
+    const updatedSubtasks = (task.subtasks || []).map((sub) => {
+      if (sub.id === subtaskId) {
+        const nextCompleted = !sub.completed;
+        return {
+          ...sub,
+          completed: nextCompleted,
+          status: nextCompleted ? ('completed' as TaskStatus) : ('todo' as TaskStatus),
+        };
+      }
+      return sub;
+    });
+
+    const allCompleted = updatedSubtasks.length > 0 && updatedSubtasks.every(s => s.completed || s.status === 'completed');
+    const newStatus = allCompleted ? 'completed' : (task.status === 'completed' ? 'in_progress' : task.status);
+
     const updatedTask: Task = {
       ...task,
+      status: newStatus as TaskStatus,
       subtasks: updatedSubtasks,
       lastUpdatedTime: new Date().toISOString(),
     };

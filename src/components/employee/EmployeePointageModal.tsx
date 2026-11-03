@@ -21,6 +21,7 @@ import { getCurrentUserLocation } from '../../utils/geolocation';
 import { dynamicQrService } from '../../services/dynamicQrService';
 import { badgeCodeService } from '../../services/badgeCodeService';
 import { haptic } from '../../services/hapticService';
+import { showErrorAlert } from '../../utils/sweetAlert';
 
 interface EmployeePointageModalProps {
   showClockingModal: boolean;
@@ -37,7 +38,7 @@ interface EmployeePointageModalProps {
   employeeProfile: Employee;
   onConfirmClocking: (
     method: ClockingMethod, 
-    customLocation?: { latitude?: number; longitude?: number; locationName?: string }
+    customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
   ) => void;
   showToast?: (title: string, desc: string, type?: 'success' | 'warning' | 'info') => void;
   moduleConfig?: CompanyModuleConfig;
@@ -254,6 +255,53 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
     }
 
     // 2. CAS QR CODE DE PORTE / ENTRÉE FIXE
+    const officialToken = (moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026').trim();
+    const fallbackSecret = (moduleConfig?.qrCodeSecret || '').trim();
+    const isDoorRevoked = moduleConfig?.doorQrCodeRevoked === true;
+
+    // A. VÉRIFICATION DE RÉVOCATION DU QR CODE
+    if (isDoorRevoked) {
+      stopCameraScan();
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
+        scanIntervalRef.current = null;
+      }
+      setDetectedQrCode(null);
+      setIsProcessingDetection(false);
+      const revokeMsg = "Ce QR Code d'entrée a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle mise en place à la porte.";
+      setActionError(`QR Code Révoqué : ${revokeMsg}`);
+      if (showToast) {
+        showToast('QR Code Révoqué', revokeMsg, 'warning');
+      }
+      showErrorAlert('QR Code Révoqué 🚫', revokeMsg);
+      return;
+    }
+
+    // B. VÉRIFICATION RIGOUREUSE DU JETON : DOIT CORRESPONDRE À CELUI EN BASE DE DONNÉES
+    const isTokenMatching = 
+      cleanToken === officialToken ||
+      (fallbackSecret && cleanToken === fallbackSecret) ||
+      cleanToken.toUpperCase() === officialToken.toUpperCase();
+
+    if (!isTokenMatching) {
+      // Rejet immédiat : Le QR Code scanné ne provient pas de l'affiche officielle en base
+      stopCameraScan();
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
+        scanIntervalRef.current = null;
+      }
+      setDetectedQrCode(null);
+      setIsProcessingDetection(false);
+      const invalidMsg = `Le QR Code scanné n'est pas reconnu par Citrine Mobilité ou a expiré.\n\nJeton détecté : "${cleanToken.length > 32 ? cleanToken.substring(0, 32) + '...' : cleanToken}"\n\nVeuillez cadrer le QR Code officiel affiché à la porte. Si la direction a mis à jour le jeton, les anciennes versions ne sont plus autorisées.`;
+      setActionError("QR Code non reconnu : jeton invalide ou expiré.");
+      if (showToast) {
+        showToast('QR Code Invalide', "Ce QR Code n'est pas le QR Code officiel de pointage.", 'warning');
+      }
+      showErrorAlert('QR Code Non Reconnu ❌', invalidMsg);
+      return;
+    }
+
+    // C. JETON OFFICIEL VALIDÉ : ACQUISITION GPS & VALIDATION DU BADGEAGE
     setIsCapturingGps(true);
     let capturedLat: number | undefined = undefined;
     let capturedLng: number | undefined = undefined;
@@ -295,7 +343,7 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
       setIsCapturingGps(false);
     }
 
-    // Validation du badgeage
+    // Validation du badgeage avec jeton certifié
     stopCameraScan();
     if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
 
@@ -303,6 +351,7 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
       latitude: capturedLat,
       longitude: capturedLng,
       locationName: locationLabel,
+      qrCodeToken: cleanToken,
     });
 
     if (showToast) {
@@ -749,28 +798,16 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
                 </div>
               )}
 
-              {/* Bouton de secours : valider directement ou téléverser photo */}
-              <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                {/* Valider manuellement le scan de porte sans attendre si nécessaire */}
-                <button
-                  type="button"
-                  onClick={() => handleProcessScannedQrCode(officialDoorToken)}
-                  disabled={isProcessingDetection}
-                  className="flex-1 py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold text-xs rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <Check className="h-4 w-4" />
-                  <span>Valider mon Badgeage Présentiel</span>
-                </button>
-
-                {/* Téléverser une photo du QR Code */}
+              {/* Téléversement d'une photo du QR Code (si objectif de caméra flou ou problématique) */}
+              <div className="pt-1">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs rounded-xl border border-stone-200 transition cursor-pointer flex items-center justify-center gap-1.5"
-                  title="Si la caméra web ne capte pas le QR Code"
+                  className="w-full py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs rounded-xl border border-stone-200 transition cursor-pointer flex items-center justify-center gap-2"
+                  title="Téléverser une photo nette du QR Code affiché à la porte"
                 >
-                  <Upload className="h-3.5 w-3.5" />
-                  <span>Photo QR</span>
+                  <Upload className="h-4 w-4 text-[#2A7B76]" />
+                  <span>Téléverser une Photo du QR Code Officiel</span>
                 </button>
                 <input
                   ref={fileInputRef}
@@ -782,23 +819,31 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
                 />
               </div>
 
-              {/* Champ d'entrée manuelle en repli absolu */}
+              {/* Champ d'entrée manuelle en repli sécurisé (vérification obligatoire contre la BD) */}
               <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1.5">
-                <label className="block text-[10px] font-bold text-stone-500 uppercase">
-                  Ou saisie directe du code (si appareil photo non disponible) :
+                <label className="block text-[10px] font-bold text-stone-600 uppercase">
+                  Ou saisie du jeton de sécurité (inscrit sous le QR Code officiel) :
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={manualTokenInput}
                     onChange={(e) => setManualTokenInput(e.target.value)}
-                    placeholder={currentStep === 'scan_door' ? officialDoorToken : "CITRINE-DYN-..."}
+                    placeholder={currentStep === 'scan_door' ? "Ex: Saisissez le jeton officiel..." : "CITRINE-DYN-..."}
                     className="flex-1 px-3 py-1.5 bg-white border border-stone-200 rounded-xl text-xs font-mono outline-none focus:border-[#2A7B76]"
                   />
                   <button
                     type="button"
-                    onClick={() => handleProcessScannedQrCode(manualTokenInput.trim() || officialDoorToken)}
-                    className="px-3.5 py-1.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                    onClick={() => {
+                      const trimmed = manualTokenInput.trim();
+                      if (!trimmed) {
+                        setActionError("Veuillez saisir le jeton inscrit sous le QR Code officiel.");
+                        return;
+                      }
+                      handleProcessScannedQrCode(trimmed);
+                    }}
+                    disabled={isProcessingDetection}
+                    className="px-4 py-1.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition cursor-pointer disabled:opacity-50"
                   >
                     Valider
                   </button>

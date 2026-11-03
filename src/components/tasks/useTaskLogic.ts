@@ -246,7 +246,20 @@ export function useTaskLogic({
     const targetTask = tasks.find((t) => t.id === taskId);
     if (!targetTask) return;
 
-    const updatedTask: Task = { ...targetTask, status: newStatus, lastUpdatedTime: new Date().toISOString() };
+    // Si la tâche est marquée comme terminée, marquer également toutes ses sous-tâches comme terminées
+    const updatedSubtasks = (targetTask.subtasks || []).map((s) => {
+      if (newStatus === 'completed') {
+        return { ...s, completed: true, status: 'completed' as TaskStatus };
+      }
+      return s;
+    });
+
+    const updatedTask: Task = { 
+      ...targetTask, 
+      status: newStatus, 
+      subtasks: updatedSubtasks,
+      lastUpdatedTime: new Date().toISOString() 
+    };
     await taskService.saveTask(updatedTask);
 
     const updated = tasks.map((t) => (t.id === taskId ? updatedTask : t));

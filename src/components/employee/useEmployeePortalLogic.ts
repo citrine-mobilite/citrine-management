@@ -416,7 +416,7 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
 
   const handleConfirmClocking = (
     method: ClockingMethod,
-    customLocation?: { latitude?: number; longitude?: number; locationName?: string }
+    customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
   ) => {
     const effectiveAction = pendingClockAction || (!todayPresence?.arrivalTime ? 'arrival' : !todayPresence?.departureTime ? 'departure' : 'arrival');
     triggerConfirmClocking(effectiveAction, method, () => {

@@ -226,7 +226,9 @@ export const SubtaskDetailModal: React.FC<SubtaskDetailModalProps> = ({
         return s;
       });
     };
-    setSubtasks(toggleTree(subtasks));
+    const updated = toggleTree(subtasks);
+    setSubtasks(updated);
+    onSaveSubtask({ ...subtask, subtasks: updated });
   };
 
   const handleAddComment = () => {

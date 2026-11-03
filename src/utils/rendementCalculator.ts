@@ -116,9 +116,9 @@ export function computeEmployeeRendement(
   let totalProgressSum = 0;
 
   assignedTasks.forEach((t) => {
-    const isCompleted = t.status === 'completed';
+    const isCompleted = t.status === 'completed' || (t as any).completed === true || (Boolean(t.subtasks && t.subtasks.length > 0 && t.subtasks.every(s => s.completed || s.status === 'completed')));
     if (isCompleted) completedTasks++;
-    else if (t.status === 'in_progress' || t.status === 'en_cours') inProgressTasks++;
+    else if (t.status === 'in_progress' || t.status === 'en_cours' || t.status === 'pending_validation') inProgressTasks++;
     else if (t.status === 'blocked') blockedTasks++;
 
     if (t.isMilestone) {

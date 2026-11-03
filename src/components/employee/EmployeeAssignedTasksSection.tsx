@@ -1,6 +1,7 @@
 import React from 'react';
 import { Briefcase, CheckCircle, Clock, PlayCircle } from 'lucide-react';
 import { Task, Employee, NotificationLog, TaskStatus } from '../../types';
+import { isTaskAssignedToEmployee } from '../../utils/rendementCalculator';
 
 interface EmployeeAssignedTasksSectionProps {
   myTasks?: Task[];
@@ -21,7 +22,7 @@ export const EmployeeAssignedTasksSection: React.FC<EmployeeAssignedTasksSection
   const safeTasks = tasks || [];
   const effectiveTasks = safeMyTasks.length > 0 
     ? safeMyTasks 
-    : safeTasks.filter(t => t && (!employeeProfile || t.assignedTo === employeeProfile.name || t.employeeId === employeeProfile.id));
+    : safeTasks.filter(t => t && (!employeeProfile || isTaskAssignedToEmployee(t, employeeProfile)));
   const list = effectiveTasks || [];
 
   const handleUpdateStatus = (task: Task, newStatus: TaskStatus) => {

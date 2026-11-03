@@ -884,6 +884,37 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
     const empIdVal = presence.employeeId || presence.employee_id;
     const resolvedEmpDbId = await resolveEmployeeDbId(supabaseAdmin, empIdVal);
 
+    // 1b. Sécurité serveur : Vérification du jeton QR Code de porte
+    const clockMethod = presence.clockingMethod || presence.method || 'qr_code_door';
+    if (clockMethod === 'qr_code_door') {
+      try {
+        const { data: settingsData } = await supabaseAdmin.from('company_settings').select('*');
+        if (settingsData && settingsData.length > 0) {
+          const cfg = settingsData.find((s: any) => s.id === 'main_config' || s.doc_id === 'main_config') || settingsData[0];
+          const rawCfg = (cfg.raw_data && typeof cfg.raw_data === 'object') ? cfg.raw_data : (cfg.setting_value && typeof cfg.setting_value === 'object' ? cfg.setting_value : cfg);
+          const serverDoorToken = (rawCfg.doorQrCodeToken || rawCfg.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026').trim();
+          const serverRevoked = rawCfg.doorQrCodeRevoked === true;
+
+          if (serverRevoked) {
+            throw new Error("Pointage rejeté : Le QR Code de porte officiel a été révoqué par la direction.");
+          }
+
+          const clientToken = (presence.qrCodeToken || '').trim();
+          if (clientToken && serverDoorToken) {
+            const matches = clientToken === serverDoorToken || clientToken.toUpperCase() === serverDoorToken.toUpperCase() || clientToken === (rawCfg.qrCodeSecret || '').trim();
+            if (!matches) {
+              throw new Error(`Pointage rejeté : Le jeton QR Code ("${clientToken}") ne correspond pas au jeton officiel en base.`);
+            }
+          }
+        }
+      } catch (checkErr: any) {
+        if (checkErr.message?.includes('Pointage rejeté')) {
+          throw checkErr;
+        }
+        console.warn('[repository] Notice vérification token serveur:', checkErr?.message);
+      }
+    }
+
     // 2. Persistance de la Présence
     const presDocId = String(presence.id || presence.docId || `pr-${Date.now()}`);
     const presenceRow: any = {
@@ -900,8 +931,12 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       signature: presence.signature || null,
       gps_lat: typeof presence.latitude === 'number' ? presence.latitude : (typeof presence.gpsLat === 'number' ? presence.gpsLat : null),
       gps_lng: typeof presence.longitude === 'number' ? presence.longitude : (typeof presence.gpsLng === 'number' ? presence.gpsLng : null),
-      method: presence.clockingMethod || presence.method || 'qr_code_door',
-      raw_data: { ...presence, id: presDocId },
+      method: clockMethod,
+      raw_data: { 
+        ...presence, 
+        id: presDocId,
+        qrCodeToken: presence.qrCodeToken || null,
+      },
       updated_at: new Date().toISOString(),
     };
 

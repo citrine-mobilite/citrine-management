@@ -170,14 +170,27 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   const handleToggleSubtask = (subId: string) => {
     const toggleInTree = (list: Subtask[]): Subtask[] => {
       return list.map((s) => {
-        if (s.id === subId) return { ...s, completed: !s.completed };
+        if (s.id === subId) {
+          const nextCompleted = !s.completed;
+          return {
+            ...s,
+            completed: nextCompleted,
+            status: nextCompleted ? 'completed' : 'todo',
+          };
+        }
         if (s.subtasks && s.subtasks.length > 0) return { ...s, subtasks: toggleInTree(s.subtasks) };
         return s;
       });
     };
     const updated = toggleInTree(subtasks);
     setSubtasks(updated);
-    onSaveTask({ ...task, subtasks: updated });
+
+    // Si toutes les sous-tâches sont complétées, clôturer également la tâche parente
+    const allSubsCompleted = updated.length > 0 && updated.every((s) => s.completed || s.status === 'completed');
+    const newStatus: TaskStatus = allSubsCompleted ? 'completed' : (task.status === 'completed' ? 'in_progress' : task.status);
+
+    setDraftStatus(newStatus);
+    onSaveTask({ ...task, status: newStatus, subtasks: updated });
   };
 
   const handleAddComment = () => {

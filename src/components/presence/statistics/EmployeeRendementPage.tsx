@@ -224,7 +224,7 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
       sub.id === subtaskId ? { ...sub, completed: !sub.completed, status: !sub.completed ? ('completed' as TaskStatus) : ('todo' as TaskStatus) } : sub
     );
 
-    const allCompleted = updatedSubtasks.length > 0 && updatedSubtasks.every((s) => s.completed);
+    const allCompleted = updatedSubtasks.length > 0 && updatedSubtasks.every((s) => s.completed || s.status === 'completed');
     let newStatus = task.status;
     if (allCompleted && task.status !== 'completed') {
       newStatus = 'completed';

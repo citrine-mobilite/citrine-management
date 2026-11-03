@@ -16,6 +16,7 @@ import { incidentService } from '../../services/incidentService';
 import { savePresenceAtomic } from '../../services/dataService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { realtimeSyncService } from '../../services/realtimeSyncService';
+import { showErrorAlert } from '../../utils/sweetAlert';
 
 interface UseClockingActionsProps {
   employeeProfile: Employee;
@@ -46,8 +47,30 @@ export function useClockingActions({
     pendingClockAction: "arrival" | "pauseStart" | "pauseEnd" | "departure" | "sortieProStart" | "sortieProEnd" | null,
     method: ClockingMethod,
     onSuccess: () => void,
-    customLocation?: { latitude?: number; longitude?: number; locationName?: string }
+    customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
   ) => {
+    // Sécurité stricte : Vérification du jeton QR Code de porte
+    if (method === 'qr_code_door') {
+      const officialDoorToken = (moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026').trim();
+      const fallbackSecret = (moduleConfig?.qrCodeSecret || '').trim();
+      const providedToken = (customLocation?.qrCodeToken || '').trim();
+
+      if (moduleConfig?.doorQrCodeRevoked) {
+        showErrorAlert('QR Code Révoqué 🚫', "Le QR Code de porte a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle.");
+        return;
+      }
+
+      const isMatch = 
+        providedToken === officialDoorToken || 
+        (fallbackSecret && providedToken === fallbackSecret) ||
+        providedToken.toUpperCase() === officialDoorToken.toUpperCase();
+
+      if (!isMatch) {
+        showErrorAlert('Pointage Rejeté ❌', "Le jeton du QR Code ne correspond pas au jeton officiel configuré en base de données.");
+        return;
+      }
+    }
+
     setIsLocating(true);
     try {
       let latitude: number | undefined = customLocation?.latitude;
@@ -241,6 +264,19 @@ export function useClockingActions({
         existing.latitude = latitude;
         existing.longitude = longitude;
         existing.clockingMethod = method;
+        if (customLocation?.qrCodeToken) {
+          existing.qrCodeToken = customLocation.qrCodeToken;
+        }
+        if (!existing.clockLocations) existing.clockLocations = {};
+        existing.clockLocations[action] = {
+          time: timeStr,
+          latitude,
+          longitude,
+          zoneName: locationName,
+          siteName: moduleConfig?.hqName || 'Siège Citrine',
+          method,
+          qrCodeToken: customLocation?.qrCodeToken,
+        };
         targetPresence = existing;
         updatedPresences[existingIdx] = existing;
       } else {
@@ -252,6 +288,7 @@ export function useClockingActions({
           zoneName: locationName,
           siteName: moduleConfig?.hqName || 'Siège Citrine',
           method,
+          qrCodeToken: customLocation?.qrCodeToken,
         };
         targetPresence = {
           id: `pr-${Date.now()}`,
@@ -269,6 +306,7 @@ export function useClockingActions({
           latitude,
           longitude,
           clockingMethod: method,
+          qrCodeToken: customLocation?.qrCodeToken,
           clockLocations,
         };
         updatedPresences.push(targetPresence);

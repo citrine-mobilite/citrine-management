@@ -133,7 +133,18 @@ export function generateDailyTimesheet(
   // 1. Tâches assignées à l'employé (Représentant son Job Description et ses projets)
   const empTasks = allTasks.filter((t) => {
     if (!isTaskAssignedToEmployee(t, employee)) return false;
-    return t.date === date || (t.dueDate && t.dueDate === date) || t.status === 'in_progress' || t.status === 'todo';
+    // Tâche directe pour ce jour
+    if (t.date === date || (t.dueDate && t.dueDate === date)) return true;
+    // Tâche active (en cours, à faire, en attente)
+    if (t.status === 'in_progress' || t.status === 'en_cours' || t.status === 'todo' || t.status === 'pending_validation') return true;
+    // Tâche contenant des sous-tâches actives ou récentes pour cette date
+    if (t.subtasks && t.subtasks.some((s) => 
+      s.dueDate === date || 
+      s.startDate === date || 
+      (s.createdAt && s.createdAt.startsWith(date)) ||
+      isSubtaskInLast3Days(s, date)
+    )) return true;
+    return false;
   });
 
   // Tri par priorité : Jalons stratégiques et urgences d'abord
@@ -149,7 +160,7 @@ export function generateDailyTimesheet(
     id: t.id,
     title: t.title,
     priority: t.priority,
-    status: t.status === 'completed' ? 'Fait' : 'En cours',
+    status: t.status === 'completed' || (t as any).completed === true ? 'Fait' : 'En cours',
     isMilestone: t.isMilestone,
   }));
 
@@ -175,7 +186,7 @@ export function generateDailyTimesheet(
 
       subsToInclude.forEach((sub) => {
         let subStatus: 'Fait' | 'En cours' | 'À faire' | 'Bloqué' = 'À faire';
-        if (sub.completed || sub.status === 'completed') subStatus = 'Fait';
+        if (sub.completed || sub.status === 'completed' || (sub.status as string) === 'fait' || (sub as any).isDone) subStatus = 'Fait';
         else if (sub.status === 'in_progress' || sub.status === 'en_cours') subStatus = 'En cours';
         else if (sub.status === 'blocked') subStatus = 'Bloqué';
 
@@ -194,7 +205,7 @@ export function generateDailyTimesheet(
     } else {
       // Si la tâche n'a pas encore de sous-tâches, la tâche parente est l'action directe
       let statusFormatted: 'Fait' | 'En cours' | 'À faire' | 'Bloqué' = 'À faire';
-      if (parentTask.status === 'completed') statusFormatted = 'Fait';
+      if (parentTask.status === 'completed' || (parentTask as any).completed === true) statusFormatted = 'Fait';
       else if (parentTask.status === 'in_progress' || parentTask.status === 'en_cours') statusFormatted = 'En cours';
       else if (parentTask.status === 'blocked') statusFormatted = 'Bloqué';
 
@@ -520,8 +531,29 @@ export function generateMonthlyTimesheet(
       totalHoursWorked += 8;
     }
 
-    const dayTasks = allTasks.filter((t) => isTaskAssignedToEmployee(t, employee) && (t.date === dayDateStr || t.dueDate === dayDateStr));
-    const tasksDone = dayTasks.filter((t) => t.status === 'completed').length;
+    const dayTasks = allTasks.filter((t) => {
+      if (!isTaskAssignedToEmployee(t, employee)) return false;
+      if (t.date === dayDateStr || (t.dueDate && t.dueDate === dayDateStr)) return true;
+      if (t.subtasks && t.subtasks.some((s) => s.dueDate === dayDateStr || s.startDate === dayDateStr || (s.createdAt && s.createdAt.startsWith(dayDateStr)))) return true;
+      return false;
+    });
+
+    let tasksDone = 0;
+    dayTasks.forEach((t) => {
+      if (t.subtasks && t.subtasks.length > 0) {
+        const subsForDay = t.subtasks.filter((s) => 
+          s.dueDate === dayDateStr || s.startDate === dayDateStr || (s.createdAt && s.createdAt.startsWith(dayDateStr)) || t.date === dayDateStr
+        );
+        const doneSubs = (subsForDay.length > 0 ? subsForDay : t.subtasks).filter((s) => s.completed || s.status === 'completed');
+        if (doneSubs.length > 0) {
+          tasksDone += doneSubs.length;
+        } else if (t.status === 'completed' || (t as any).completed) {
+          tasksDone += 1;
+        }
+      } else if (t.status === 'completed' || (t as any).completed) {
+        tasksDone += 1;
+      }
+    });
 
     dailyBreakdown.push({
       date: dayDateStr,
@@ -537,11 +569,34 @@ export function generateMonthlyTimesheet(
   const empMonthTasks = allTasks.filter((t) => {
     if (!isTaskAssignedToEmployee(t, employee)) return false;
     const taskMonth = (t.date || t.dueDate || '').slice(0, 7);
-    return taskMonth === monthStr;
+    if (taskMonth === monthStr) return true;
+    if (t.subtasks && t.subtasks.some((s) => 
+      (s.dueDate && s.dueDate.startsWith(monthStr)) || 
+      (s.startDate && s.startDate.startsWith(monthStr)) || 
+      (s.createdAt && s.createdAt.startsWith(monthStr))
+    )) return true;
+    if (t.lastUpdatedTime && t.lastUpdatedTime.startsWith(monthStr)) return true;
+    if (t.status === 'in_progress' || t.status === 'completed' || t.status === 'pending_validation') return true;
+    return false;
   });
 
-  const totalTasksAssigned = empMonthTasks.length;
-  const totalTasksCompleted = empMonthTasks.filter((t) => t.status === 'completed').length;
+  let totalTasksAssigned = 0;
+  let totalTasksCompleted = 0;
+
+  empMonthTasks.forEach((t) => {
+    if (t.subtasks && t.subtasks.length > 0) {
+      const subs = t.subtasks.filter((s) => isTaskAssignedToEmployee(s, employee) || isTaskAssignedToEmployee(t, employee));
+      const effectiveSubs = subs.length > 0 ? subs : t.subtasks;
+      totalTasksAssigned += effectiveSubs.length;
+      totalTasksCompleted += effectiveSubs.filter((s) => s.completed || s.status === 'completed').length;
+    } else {
+      totalTasksAssigned += 1;
+      if (t.status === 'completed' || (t as any).completed) {
+        totalTasksCompleted += 1;
+      }
+    }
+  });
+
   const completionRate = totalTasksAssigned > 0 ? Math.round((totalTasksCompleted / totalTasksAssigned) * 100) : 0;
 
   return {
@@ -581,9 +636,30 @@ export function generateYearlyTimesheet(
     const daysWorked = monthPresences.filter((p) => p.status === 'present' || p.status === 'late' || Boolean(p.arrivalTime)).length;
     const hoursWorked = daysWorked * 8;
 
-    const monthTasks = allTasks.filter((t) => isTaskAssignedToEmployee(t, employee) && (t.date.startsWith(monthStr) || (t.dueDate && t.dueDate.startsWith(monthStr))));
-    const tasksCompleted = monthTasks.filter((t) => t.status === 'completed').length;
-    const rendementRate = monthTasks.length > 0 ? Math.round((tasksCompleted / monthTasks.length) * 100) : 0;
+    const monthTasks = allTasks.filter((t) => {
+      if (!isTaskAssignedToEmployee(t, employee)) return false;
+      if (t.date.startsWith(monthStr) || (t.dueDate && t.dueDate.startsWith(monthStr))) return true;
+      if (t.subtasks && t.subtasks.some((s) => (s.dueDate && s.dueDate.startsWith(monthStr)) || (s.startDate && s.startDate.startsWith(monthStr)) || (s.createdAt && s.createdAt.startsWith(monthStr)))) return true;
+      if (t.lastUpdatedTime && t.lastUpdatedTime.startsWith(monthStr)) return true;
+      return false;
+    });
+
+    let tasksCompleted = 0;
+    let totalSubCount = 0;
+    monthTasks.forEach((t) => {
+      if (t.subtasks && t.subtasks.length > 0) {
+        const subs = t.subtasks.filter((s) => isTaskAssignedToEmployee(s, employee) || isTaskAssignedToEmployee(t, employee));
+        const effectiveSubs = subs.length > 0 ? subs : t.subtasks;
+        totalSubCount += effectiveSubs.length;
+        tasksCompleted += effectiveSubs.filter((s) => s.completed || s.status === 'completed').length;
+      } else {
+        totalSubCount += 1;
+        if (t.status === 'completed' || (t as any).completed) {
+          tasksCompleted += 1;
+        }
+      }
+    });
+    const rendementRate = totalSubCount > 0 ? Math.round((tasksCompleted / totalSubCount) * 100) : 0;
 
     totalDaysPresent += daysWorked;
     totalHoursWorked += hoursWorked;
@@ -598,7 +674,7 @@ export function generateYearlyTimesheet(
   });
 
   const yearTasks = allTasks.filter((t) => isTaskAssignedToEmployee(t, employee) && (t.date.startsWith(String(year)) || (t.dueDate && t.dueDate.startsWith(String(year)))));
-  const totalTasksCompleted = yearTasks.filter((t) => t.status === 'completed').length;
+  const totalTasksCompleted = yearTasks.filter((t) => t.status === 'completed' || (t as any).completed).length;
   const avgCompletionRate = yearTasks.length > 0 ? Math.round((totalTasksCompleted / yearTasks.length) * 100) : 0;
 
   return {

@@ -193,7 +193,7 @@ function preparePlanDuJourData(data: TimesheetReportData) {
 
   // 2. Tâches détaillées (Sous-tâches concrètes traitées)
   const tasks = data.items.map((item, idx) => {
-    const isDone = item.status === 'completed' || item.status === 'fait' || item.status === 'done' || item.statusLabel?.includes('TERM');
+    const isDone = item.status === 'completed' || item.status === 'fait' || item.status === 'done' || (item as any).completed === true || item.statusLabel?.includes('TERM');
     const isInProgress = item.status === 'in_progress' || item.status === 'en_cours' || item.statusLabel?.includes('COURS');
     const isBlocked = item.status === 'blocked' || item.isBlocked;
     const statusText = isDone ? 'Fait' : isBlocked ? 'Bloqué' : isInProgress ? 'En cours' : 'À faire';

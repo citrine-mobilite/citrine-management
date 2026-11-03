@@ -331,6 +331,7 @@ export interface CompanyModuleConfig {
   companyLongitude?: number;
   qrCodeSecret: string;
   doorQrCodeToken?: string;
+  doorQrCodeRevoked?: boolean;
   doorQrCodeGeneratedAt?: string;
   doorQrSiteName?: string;
   doorQrRequireGps?: boolean;
