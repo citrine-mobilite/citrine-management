@@ -182,7 +182,6 @@ export const RecruitmentPanel: React.FC<RecruitmentPanelProps> = ({
           </div>
           <div>
             <h1 className="text-xl font-bold text-stone-800">Recrutement & Vivier de Candidatures (ATS)</h1>
-            <p className="text-xs text-stone-500">Postes ouverts, entretiens et sélection des talents Citrine SARL</p>
           </div>
         </div>
 

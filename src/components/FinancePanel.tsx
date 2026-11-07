@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { DollarSign, Wallet, Coins, Receipt } from 'lucide-react';
+import { DollarSign, Wallet, Coins, Receipt, Sparkles } from 'lucide-react';
 import { Employee, EmployeeSalaryDebt, SalaryPayment, FinancialTransaction, Role } from '../types';
 import { FinanceStatsCards } from './finances/FinanceStatsCards';
 import { SalaryPaymentsTable } from './finances/SalaryPaymentsTable';
 import { FinancialLedgerTable } from './finances/FinancialLedgerTable';
 import { EmployeeLoansTable } from './finances/EmployeeLoansTable';
+import { HumaanFinance } from './illustrations/HumaanIllustrations';
 
 interface FinancePanelProps {
   employees: Employee[];
@@ -34,12 +35,20 @@ export default function FinancePanel({
   return (
     <div className="space-y-6">
       {/* Banner */}
-      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-emerald-200" />
-            <h2 className="font-serif font-bold text-xl">Gestion Financière, Paie & Prêts</h2>
+      <div className="bg-gradient-to-r from-[#2A7B76] via-[#216762] to-emerald-950 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="space-y-2 z-10 text-center md:text-left">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs text-emerald-100 font-semibold shadow-2xs">
+            <Sparkles className="h-3.5 w-3.5 text-[#F3D079]" />
+            <span>Trésorerie, Paie & Prêts Collaborateurs</span>
           </div>
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-6 w-6 text-emerald-200" />
+            <h2 className="font-serif font-bold text-2xl">Gestion Financière & Rémunérations</h2>
+          </div>
+        </div>
+
+        <div className="shrink-0 z-10">
+          <HumaanFinance className="w-44 h-32 drop-shadow-md" />
         </div>
 
         {/* Tab Switcher with Options */}

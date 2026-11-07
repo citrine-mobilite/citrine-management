@@ -83,7 +83,21 @@ export interface MonthlyTimesheetData {
   totalHoursWorked: number;
   totalTasksAssigned: number;
   totalTasksCompleted: number;
+  totalSubtasksCount: number;
+  completedSubtasksCount: number;
   completionRate: number;
+  tasksList: {
+    id: string;
+    title: string;
+    status: string;
+    isMilestone?: boolean;
+    priority?: string;
+    date?: string;
+    totalSubtasks: number;
+    completedSubtasks: number;
+    subtasks: { id: string; title: string; completed: boolean; status: string; estimatedHours?: number }[];
+    completionPercentage: number;
+  }[];
   dailyBreakdown: {
     date: string;
     dayName: string;
@@ -92,6 +106,7 @@ export interface MonthlyTimesheetData {
     hoursWorked: number;
     status: string;
     tasksDoneCount: number;
+    taskTitles?: string[];
   }[];
 }
 
@@ -576,21 +591,54 @@ export function generateMonthlyTimesheet(
 
   let totalTasksAssigned = 0;
   let totalTasksCompleted = 0;
+  let totalSubtasksCount = 0;
+  let completedSubtasksCount = 0;
 
-  empMonthTasks.forEach((t) => {
-    if (t.subtasks && t.subtasks.length > 0) {
-      const subs = t.subtasks.filter((s) => isTaskAssignedToEmployee(s, employee) || isTaskAssignedToEmployee(t, employee));
-      const effectiveSubs = subs.length > 0 ? subs : t.subtasks;
+  const tasksList = empMonthTasks.map((t) => {
+    const rawSubs = t.subtasks || [];
+    const subs = rawSubs.filter((s) => isTaskAssignedToEmployee(s, employee) || isTaskAssignedToEmployee(t, employee));
+    const effectiveSubs = subs.length > 0 ? subs : rawSubs;
+
+    const completedSubsCount = effectiveSubs.filter((s) => s.completed || s.status === 'completed').length;
+    const isCompleted = t.status === 'completed' || (t as any).completed || (effectiveSubs.length > 0 && completedSubsCount === effectiveSubs.length);
+
+    if (effectiveSubs.length > 0) {
+      totalSubtasksCount += effectiveSubs.length;
+      completedSubtasksCount += completedSubsCount;
       totalTasksAssigned += effectiveSubs.length;
-      totalTasksCompleted += effectiveSubs.filter((s) => s.completed || s.status === 'completed').length;
+      totalTasksCompleted += completedSubsCount;
     } else {
       totalTasksAssigned += 1;
-      if (t.status === 'completed' || (t as any).completed) {
+      if (isCompleted) {
         totalTasksCompleted += 1;
       }
     }
+
+    const completionPercentage = effectiveSubs.length > 0
+      ? Math.round((completedSubsCount / effectiveSubs.length) * 100)
+      : (isCompleted ? 100 : 0);
+
+    return {
+      id: t.id,
+      title: t.title,
+      status: isCompleted ? 'completed' : t.status,
+      isMilestone: t.isMilestone,
+      priority: t.priority,
+      date: t.date || t.dueDate,
+      totalSubtasks: effectiveSubs.length,
+      completedSubtasks: completedSubsCount,
+      subtasks: effectiveSubs.map((s) => ({
+        id: s.id,
+        title: s.title,
+        completed: Boolean(s.completed || s.status === 'completed'),
+        status: s.status || (s.completed ? 'completed' : 'todo'),
+        estimatedHours: s.estimatedHours,
+      })),
+      completionPercentage,
+    };
   });
 
+  // Le rendement se calcule sur le nombre de sous-tâches (et tâches élémentaires)
   const completionRate = totalTasksAssigned > 0 ? Math.round((totalTasksCompleted / totalTasksAssigned) * 100) : 0;
 
   return {
@@ -601,7 +649,10 @@ export function generateMonthlyTimesheet(
     totalHoursWorked: Math.round(totalHoursWorked),
     totalTasksAssigned,
     totalTasksCompleted,
+    totalSubtasksCount,
+    completedSubtasksCount,
     completionRate,
+    tasksList,
     dailyBreakdown,
   };
 }

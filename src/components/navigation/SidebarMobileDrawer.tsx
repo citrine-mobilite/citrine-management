@@ -4,6 +4,7 @@ import { CMLogo } from '../CMLogo';
 import { TabType } from '../Sidebar';
 import { SidebarCategory } from './sidebarCategories';
 import { SidebarItemButton } from './SidebarItemButton';
+import { HumaanDashboardHero } from '../illustrations/HumaanIllustrations';
 
 interface SidebarMobileDrawerProps {
   mobileMenuOpen: boolean;
@@ -42,19 +43,24 @@ export const SidebarMobileDrawer: React.FC<SidebarMobileDrawerProps> = ({
 
       {/* Drawer Panel in Frosted Glass */}
       <div className="relative flex-1 flex flex-col max-w-xs w-full glass-drawer-panel z-10">
-        <div className="p-4 border-b border-white/70 flex items-center justify-between bg-white/50 backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <CMLogo size="sm" />
-            <span className="font-serif font-bold text-sm text-stone-900 tracking-tight">Menu Principal</span>
+        <div className="p-4 border-b border-white/70 flex flex-col items-center gap-3 bg-white/50 backdrop-blur-md">
+          <div className="w-full flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CMLogo size="sm" />
+              <span className="font-serif font-bold text-sm text-stone-900 tracking-tight">Menu Principal</span>
+            </div>
+            <button
+              onClick={handleClose}
+              className="p-1.5 rounded-xl hover:bg-white/80 text-stone-700 transition cursor-pointer glass-chip"
+              aria-label="Fermer le menu"
+              title="Fermer le menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            onClick={handleClose}
-            className="p-1.5 rounded-xl hover:bg-white/80 text-stone-700 transition cursor-pointer glass-chip"
-            aria-label="Fermer le menu"
-            title="Fermer le menu"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="w-full bg-gradient-to-r from-[#2A7B76]/15 to-emerald-500/15 rounded-2xl p-3 flex items-center justify-center border border-white/60">
+            <HumaanDashboardHero className="w-40 h-24" />
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-4 pb-20">

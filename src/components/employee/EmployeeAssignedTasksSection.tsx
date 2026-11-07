@@ -2,6 +2,7 @@ import React from 'react';
 import { Briefcase, CheckCircle, Clock, PlayCircle } from 'lucide-react';
 import { Task, Employee, NotificationLog, TaskStatus } from '../../types';
 import { isTaskAssignedToEmployee } from '../../utils/rendementCalculator';
+import { notifyExceptionalTaskCompletion } from '../../services/exceptionalTaskCompletionService';
 
 interface EmployeeAssignedTasksSectionProps {
   myTasks?: Task[];
@@ -61,6 +62,14 @@ export const EmployeeAssignedTasksSection: React.FC<EmployeeAssignedTasksSection
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
       }
+    }
+
+    if (newStatus === 'completed' && task.status !== 'completed') {
+      notifyExceptionalTaskCompletion(
+        { ...task, status: 'completed' },
+        employeeProfile?.name || task.assignedTo,
+        onAddNotification as any
+      );
     }
   };
 

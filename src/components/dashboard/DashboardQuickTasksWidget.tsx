@@ -2,6 +2,7 @@ import React from 'react';
 import { ListTodo, ChevronRight, CheckCircle2, AlertTriangle, Calendar } from 'lucide-react';
 import { Task, Reminder } from '../../types';
 import { TabType } from '../Sidebar';
+import { HumaanRelaxedState } from '../illustrations/HumaanIllustrations';
 
 interface DashboardQuickTasksWidgetProps {
   tasks: Task[];
@@ -40,8 +41,10 @@ export const DashboardQuickTasksWidget: React.FC<DashboardQuickTasksWidgetProps>
 
       <div className="divide-y divide-stone-100 overflow-y-auto max-h-[380px]">
         {pendingTasks.length === 0 && activeReminders.length === 0 ? (
-          <div className="p-8 text-center text-stone-400 text-xs italic">
-            Aucune tâche urgente ou alerte en attente.
+          <div className="p-8 text-center flex flex-col items-center justify-center space-y-2">
+            <HumaanRelaxedState className="w-24 h-24" />
+            <p className="text-xs font-bold text-stone-700">Toutes les tâches sont à jour</p>
+            <p className="text-[11px] text-stone-400">Aucune alerte urgente en attente actuellement.</p>
           </div>
         ) : (
           <>

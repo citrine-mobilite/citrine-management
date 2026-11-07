@@ -16,6 +16,7 @@ import {
 } from '../../services/timesheetReportService';
 import { getTimesheetNotes } from '../../services/timesheetNotesService';
 import { isSubtaskInLast3Days, sortSubtasksNewestFirst } from '../../utils/subtaskFilterUtils';
+import { notifyExceptionalTaskCompletion } from '../../services/exceptionalTaskCompletionService';
 
 interface UseTaskLogicProps {
   tasks: Task[];
@@ -306,6 +307,14 @@ export function useTaskLogic({
       type: 'task_assigned',
       link: 'tasks',
     });
+
+    if (newStatus === 'completed' && targetTask.status !== 'completed') {
+      notifyExceptionalTaskCompletion(
+        updatedTask,
+        targetTask.assignedTo,
+        onAddNotification as any
+      );
+    }
 
     if (showToast) showToast('Statut mis à jour et enregistré.', 'success');
   };

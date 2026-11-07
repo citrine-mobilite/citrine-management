@@ -143,11 +143,34 @@ export function computeEmployeeRendement(
     totalProgressSum += getTaskDynamicProgress(t);
   });
 
-  // Taux de rendement dynamique moyen des tâches (0 - 100%)
-  const taskRendementRate = totalTasks > 0 ? Math.round(totalProgressSum / totalTasks) : 0;
+  // Calcul du rendement opérationnel STRICTEMENT basé sur le nombre de sous-tâches terminées
+  let totalWorkUnits = 0;
+  let completedWorkUnits = 0;
 
-  // Score combiné RH (50% Assiduité & Respect des horaires + 50% Rendement opérationnel)
-  const globalCombinedScore = totalTasks > 0
+  assignedTasks.forEach((t) => {
+    if (t.subtasks && t.subtasks.length > 0) {
+      totalWorkUnits += t.subtasks.length;
+      t.subtasks.forEach((s) => {
+        if (s.completed || s.status === 'completed') {
+          completedWorkUnits++;
+        }
+      });
+    } else {
+      // Tâche élémentaire sans découpage : compte comme 1 unité de travail
+      totalWorkUnits += 1;
+      if (t.status === 'completed' || (t as any).completed === true) {
+        completedWorkUnits++;
+      }
+    }
+  });
+
+  // Taux de rendement dynamique des sous-tâches (0 - 100%)
+  const taskRendementRate = totalWorkUnits > 0 
+    ? Math.round((completedWorkUnits / totalWorkUnits) * 100) 
+    : (totalTasks > 0 ? Math.round(totalProgressSum / totalTasks) : 0);
+
+  // Score combiné RH (Synthèse : 50% Assiduité & Ponctualité + 50% Rendement sous-tâches)
+  const globalCombinedScore = totalWorkUnits > 0 || totalTasks > 0
     ? Math.round(0.5 * assiduiteRate + 0.5 * taskRendementRate)
     : assiduiteRate;
 

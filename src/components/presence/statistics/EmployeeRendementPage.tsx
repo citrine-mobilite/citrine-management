@@ -30,6 +30,8 @@ import { SubtaskCreateModal } from '../../tasks/SubtaskCreateModal';
 import { TimesheetModal } from '../../timesheet/TimesheetModal';
 import { computeEmployeeRendement, isTaskAssignedToEmployee, getTaskDynamicProgress } from '../../../utils/rendementCalculator';
 import { TaskTimePyramid } from './TaskTimePyramid';
+import { notifyExceptionalTaskCompletion } from '../../../services/exceptionalTaskCompletionService';
+import { HumaanTeamCelebration } from '../../illustrations/HumaanIllustrations';
 
 interface EmployeeRendementPageProps {
   employee: Employee;
@@ -226,8 +228,10 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
 
     const allCompleted = updatedSubtasks.length > 0 && updatedSubtasks.every((s) => s.completed || s.status === 'completed');
     let newStatus = task.status;
+    let becameCompleted = false;
     if (allCompleted && task.status !== 'completed') {
       newStatus = 'completed';
+      becameCompleted = true;
     } else if (!allCompleted && task.status === 'completed') {
       newStatus = 'in_progress';
     }
@@ -240,7 +244,15 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
     };
 
     if (onUpdateTask) onUpdateTask(updatedTask);
-    if (showToast) showToast('Rendement recalculé et sous-tâche mise à jour.', 'success');
+
+    if (becameCompleted) {
+      notifyExceptionalTaskCompletion(updatedTask, employee.name);
+      if (showToast) {
+        showToast(`🏆 ACCOMPLISSEMENT EXCEPTIONNEL ! ${employee.name} a terminé la tâche complète "${task.title}". Les responsables et l'IT sont notifiés par push.`, 'success');
+      }
+    } else {
+      if (showToast) showToast('Rendement recalculé et sous-tâche mise à jour.', 'success');
+    }
   };
 
   const handleAddSubtask = (task: Task) => {
@@ -288,8 +300,11 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
 
   const handleStatusChange = (task: Task, newStatus: TaskStatus) => {
     haptic.medium();
+    const wasCompleted = task.status === 'completed';
+    const isNowCompleted = newStatus === 'completed';
+
     let updatedSubtasks = task.subtasks;
-    if (newStatus === 'completed' && updatedSubtasks && updatedSubtasks.length > 0) {
+    if (isNowCompleted && updatedSubtasks && updatedSubtasks.length > 0) {
       updatedSubtasks = updatedSubtasks.map((s) => ({ ...s, completed: true, status: 'completed' as TaskStatus }));
     }
 
@@ -301,7 +316,15 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
     };
 
     if (onUpdateTask) onUpdateTask(updatedTask);
-    if (showToast) showToast(`Statut mis à jour : ${newStatus} (Rendement actualisé).`, 'success');
+
+    if (isNowCompleted && !wasCompleted) {
+      notifyExceptionalTaskCompletion(updatedTask, employee.name);
+      if (showToast) {
+        showToast(`🏆 ACCOMPLISSEMENT EXCEPTIONNEL ! ${employee.name} a validé la tâche complète "${task.title}". Les responsables et l'IT sont notifiés par push.`, 'success');
+      }
+    } else {
+      if (showToast) showToast(`Statut mis à jour : ${newStatus} (Rendement actualisé).`, 'success');
+    }
   };
 
   const handleMilestoneProgressChange = (task: Task, progress: number) => {
@@ -357,20 +380,23 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
           </div>
         </div>
 
-        {/* Quick Timesheet Launcher on Header */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Quick Timesheet Launcher on Header & Team Illustration */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden lg:block opacity-90 drop-shadow-sm">
+            <HumaanTeamCelebration className="w-28 h-20" />
+          </div>
           <button
             onClick={() => openTimesheet('month')}
-            className="px-3.5 py-2 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
-            title="Générer automatiquement la feuille de temps de ce collaborateur (Jour / Mois / Année)"
+            className="px-4 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer active:scale-98"
+            title="Générer la feuille de tâches synthétique de ce collaborateur (Jour / Mois / Année)"
           >
             <FileSpreadsheet className="h-4 w-4 text-[#2A7B76]" />
-            <span>Feuilles de Temps</span>
+            <span>Feuilles de Tâches</span>
           </button>
         </div>
       </div>
 
-      {/* Barre d'automatisation des Feuilles de Temps */}
+      {/* Barre d'automatisation des Feuilles de Tâches */}
       <div className="bg-gradient-to-r from-stone-900 via-stone-800 to-emerald-950 p-4 rounded-3xl text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 border border-stone-700/60">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-emerald-500/20 text-emerald-300 rounded-2xl border border-emerald-400/30">
@@ -378,13 +404,13 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
           </div>
           <div>
             <h4 className="font-serif font-bold text-sm text-white flex items-center gap-2">
-              Génération Automatique de la Feuille de Temps
+              Génération de la Feuille de Tâches &amp; Rendement
               <span className="text-[10px] font-sans font-bold bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 px-2 py-0.2 rounded-full">
-                Modèle Officiel Citrine
+                Synthèse Citrine
               </span>
             </h4>
             <p className="text-xs text-stone-300">
-              Générez, prévisualisez et exportez les feuilles d'activité par période.
+              Synthèse complète entre l'assiduité et le rendement des tâches et sous-tâches selon la durée sélectionnée.
             </p>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { FolderKanban, FolderPlus, Plus, Trophy, Sparkles, Send } from 'lucide-react';
+import { HumaanTaskCheck } from '../illustrations/HumaanIllustrations';
 
 interface TaskHeaderBannerProps {
   onOpenNewProject: () => void;
@@ -29,10 +30,11 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
               Style Asana Pro
             </span>
           </div>
-          <p className="text-xs text-emerald-100/90 hidden sm:block">
-            Organisation des projets d'entreprise, décomposition en sous-tâches et pilotage du rendement capacitaire.
-          </p>
         </div>
+      </div>
+
+      <div className="hidden lg:block shrink-0">
+        <HumaanTaskCheck className="w-28 h-24 drop-shadow-md" />
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 w-full md:w-auto">

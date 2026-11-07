@@ -8,11 +8,13 @@ import {
   Settings, 
   ArrowRight,
   TrendingUp,
-  LayoutDashboard
+  LayoutDashboard,
+  Sparkles
 } from 'lucide-react';
 import { Employee, Presence, Task, Reminder, AppUser } from '../types';
 import { TabType } from './Sidebar';
 import { isEmployeeOnlyRole } from '../utils/roleUtils';
+import { HumaanDashboardHero, HumaanRelaxedState } from './illustrations/HumaanIllustrations';
 
 interface AdminDashboardOverviewProps {
   currentUser: AppUser | null;
@@ -85,18 +87,38 @@ export default function AdminDashboardOverview({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       
-      {/* Dashboard Top Header Banner */}
-      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <LayoutDashboard className="h-5 w-5 text-emerald-200" />
-            <h2 className="font-serif font-bold text-xl">Tableau de Bord d'Administration</h2>
+      {/* Dashboard Top Header Banner avec Illustration Humaaans */}
+      <div className="bg-gradient-to-r from-[#2A7B76] via-[#216762] to-[#164844] rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-emerald-600/30 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+        
+        {/* Glow ambient background */}
+        <div className="absolute top-0 right-1/4 -mt-12 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="space-y-3 z-10 text-center md:text-left">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs text-emerald-100 font-semibold shadow-2xs">
+            <Sparkles className="h-3.5 w-3.5 text-[#F3D079]" />
+            <span>Espace Direction & Pilotage Opérationnel</span>
+          </div>
+          <div>
+            <h2 className="font-serif font-bold text-2xl sm:text-3xl text-white tracking-tight">
+              Bonjour, {currentUser?.name || 'Administrateur'}
+            </h2>
+            <p className="text-xs text-emerald-100/90 font-medium capitalize mt-1">
+              {currentDateFormatted} • Suivi en temps réel de l'activité Citrine
+            </p>
+          </div>
+          
+          <div className="inline-flex items-center gap-3 bg-white/15 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/20 text-xs font-mono font-bold shadow-2xs">
+            <span className="text-emerald-200">🕒 {realTime}</span>
+            <span className="text-white/40">|</span>
+            <span className="text-emerald-100 font-sans font-semibold text-[11px]">
+              {presentCount} collaborateur{presentCount > 1 ? 's' : ''} en poste
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/20 text-xs font-mono font-bold shrink-0">
-          <span className="text-emerald-200">🕒 {realTime}</span>
-          <span className="text-white/40">|</span>
-          <span className="capitalize">{currentDateFormatted}</span>
+
+        {/* Illustration Humaine Vectorielle Humaaans */}
+        <div className="shrink-0 z-10 flex items-center justify-center">
+          <HumaanDashboardHero className="w-56 h-36 sm:w-64 sm:h-40 drop-shadow-md" />
         </div>
       </div>
 
@@ -296,11 +318,15 @@ export default function AdminDashboardOverview({
               </span>
             </div>
 
-            <div className="py-4 text-center">
+            <div className="py-2 text-center flex flex-col items-center justify-center">
               {activeRemindersCount === 0 ? (
-                <p className="text-stone-400 italic text-[11px]">Aucun rappel en attente. Tout est à jour !</p>
+                <div className="flex flex-col items-center py-2 space-y-1">
+                  <HumaanRelaxedState className="w-20 h-20" />
+                  <p className="text-stone-600 font-bold text-xs">Tout est sous contrôle !</p>
+                  <p className="text-stone-400 text-[10px]">Aucun rappel ni retard critique à signaler.</p>
+                </div>
               ) : (
-                <div className="text-left space-y-2 max-h-36 overflow-y-auto">
+                <div className="w-full text-left space-y-2 max-h-36 overflow-y-auto">
                   {reminders.slice(0, 2).map((r) => (
                     <div key={r.id} className="p-2.5 glass-chip rounded-xl text-[11px] font-medium text-stone-700">
                       🔔 <b>{r.title}</b> ({r.time})

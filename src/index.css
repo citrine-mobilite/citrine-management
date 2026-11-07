@@ -242,6 +242,136 @@ html {
   padding: 1.75rem !important;
 }
 
+/* ==========================================================================
+   🎯 SWEETALERT2 ICON CENTERING FIX (SUCCESS & ERROR)
+   ========================================================================== */
+
+/* Isolation stricte du box-sizing pour SweetAlert2 (évite le conflit avec Tailwind border-box) */
+.swal2-icon {
+  box-sizing: content-box !important;
+  margin: 1.25rem auto 0.75rem auto !important;
+  border-width: 0.25em !important;
+}
+
+.swal2-icon * {
+  box-sizing: content-box !important;
+}
+
+/* 1. Correction Icône SUCCÈS (swal2-success) */
+.swal2-icon.swal2-success {
+  position: relative !important;
+  border-color: #10b981 !important;
+  background: transparent !important;
+}
+
+/* Masquage des caches blancs d'animation SweetAlert2 qui découpaient le rond sur fond translucide */
+.swal2-icon.swal2-success [class^='swal2-success-circular-line'],
+.swal2-icon.swal2-success .swal2-success-fix {
+  display: none !important;
+  background: transparent !important;
+}
+
+/* Anneau circulaire de succès bien centré */
+.swal2-icon.swal2-success .swal2-success-ring {
+  position: absolute !important;
+  top: -0.25em !important;
+  left: -0.25em !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0.25em solid rgba(16, 185, 129, 0.35) !important;
+  border-radius: 50% !important;
+  box-sizing: content-box !important;
+}
+
+/* Coche verte de succès (V / checkmark) parfaitement calibrée */
+.swal2-icon.swal2-success [class^='swal2-success-line'] {
+  display: block !important;
+  position: absolute !important;
+  z-index: 2 !important;
+  height: 0.3125em !important;
+  border-radius: 0.125em !important;
+  background-color: #10b981 !important;
+}
+
+.swal2-icon.swal2-success [class^='swal2-success-line'][class$='tip'] {
+  top: 2.875em !important;
+  left: 0.8125em !important;
+  width: 1.5625em !important;
+  transform: rotate(45deg) !important;
+}
+
+.swal2-icon.swal2-success [class^='swal2-success-line'][class$='long'] {
+  top: 2.375em !important;
+  right: 0.5em !important;
+  width: 2.9375em !important;
+  transform: rotate(-45deg) !important;
+}
+
+/* 2. Correction Icône ERREUR (swal2-error) - Centrage géométrique parfait */
+.swal2-icon.swal2-error {
+  position: relative !important;
+  border-color: #f43f5e !important;
+  background: transparent !important;
+}
+
+.swal2-icon.swal2-error .swal2-x-mark {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+}
+
+/* Les deux barres de la croix se croisent exactement à 50% / 50% du cercle */
+.swal2-icon.swal2-error [class^='swal2-x-mark-line'] {
+  display: block !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: 2.875em !important;
+  height: 0.3125em !important;
+  border-radius: 0.15em !important;
+  background-color: #f43f5e !important;
+  transform-origin: center center !important;
+}
+
+.swal2-icon.swal2-error [class^='swal2-x-mark-line'][class$='left'] {
+  transform: translate(-50%, -50%) rotate(45deg) !important;
+  left: 50% !important;
+  right: auto !important;
+}
+
+.swal2-icon.swal2-error [class^='swal2-x-mark-line'][class$='right'] {
+  transform: translate(-50%, -50%) rotate(-45deg) !important;
+  left: 50% !important;
+  right: auto !important;
+}
+
+/* 3. Centrage des icônes Warning, Info & Question */
+.swal2-icon.swal2-warning,
+.swal2-icon.swal2-info,
+.swal2-icon.swal2-question {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-width: 0.25em !important;
+}
+
+.swal2-icon .swal2-icon-content {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: center !important;
+  line-height: 1 !important;
+}
+
 .swal2-title {
   color: #1c1917 !important;
   font-family: Georgia, Cambria, "Times New Roman", Times, serif !important;

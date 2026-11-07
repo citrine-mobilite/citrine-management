@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { HumaanPeople } from './illustrations/HumaanIllustrations';
 import { 
   Users, 
   Search, 

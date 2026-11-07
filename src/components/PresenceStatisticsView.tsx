@@ -188,7 +188,7 @@ export function PresenceStatisticsView({
             Statistiques, Assiduité & Rendement
           </h2>
           <p className="text-xs text-emerald-100/90 max-w-2xl">
-            Surveillance en temps réel de la ponctualité, de l'assiduité, du rendement des tâches et génération automatisée des feuilles de temps.
+            Surveillance en temps réel de la ponctualité, de l'assiduité, du rendement des sous-tâches et génération des feuilles de tâches.
           </p>
         </div>
 
@@ -230,10 +230,10 @@ export function PresenceStatisticsView({
               ? 'bg-[#2A7B76] text-white shadow-sm'
               : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
           }`}
-          title="Afficher l'histogramme et le rendement dynamique des collaborateurs"
+          title="Afficher le rendement des collaborateurs, le suivi des tâches et sous-tâches"
         >
           <CheckSquare className="h-4 w-4" />
-          <span>Rendement, Tâches & Histogramme</span>
+          <span>Rendement & Tâches</span>
           <span className="bg-white/20 px-1.5 py-0.2 rounded-full text-[10px] font-mono">
             {dynamicTeamRate}%
           </span>
@@ -406,7 +406,7 @@ export function PresenceStatisticsView({
                 Rendement des Tâches & Assiduité par Collaborateur ({filteredMetricsList.length})
               </h3>
               <span className="text-[11px] text-stone-500 italic">
-                Cliquez sur une ligne pour ouvrir la fiche de détail ou générer la feuille de temps.
+                Cliquez sur une ligne pour ouvrir la fiche de détail ou générer la feuille de tâches.
               </span>
             </div>
 
@@ -495,14 +495,14 @@ export function PresenceStatisticsView({
                       </td>
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Bouton direct Feuille de temps */}
+                          {/* Bouton direct Feuille de tâches */}
                           <button
                             onClick={() => handleOpenTimesheetModal(m.employee, 'month')}
                             className="px-2 py-1 bg-white hover:bg-emerald-600 hover:text-white text-stone-700 border border-stone-200 hover:border-emerald-600 rounded-lg transition inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer shadow-3xs"
-                            title="Générer automatiquement la feuille de temps de ce collaborateur (Jour/Mois/Année)"
+                            title="Générer automatiquement la feuille de tâches de ce collaborateur (Jour/Mois/Année)"
                           >
                             <FileSpreadsheet className="h-3.5 w-3.5 text-[#2A7B76]" />
-                            <span className="hidden lg:inline">Feuille</span>
+                            <span className="hidden lg:inline">Feuille de tâches</span>
                           </button>
 
                           <button

@@ -212,19 +212,34 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
         managerAlertPoint: notesSummary,
       });
     } else if (mode === 'month') {
-      const headers = ['Date', 'Jour', 'Arrivée', 'Départ', 'Heures Travaillées', 'Statut Pointage', 'Tâches Clôturées'];
-      const rows = monthlyData.dailyBreakdown.map((d) => [
-        d.date,
-        d.dayName,
-        d.arrivalTime,
-        d.departureTime,
-        `${d.hoursWorked}h`,
-        d.status,
-        d.tasksDoneCount,
-      ]);
-      exportToExcel(`feuille_temps_mensuelle_${employee.name}_${selectedMonth}.xls`, `Feuille Mensuelle - ${monthlyData.monthName}`, headers, rows);
+      const headers = ['Tâche / Mission Parente', 'Sous-Tâche', 'Priorité', 'Date / Échéance', 'Statut Sous-Tâche', 'Avancement Tâche'];
+      const rows: any[] = [];
+      (monthlyData.tasksList || []).forEach((t) => {
+        if (t.subtasks && t.subtasks.length > 0) {
+          t.subtasks.forEach((s) => {
+            rows.push([
+              t.title,
+              s.title,
+              t.priority || 'Normal',
+              t.date || selectedMonth,
+              s.completed ? 'Terminée ✓' : (s.status === 'in_progress' ? 'En cours' : 'À faire'),
+              `${t.completionPercentage}%`,
+            ]);
+          });
+        } else {
+          rows.push([
+            t.title,
+            '(Tâche unitaire)',
+            t.priority || 'Normal',
+            t.date || selectedMonth,
+            t.status === 'completed' ? 'Terminée ✓' : 'En cours',
+            t.status === 'completed' ? '100%' : '50%',
+          ]);
+        }
+      });
+      exportToExcel(`feuille_taches_mensuelle_${employee.name}_${selectedMonth}.xls`, `Feuille de Tâches - ${monthlyData.monthName}`, headers, rows);
     } else {
-      const headers = ['Mois', 'Jours Travaillés', 'Heures Cumulées', 'Tâches Achevées', 'Taux de Rendement'];
+      const headers = ['Mois', 'Jours Travaillés', 'Heures Cumulées', 'Sous-Tâches Achevées', 'Taux de Rendement'];
       const rows = yearlyData.monthlyBreakdown.map((m) => [
         m.monthName,
         m.daysWorked,
@@ -232,12 +247,12 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
         m.tasksCompleted,
         `${m.rendementRate}%`,
       ]);
-      exportToExcel(`feuille_temps_annuelle_${employee.name}_${selectedYear}.xls`, `Bilan Annuel ${selectedYear} - ${employee.name}`, headers, rows);
+      exportToExcel(`feuille_taches_annuelle_${employee.name}_${selectedYear}.xls`, `Bilan Annuel Tâches ${selectedYear} - ${employee.name}`, headers, rows);
     }
   };
 
   const handleExportPdf = () => {
-    exportElementToPdf('timesheet-printable-sheet', `feuille_de_temps_${employee.name}_${mode}.pdf`);
+    exportElementToPdf('timesheet-printable-sheet', `feuille_de_taches_${employee.name}_${mode}.pdf`);
   };
 
   return (
@@ -260,7 +275,7 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                 </span>
               </div>
               <h3 className="font-serif font-bold text-base sm:text-lg text-white">
-                Feuille de Temps Automatique &amp; Plan Horaire
+                Feuille de Tâches &amp; Synthèse du Rendement
               </h3>
             </div>
           </div>
@@ -436,67 +451,54 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                   </div>
                 </div>
 
-                {/* 🚨 SIGNALEMENT DES INCIDENTS DE PRÉSENCE (RETARD, SORTIE, DÉPART ANTICIPÉ...) */}
-                <div className={`rounded-xl border overflow-hidden ${
-                  dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0
-                    ? 'border-orange-400 bg-orange-50/60'
-                    : 'border-emerald-300 bg-emerald-50/60'
-                }`}>
-                  <div className={`px-3 py-2 font-bold text-xs flex items-center justify-between text-white ${
-                    dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0
-                      ? 'bg-orange-700'
-                      : 'bg-emerald-700'
-                  }`}>
-                    <div className="flex items-center gap-1.5">
-                      <span>{dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0 ? '⚠️' : '✅'}</span>
-                      <span>
-                        SIGNALEMENT DES INCIDENTS &amp; HORAIRES DE PRÉSENCE ({dailyData.presenceIncidents ? dailyData.presenceIncidents.length : 0})
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-semibold opacity-90">
-                      {dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0
-                        ? 'Retards, sorties ou écarts constatés'
-                        : 'Ponctualité et assiduité conformes'}
-                    </span>
-                  </div>
-
-                  <div className="p-3">
-                    {dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0 ? (
-                      <div className="space-y-2">
-                        {dailyData.presenceIncidents.map((inc, iIdx) => (
-                          <div 
-                            key={iIdx} 
-                            className="bg-white p-2.5 rounded-lg border border-orange-200 flex items-center justify-between gap-3 text-xs shadow-3xs"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="font-mono font-bold text-orange-900 bg-orange-100 px-2 py-0.5 rounded text-[11px] shrink-0">
-                                {inc.time || 'Pointage'}
-                              </span>
-                              <span className="font-bold text-orange-700 uppercase text-[10px] bg-orange-100/70 border border-orange-300 px-1.5 py-0.5 rounded shrink-0">
-                                {inc.label}
-                              </span>
-                              <span className="text-stone-700 font-medium truncate">
-                                {inc.description}
-                              </span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded font-bold text-[10px] shrink-0 ${
-                              inc.isJustified
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : 'bg-rose-100 text-rose-800 border border-rose-300'
-                            }`}>
-                              {inc.isJustified ? '✓ Justifié' : '⚠️ Non régularisé'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 text-emerald-900 font-semibold text-xs">
-                        <span className="text-base">✅</span>
-                        <span>
-                          Aucun incident de présence constaté : ponctualité respectée (dès 08h00), pause déjeuner 12h–13h conforme, aucune sortie non justifiée.
+                {/* 🎯 SYNTHÈSE ASSIDUITÉ ET RENDEMENT DES SOUS-TÂCHES */}
+                <div className="rounded-2xl border border-stone-200 bg-gradient-to-r from-stone-50 via-white to-emerald-50/50 p-4 shadow-3xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#2A7B76]/10 text-[#2A7B76]">
+                          Synthèse Présence &amp; Rendement
+                        </span>
+                        <span className="text-xs text-stone-500 font-medium">
+                          {dailyData.dayName.toUpperCase()} • {dailyData.date}
                         </span>
                       </div>
-                    )}
+                      <h4 className="font-serif font-bold text-sm text-stone-900">
+                        Bilan Opérationnel des Tâches &amp; Assiduité
+                      </h4>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-3xs flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                        <div>
+                          <span className="text-[9px] text-stone-400 font-bold block uppercase">Assiduité</span>
+                          <strong className="text-stone-800 text-xs font-bold">
+                            {dailyData.presenceIncidents && dailyData.presenceIncidents.length > 0 ? 'Conforme avec remarques' : 'Ponctualité 100%'}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-3xs flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-[#2A7B76]" />
+                        <div>
+                          <span className="text-[9px] text-stone-400 font-bold block uppercase">Rendement Sous-Tâches</span>
+                          <strong className="text-stone-800 text-xs font-bold">
+                            {dailyData.completedTasks}/{dailyData.totalTasks} ({dailyData.ratePercentage}%)
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-3xs flex items-center gap-2">
+                        <Trophy className="w-4 h-4 text-amber-500" />
+                        <div>
+                          <span className="text-[9px] text-stone-400 font-bold block uppercase">Missions Majeures</span>
+                          <strong className="text-stone-800 text-xs font-bold">
+                            {dailyData.topPriorities.filter(p => p.status === 'Fait').length}/{dailyData.topPriorities.length}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1062,51 +1064,160 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
               </div>
             )}
 
-            {/* MODE 2: SYNTHÈSE MENSUELLE */}
+            {/* MODE 2: SYNTHÈSE MENSUELLE AXÉE TÂCHES & SOUS-TÂCHES */}
             {mode === 'month' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-stone-50 p-3 rounded-xl border border-stone-200 text-center">
-                    <span className="text-[10px] text-stone-400 font-bold uppercase">Jours Travaillés</span>
+              <div className="space-y-5">
+                {/* 4 KPI Synthétiques du Mois */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 text-center shadow-3xs">
+                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Assiduité Globale</span>
                     <strong className="block text-xl font-bold font-serif text-[#164e4b] mt-0.5">
                       {monthlyData.totalDaysWorked} jours
                     </strong>
+                    <span className="text-[10px] text-stone-500 font-mono">{monthlyData.totalHoursWorked}h cumulées</span>
                   </div>
-                  <div className="bg-stone-50 p-3 rounded-xl border border-stone-200 text-center">
-                    <span className="text-[10px] text-stone-400 font-bold uppercase">Heures Cumulées</span>
-                    <strong className="block text-xl font-bold font-serif text-indigo-700 mt-0.5">
-                      {monthlyData.totalHoursWorked}h
-                    </strong>
-                  </div>
-                  <div className="bg-stone-50 p-3 rounded-xl border border-stone-200 text-center">
-                    <span className="text-[10px] text-stone-400 font-bold uppercase">Rendement Tâches</span>
-                    <strong className="block text-xl font-bold font-serif text-emerald-700 mt-0.5">
+
+                  <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 text-center shadow-3xs">
+                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Rendement Sous-Tâches</span>
+                    <strong className="block text-xl font-bold font-serif text-[#2A7B76] mt-0.5">
                       {monthlyData.completionRate}%
                     </strong>
+                    <span className="text-[10px] text-stone-500 font-medium">Calculé sur sous-tâches</span>
+                  </div>
+
+                  <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 text-center shadow-3xs">
+                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Sous-Tâches Validées</span>
+                    <strong className="block text-xl font-bold font-serif text-emerald-700 mt-0.5">
+                      {monthlyData.completedSubtasksCount || monthlyData.totalTasksCompleted} / {monthlyData.totalSubtasksCount || monthlyData.totalTasksAssigned}
+                    </strong>
+                    <span className="text-[10px] text-stone-500">Unités concrètes</span>
+                  </div>
+
+                  <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 text-center shadow-3xs">
+                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Missions Majeures</span>
+                    <strong className="block text-xl font-bold font-serif text-amber-600 mt-0.5">
+                      {(monthlyData.tasksList || []).filter(t => t.status === 'completed').length} / {(monthlyData.tasksList || []).length}
+                    </strong>
+                    <span className="text-[10px] text-stone-500">Tâches parentes finies</span>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-stone-300 overflow-hidden">
+                {/* 📋 TABLEAU PRINCIPAL : RELEVÉ EXHAUSTIF DES TÂCHES & SOUS-TÂCHES DU MOIS */}
+                <div className="rounded-2xl border border-stone-300 overflow-hidden shadow-3xs">
+                  <div className="bg-[#164e4b] text-white px-3.5 py-2.5 font-bold text-xs flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">📋</span>
+                      <span>RELEVÉ DÉTAILLÉ DU MOIS : TÂCHES &amp; SOUS-TÂCHES OPÉRATIONNELLES</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-200 font-mono">
+                      {(monthlyData.tasksList || []).length} mission(s) assignée(s)
+                    </span>
+                  </div>
+
+                  <div className="divide-y divide-stone-200 bg-white">
+                    {(monthlyData.tasksList || []).map((t) => {
+                      const isTaskDone = t.status === 'completed';
+                      return (
+                        <div key={t.id} className="p-3.5 hover:bg-stone-50/60 transition space-y-2.5">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase ${
+                                isTaskDone
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : t.status === 'in_progress'
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  : 'bg-stone-100 text-stone-700 border border-stone-300'
+                              }`}>
+                                {isTaskDone ? '🏆 Tâche Terminée' : 'En cours'}
+                              </span>
+                              <h4 className="font-bold text-xs text-stone-900 truncate">
+                                {t.title}
+                              </h4>
+                              {t.isMilestone && (
+                                <span className="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded text-[9px] font-bold">
+                                  Jalon Clé
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0 text-xs">
+                              <span className="text-[11px] font-mono text-stone-500">
+                                Sous-tâches : <strong className="text-stone-800 font-bold">{t.completedSubtasks}/{t.totalSubtasks}</strong>
+                              </span>
+                              <div className="w-24 bg-stone-100 h-2 rounded-full overflow-hidden border border-stone-200">
+                                <div 
+                                  className={`h-full ${isTaskDone ? 'bg-emerald-500' : 'bg-[#2A7B76]'}`} 
+                                  style={{ width: `${t.completionPercentage}%` }}
+                                />
+                              </div>
+                              <span className="font-bold font-mono text-[11px] text-[#2A7B76]">
+                                {t.completionPercentage}%
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Liste des sous-tâches de cette tâche */}
+                          {t.subtasks && t.subtasks.length > 0 && (
+                            <div className="pl-3 sm:pl-5 space-y-1.5 border-l-2 border-[#2A7B76]/30">
+                              {t.subtasks.map((s) => (
+                                <div 
+                                  key={s.id}
+                                  className="flex items-center justify-between gap-2 text-xs py-1 px-2.5 rounded-lg bg-stone-50 border border-stone-200/60"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className={s.completed ? 'text-emerald-600 font-bold' : 'text-stone-400'}>
+                                      {s.completed ? '✓' : '○'}
+                                    </span>
+                                    <span className={`truncate ${s.completed ? 'line-through text-stone-400' : 'text-stone-800 font-medium'}`}>
+                                      {s.title}
+                                    </span>
+                                  </div>
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
+                                    s.completed
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  }`}>
+                                    {s.completed ? 'Validée' : 'À faire'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {(monthlyData.tasksList || []).length === 0 && (
+                      <div className="p-8 text-center text-stone-400 italic text-xs">
+                        Aucune tâche enregistrée pour ce collaborateur sur ce mois.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 🗓️ SYNTHÈSE JOURNALIÈRE D'ACTIVITÉ */}
+                <div className="rounded-2xl border border-stone-300 overflow-hidden shadow-3xs">
+                  <div className="bg-[#2A7B76] text-white px-3.5 py-2 font-bold text-xs flex items-center justify-between">
+                    <span>SYNTHÈSE JOURNALIÈRE DU MOIS</span>
+                    <span className="text-[10px] text-emerald-100 font-mono">
+                      {monthlyData.totalDaysWorked} jours d'activité
+                    </span>
+                  </div>
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#164e4b] text-white font-bold text-[11px]">
+                    <thead className="bg-stone-50 text-stone-600 font-bold text-[10px] uppercase border-b border-stone-200">
                       <tr>
                         <th className="py-2 px-3">Date</th>
                         <th className="py-2 px-2 text-center">Jour</th>
-                        <th className="py-2 px-3 text-center">Arrivée</th>
-                        <th className="py-2 px-3 text-center">Départ</th>
+                        <th className="py-2 px-3 text-center">Statut Présence</th>
                         <th className="py-2 px-3 text-right">Heures</th>
-                        <th className="py-2 px-3 text-center">Pointage</th>
-                        <th className="py-2 px-3 text-center">Tâches Clôturées</th>
+                        <th className="py-2 px-3 text-center">Sous-Tâches Clôturées</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-200 font-medium">
                       {monthlyData.dailyBreakdown.map((d, idx) => (
-                        <tr key={idx} className={d.hoursWorked > 0 ? 'bg-white' : 'bg-stone-50 text-stone-400'}>
+                        <tr key={idx} className={d.hoursWorked > 0 || d.tasksDoneCount > 0 ? 'bg-white' : 'bg-stone-50 text-stone-400'}>
                           <td className="py-1.5 px-3 font-mono">{d.date}</td>
                           <td className="py-1.5 px-2 text-center uppercase font-bold text-[10px]">{d.dayName}</td>
-                          <td className="py-1.5 px-3 text-center font-mono">{d.arrivalTime}</td>
-                          <td className="py-1.5 px-3 text-center font-mono">{d.departureTime}</td>
-                          <td className="py-1.5 px-3 text-right font-mono font-bold">{d.hoursWorked > 0 ? `${d.hoursWorked}h` : '-'}</td>
                           <td className="py-1.5 px-3 text-center">
                             {d.status !== '-' && (
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -1116,8 +1227,15 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                               </span>
                             )}
                           </td>
-                          <td className="py-1.5 px-3 text-center font-bold text-blue-700 font-mono">
-                            {d.tasksDoneCount > 0 ? `${d.tasksDoneCount} fait` : '-'}
+                          <td className="py-1.5 px-3 text-right font-mono font-bold text-stone-700">
+                            {d.hoursWorked > 0 ? `${d.hoursWorked}h` : '-'}
+                          </td>
+                          <td className="py-1.5 px-3 text-center font-bold font-mono">
+                            {d.tasksDoneCount > 0 ? (
+                              <span className="px-2 py-0.5 rounded bg-emerald-50 text-[#2A7B76] border border-emerald-200 font-bold text-[10px]">
+                                {d.tasksDoneCount} sous-tâche(s)
+                              </span>
+                            ) : '-'}
                           </td>
                         </tr>
                       ))}
