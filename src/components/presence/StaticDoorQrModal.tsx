@@ -15,6 +15,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
+import { generateAndDownloadQrPoster } from '../../utils/qrPosterGenerator';
 
 interface StaticDoorQrModalProps {
   isOpen: boolean;
@@ -99,35 +100,16 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
   };
 
   const handleDownloadQR = () => {
-    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
-      <rect width="100%" height="100%" fill="white"/>
-      <rect x="40" y="40" width="320" height="320" fill="none" stroke="${isInvalidated ? '#ef4444' : '#1e3a8a'}" stroke-width="12" rx="16"/>
-      <text x="200" y="85" font-family="sans-serif" font-weight="bold" font-size="20" fill="#1e3a8a" text-anchor="middle">ACCÈS SÉCURISÉ CITRINE</text>
-      <text x="200" y="115" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">${moduleConfig?.companyName || 'Siège Social'}</text>
-      <g fill="${isInvalidated ? '#ef4444' : '#0f172a'}">
-        <rect x="70" y="140" width="80" height="80" rx="8"/>
-        <rect x="250" y="140" width="80" height="80" rx="8"/>
-        <rect x="70" y="250" width="80" height="80" rx="8"/>
-        <rect x="170" y="170" width="60" height="60"/>
-        <rect x="170" y="260" width="100" height="40"/>
-        <rect x="270" y="260" width="60" height="70"/>
-      </g>
-      <text x="200" y="365" font-family="monospace" font-size="11" fill="#475569" text-anchor="middle">JETON: ${currentToken.substring(0, 24)}...</text>
-    </svg>`;
-
-    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `qrcode-porte-${isInvalidated ? 'INVALIDE' : 'actif'}-${Date.now()}.svg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    generateAndDownloadQrPoster(currentToken, {
+      companyName: moduleConfig?.companyName || 'Citrine SARL',
+      siteName: moduleConfig?.doorQrSiteName || 'Entrée Principale (HQ Siège)',
+      title: 'ACCÈS SÉCURISÉ CITRINE - POINTAGE',
+      subtitle: isInvalidated ? 'ATTENTION : Ce QR Code a été invalidé par la direction.' : 'Scannez ce QR Code officiel pour enregistrer votre badgeage.',
+    });
   };
 
   const handlePrint = () => {
-    window.print();
+    handleDownloadQR();
   };
 
   return (

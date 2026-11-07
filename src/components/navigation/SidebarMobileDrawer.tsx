@@ -24,22 +24,22 @@ export const SidebarMobileDrawer: React.FC<SidebarMobileDrawerProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex md:hidden">
-      {/* Backdrop */}
+      {/* Backdrop with frosted dark veil */}
       <div
-        className="fixed inset-0 bg-stone-900/50 backdrop-blur-xs transition-opacity"
+        className="fixed inset-0 bg-stone-950/45 backdrop-blur-md transition-opacity"
         onClick={onToggleMobileMenu}
       />
 
-      {/* Drawer Panel */}
-      <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-2xl z-10">
-        <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/60">
+      {/* Drawer Panel in Frosted Glass */}
+      <div className="relative flex-1 flex flex-col max-w-xs w-full glass-drawer-panel z-10">
+        <div className="p-4 border-b border-white/70 flex items-center justify-between bg-white/50 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <CMLogo size="sm" />
-            <span className="font-serif font-bold text-sm text-stone-900">Menu Principal</span>
+            <span className="font-serif font-bold text-sm text-stone-900 tracking-tight">Menu Principal</span>
           </div>
           <button
             onClick={onToggleMobileMenu}
-            className="p-1.5 rounded-xl hover:bg-stone-200/60 text-stone-500 transition cursor-pointer"
+            className="p-1.5 rounded-xl hover:bg-white/80 text-stone-700 transition cursor-pointer glass-chip"
           >
             <X className="h-5 w-5" />
           </button>

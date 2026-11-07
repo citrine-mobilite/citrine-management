@@ -15,7 +15,7 @@ interface OfficeQRCodeModalProps {
 export default function OfficeQRCodeModal({
   isOpen,
   onClose,
-  qrSecret = 'CITRINE-HQ-SECRET-KEY-2026',
+  qrSecret = 'CITRINE_HQ_NOVEMBRE_2026',
   companyName = 'Citrine Management',
   managerName = 'Responsable',
 }: OfficeQRCodeModalProps) {
@@ -201,11 +201,16 @@ export default function OfficeQRCodeModal({
           {/* Action buttons */}
           <div className="pt-2">
             <button
-              onClick={() => generateAndDownloadQrPoster(currentQrSecret, companyName)}
+              onClick={() => generateAndDownloadQrPoster(qrSecret, {
+                companyName,
+                siteName: 'Borne Officielle d’Entrée',
+                title: 'BORNE OFFICIELLE DE POINTAGE',
+                subtitle: 'Affiche permanente à imprimer et fixer à la porte d’entrée.',
+              })}
               className="w-full py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
             >
               <Download className="h-4 w-4" />
-              <span>Télécharger l'Affiche de Pointage (HD)</span>
+              <span>Télécharger l'Affiche de Pointage Permanente (HD)</span>
             </button>
           </div>
         </div>

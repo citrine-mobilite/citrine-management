@@ -27,9 +27,9 @@ import { pushNotificationBridgeService } from '../services/pushNotificationBridg
 import { realtimeSyncService } from '../services/realtimeSyncService';
 import { syncMissionsAndEmployeeStatus } from '../services/missionLifecycleService';
 
-const MODULE_CACHE_KEY = 'citrine_module_config';
+export const MODULE_CACHE_KEY = 'citrine_module_config';
 
-function getStoredModuleConfig(): CompanyModuleConfig {
+export function getStoredModuleConfig(): CompanyModuleConfig {
   try {
     let raw = safeStorage.getItem(MODULE_CACHE_KEY);
     if (!raw && typeof window !== 'undefined' && window.localStorage) {
@@ -91,6 +91,7 @@ export function useAppInitialData() {
   const appStartTimeRef = useRef(Date.now());
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
   const isInitialNotifLoadDoneRef = useRef(false);
+  const recentNotifKeysRef = useRef<Map<string, number>>(new Map());
 
   const handleIncomingNotifications = useCallback((newNotifs: NotificationLog[]) => {
     if (!newNotifs || newNotifs.length === 0) return;
@@ -628,11 +629,30 @@ export function useAppInitialData() {
 
   const handleAddNotification = async (notif: any) => {
     const text = notif.content || notif.message || notif.title || 'Notification';
+    const recipient = notif.recipient || 'Général';
+    const title = notif.title || 'Notification';
+    const dedupKey = `${recipient}:${title}:${text}`;
+    const now = Date.now();
+
+    // Déduplication anti-rafale : si une notification identique a été envoyée il y a moins de 3s
+    const last = recentNotifKeysRef.current.get(dedupKey);
+    if (last && now - last < 3000) {
+      return;
+    }
+    recentNotifKeysRef.current.set(dedupKey, now);
+
+    // Nettoyage régulier du cache de clés
+    for (const [key, timestamp] of recentNotifKeysRef.current.entries()) {
+      if (now - timestamp > 10000) {
+        recentNotifKeysRef.current.delete(key);
+      }
+    }
+
     const n: NotificationLog = {
       id: notif.id || `notif-${Date.now()}`,
       type: notif.type || 'system',
-      recipient: notif.recipient || 'Général',
-      title: notif.title || 'Notification',
+      recipient,
+      title,
       content: text,
       message: text,
       payload: notif.payload || '',

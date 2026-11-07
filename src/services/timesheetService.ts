@@ -2,6 +2,7 @@ import { Employee, Task, Subtask, Presence, AttendanceIncident, TaskProject } fr
 import { isTaskAssignedToEmployee } from '../utils/rendementCalculator';
 import { exportToExcel } from './excelExportService';
 import { isSubtaskInLast3Days, sortSubtasksNewestFirst } from '../utils/subtaskFilterUtils';
+import { isTaskEligibleForDayTimesheet, getItemTimesheetStatus } from '../utils/timesheetTaskEligibility';
 
 export interface DailyTimesheetTaskItem {
   id?: string;
@@ -179,16 +180,11 @@ export function generateDailyTimesheet(
     }
 
     if (parentTask.subtasks && parentTask.subtasks.length > 0) {
-      // Prioriser les sous-tâches des 3 derniers jours glissants, triées du plus récent au plus ancien
-      const sortedSubs = sortSubtasksNewestFirst(parentTask.subtasks, parentTask.date);
-      const recentSubs = sortedSubs.filter((s) => isSubtaskInLast3Days(s, parentTask.date));
-      const subsToInclude = recentSubs.length > 0 ? recentSubs : sortedSubs;
-
-      subsToInclude.forEach((sub) => {
-        let subStatus: 'Fait' | 'En cours' | 'À faire' | 'Bloqué' = 'À faire';
-        if (sub.completed || sub.status === 'completed' || (sub.status as string) === 'fait' || (sub as any).isDone) subStatus = 'Fait';
-        else if (sub.status === 'in_progress' || sub.status === 'en_cours') subStatus = 'En cours';
-        else if (sub.status === 'blocked') subStatus = 'Bloqué';
+      // Filtrage strict : seules les sous-tâches terminées ce jour ou en cours ce jour sont incluses.
+      // Une sous-tâche terminée avant cette journée est strictement exclue, même si son échéance est aujourd'hui.
+      parentTask.subtasks.forEach((sub) => {
+        const subStatus = getItemTimesheetStatus(sub, date, parentTask.date);
+        if (!subStatus) return; // Non éligible (ex: terminée avant ce jour)
 
         subtaskItems.push({
           id: sub.id,
@@ -203,23 +199,21 @@ export function generateDailyTimesheet(
         });
       });
     } else {
-      // Si la tâche n'a pas encore de sous-tâches, la tâche parente est l'action directe
-      let statusFormatted: 'Fait' | 'En cours' | 'À faire' | 'Bloqué' = 'À faire';
-      if (parentTask.status === 'completed' || (parentTask as any).completed === true) statusFormatted = 'Fait';
-      else if (parentTask.status === 'in_progress' || parentTask.status === 'en_cours') statusFormatted = 'En cours';
-      else if (parentTask.status === 'blocked') statusFormatted = 'Bloqué';
-
-      subtaskItems.push({
-        id: parentTask.id,
-        title: parentTask.title,
-        parentTaskTitle: parentTask.title,
-        domain,
-        priorityLabel: prioLabel,
-        estimatedMinutes: parentTask.priority === 'urgent' ? 240 : (parentTask.priority === 'high' ? 180 : 120),
-        dueDate: parentTask.dueDate || parentTask.date || date,
-        status: statusFormatted,
-        isMilestone: parentTask.isMilestone,
-      });
+      // Tâche sans sous-tâches : vérification stricte de son statut pour la journée
+      const parentStatus = getItemTimesheetStatus(parentTask, date);
+      if (parentStatus) {
+        subtaskItems.push({
+          id: parentTask.id,
+          title: parentTask.title,
+          parentTaskTitle: parentTask.title,
+          domain,
+          priorityLabel: prioLabel,
+          estimatedMinutes: parentTask.priority === 'urgent' ? 240 : (parentTask.priority === 'high' ? 180 : 120),
+          dueDate: parentTask.dueDate || parentTask.date || date,
+          status: parentStatus,
+          isMilestone: parentTask.isMilestone,
+        });
+      }
     }
   });
 

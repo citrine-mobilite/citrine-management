@@ -12,6 +12,7 @@ import {
   isStrictSuperAdminAccount, 
   isArrivalAfterThreshold 
 } from './weeklyAttendanceReportService';
+import { getItemTimesheetStatus, isTaskEligibleForDayTimesheet } from '../utils/timesheetTaskEligibility';
 
 export interface DailyTimesheetDispatchResult {
   success: boolean;
@@ -168,16 +169,19 @@ export async function executeDailyTimesheetDispatch(options?: { forceWeekday?: b
             });
           }
 
-          // Sous-tâches ou tâche principale
+          // Sous-tâches ou tâche principale (Filtrage strict : uniquement celles terminées ce jour ou en cours ce jour)
           if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
             t.subtasks.forEach((sub: any) => {
+              const statusLabel = getItemTimesheetStatus(sub, doualaTime.dayIso, t.date);
+              if (!statusLabel) return; // Non éligible (terminée avant ce jour ou inactive)
+
               const isBlocked = sub.status === 'blocked' || sub.isBlocked || Boolean(sub.blockerReason);
               items.push({
                 index: itemIndex++,
                 taskTitle: t.title,
                 subTitle: sub.title,
-                status: sub.status || (sub.completed ? 'completed' : 'todo'),
-                statusLabel: sub.completed ? 'Fait' : (sub.status === 'in_progress' ? 'En cours' : 'À faire'),
+                status: statusLabel === 'Fait' ? 'completed' : (statusLabel === 'En cours' ? 'in_progress' : (statusLabel === 'Bloqué' ? 'blocked' : 'todo')),
+                statusLabel,
                 estimatedHours: Number(sub.estimatedHours) || 0,
                 actualHours: Number(sub.actualHours) || 0,
                 blockerReason: sub.blockerReason,
@@ -204,18 +208,21 @@ export async function executeDailyTimesheetDispatch(options?: { forceWeekday?: b
               }
             });
           } else {
-            const isBlocked = t.status === 'blocked';
-            items.push({
-              index: itemIndex++,
-              taskTitle: t.title,
-              subTitle: t.title,
-              status: t.status || 'todo',
-              statusLabel: t.status === 'completed' ? 'Fait' : (t.status === 'in_progress' ? 'En cours' : 'À faire'),
-              estimatedHours: Number(t.estimatedHours) || 1,
-              actualHours: Number(t.actualHours) || 0,
-              blockerReason: isBlocked ? 'Tâche bloquée' : undefined,
-              isBlocked,
-            });
+            const statusLabel = getItemTimesheetStatus(t, doualaTime.dayIso);
+            if (statusLabel) {
+              const isBlocked = t.status === 'blocked';
+              items.push({
+                index: itemIndex++,
+                taskTitle: t.title,
+                subTitle: t.title,
+                status: statusLabel === 'Fait' ? 'completed' : (statusLabel === 'En cours' ? 'in_progress' : (statusLabel === 'Bloqué' ? 'blocked' : 'todo')),
+                statusLabel,
+                estimatedHours: Number(t.estimatedHours) || 1,
+                actualHours: Number(t.actualHours) || 0,
+                blockerReason: isBlocked ? 'Tâche bloquée' : undefined,
+                isBlocked,
+              });
+            }
           }
         });
 

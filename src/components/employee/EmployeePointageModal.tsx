@@ -22,6 +22,7 @@ import { dynamicQrService } from '../../services/dynamicQrService';
 import { badgeCodeService } from '../../services/badgeCodeService';
 import { haptic } from '../../services/hapticService';
 import { showErrorAlert } from '../../utils/sweetAlert';
+import { verifyDoorQrToken, extractCleanQrToken } from '../../services/qrDoorValidationService';
 
 interface EmployeePointageModalProps {
   showClockingModal: boolean;
@@ -255,12 +256,10 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
     }
 
     // 2. CAS QR CODE DE PORTE / ENTRÉE FIXE
-    const officialToken = (moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026').trim();
-    const fallbackSecret = (moduleConfig?.qrCodeSecret || '').trim();
-    const isDoorRevoked = moduleConfig?.doorQrCodeRevoked === true;
+    const doorValidation = await verifyDoorQrToken(cleanToken, moduleConfig);
 
     // A. VÉRIFICATION DE RÉVOCATION DU QR CODE
-    if (isDoorRevoked) {
+    if (doorValidation.isRevoked) {
       stopCameraScan();
       if (scanIntervalRef.current) {
         clearInterval(scanIntervalRef.current);
@@ -277,14 +276,9 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
       return;
     }
 
-    // B. VÉRIFICATION RIGOUREUSE DU JETON : DOIT CORRESPONDRE À CELUI EN BASE DE DONNÉES
-    const isTokenMatching = 
-      cleanToken === officialToken ||
-      (fallbackSecret && cleanToken === fallbackSecret) ||
-      cleanToken.toUpperCase() === officialToken.toUpperCase();
-
-    if (!isTokenMatching) {
-      // Rejet immédiat : Le QR Code scanné ne provient pas de l'affiche officielle en base
+    // B. VÉRIFICATION DU JETON (EN MÉMOIRE ET EN BASE DE DONNÉES EN TEMPS RÉEL)
+    if (!doorValidation.valid) {
+      // Rejet immédiat : Le QR Code scanné ne provient pas de l'affiche officielle
       stopCameraScan();
       if (scanIntervalRef.current) {
         clearInterval(scanIntervalRef.current);
@@ -292,7 +286,7 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
       }
       setDetectedQrCode(null);
       setIsProcessingDetection(false);
-      const invalidMsg = `Le QR Code scanné n'est pas reconnu par Citrine Mobilité ou a expiré.\n\nJeton détecté : "${cleanToken.length > 32 ? cleanToken.substring(0, 32) + '...' : cleanToken}"\n\nVeuillez cadrer le QR Code officiel affiché à la porte. Si la direction a mis à jour le jeton, les anciennes versions ne sont plus autorisées.`;
+      const invalidMsg = `Le QR Code scanné n'est pas reconnu par Citrine Mobilité.\n\nJeton détecté : "${cleanToken.length > 32 ? cleanToken.substring(0, 32) + '...' : cleanToken}"\n\nVeuillez cadrer le QR Code officiel affiché à la porte.`;
       setActionError("QR Code non reconnu : jeton invalide ou expiré.");
       if (showToast) {
         showToast('QR Code Invalide', "Ce QR Code n'est pas le QR Code officiel de pointage.", 'warning');
@@ -300,6 +294,9 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
       showErrorAlert('QR Code Non Reconnu ❌', invalidMsg);
       return;
     }
+
+    // Utilise le jeton officiel normalisé validé
+    cleanToken = doorValidation.cleanToken || cleanToken;
 
     // C. JETON OFFICIEL VALIDÉ : ACQUISITION GPS & VALIDATION DU BADGEAGE
     setIsCapturingGps(true);
@@ -563,10 +560,10 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
   if (!showClockingModal) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/40 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="glass-modal rounded-3xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 p-4 text-white flex items-center justify-between shrink-0">
+        <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 p-4 text-white flex items-center justify-between shrink-0 border-b border-white/20">
           <div className="flex items-center gap-2.5">
             {currentStep !== 'select_method' && (
               <button

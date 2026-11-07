@@ -37,13 +37,13 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
   const [cacheModalOpen, setCacheModalOpen] = React.useState(false);
 
   return (
-    <header className="h-14 sm:h-16 bg-white border-b border-stone-200/80 px-2.5 sm:px-6 flex items-center justify-between z-30 sticky top-0 backdrop-blur-md bg-white/95">
+    <header className="h-14 sm:h-16 glass-header px-2.5 sm:px-6 flex items-center justify-between z-30 sticky top-0">
       {/* Left: Mobile Menu Toggle (Admin only) & Brand */}
       <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
         {!isEmployee && (
           <button
             onClick={onToggleMobileMenu}
-            className="p-1.5 sm:p-2 -ml-1 sm:-ml-2 rounded-xl text-stone-600 hover:bg-stone-100 md:hidden transition cursor-pointer shrink-0"
+            className="p-1.5 sm:p-2 -ml-1 sm:-ml-2 rounded-xl text-stone-600 hover:bg-stone-200/50 md:hidden transition cursor-pointer shrink-0"
             aria-label="Ouvrir le menu de navigation"
             title="Ouvrir le menu de navigation"
           >
@@ -65,7 +65,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
               Management
             </span>
             {isEmployee && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-[#2A7B76]/10 text-[#2A7B76] border border-[#2A7B76]/20 shrink-0">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold glass-chip-accent text-[#2A7B76] shrink-0">
                 Personnel
               </span>
             )}
@@ -77,7 +77,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
       <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
         {/* Offline Indicator */}
         {!isOnline && (
-          <div className="flex items-center gap-1 bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg text-[10px] font-bold text-red-700" title="Mode hors-ligne actif">
+          <div className="flex items-center gap-1 bg-red-500/10 border border-red-300/60 px-2 py-0.5 rounded-lg text-[10px] font-bold text-red-700 backdrop-blur-xs" title="Mode hors-ligne actif">
             <WifiOff className="h-3 w-3" />
             <span className="hidden sm:inline">Hors ligne</span>
           </div>
@@ -92,8 +92,8 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
             }}
             className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition border cursor-pointer ${
               activeTab === 'employee_portal'
-                ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-2xs'
-                : 'bg-stone-50 text-stone-700 hover:bg-emerald-50 hover:text-[#2A7B76] border-stone-200'
+                ? 'bg-amber-500/15 text-amber-900 border-amber-300/80 shadow-2xs backdrop-blur-xs'
+                : 'glass-chip text-stone-700 hover:text-[#2A7B76]'
             }`}
             title="Basculer entre la vue Admin et la vue Espace Employé"
           >
@@ -112,7 +112,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
         )}
 
         {/* Live Clock Badge (Desktop) */}
-        <div className="hidden md:flex items-center gap-1.5 bg-stone-50 border border-stone-200 px-3 py-1 rounded-xl text-xs font-mono font-bold text-stone-700" title="Heure locale actuelle">
+        <div className="hidden md:flex items-center gap-1.5 glass-chip px-3 py-1 rounded-xl text-xs font-mono font-bold text-stone-700" title="Heure locale actuelle">
           <Clock className="h-3.5 w-3.5 text-[#2A7B76]" />
           <span>{liveTimeString}</span>
         </div>
@@ -126,22 +126,22 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
                 pushNotificationService.sendTestNotification();
               }
             }}
-            className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-xl border border-emerald-300 transition cursor-pointer"
+            className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-900 text-[10px] font-bold rounded-xl border border-emerald-400/50 backdrop-blur-xs transition cursor-pointer"
             title="Activer les notifications Push du navigateur sur cet appareil"
           >
-            <Bell className="h-3 w-3 text-emerald-600 animate-bounce" />
+            <Bell className="h-3 w-3 text-emerald-700 animate-bounce" />
             <span>Activer Push</span>
           </button>
         )}
 
-        {/* Notifications Icon Button (Admin / Responsable only, hidden for employees as requested) */}
+        {/* Notifications Icon Button (Admin / Responsable only) */}
         {!isEmployee && (
           <button
             onClick={() => {
               haptic.light();
               setActiveTab('logs');
             }}
-            className="p-1.5 sm:p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition relative cursor-pointer"
+            className="p-1.5 sm:p-2 text-stone-600 hover:text-stone-900 hover:bg-white/60 rounded-xl transition relative cursor-pointer"
             title="Notifications & Alertes"
           >
             <Bell className="h-4 w-4" />
@@ -157,7 +157,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
             haptic.medium();
             setCacheModalOpen(true);
           }}
-          className="p-1.5 sm:p-2 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition relative cursor-pointer"
+          className="p-1.5 sm:p-2 text-stone-500 hover:text-red-600 hover:bg-red-50/60 rounded-xl transition relative cursor-pointer"
           title="Purger tous les niveaux de cache (RAM, IndexedDB, PWA)"
         >
           <Trash2 className="h-4 w-4" />
@@ -175,7 +175,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
               haptic.light();
               if (onOpenProfile) onOpenProfile();
             }}
-            className="flex items-center gap-1.5 p-1 sm:p-1.5 pl-1.5 sm:pl-2 rounded-2xl border border-stone-200 hover:bg-stone-50 text-stone-700 transition cursor-pointer select-none"
+            className="flex items-center gap-1.5 p-1 sm:p-1.5 pl-1.5 sm:pl-2 rounded-2xl glass-chip hover:bg-white/90 text-stone-700 transition cursor-pointer select-none"
             title="Mon Profil & Déconnexion"
           >
             <div className="flex flex-col text-right hidden sm:flex">
@@ -186,7 +186,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
                 {currentUser.role}
               </span>
             </div>
-            <div className="w-7 h-7 rounded-xl bg-[#2A7B76]/15 text-[#2A7B76] flex items-center justify-center font-bold text-xs overflow-hidden">
+            <div className="w-7 h-7 rounded-xl bg-[#2A7B76]/15 text-[#2A7B76] flex items-center justify-center font-bold text-xs overflow-hidden border border-[#2A7B76]/20">
               {currentUser.avatarUrl ? (
                 <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-full h-full object-cover" />
               ) : (

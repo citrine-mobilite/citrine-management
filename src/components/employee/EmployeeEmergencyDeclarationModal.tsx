@@ -27,15 +27,15 @@ export const EmployeeEmergencyDeclarationModal: React.FC<EmployeeEmergencyDeclar
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-      <div className="bg-white rounded-3xl p-6 border border-stone-200/90 shadow-2xl max-w-md w-full space-y-4 text-xs max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+    <div className="fixed inset-0 bg-stone-950/45 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fadeIn">
+      <div className="glass-modal rounded-3xl p-6 max-w-md w-full space-y-4 text-xs max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-stone-200/60 pb-3">
           <h3 className="font-serif font-bold text-stone-900 flex items-center gap-2 text-sm">
             <HelpCircle className="h-5 w-5 text-[#2A7B76]" /> *Autre* — Déclaration & Justification RH
           </h3>
           <button
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg cursor-pointer transition"
+            className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg cursor-pointer transition glass-chip"
           >
             ✕
           </button>
@@ -85,18 +85,18 @@ export const EmployeeEmergencyDeclarationModal: React.FC<EmployeeEmergencyDeclar
             </p>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
+          <div className="flex justify-end gap-2 pt-2 border-t border-stone-200/60">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-bold transition cursor-pointer"
+              className="px-4 py-2 glass-chip text-stone-700 hover:text-stone-950 rounded-xl font-bold transition cursor-pointer"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={isSubmitting || !emergencyReason.trim()}
-              className="px-4 py-2 bg-[#2A7B76] hover:bg-[#20635F] disabled:opacity-50 text-white rounded-xl font-bold transition cursor-pointer shadow-xs"
+              className="px-4 py-2 glass-btn-primary disabled:opacity-50 text-white rounded-xl font-bold transition cursor-pointer"
             >
               {isSubmitting ? 'Transmission...' : 'Enregistrer la déclaration'}
             </button>

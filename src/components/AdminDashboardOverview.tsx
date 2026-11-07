@@ -100,29 +100,29 @@ export default function AdminDashboardOverview({
         </div>
       </div>
 
-      {/* KPI Cards exactly as in Image 1 */}
+      {/* KPI Cards in Glassmorphism */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* PRESENCES DU JOUR CARD */}
         <div 
           onClick={() => onSelectTab('presences')}
-          className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
+          className="glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 hover:border-emerald-300"
           title="Afficher le registre des présences et la feuille du jour"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Présences du Jour</span>
-            <div className="p-1.5 rounded-xl bg-emerald-50 text-emerald-600">
+            <div className="p-1.5 rounded-xl bg-emerald-500/15 text-emerald-700">
               <Users className="h-4 w-4" />
             </div>
           </div>
           <div>
             <div className="text-xl font-bold text-stone-900">
               {presentCount} / {employees.length}{' '}
-              <span className="text-xs text-emerald-600 font-semibold">({attendanceRate}%)</span>
+              <span className="text-xs text-emerald-700 font-semibold">({attendanceRate}%)</span>
             </div>
             {/* Progress Bar */}
-            <div className="w-full bg-stone-100 h-1.5 rounded-full mt-2 overflow-hidden">
+            <div className="w-full bg-stone-200/60 h-1.5 rounded-full mt-2 overflow-hidden">
               <div 
-                className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                className="bg-[#2A7B76] h-full rounded-full transition-all duration-500" 
                 style={{ width: `${attendanceRate}%` }}
               />
             </div>
@@ -132,12 +132,12 @@ export default function AdminDashboardOverview({
         {/* ANOMALIES & RETARDS CARD */}
         <div 
           onClick={() => onSelectTab('presences')}
-          className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-amber-300 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
+          className="glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 hover:border-amber-300"
           title="Consulter les anomalies et retards consignés"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Anomalies & Retards</span>
-            <div className="p-1.5 rounded-xl bg-amber-50 text-amber-600">
+            <div className="p-1.5 rounded-xl bg-amber-500/15 text-amber-700">
               <AlertTriangle className="h-4 w-4" />
             </div>
           </div>
@@ -156,12 +156,12 @@ export default function AdminDashboardOverview({
         {/* TACHES EN COURS CARD */}
         <div 
           onClick={() => onSelectTab('tasks')}
-          className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-blue-300 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
+          className="glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 hover:border-blue-300"
           title="Ouvrir le module de gestion des tâches"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Tâches en Cours</span>
-            <div className="p-1.5 rounded-xl bg-blue-50 text-blue-600">
+            <div className="p-1.5 rounded-xl bg-blue-500/15 text-blue-700">
               <CheckSquare className="h-4 w-4" />
             </div>
           </div>
@@ -179,11 +179,11 @@ export default function AdminDashboardOverview({
         {/* ALERTES ACTIVES CARD */}
         <div 
           onClick={() => onSelectTab('reminders')}
-          className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md hover:border-emerald-200 transition duration-200 cursor-pointer flex flex-col justify-between space-y-4"
+          className="glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 hover:border-emerald-300"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Alertes Actives</span>
-            <div className="p-1.5 rounded-xl bg-emerald-50 text-emerald-600">
+            <div className="p-1.5 rounded-xl bg-emerald-500/15 text-emerald-700">
               <Bell className="h-4 w-4" />
             </div>
           </div>
@@ -202,9 +202,9 @@ export default function AdminDashboardOverview({
       {/* Main Grid with full width Pointages and widgets underneath */}
       <div className="space-y-6">
         
-        {/* FULL WIDTH: Pointages du Jour */}
-        <div className="bg-white rounded-3xl border border-stone-200/80 shadow-sm p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        {/* FULL WIDTH: Pointages du Jour in Glass Card */}
+        <div className="glass-card rounded-3xl p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-stone-200/60 pb-3">
             <h3 className="font-serif font-bold text-sm text-stone-900 flex items-center gap-1.5">
               <Clock className="h-4.5 w-4.5 text-[#2A7B76]" />
               Pointages du Jour
@@ -285,13 +285,13 @@ export default function AdminDashboardOverview({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* widget 1: Rappels & Délais */}
-          <div className="bg-white rounded-3xl border border-stone-200/80 shadow-sm p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+          <div className="glass-card rounded-3xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-200/60 pb-2">
               <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
                 <Bell className="h-4 w-4 text-[#2A7B76]" />
                 Rappels & Délais
               </h4>
-              <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-lg">
+              <span className="text-[10px] bg-emerald-500/15 text-emerald-800 font-bold px-2 py-0.5 rounded-lg border border-emerald-400/30">
                 {activeRemindersCount}
               </span>
             </div>
@@ -302,7 +302,7 @@ export default function AdminDashboardOverview({
               ) : (
                 <div className="text-left space-y-2 max-h-36 overflow-y-auto">
                   {reminders.slice(0, 2).map((r) => (
-                    <div key={r.id} className="p-2.5 bg-stone-50 rounded-xl border border-stone-100 text-[11px] font-medium text-stone-700">
+                    <div key={r.id} className="p-2.5 glass-chip rounded-xl text-[11px] font-medium text-stone-700">
                       🔔 <b>{r.title}</b> ({r.time})
                     </div>
                   ))}
@@ -312,15 +312,15 @@ export default function AdminDashboardOverview({
 
             <button
               onClick={() => onSelectTab('reminders')}
-              className="w-full py-2 border border-stone-200 text-stone-700 hover:bg-stone-50 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
+              className="w-full py-2 glass-chip text-stone-700 hover:text-stone-900 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
             >
               Toutes les alertes &gt;
             </button>
           </div>
 
           {/* widget 2: Tâches en Cours */}
-          <div className="bg-white rounded-3xl border border-stone-200/80 shadow-sm p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+          <div className="glass-card rounded-3xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-200/60 pb-2">
               <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
                 <CheckSquare className="h-4 w-4 text-[#2A7B76]" />
                 Tâches en Cours ({pendingTasks.length})
@@ -332,7 +332,7 @@ export default function AdminDashboardOverview({
                 <p className="text-stone-400 italic text-[11px] text-center py-4">Aucune tâche en cours.</p>
               ) : (
                 pendingTasks.slice(0, 1).map((t) => (
-                  <div key={t.id} className="p-3 bg-stone-50/50 rounded-2xl border border-stone-200/80 flex items-center justify-between gap-3 text-[11px]">
+                  <div key={t.id} className="p-3 glass-chip rounded-2xl flex items-center justify-between gap-3 text-[11px]">
                     <div className="space-y-0.5 min-w-0">
                       <span className="block font-bold text-stone-900 truncate">{t.title}</span>
                       <span className="block text-[10px] text-stone-500">Assigné à : {t.assignedTo}</span>
@@ -347,7 +347,7 @@ export default function AdminDashboardOverview({
 
             <button
               onClick={() => onSelectTab('tasks')}
-              className="w-full py-2 border border-stone-200 text-stone-700 hover:bg-stone-50 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
+              className="w-full py-2 glass-chip text-stone-700 hover:text-stone-900 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
               title="Voir la liste complète des tâches"
             >
               Accéder aux tâches &gt;
@@ -357,9 +357,9 @@ export default function AdminDashboardOverview({
         </div>
       </div>
 
-      {/* Shortcuts bar exactly as in Image 1 */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 p-5 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-stone-100 pb-2.5">
+      {/* Shortcuts bar */}
+      <div className="glass-card rounded-3xl p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-stone-200/60 pb-2.5">
           <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
             <Settings className="h-4 w-4 text-[#2A7B76]" />
             Raccourcis Directs

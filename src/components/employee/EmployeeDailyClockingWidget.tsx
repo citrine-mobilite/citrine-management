@@ -68,7 +68,7 @@ export const EmployeeDailyClockingWidget: React.FC<EmployeeDailyClockingWidgetPr
   const enableBreakTracking = moduleConfig?.enableBreakTracking !== false;
 
   return (
-    <div className="bg-white rounded-3xl border border-stone-200/90 p-5 sm:p-6 shadow-sm space-y-6">
+    <div className="glass-card rounded-3xl p-5 sm:p-6 space-y-6">
       <EmployeeDailyClockingHeader
         currentUser={currentUser}
         employeeProfile={employeeProfile}

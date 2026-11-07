@@ -176,6 +176,7 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
             ...s,
             completed: nextCompleted,
             status: nextCompleted ? 'completed' : 'todo',
+            completedAt: nextCompleted ? new Date().toISOString() : undefined,
           };
         }
         if (s.subtasks && s.subtasks.length > 0) return { ...s, subtasks: toggleInTree(s.subtasks) };
@@ -190,7 +191,12 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
     const newStatus: TaskStatus = allSubsCompleted ? 'completed' : (task.status === 'completed' ? 'in_progress' : task.status);
 
     setDraftStatus(newStatus);
-    onSaveTask({ ...task, status: newStatus, subtasks: updated });
+    onSaveTask({ 
+      ...task, 
+      status: newStatus, 
+      subtasks: updated,
+      completedAt: newStatus === 'completed' ? (task.completedAt || new Date().toISOString()) : undefined 
+    });
   };
 
   const handleAddComment = () => {

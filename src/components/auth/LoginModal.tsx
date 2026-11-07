@@ -55,11 +55,11 @@ export function LoginModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto" id="login-modal-overlay">
-      <div className="bg-white rounded-3xl shadow-2xl border border-stone-200 w-full max-w-md overflow-hidden" id="login-card">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 backdrop-blur-md p-4 overflow-y-auto" id="login-modal-overlay">
+      <div className="glass-modal rounded-3xl w-full max-w-md overflow-hidden" id="login-card">
         
         {/* Header Institutionnel */}
-        <div className="p-6 text-center border-b border-stone-100 flex flex-col items-center justify-center">
+        <div className="p-6 text-center border-b border-stone-200/60 flex flex-col items-center justify-center bg-white/30 backdrop-blur-xs">
           <HeroCabLogo size="xl" showSubtitle={true} className="mb-2" />
           <h1 className="text-xl font-bold tracking-tight text-stone-900">Citrine Management</h1>
           <p className="text-xs text-stone-500 mt-1">Portail d'authentification sécurisé d'entreprise</p>
@@ -68,9 +68,9 @@ export function LoginModal({
         {/* Formulaire Connexion */}
         <div className="p-6 space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 p-3 rounded-xl space-y-2 text-xs text-red-800">
+            <div className="bg-rose-500/10 border border-rose-300/60 p-3 rounded-2xl space-y-2 text-xs text-rose-950 backdrop-blur-xs">
               <div className="flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
                 <span className="leading-relaxed">{error}</span>
               </div>
             </div>
@@ -93,7 +93,7 @@ export function LoginModal({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="nom@entreprise.com"
-                  className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 focus:bg-white focus:border-emerald-600 outline-none transition font-medium"
+                  className="w-full pl-10 pr-4 py-2.5 glass-chip rounded-xl text-xs text-stone-800 focus:bg-white focus:border-[#2A7B76] outline-hidden transition font-medium"
                 />
               </div>
             </div>
@@ -114,7 +114,7 @@ export function LoginModal({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-10 pr-10 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 focus:bg-white focus:border-emerald-600 outline-none transition font-medium"
+                  className="w-full pl-10 pr-10 py-2.5 glass-chip rounded-xl text-xs text-stone-800 focus:bg-white focus:border-[#2A7B76] outline-hidden transition font-medium"
                 />
                 <button
                   type="button"
@@ -131,7 +131,7 @@ export function LoginModal({
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+              className="w-full py-3 glass-btn-primary active:scale-[0.99] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {loading ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

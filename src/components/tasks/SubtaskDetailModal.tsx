@@ -175,6 +175,7 @@ export const SubtaskDetailModal: React.FC<SubtaskDetailModalProps> = ({
       description: draftDescription.trim() || undefined,
       status: finalStatus,
       completed: finalStatus === 'completed',
+      completedAt: finalStatus === 'completed' ? (subtask.completedAt || new Date().toISOString()) : undefined,
       priority: draftPriority,
       // If user is employee or stagiaire, NEVER reassign! Keep original assignment
       assignedTo: canReassign ? draftAssignedTo : (subtask.assignedTo || 'Équipe'),
@@ -218,7 +219,12 @@ export const SubtaskDetailModal: React.FC<SubtaskDetailModalProps> = ({
       return list.map((s) => {
         if (s.id === subId) {
           const nextCompleted = !s.completed;
-          return { ...s, completed: nextCompleted, status: nextCompleted ? 'completed' : 'todo' };
+          return { 
+            ...s, 
+            completed: nextCompleted, 
+            status: nextCompleted ? 'completed' : 'todo',
+            completedAt: nextCompleted ? new Date().toISOString() : undefined 
+          };
         }
         if (s.subtasks && s.subtasks.length > 0) {
           return { ...s, subtasks: toggleTree(s.subtasks) };

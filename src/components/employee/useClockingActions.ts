@@ -17,6 +17,7 @@ import { savePresenceAtomic } from '../../services/dataService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { realtimeSyncService } from '../../services/realtimeSyncService';
 import { showErrorAlert } from '../../utils/sweetAlert';
+import { verifyDoorQrToken } from '../../services/qrDoorValidationService';
 
 interface UseClockingActionsProps {
   employeeProfile: Employee;
@@ -51,23 +52,22 @@ export function useClockingActions({
   ) => {
     // Sécurité stricte : Vérification du jeton QR Code de porte
     if (method === 'qr_code_door') {
-      const officialDoorToken = (moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026').trim();
-      const fallbackSecret = (moduleConfig?.qrCodeSecret || '').trim();
       const providedToken = (customLocation?.qrCodeToken || '').trim();
+      const doorValidation = await verifyDoorQrToken(providedToken, moduleConfig);
 
-      if (moduleConfig?.doorQrCodeRevoked) {
+      if (doorValidation.isRevoked) {
         showErrorAlert('QR Code Révoqué 🚫', "Le QR Code de porte a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle.");
         return;
       }
 
-      const isMatch = 
-        providedToken === officialDoorToken || 
-        (fallbackSecret && providedToken === fallbackSecret) ||
-        providedToken.toUpperCase() === officialDoorToken.toUpperCase();
-
-      if (!isMatch) {
-        showErrorAlert('Pointage Rejeté ❌', "Le jeton du QR Code ne correspond pas au jeton officiel configuré en base de données.");
+      if (!doorValidation.valid) {
+        showErrorAlert('Pointage Rejeté ❌', "Le jeton du QR Code ne correspond pas au jeton officiel configuré pour la porte.");
         return;
+      }
+
+      // Normalisation du token validé
+      if (customLocation && doorValidation.cleanToken) {
+        customLocation.qrCodeToken = doorValidation.cleanToken;
       }
     }
 

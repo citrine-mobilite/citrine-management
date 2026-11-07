@@ -38,10 +38,13 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
     }
   };
 
-  // Pour un employé : uniquement Mon Espace et Mon Profil (avec déconnexion)
+  // Pour un employé : uniquement Mon Espace, Alertes et Mon Profil (avec déconnexion)
   if (isEmployee) {
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#2A7B76]/20 px-4 py-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-xl sm:hidden">
+      <nav 
+        aria-label="Navigation principale mobile"
+        className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-4 right-4 max-w-sm mx-auto z-40 ios-island-dock px-2.5 py-1.5 flex items-center justify-around sm:hidden"
+      >
         {/* Espace Personnel / Pointage */}
         <button
           onClick={() => {
@@ -49,14 +52,14 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
             setActiveTab('employee_portal');
             scrollToTop();
           }}
-          className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition cursor-pointer ${
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-full transition-all duration-200 cursor-pointer active:scale-90 ${
             activeTab === 'employee_portal' && (typeof window === 'undefined' || !window.location.hash.includes('alerts'))
-              ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
-              : 'text-stone-500 hover:text-stone-800'
+              ? 'ios-dock-pill-active text-[#2A7B76]'
+              : 'text-stone-600 hover:text-stone-950 active:bg-white/30'
           }`}
         >
-          <UserCheck className="h-5 w-5" />
-          <span className="text-[11px] font-bold">Mon Espace</span>
+          <UserCheck className="h-4.5 w-4.5 stroke-[2.2]" />
+          <span className="text-[10px] font-bold tracking-tight">Mon Espace</span>
         </button>
 
         {/* Mes Alertes & Notifications */}
@@ -70,21 +73,21 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
             }
             scrollToTop();
           }}
-          className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition cursor-pointer relative ${
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-full transition-all duration-200 cursor-pointer relative active:scale-90 ${
             activeTab === 'employee_portal' && typeof window !== 'undefined' && window.location.hash.includes('alerts')
-              ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
-              : 'text-stone-500 hover:text-stone-800'
+              ? 'ios-dock-pill-active text-[#2A7B76]'
+              : 'text-stone-600 hover:text-stone-950 active:bg-white/30'
           }`}
         >
           <div className="relative">
-            <Bell className="h-5 w-5" />
+            <Bell className="h-4.5 w-4.5 stroke-[2.2]" />
             {mobileUnreadCount > 0 && (
-              <span className="absolute -top-1 -right-1.5 px-1 min-w-[14px] h-3.5 bg-amber-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center font-mono">
+              <span className="absolute -top-1.5 -right-2 px-1.5 min-w-[15px] h-3.5 bg-[#FF3B30] text-white rounded-full text-[9px] font-bold flex items-center justify-center font-mono shadow-sm">
                 {mobileUnreadCount}
               </span>
             )}
           </div>
-          <span className="text-[11px] font-bold">Alertes</span>
+          <span className="text-[10px] font-bold tracking-tight">Alertes</span>
         </button>
 
         {/* Mon Profil & Déconnexion */}
@@ -94,24 +97,25 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
             setActiveTab('profile');
             scrollToTop();
           }}
-          className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition cursor-pointer ${
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-full transition-all duration-200 cursor-pointer active:scale-90 ${
             activeTab === 'profile'
-              ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
-              : 'text-stone-500 hover:text-stone-800'
+              ? 'ios-dock-pill-active text-[#2A7B76]'
+              : 'text-stone-600 hover:text-stone-950 active:bg-white/30'
           }`}
         >
-          <div className="relative">
-            <User className="h-5 w-5" />
-          </div>
-          <span className="text-[11px] font-bold">Mon Profil</span>
+          <User className="h-4.5 w-4.5 stroke-[2.2]" />
+          <span className="text-[10px] font-bold tracking-tight">Profil</span>
         </button>
-      </div>
+      </nav>
     );
   }
 
   // Pour les administrateurs et responsables
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#2A7B76]/20 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-xl sm:hidden">
+    <nav 
+      aria-label="Navigation principale mobile"
+      className="fixed bottom-[max(0.6rem,env(safe-area-inset-bottom))] left-2.5 right-2.5 max-w-md mx-auto z-40 ios-island-dock px-1.5 py-1.5 flex items-center justify-between sm:hidden"
+    >
       {/* Dashboard / Accueil */}
       <button
         onClick={() => {
@@ -119,14 +123,14 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
           setActiveTab('dashboard');
           scrollToTop();
         }}
-        className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition cursor-pointer ${
+        className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all duration-200 cursor-pointer active:scale-90 ${
           activeTab === 'dashboard'
-            ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
-            : 'text-stone-500 hover:text-stone-800'
+            ? 'ios-dock-pill-active text-[#2A7B76]'
+            : 'text-stone-600 hover:text-stone-950'
         }`}
       >
-        <LayoutDashboard className="h-4 w-4" />
-        <span className="text-[9px]">Tableau</span>
+        <LayoutDashboard className="h-4 w-4 stroke-[2.2]" />
+        <span className="text-[9px] font-bold tracking-tight">Tableau</span>
       </button>
 
       {/* Espace Employé / Pointage */}
@@ -136,14 +140,14 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
           setActiveTab('employee_portal');
           scrollToTop();
         }}
-        className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition cursor-pointer ${
+        className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all duration-200 cursor-pointer active:scale-90 ${
           activeTab === 'employee_portal'
-            ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
-            : 'text-stone-500 hover:text-stone-800'
+            ? 'ios-dock-pill-active text-[#2A7B76]'
+            : 'text-stone-600 hover:text-stone-950'
         }`}
       >
-        <UserCheck className="h-4 w-4" />
-        <span className="text-[9px]">Mon Espace</span>
+        <UserCheck className="h-4 w-4 stroke-[2.2]" />
+        <span className="text-[9px] font-bold tracking-tight">Espace</span>
       </button>
 
       {/* Présences */}
@@ -153,14 +157,14 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
           setActiveTab('presences');
           scrollToTop();
         }}
-        className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition cursor-pointer ${
+        className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all duration-200 cursor-pointer active:scale-90 ${
           activeTab === 'presences'
-            ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
-            : 'text-stone-500 hover:text-stone-800'
+            ? 'ios-dock-pill-active text-[#2A7B76]'
+            : 'text-stone-600 hover:text-stone-950'
         }`}
       >
-        <Clock className="h-4 w-4" />
-        <span className="text-[9px]">Présences</span>
+        <Clock className="h-4 w-4 stroke-[2.2]" />
+        <span className="text-[9px] font-bold tracking-tight">Présences</span>
       </button>
 
       {/* Tâches */}
@@ -170,14 +174,14 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
           setActiveTab('tasks');
           scrollToTop();
         }}
-        className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition cursor-pointer ${
+        className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all duration-200 cursor-pointer active:scale-90 ${
           activeTab === 'tasks'
-            ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
-            : 'text-stone-500 hover:text-stone-800'
+            ? 'ios-dock-pill-active text-[#2A7B76]'
+            : 'text-stone-600 hover:text-stone-950'
         }`}
       >
-        <Calendar className="h-4 w-4" />
-        <span className="text-[9px]">Tâches</span>
+        <Calendar className="h-4 w-4 stroke-[2.2]" />
+        <span className="text-[9px] font-bold tracking-tight">Tâches</span>
       </button>
 
       {/* Profil & Déconnexion */}
@@ -187,14 +191,14 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
           setActiveTab('profile');
           scrollToTop();
         }}
-        className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition cursor-pointer ${
+        className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all duration-200 cursor-pointer active:scale-90 ${
           activeTab === 'profile'
-            ? 'bg-[#2A7B76]/10 text-[#2A7B76] font-bold border border-[#2A7B76]/30 shadow-2xs'
-            : 'text-stone-500 hover:text-stone-800'
+            ? 'ios-dock-pill-active text-[#2A7B76]'
+            : 'text-stone-600 hover:text-stone-950'
         }`}
       >
-        <User className="h-4 w-4" />
-        <span className="text-[9px]">Profil</span>
+        <User className="h-4 w-4 stroke-[2.2]" />
+        <span className="text-[9px] font-bold tracking-tight">Profil</span>
       </button>
 
       {/* Plus Menu */}
@@ -203,11 +207,11 @@ export const AppMobileBottomNav: React.FC<AppMobileBottomNavProps> = ({
           haptic.light();
           setMobileMenuOpen(true);
         }}
-        className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl text-stone-500 hover:text-stone-800 transition cursor-pointer"
+        className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full text-stone-600 hover:text-stone-950 transition-all duration-200 cursor-pointer active:scale-90"
       >
-        <Menu className="h-4 w-4" />
-        <span className="text-[9px]">Plus...</span>
+        <Menu className="h-4 w-4 stroke-[2.2]" />
+        <span className="text-[9px] font-bold tracking-tight">Plus</span>
       </button>
-    </div>
+    </nav>
   );
 };

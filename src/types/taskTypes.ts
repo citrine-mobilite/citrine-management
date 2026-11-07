@@ -51,6 +51,7 @@ export interface Subtask {
   isBlocked?: boolean;
   incidents?: Incident[];
   createdAt?: string;
+  completedAt?: string;
 }
 
 export interface TaskProject {
@@ -91,6 +92,9 @@ export interface Task {
   actualHours?: number;
   lastUpdatedByRole?: Role;
   lastUpdatedTime?: string;
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type ReminderTrigger = '5m' | '15m' | '30m' | '1h' | '1d' | 'none';

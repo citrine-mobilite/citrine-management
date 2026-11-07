@@ -124,7 +124,7 @@ export default function EmployeePortal(props: EmployeePortalProps) {
       />
 
       {/* Subtab navigation */}
-      <div className="flex items-center gap-2 overflow-x-auto p-1.5 bg-white rounded-2xl border border-stone-200 shadow-2xs">
+      <div className="flex items-center gap-2 overflow-x-auto p-1.5 glass-card rounded-2xl">
         {[
           moduleConfig?.enablePresences !== false && { id: 'clocking', label: 'Pointage Direct', icon: Clock, badge: undefined },
           moduleConfig?.enablePresences !== false && { id: 'presences', label: 'Mes Pointages', icon: Calendar, badge: undefined },

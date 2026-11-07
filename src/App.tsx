@@ -325,9 +325,12 @@ export default function App() {
   // Not authenticated -> Show Login Screen
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-stone-100 flex flex-col justify-between">
+      <div className="min-h-screen ambient-glass-bg flex flex-col justify-between relative overflow-hidden">
+        {/* Subtle decorative glass orbs */}
+        <div className="fixed -top-32 -right-32 w-96 h-96 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+        <div className="fixed -bottom-32 -left-32 w-96 h-96 rounded-full bg-[#D4A82F]/10 blur-3xl pointer-events-none" />
         <DatabaseHealthBanner />
-        <div className="flex-1 flex items-center justify-center p-4">
+        <div className="flex-1 flex items-center justify-center p-4 relative z-10">
           <LoginModal
             users={initialData.users}
             onLoginSuccess={handleLoginSuccess}
@@ -340,7 +343,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-100 flex flex-col text-stone-900 font-sans selection:bg-[#2A7B76] selection:text-white">
+    <div className="min-h-screen ambient-glass-bg flex flex-col text-stone-900 font-sans selection:bg-[#2A7B76] selection:text-white relative">
+      {/* Background ambient lighting orbs for real-time glass refraction on PC, Tablet & Mobile */}
+      <div className="fixed top-0 right-1/4 w-[500px] h-[500px] rounded-full bg-emerald-500/8 blur-[120px] pointer-events-none -z-10" />
+      <div className="fixed bottom-10 left-10 w-[450px] h-[450px] rounded-full bg-[#D4A82F]/7 blur-[100px] pointer-events-none -z-10" />
+      <div className="fixed top-1/2 left-1/3 w-[600px] h-[600px] rounded-full bg-[#2A7B76]/5 blur-[140px] pointer-events-none -z-10" />
+
       {/* Database Diagnostic and Permission Health Banner */}
       <DatabaseHealthBanner />
 
@@ -361,7 +369,7 @@ export default function App() {
       />
 
       {/* Main Layout Container */}
-      <div className="flex-1 flex w-full max-w-[1920px] mx-auto overflow-hidden">
+      <div className="flex-1 flex w-full max-w-[1920px] mx-auto overflow-hidden relative">
         {/* Desktop Sidebar (Admins & Managers) */}
         {!isEmployeeUser(currentUser) && (
           <Sidebar
@@ -384,7 +392,7 @@ export default function App() {
         )}
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-20 md:pb-8">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-28 sm:pb-24 md:pb-8">
           <AppTabRouter
             activeTab={activeTab}
             setActiveTab={setActiveTab}

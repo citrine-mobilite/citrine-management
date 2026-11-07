@@ -80,15 +80,15 @@ export default function Sidebar({
     <>
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden md:flex flex-col border-r border-stone-200/80 bg-white transition-all duration-300 relative z-30 shrink-0 select-none ${
+        className={`hidden md:flex flex-col glass-sidebar transition-all duration-300 relative z-30 shrink-0 select-none ${
           isOpen ? 'w-64' : 'w-16'
         }`}
       >
         {/* Sidebar Collapse Toggle */}
-        <div className="h-14 border-b border-stone-100 flex items-center justify-end px-3.5 bg-stone-50/40">
+        <div className="h-14 border-b border-white/60 flex items-center justify-end px-3.5 bg-white/20 backdrop-blur-xs">
           <button
             onClick={onToggleOpen}
-            className="p-1 rounded-lg hover:bg-stone-200/60 text-stone-400 hover:text-stone-700 transition cursor-pointer"
+            className="p-1 rounded-lg hover:bg-white/60 text-stone-400 hover:text-stone-700 transition cursor-pointer"
             title={isOpen ? 'Réduire le menu' : 'Agrandir le menu'}
           >
             {isOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}

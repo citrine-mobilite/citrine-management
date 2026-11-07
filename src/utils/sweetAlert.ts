@@ -1,13 +1,14 @@
 import Swal, { SweetAlertOptions } from 'sweetalert2';
 
-// Base styling configuration to match Citrine Design System
+// Base styling configuration to match Citrine Glassmorphism Design System
 const baseSwalConfig: SweetAlertOptions = {
+  backdrop: 'rgba(15, 23, 42, 0.40)',
   customClass: {
-    popup: 'rounded-3xl border border-stone-200 shadow-2xl p-6 font-sans',
+    popup: 'glass-modal rounded-3xl p-6 font-sans shadow-2xl',
     title: 'font-serif font-bold text-lg text-stone-900',
     htmlContainer: 'text-xs text-stone-600 leading-relaxed',
     confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm cursor-pointer transition mx-1.5',
-    cancelButton: 'px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm cursor-pointer transition bg-stone-100 text-stone-700 hover:bg-stone-200 mx-1.5',
+    cancelButton: 'px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm cursor-pointer transition glass-chip text-stone-700 hover:text-stone-900 mx-1.5',
   },
   buttonsStyling: false,
 };
@@ -51,7 +52,7 @@ export async function confirmDeleteAlert(options: {
     focusCancel: true,
     customClass: {
       ...baseSwalConfig.customClass,
-      confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-700 shadow-sm cursor-pointer transition mx-1.5',
+      confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white glass-btn-danger cursor-pointer transition mx-1.5',
     },
   });
 
@@ -93,8 +94,8 @@ export async function confirmActionAlert(options: {
     customClass: {
       ...baseSwalConfig.customClass,
       confirmButton: isDestructive
-        ? 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-700 shadow-sm cursor-pointer transition mx-1.5'
-        : 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-[#2A7B76] hover:bg-[#20635F] shadow-sm cursor-pointer transition mx-1.5',
+        ? 'px-5 py-2.5 rounded-xl font-bold text-xs text-white glass-btn-danger cursor-pointer transition mx-1.5'
+        : 'px-5 py-2.5 rounded-xl font-bold text-xs text-white glass-btn-primary cursor-pointer transition mx-1.5',
     },
   });
 
@@ -153,7 +154,7 @@ export async function showSuccessAlert(title: string = 'Succès !', text: string
     confirmButtonColor: '#00796B',
     customClass: {
       ...baseSwalConfig.customClass,
-      confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-[#2A7B76] hover:bg-[#20635F] shadow-sm cursor-pointer transition mx-1.5',
+      confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white glass-btn-primary cursor-pointer transition mx-1.5',
     },
   });
 }
@@ -172,7 +173,7 @@ export async function showErrorAlert(title: string = 'Échec de l\'opération', 
     confirmButtonText: 'Fermer',
     customClass: {
       ...baseSwalConfig.customClass,
-      confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-700 shadow-sm cursor-pointer transition mx-1.5',
+      confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white glass-btn-danger cursor-pointer transition mx-1.5',
     },
   });
 }

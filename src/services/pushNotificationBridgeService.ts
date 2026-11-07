@@ -12,6 +12,7 @@ export interface PushNotificationPayload {
   timestamp?: string;
   exactReceivedTime?: string;
   excludeUserId?: string;
+  actionKey?: string;
 }
 
 type PushListener = (payload: PushNotificationPayload) => void;
@@ -20,6 +21,7 @@ class PushNotificationBridgeService {
   private listeners: PushListener[] = [];
   private history: PushNotificationPayload[] = [];
   private bc: BroadcastChannel | null = null;
+  private recentPushKeys: Map<string, number> = new Map();
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -109,6 +111,23 @@ class PushNotificationBridgeService {
   }
 
   public sendPush(payload: PushNotificationPayload): void {
+    const now = Date.now();
+    const dedupKey = payload.actionKey || `${payload.title}:${payload.message}`;
+
+    // Nettoyage des anciennes clés (> 10s)
+    for (const [key, timestamp] of this.recentPushKeys.entries()) {
+      if (now - timestamp > 10000) {
+        this.recentPushKeys.delete(key);
+      }
+    }
+
+    // Déduplication stricte : si un push identique ou lié à la même action a eu lieu il y a < 3000ms, on ignore
+    const lastSent = this.recentPushKeys.get(dedupKey);
+    if (lastSent && now - lastSent < 3000) {
+      return;
+    }
+    this.recentPushKeys.set(dedupKey, now);
+
     const fullPayload: PushNotificationPayload = {
       id: `push-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: new Date().toISOString(),

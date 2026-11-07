@@ -17,8 +17,8 @@ export const DashboardLiveAttendanceList: React.FC<DashboardLiveAttendanceListPr
   onSelectEmployee,
 }) => {
   return (
-    <div className="bg-white rounded-3xl border border-stone-200/90 shadow-sm overflow-hidden flex flex-col">
-      <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+    <div className="glass-card rounded-3xl overflow-hidden flex flex-col">
+      <div className="p-4 border-b border-white/60 flex items-center justify-between bg-white/40 backdrop-blur-xs">
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-[#2A7B76]" />
           <h3 className="font-serif font-bold text-xs text-stone-900">

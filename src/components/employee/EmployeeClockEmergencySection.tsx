@@ -14,10 +14,10 @@ export const EmployeeClockEmergencySection: React.FC<EmployeeClockEmergencySecti
   return (
     <div className="space-y-3">
       {/* Actions Bar */}
-      <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 bg-stone-50/80 p-3 rounded-2xl border border-stone-200/80">
+      <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 glass-card p-3.5 rounded-2xl">
         <button
           onClick={onOpenEmergencyModal}
-          className="w-full sm:w-auto bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-xs cursor-pointer active:scale-98"
+          className="w-full sm:w-auto glass-btn-primary text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
           title="Déclarer une sortie professionnelle, un retard, un départ anticipé, une permission ou autre"
         >
           <HelpCircle className="h-4 w-4 text-emerald-200 shrink-0" />

@@ -45,12 +45,12 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
   return (
     <div className="space-y-4 pt-1">
       {/* Principal Daily Clock Grid */}
-      <div className="bg-stone-50/70 p-3.5 rounded-2xl border border-stone-200/80 space-y-3">
+      <div className="glass-card p-4 rounded-2xl space-y-3.5">
         <div className="flex items-center justify-between px-1">
           <span className="text-[11px] font-bold uppercase tracking-wider text-stone-600">
             Assiduité & Pointage Journalier
           </span>
-          <span className="text-[11px] font-mono font-medium text-stone-500">
+          <span className="text-[11px] font-mono font-medium text-[#2A7B76] glass-chip px-2.5 py-0.5 rounded-lg">
             {liveTimeString}
           </span>
         </div>
@@ -60,14 +60,14 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
           <button
             onClick={() => onTriggerClock('arrival')}
             disabled={isLocating || !canClockArrival || hasArrived || hasDeparted}
-            className={`w-full py-3.5 px-4 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition shadow-xs ${
+            className={`w-full py-3.5 px-4 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 ${
               hasArrived
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 cursor-not-allowed shadow-none'
+                ? 'glass-chip-accent text-emerald-800 cursor-not-allowed shadow-none'
                 : hasDeparted
-                ? 'bg-stone-100 text-stone-400 border border-stone-200 cursor-not-allowed shadow-none'
+                ? 'bg-stone-100/60 text-stone-400 border border-stone-200/80 cursor-not-allowed shadow-none'
                 : !canClockArrival
-                ? 'bg-stone-100 text-stone-400 border border-stone-200 cursor-not-allowed shadow-none'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-98'
+                ? 'bg-stone-100/60 text-stone-400 border border-stone-200/80 cursor-not-allowed shadow-none'
+                : 'glass-btn-primary text-white'
             }`}
             title={hasArrived ? "Votre arrivée a déjà été enregistrée" : "Pointer votre arrivée au bureau"}
           >
@@ -99,12 +99,12 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
             <button
               onClick={() => onTriggerClock('pauseStart')}
               disabled={isLocating || !canStartPause || hasDeparted}
-              className={`w-full py-3.5 px-4 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition shadow-xs ${
+              className={`w-full py-3.5 px-4 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 ${
                 hasStartedPause
-                  ? 'bg-amber-50 text-amber-800 border border-amber-200 cursor-not-allowed shadow-none'
+                  ? 'bg-amber-500/15 text-amber-900 border border-amber-300/80 backdrop-blur-xs cursor-not-allowed shadow-none'
                   : hasDeparted || !canStartPause
-                  ? 'bg-stone-100 text-stone-400 border border-stone-200 cursor-not-allowed shadow-none'
-                  : 'bg-amber-600 hover:bg-amber-700 text-white cursor-pointer active:scale-98'
+                  ? 'bg-stone-100/60 text-stone-400 border border-stone-200/80 cursor-not-allowed shadow-none'
+                  : 'glass-btn-warning text-white'
               }`}
               title={hasStartedPause ? "Votre pause a déjà débuté" : "Signaler votre départ en pause"}
             >
@@ -127,12 +127,12 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
             <button
               onClick={() => onTriggerClock('pauseEnd')}
               disabled={isLocating || !canEndPause || hasDeparted}
-              className={`w-full py-3.5 px-4 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition shadow-xs ${
+              className={`w-full py-3.5 px-4 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 ${
                 hasEndedPause
-                  ? 'bg-teal-50 text-teal-800 border border-teal-200 cursor-not-allowed shadow-none'
+                  ? 'glass-chip-accent text-teal-900 cursor-not-allowed shadow-none'
                   : hasDeparted || !canEndPause
-                  ? 'bg-stone-100 text-stone-400 border border-stone-200 cursor-not-allowed shadow-none'
-                  : 'bg-teal-600 hover:bg-teal-700 text-white cursor-pointer active:scale-98'
+                  ? 'bg-stone-100/60 text-stone-400 border border-stone-200/80 cursor-not-allowed shadow-none'
+                  : 'glass-btn-primary text-white'
               }`}
               title={hasEndedPause ? "Votre reprise a déjà été enregistrée" : "Signaler votre retour de pause"}
             >
@@ -154,12 +154,12 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
           <button
             onClick={() => onTriggerClock('departure')}
             disabled={isLocating || hasDeparted || !canDepart}
-            className={`w-full py-3.5 px-4 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition shadow-xs ${
+            className={`w-full py-3.5 px-4 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 ${
               hasDeparted
-                ? 'bg-stone-100 text-stone-700 border border-stone-300 font-extrabold cursor-not-allowed shadow-none'
+                ? 'glass-chip text-stone-800 font-extrabold cursor-not-allowed shadow-none'
                 : !canDepart
-                ? 'bg-stone-100 text-stone-400 border border-stone-200 cursor-not-allowed shadow-none'
-                : 'bg-[#2A7B76] hover:bg-[#20635F] text-white cursor-pointer active:scale-98'
+                ? 'bg-stone-100/60 text-stone-400 border border-stone-200/80 cursor-not-allowed shadow-none'
+                : 'glass-btn-primary text-white'
             }`}
             title={hasDeparted ? "Votre départ a déjà été enregistré" : "Pointer votre fin de journée et votre départ"}
           >
