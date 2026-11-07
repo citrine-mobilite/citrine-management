@@ -1,14 +1,14 @@
 {
   "id": "/",
-  "name": "Citrine Management",
+  "name": "Citrine Management - App Mobile",
   "short_name": "Citrine",
-  "description": "Application mobile de gestion d'entreprise, présences, pointages et paie.",
+  "description": "Application mobile & web de gestion d'entreprise, pointages QR Code, présences, paie et notifications.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "theme_color": "#2A7B76",
   "categories": ["business", "productivity", "utilities"],
   "icons": [
     {
@@ -32,7 +32,8 @@
     {
       "src": "/icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }

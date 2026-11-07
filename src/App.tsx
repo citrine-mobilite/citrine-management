@@ -41,6 +41,7 @@ import { PushNotificationPopupContainer } from './components/notifications/PushN
 import { GlobalActionLoader } from './components/common/GlobalActionLoader';
 import { showSuccessAlert, showErrorAlert, showPendingAlert } from './utils/sweetAlert';
 import { asyncActionTrackerService } from './services/asyncActionTrackerService';
+import { PwaInstallBanner } from './components/pwa/PwaInstallBanner';
 
 export default function App() {
   const initialData = useAppInitialData();
@@ -386,13 +387,15 @@ export default function App() {
             nonBadgedEmployeesCount={nonBadgedEmployeesCount}
             mobileMenuOpen={mobileMenuOpen}
             onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
+            onCloseMobileMenu={() => setMobileMenuOpen(false)}
             currentUser={currentUser}
             moduleConfig={initialData.moduleConfig}
           />
         )}
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-28 sm:pb-24 md:pb-8">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-28 sm:pb-24 md:pb-8 space-y-4">
+          <PwaInstallBanner />
           <AppTabRouter
             activeTab={activeTab}
             setActiveTab={setActiveTab}

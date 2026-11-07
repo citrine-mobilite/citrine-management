@@ -4,7 +4,7 @@ import { usePwaInstall } from './usePwaInstall';
 import { UniversalInstallModal } from './UniversalInstallModal';
 
 export const PwaInstallBanner: React.FC = () => {
-  const { isInstalled, isIos, isAndroid, showInstallModal, setShowInstallModal, triggerInstall } = usePwaInstall();
+  const { isInstalled, isIos, isAndroid, hasNativePrompt, showInstallModal, setShowInstallModal, triggerInstall } = usePwaInstall();
   const [isDismissed, setIsDismissed] = useState<boolean>(() => {
     return sessionStorage.getItem('pwa_banner_dismissed') === 'true';
   });
@@ -63,6 +63,8 @@ export const PwaInstallBanner: React.FC = () => {
         onClose={() => setShowInstallModal(false)}
         isIos={isIos}
         isAndroid={isAndroid}
+        hasNativePrompt={hasNativePrompt}
+        onTriggerNativePrompt={triggerInstall}
       />
     </>
   );

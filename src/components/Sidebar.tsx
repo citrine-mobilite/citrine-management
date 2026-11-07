@@ -47,6 +47,7 @@ interface SidebarProps {
   nonBadgedEmployeesCount?: number;
   mobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
+  onCloseMobileMenu?: () => void;
   currentUser: AppUser | null;
   moduleConfig?: CompanyModuleConfig;
 }
@@ -62,6 +63,7 @@ export default function Sidebar({
   nonBadgedEmployeesCount,
   mobileMenuOpen,
   onToggleMobileMenu,
+  onCloseMobileMenu,
   currentUser,
   moduleConfig = DEFAULT_MODULE_CONFIG,
 }: SidebarProps) {
@@ -124,6 +126,7 @@ export default function Sidebar({
       <SidebarMobileDrawer
         mobileMenuOpen={mobileMenuOpen}
         onToggleMobileMenu={onToggleMobileMenu}
+        onClose={onCloseMobileMenu}
         categories={categories}
         activeTab={activeTab}
         onSelectTab={onSelectTab}

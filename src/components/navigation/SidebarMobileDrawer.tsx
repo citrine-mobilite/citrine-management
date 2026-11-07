@@ -8,6 +8,7 @@ import { SidebarItemButton } from './SidebarItemButton';
 interface SidebarMobileDrawerProps {
   mobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
+  onClose?: () => void;
   categories: SidebarCategory[];
   activeTab: TabType;
   onSelectTab: (tab: TabType) => void;
@@ -16,18 +17,27 @@ interface SidebarMobileDrawerProps {
 export const SidebarMobileDrawer: React.FC<SidebarMobileDrawerProps> = ({
   mobileMenuOpen,
   onToggleMobileMenu,
+  onClose,
   categories,
   activeTab,
   onSelectTab,
 }) => {
   if (!mobileMenuOpen) return null;
 
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else {
+      onToggleMobileMenu();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex md:hidden">
       {/* Backdrop with frosted dark veil */}
       <div
         className="fixed inset-0 bg-stone-950/45 backdrop-blur-md transition-opacity"
-        onClick={onToggleMobileMenu}
+        onClick={handleClose}
       />
 
       {/* Drawer Panel in Frosted Glass */}
@@ -38,8 +48,10 @@ export const SidebarMobileDrawer: React.FC<SidebarMobileDrawerProps> = ({
             <span className="font-serif font-bold text-sm text-stone-900 tracking-tight">Menu Principal</span>
           </div>
           <button
-            onClick={onToggleMobileMenu}
+            onClick={handleClose}
             className="p-1.5 rounded-xl hover:bg-white/80 text-stone-700 transition cursor-pointer glass-chip"
+            aria-label="Fermer le menu"
+            title="Fermer le menu"
           >
             <X className="h-5 w-5" />
           </button>
@@ -60,7 +72,7 @@ export const SidebarMobileDrawer: React.FC<SidebarMobileDrawerProps> = ({
                     isOpen={true}
                     onSelectTab={(tab) => {
                       onSelectTab(tab);
-                      onToggleMobileMenu();
+                      handleClose();
                     }}
                   />
                 ))}

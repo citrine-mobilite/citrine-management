@@ -13,9 +13,18 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { usePwaInstall } from '../pwa/usePwaInstall';
+import { UniversalInstallModal } from '../pwa/UniversalInstallModal';
 
 export const EmployeePwaInstallTab: React.FC = () => {
-  const { isInstalled, isIos, isAndroid, triggerInstall } = usePwaInstall();
+  const { 
+    isInstalled, 
+    isIos, 
+    isAndroid, 
+    hasNativePrompt,
+    showInstallModal, 
+    setShowInstallModal, 
+    triggerInstall 
+  } = usePwaInstall();
   const [activeGuide, setActiveGuide] = useState<'android' | 'ios' | 'desktop'>(() => {
     if (isIos) return 'ios';
     if (isAndroid) return 'android';
@@ -247,6 +256,15 @@ export const EmployeePwaInstallTab: React.FC = () => {
           </div>
         )}
       </div>
+
+      <UniversalInstallModal
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        isIos={isIos}
+        isAndroid={isAndroid}
+        hasNativePrompt={hasNativePrompt}
+        onTriggerNativePrompt={triggerInstall}
+      />
     </div>
   );
 };

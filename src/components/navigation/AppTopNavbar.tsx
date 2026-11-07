@@ -164,9 +164,7 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
         </button>
 
         {/* PWA Install Button */}
-        <div className="hidden xs:block">
-          <PWAInstallButton />
-        </div>
+        <PWAInstallButton compact={true} />
 
         {/* User Profile Trigger Button */}
         {currentUser && (
