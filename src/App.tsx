@@ -42,6 +42,7 @@ import { GlobalActionLoader } from './components/common/GlobalActionLoader';
 import { showSuccessAlert, showErrorAlert, showPendingAlert } from './utils/sweetAlert';
 import { asyncActionTrackerService } from './services/asyncActionTrackerService';
 import { PwaInstallBanner } from './components/pwa/PwaInstallBanner';
+import { PwaUpdateToast } from './components/pwa/PwaUpdateToast';
 
 export default function App() {
   const initialData = useAppInitialData();
@@ -56,6 +57,32 @@ export default function App() {
       });
     }
   }, [initialData.moduleConfig?.companyLogoBase64]);
+
+  // Global anti-silent error interceptor (Catches all unhandled runtime errors & promise rejections)
+  useEffect(() => {
+    const handleGlobalError = (event: ErrorEvent) => {
+      console.error("Global uncaught error caught:", event.error || event.message);
+      const msg = event.message || '';
+      if (!msg.includes('WebSocket') && !msg.includes('vite/client')) {
+        showErrorAlert("Erreur Inattendue", msg || "Une erreur critique est survenue dans l'application.");
+      }
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error("Global unhandled promise rejection caught:", event.reason);
+      const reasonStr = String(event.reason?.message || event.reason || '');
+      if (!reasonStr.includes('WebSocket') && !reasonStr.includes('vite/client')) {
+        showErrorAlert("Erreur Asynchrone", reasonStr || "Une opération en arrière-plan a échoué.");
+      }
+    };
+
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => {
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -512,6 +539,9 @@ export default function App() {
 
       {/* Global Action Loader (Déclenchement automatique pour toute action > 1 seconde) */}
       <GlobalActionLoader />
+
+      {/* PWA Update Toast Notification */}
+      <PwaUpdateToast />
     </div>
   );
 }

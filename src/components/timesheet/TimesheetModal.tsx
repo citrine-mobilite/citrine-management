@@ -12,7 +12,6 @@ import {
   User, 
   ChevronLeft, 
   ChevronRight, 
-  Sparkles,
   Plus,
   Trash2,
   Zap,

@@ -9,7 +9,6 @@ import {
   ShieldCheck, 
   ToggleLeft, 
   ToggleRight,
-  Sparkles,
   Info
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';

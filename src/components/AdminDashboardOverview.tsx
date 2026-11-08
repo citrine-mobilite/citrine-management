@@ -8,8 +8,7 @@ import {
   Settings, 
   ArrowRight,
   TrendingUp,
-  LayoutDashboard,
-  Sparkles
+  LayoutDashboard
 } from 'lucide-react';
 import { Employee, Presence, Task, Reminder, AppUser } from '../types';
 import { TabType } from './Sidebar';
@@ -95,7 +94,7 @@ export default function AdminDashboardOverview({
 
         <div className="space-y-3 z-10 text-center md:text-left">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs text-emerald-100 font-semibold shadow-2xs">
-            <Sparkles className="h-3.5 w-3.5 text-[#F3D079]" />
+            <LayoutDashboard className="h-3.5 w-3.5 text-[#F3D079]" />
             <span>Espace Direction & Pilotage Opérationnel</span>
           </div>
           <div>

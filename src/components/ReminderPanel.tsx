@@ -19,6 +19,7 @@ import {
   ReminderModal, 
   ActiveAlarmBanner 
 } from './reminders';
+import { HumaanAlerts } from './illustrations/HumaanIllustrations';
 import { showSuccessAlert, executeOperationWithLoading, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface ReminderPanelProps {
@@ -237,21 +238,27 @@ export default function ReminderPanel({
       )}
 
       {/* Top Banner */}
-      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+        <div className="z-10 text-center md:text-left">
+          <div className="flex items-center justify-center md:justify-start gap-2">
             <Bell className="h-5 w-5 text-emerald-200" />
-            <h2 className="font-serif font-bold text-xl">Gestion des Alertes & Rappels</h2>
+            <h2 className="font-serif font-bold text-xl md:text-2xl">Gestion des Alertes & Rappels</h2>
           </div>
         </div>
 
-        <button
-          onClick={handleOpenCreateModal}
-          className="bg-white text-[#2A7B76] hover:bg-emerald-50 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Créer une Alerte</span>
-        </button>
+        <div className="hidden lg:block shrink-0 z-10">
+          <HumaanAlerts className="w-32 h-24 drop-shadow-md" />
+        </div>
+
+        <div className="w-full sm:w-auto flex justify-center md:justify-end z-10">
+          <button
+            onClick={handleOpenCreateModal}
+            className="w-full sm:w-auto justify-center bg-white text-[#2A7B76] hover:bg-emerald-50 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer active:scale-98"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Créer une Alerte</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Stats */}

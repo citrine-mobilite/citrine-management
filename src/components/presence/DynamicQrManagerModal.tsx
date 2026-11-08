@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { QrCode, X, RefreshCw, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-react';
+import { QrCode, X, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { dynamicQrService } from '../../services/dynamicQrService';
 import { DynamicQrSession } from '../../types';
 

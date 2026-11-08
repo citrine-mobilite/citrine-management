@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderKanban, FolderPlus, Plus, Trophy, Sparkles, Send } from 'lucide-react';
+import { FolderKanban, FolderPlus, Plus, Trophy, Send } from 'lucide-react';
 import { HumaanTaskCheck } from '../illustrations/HumaanIllustrations';
 
 interface TaskHeaderBannerProps {
@@ -37,26 +37,26 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
         <HumaanTaskCheck className="w-28 h-24 drop-shadow-md" />
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 w-full md:w-auto">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap items-center justify-center md:justify-end gap-2 w-full md:w-auto">
         {/* Envoyer ma fiche de temps */}
         {onSendTimesheet && (
           <button
             onClick={onSendTimesheet}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3 py-2 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-md border border-emerald-400"
+            className="w-full md:w-auto justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-md border border-emerald-400"
             title="Envoyer votre fiche de temps de la journée"
           >
-            <Send className="h-3.5 w-3.5 text-white" />
-            <span>Envoyer ma fiche de temps</span>
+            <Send className="h-3.5 w-3.5 text-white shrink-0" />
+            <span>Fiche temps</span>
           </button>
         )}
 
         {/* Nouveau Projet */}
         <button
           onClick={onOpenNewProject}
-          className="bg-white/15 hover:bg-white/25 text-white font-semibold px-3 py-2 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer border border-white/25 active:scale-98 whitespace-nowrap"
+          className="w-full md:w-auto justify-center bg-white/15 hover:bg-white/25 text-white font-semibold px-3 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer border border-white/25 active:scale-98 whitespace-nowrap"
           title="Créer un nouveau projet ou module d'entreprise"
         >
-          <FolderPlus className="h-3.5 w-3.5 text-emerald-200" />
+          <FolderPlus className="h-3.5 w-3.5 text-emerald-200 shrink-0" />
           <span>Projet</span>
         </button>
 
@@ -64,11 +64,11 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
         {onOpenCreateMilestone && (
           <button
             onClick={onOpenCreateMilestone}
-            className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 font-bold px-3 py-2 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-xs"
+            className="w-full md:w-auto justify-center bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 font-bold px-3 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-xs"
             title="Définir un jalon stratégique majeur avec date cible et livrable clé"
           >
-            <Trophy className="h-3.5 w-3.5 text-amber-300" />
-            <span>Nouveau Jalon</span>
+            <Trophy className="h-3.5 w-3.5 text-amber-300 shrink-0" />
+            <span>Jalon</span>
           </button>
         )}
 
@@ -76,21 +76,21 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
         {onOpenCreateSubtask && (
           <button
             onClick={onOpenCreateSubtask}
-            className="bg-indigo-500/25 hover:bg-indigo-500/35 text-indigo-100 border border-indigo-400/30 font-bold px-3 py-2 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-xs"
+            className="w-full md:w-auto justify-center bg-indigo-500/25 hover:bg-indigo-500/35 text-indigo-100 border border-indigo-400/30 font-bold px-3 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-xs"
             title="Créer une sous-tâche détaillée avec le procédé haute précision Asana"
           >
-            <Sparkles className="h-3.5 w-3.5 text-indigo-300" />
-            <span>Sous-Tâche Pro</span>
+            <Plus className="h-3.5 w-3.5 text-indigo-300 shrink-0" />
+            <span>Sous-Tâche</span>
           </button>
         )}
 
         {/* Nouvelle Tâche */}
         <button
           onClick={onOpenCreateTask}
-          className="bg-white text-[#2A7B76] hover:bg-emerald-50 font-bold px-3.5 py-2 rounded-2xl text-xs flex items-center gap-1.5 shadow-md hover:shadow transition cursor-pointer active:scale-98 whitespace-nowrap"
+          className="col-span-2 sm:col-span-1 w-full md:w-auto justify-center bg-white text-[#2A7B76] hover:bg-emerald-50 font-bold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 shadow-md hover:shadow transition cursor-pointer active:scale-98 whitespace-nowrap"
           title="Créer une nouvelle tâche opérationnelle"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4 shrink-0" />
           <span>Nouvelle Tâche</span>
         </button>
       </div>

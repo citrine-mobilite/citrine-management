@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Wallet, Coins, Receipt, Sparkles } from 'lucide-react';
+import { DollarSign, Wallet, Coins, Receipt } from 'lucide-react';
 import { Employee, EmployeeSalaryDebt, SalaryPayment, FinancialTransaction, Role } from '../types';
 import { FinanceStatsCards } from './finances/FinanceStatsCards';
 import { SalaryPaymentsTable } from './finances/SalaryPaymentsTable';
@@ -38,7 +38,7 @@ export default function FinancePanel({
       <div className="bg-gradient-to-r from-[#2A7B76] via-[#216762] to-emerald-950 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="space-y-2 z-10 text-center md:text-left">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs text-emerald-100 font-semibold shadow-2xs">
-            <Sparkles className="h-3.5 w-3.5 text-[#F3D079]" />
+            <Coins className="h-3.5 w-3.5 text-[#F3D079]" />
             <span>Trésorerie, Paie & Prêts Collaborateurs</span>
           </div>
           <div className="flex items-center gap-2">

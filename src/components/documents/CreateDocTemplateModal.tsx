@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { 
   X, 
-  Sparkles, 
   Plus, 
   Trash2, 
   Database, 
@@ -172,7 +171,7 @@ La présente pièce lui est délivrée pour servir et valoir ce que de droit.`);
         <div className="p-5 border-b border-stone-200 bg-stone-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-100/80 rounded-2xl text-[#2A7B76]">
-              <Sparkles className="h-5 w-5" />
+              <FileText className="h-5 w-5" />
             </div>
             <div>
               <h3 className="font-serif font-bold text-base text-stone-900">

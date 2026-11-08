@@ -213,9 +213,6 @@ export const CompanyModulesToggle: React.FC<CompanyModulesToggleProps> = ({
             <h3 className="font-serif font-bold text-base text-stone-900">
               Activation & Désactivation des Modules
             </h3>
-            <p className="text-xs text-stone-500">
-              Tous les modules du système sont activables ou désactivables selon les besoins de votre organisation.
-            </p>
           </div>
         </div>
 

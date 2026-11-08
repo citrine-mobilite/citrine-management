@@ -97,9 +97,6 @@ export const DisciplinaryMotifsManagementSection: React.FC<DisciplinaryMotifsMan
             <h3 className="font-serif font-bold text-base text-stone-900">
               Registre des Motifs RH & Statuts Collaborateurs
             </h3>
-            <p className="text-xs text-stone-500">
-              Nomenclature des motifs réglementaires : renvois, suspensions, mutations, départs et avertissements (15 derniers motifs affichés).
-            </p>
           </div>
         </div>
 

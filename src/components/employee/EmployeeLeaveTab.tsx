@@ -13,7 +13,6 @@ import {
   X, 
   ArrowRight, 
   MessageSquare, 
-  Sparkles, 
   LayoutList, 
   LayoutGrid,
   Info,
@@ -364,7 +363,7 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
         <div className="flex items-center gap-2 w-full md:w-auto flex-wrap justify-between md:justify-end">
           {/* Total Days Count Ribbon */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 border border-stone-200 text-xs text-stone-700 font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-[#2A7B76]" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-[#2A7B76]" />
             <span>Accordé : <strong className="font-mono text-stone-900">{stats.totalDaysTaken} j</strong></span>
           </div>
 
@@ -761,7 +760,7 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
                   >
                     {isPending && <Clock className="w-3.5 h-3.5 text-amber-600" />}
                     {isApproved && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-                    {isModified && <Sparkles className="w-3.5 h-3.5 text-sky-600" />}
+                    {isModified && <Calendar className="w-3.5 h-3.5 text-sky-600" />}
                     {isRejected && <XCircle className="w-3.5 h-3.5 text-rose-600" />}
                     <span>
                       {isPending
@@ -826,7 +825,7 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
             }`}>
               {selectedLeaveModal.status === 'pending' && <Hourglass className="w-5 h-5 text-amber-600 shrink-0" />}
               {selectedLeaveModal.status === 'approved' && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />}
-              {selectedLeaveModal.status === 'modified' && <Sparkles className="w-5 h-5 text-sky-600 shrink-0" />}
+              {selectedLeaveModal.status === 'modified' && <Calendar className="w-5 h-5 text-sky-600 shrink-0" />}
               {selectedLeaveModal.status === 'rejected' && <XCircle className="w-5 h-5 text-rose-600 shrink-0" />}
               <div>
                 <h4 className="font-bold text-xs uppercase tracking-wider">

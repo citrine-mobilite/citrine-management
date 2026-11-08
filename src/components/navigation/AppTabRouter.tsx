@@ -30,6 +30,7 @@ import TaskPanel from '../TaskPanel';
 import ReminderPanel from '../ReminderPanel';
 import SystemLogsPanel from '../SystemLogsPanel';
 import CollaboratorPanel from '../CollaboratorPanel';
+import UserManagementPanel from '../UserManagementPanel';
 import ProfilePage from '../ProfilePage';
 import { taskService } from '../../services/taskService';
 
@@ -40,7 +41,6 @@ const CommunicationPanel = lazy(() => import('../CommunicationPanel'));
 const FinancePanel = lazy(() => import('../FinancePanel'));
 const InventoryPanel = lazy(() => import('../InventoryPanel'));
 const PartnersPanel = lazy(() => import('../PartnersPanel'));
-const UserManagementPanel = lazy(() => import('../UserManagementPanel'));
 const CompanySettingsPanel = lazy(() => import('../CompanySettingsPanel'));
 const TeamCallsPanel = lazy(() => import('../TeamCallsPanel'));
 const RecruitmentPanel = lazy(() => import('../recruitment/RecruitmentPanel'));

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { HumaanInnovation } from './illustrations/HumaanIllustrations';
+import { HumaanLeaves } from './illustrations/HumaanIllustrations';
 import { 
   CalendarDays, 
   Search, 
@@ -19,8 +19,7 @@ import {
   Calendar,
   Plus,
   Compass,
-  Flag,
-  Sparkles
+  Flag
 } from 'lucide-react';
 import { 
   LeaveRequest, 
@@ -347,7 +346,7 @@ export default function LeaveManagementPanel({
       <div className="bg-gradient-to-r from-[#2A7B76] via-[#20635F] to-emerald-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="space-y-2 z-10 text-center md:text-left">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs text-emerald-100 font-semibold shadow-2xs">
-            <Sparkles className="h-3.5 w-3.5 text-[#F3D079]" />
+            <Calendar className="h-3.5 w-3.5 text-[#F3D079]" />
             <span>Gestion des Absences & Missions</span>
           </div>
           <div className="flex items-center gap-2.5 justify-center md:justify-start">
@@ -361,10 +360,10 @@ export default function LeaveManagementPanel({
         </div>
 
         <div className="hidden lg:block shrink-0 z-10">
-          <HumaanInnovation className="w-40 h-28 drop-shadow-md" />
+          <HumaanLeaves className="w-40 h-28 drop-shadow-md" />
         </div>
 
-        <div className="flex flex-wrap items-center justify-center md:justify-end gap-2.5 shrink-0 z-10 w-full md:w-auto">
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2.5 shrink-0 z-10 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => {
@@ -373,7 +372,7 @@ export default function LeaveManagementPanel({
               }
               setShowCreateModal(true);
             }}
-            className="px-4 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-bold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0 active:scale-98"
+            className="w-full sm:w-auto justify-center px-4 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-bold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0 active:scale-98"
           >
             <Plus className="h-4 w-4 text-[#2A7B76]" />
             <span>Créer un congé</span>

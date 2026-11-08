@@ -18,6 +18,7 @@ import { HseIncidentsGrid } from './HseIncidentsGrid';
 import { HseDetailModal } from './HseDetailModal';
 import { HseIncidentModal } from './HseIncidentModal';
 import { SearchableSelect, SelectOption } from '../common/SearchableSelect';
+import { HumaanHse } from '../illustrations/HumaanIllustrations';
 import { executeOperationWithLoading, executeDeleteWithSweetAlert } from '../../utils/sweetAlert';
 
 interface HsePanelProps {
@@ -215,28 +216,32 @@ export const HsePanel: React.FC<HsePanelProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200 shadow-xs">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2.5 bg-amber-50 text-amber-700 rounded-xl border border-amber-100">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-5 bg-white p-6 rounded-3xl border border-stone-200/80 shadow-xs relative overflow-hidden">
+        <div className="flex items-center justify-center md:justify-start gap-3 text-center md:text-left z-10">
+          <div className="p-2.5 bg-amber-50 text-amber-700 rounded-2xl border border-amber-100 shrink-0">
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-stone-800">Registre Hygiène, Sécurité & Environnement (HSE)</h1>
-            <p className="text-xs text-stone-500">
-              Prévention des risques, signalement des presque-accidents et plans d'actions correctives (CAPA)
-            </p>
+            <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-800">Registre Hygiène, Sécurité & Environnement (HSE)</h1>
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setEditingIncident(null);
-            setIsModalOpen(true);
-          }}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition cursor-pointer"
-        >
-          <AlertTriangle className="w-4 h-4" /> Déclarer un Incident / Danger
-        </button>
+        <div className="hidden lg:block shrink-0 z-10">
+          <HumaanHse className="w-32 h-24 drop-shadow-sm" />
+        </div>
+
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2.5 w-full sm:w-auto z-10">
+          <button
+            onClick={() => {
+              setEditingIncident(null);
+              setIsModalOpen(true);
+            }}
+            className="w-full sm:w-auto justify-center inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-2xl shadow-xs transition cursor-pointer active:scale-98"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>Déclarer un Incident / Danger</span>
+          </button>
+        </div>
       </div>
 
       <HseKpiBanner

@@ -7,7 +7,6 @@ import {
   Check, 
   MapPin, 
   ShieldCheck, 
-  Sparkles, 
   ExternalLink,
   Printer,
   Info,

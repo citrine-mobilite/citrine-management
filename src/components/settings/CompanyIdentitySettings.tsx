@@ -84,9 +84,6 @@ export const CompanyIdentitySettings: React.FC<CompanyIdentitySettingsProps> = (
             <h3 className="font-serif font-bold text-base text-stone-900">
               Identité Juridique & Siège Social
             </h3>
-            <p className="text-xs text-stone-500">
-              Logo officiel conservé en base, mentions légales et coordonnées réutilisées sur les documents officiels.
-            </p>
           </div>
         </div>
 

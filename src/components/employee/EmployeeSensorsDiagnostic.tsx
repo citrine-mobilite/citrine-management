@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Sparkles, MapPin } from 'lucide-react';
+import { ShieldCheck, MapPin, Activity } from 'lucide-react';
 
 interface SensorsDiagnosticState {
   status: 'idle' | 'scanning' | 'done';
@@ -32,7 +32,7 @@ export const EmployeeSensorsDiagnostic: React.FC<EmployeeSensorsDiagnosticProps>
           disabled={sensorsDiagnostic.status === 'scanning'}
           className="px-3.5 py-1.5 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold rounded-xl text-[10px] flex items-center gap-1.5 self-start sm:self-auto transition disabled:opacity-50 cursor-pointer shadow-3xs"
         >
-          <Sparkles className="h-3.5 w-3.5" />
+          <Activity className="h-3.5 w-3.5" />
           {sensorsDiagnostic.status === 'scanning' ? 'Vérification...' : 'Tester GPS & Caméra'}
         </button>
       </div>

@@ -9,7 +9,6 @@ import {
   Key, 
   Layers, 
   RefreshCw,
-  Sparkles,
   Info,
   Eye,
   EyeOff,

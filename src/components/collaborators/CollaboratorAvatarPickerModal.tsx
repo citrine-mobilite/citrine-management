@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Upload, Image as ImageIcon, Check, RefreshCw, X, AlertCircle } from 'lucide-react';
+import { Smile, Upload, Image as ImageIcon, Check, RefreshCw, X, AlertCircle } from 'lucide-react';
 import { compressImageFile } from '../../utils/imageCompressor';
 
 interface CollaboratorAvatarPickerModalProps {
@@ -87,7 +87,7 @@ export const CollaboratorAvatarPickerModal: React.FC<CollaboratorAvatarPickerMod
       <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-stone-200 space-y-4 text-xs">
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
           <h3 className="font-serif font-bold text-sm text-stone-900 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-[#2A7B76]" /> Photo de Profil & Avatar du Collaborateur
+            <ImageIcon className="h-4 w-4 text-[#2A7B76]" /> Photo de Profil & Avatar du Collaborateur
           </h3>
           <button onClick={onClose} className="p-1 rounded-xl text-stone-400 hover:bg-stone-100 cursor-pointer">
             <X className="h-4 w-4" />
@@ -103,7 +103,7 @@ export const CollaboratorAvatarPickerModal: React.FC<CollaboratorAvatarPickerMod
               activeMode === 'funny' ? 'bg-[#2A7B76] text-white shadow-xs' : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            <Sparkles className="h-3.5 w-3.5" />
+            <Smile className="h-3.5 w-3.5" />
             <span>Avatars Rigolos & Stylés</span>
           </button>
           <button

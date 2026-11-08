@@ -1,5 +1,4 @@
 import React from 'react';
-import { HardHat } from 'lucide-react';
 
 interface HseKpiBannerProps {
   daysWithoutLostTimeAccident: number;
@@ -22,27 +21,6 @@ export const HseKpiBanner: React.FC<HseKpiBannerProps> = ({
 }) => {
   return (
     <div className="space-y-4">
-      {/* Safety Goal Banner */}
-      <div className="bg-gradient-to-r from-emerald-800 to-[#2A7B76] text-white p-5 rounded-2xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-white/10 rounded-xl backdrop-blur-xs">
-            <HardHat className="w-8 h-8 text-emerald-200" />
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-emerald-200 font-bold">Sécurité au travail Citrine</p>
-            <h3 className="text-lg font-bold">Objectif « Zéro Accident » sur les sites et sur la route</h3>
-            <p className="text-xs text-emerald-100/90 mt-0.5">
-              Port obligatoire des EPI à la Base Japoma • Contrôle check-list des freins et pneus avant départ
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white/10 px-5 py-3 rounded-xl border border-white/20 text-center shrink-0">
-          <p className="text-2xl font-black font-mono tracking-tight text-white">{daysWithoutLostTimeAccident}</p>
-          <p className="text-[11px] text-emerald-200 uppercase font-semibold">Jours sans accident avec arrêt</p>
-        </div>
-      </div>
-
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4.5 rounded-xl border border-stone-200 shadow-xs">

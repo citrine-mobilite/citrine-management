@@ -9,8 +9,7 @@ import {
   ExternalLink, 
   Copy, 
   Check, 
-  Info,
-  Sparkles
+  Info
 } from 'lucide-react';
 import { CMLogo } from '../CMLogo';
 import { haptic } from '../../services/hapticService';
@@ -99,7 +98,6 @@ export const UniversalInstallModal: React.FC<UniversalInstallModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-emerald-100 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-[#D4A82F]" />
                 Accès direct, plein écran & alertes push
               </p>
             </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, PhoneOff, Video, Users, Sparkles, UserPlus } from 'lucide-react';
+import { Phone, PhoneOff, Video, Users, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { VoIPCall } from '../types';
 

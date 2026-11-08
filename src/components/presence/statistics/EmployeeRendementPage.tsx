@@ -9,7 +9,6 @@ import {
   Trash2, 
   FileSpreadsheet, 
   Calendar, 
-  Sparkles,
   ChevronRight,
   TrendingUp,
   Flame,

@@ -10,7 +10,6 @@ import {
   Plus, 
   Trash2, 
   Trophy, 
-  Sparkles, 
   ListChecks, 
   FolderKanban, 
   Layers

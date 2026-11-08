@@ -14,7 +14,6 @@ import {
   Target, 
   TrendingUp, 
   Zap, 
-  Sparkles,
   ArrowUpRight,
   Filter,
 } from 'lucide-react';

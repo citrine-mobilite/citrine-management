@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  Sparkles, 
   Database, 
   FileText, 
   Briefcase, 
@@ -97,7 +96,7 @@ export const DocTemplateSelector: React.FC<DocTemplateSelectorProps> = ({
         <div className="flex items-center justify-between w-full md:w-auto">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-emerald-100/80 text-[#2A7B76] rounded-xl shrink-0">
-              <Sparkles className="h-4 w-4" />
+              <FileText className="h-4 w-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">

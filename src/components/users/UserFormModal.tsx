@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Lock, Building, Sparkles, UserCheck, UserPlus, Shield } from 'lucide-react';
+import { X, User, Mail, Lock, Building, UserCheck, UserPlus, Shield } from 'lucide-react';
 import { AppUser, UserRole, UserStatus, EmployeeStatus } from '../../types';
 import { generateStrongPassword } from '../../utils/cryptoUtils';
 
@@ -219,7 +219,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 onClick={() => setPassword(generateStrongPassword())}
                 className="text-[10px] text-[#2A7B76] hover:underline flex items-center gap-1 cursor-pointer font-bold"
               >
-                <Sparkles className="h-3 w-3" /> Générer un mot de passe
+                <Lock className="h-3 w-3" /> Générer un mot de passe
               </button>
             </div>
             <input

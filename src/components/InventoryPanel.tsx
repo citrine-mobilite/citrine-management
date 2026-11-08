@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Package, Search, Plus, Heart, Layers, LayoutGrid, Table } from 'lucide-react';
+import { HumaanInventory } from './illustrations/HumaanIllustrations';
 import { InventoryItem, Role, Employee, NotificationLog, AppUser, InventoryAssignment } from '../types';
 import { InventoryStatsCards } from './inventory/InventoryStatsCards';
 import { InventoryItemCard } from './inventory/InventoryItemCard';
@@ -118,21 +119,25 @@ export default function InventoryPanel({
   return (
     <div className="space-y-6">
       {/* Clean Banner with Aligned Primary Action */}
-      <div className="bg-[#2A7B76] rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2.5">
+      <div className="bg-[#2A7B76] rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+        <div className="flex items-center justify-center md:justify-start gap-2.5 z-10 text-center md:text-left">
           <Package className="h-6 w-6 text-emerald-200" />
           <h2 className="font-serif font-bold text-xl sm:text-2xl text-white">
             Gestion du Matériel & Inventaires
           </h2>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+        <div className="hidden lg:block shrink-0 z-10">
+          <HumaanInventory className="w-36 h-28 drop-shadow-md" />
+        </div>
+
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-3 w-full sm:w-auto z-10">
           <button
             onClick={() => {
               setEditingItem(null);
               setShowCreateModal(true);
             }}
-            className="px-5 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0"
+            className="w-full sm:w-auto justify-center px-5 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0 active:scale-98"
           >
             <Plus className="h-4 w-4 text-[#2A7B76]" />
             <span>Nouveau Matériel</span>

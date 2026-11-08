@@ -22,6 +22,7 @@ import { NewVisitorModal } from './NewVisitorModal';
 import { VisitorsTable } from './VisitorsTable';
 import { SupervisorConfigModal } from './SupervisorConfigModal';
 import { SearchableSelect, SelectOption } from '../common/SearchableSelect';
+import { HumaanReception } from '../illustrations/HumaanIllustrations';
 import { executeOperationWithLoading, executeDeleteWithSweetAlert, showSuccessAlert, showPendingAlert } from '../../utils/sweetAlert';
 
 interface VisitorsPanelProps {
@@ -264,43 +265,45 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200 shadow-xs">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2.5 bg-[#2A7B76]/10 text-[#2A7B76] rounded-xl border border-[#2A7B76]/20">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-5 bg-white p-6 rounded-3xl border border-stone-200/80 shadow-xs relative overflow-hidden">
+        <div className="flex items-center justify-center md:justify-start gap-3 text-center md:text-left z-10">
+          <div className="p-2.5 bg-[#2A7B76]/10 text-[#2A7B76] rounded-2xl border border-[#2A7B76]/20 shrink-0">
             <Contact2 className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-stone-800">Contrôle des Accès & Sécurité du Bâtiment</h1>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+              <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-800">Contrôle des Accès & Sécurité du Bâtiment</h1>
               <span className="text-[10px] font-bold bg-amber-50 text-amber-900 px-2 py-0.5 rounded-full border border-amber-200">
-                Siège Japoma (Carrefour Matango)
+                Siège Japoma
               </span>
             </div>
-            <p className="text-xs text-stone-500 mt-0.5">
-              Registre d'émargement : Visiteurs externes & Travailleurs sous supervision technique (BD Supabase)
-            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="hidden lg:block shrink-0 z-10">
+          <HumaanReception className="w-32 h-24 drop-shadow-sm" />
+        </div>
+
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2.5 w-full sm:w-auto z-10">
           {/* Bouton pour modifier la liste des superviseurs */}
           <button
             type="button"
             onClick={() => setIsSupervisorsModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition cursor-pointer border border-stone-200"
+            className="w-full sm:w-auto justify-center inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-2xl transition cursor-pointer border border-stone-200 active:scale-98"
             title="Gérer les superviseurs enregistrés en base de données"
           >
             <Settings className="w-4 h-4 text-stone-500" />
-            <span>Gérer les Superviseurs ({supervisors.length})</span>
+            <span>Superviseurs ({supervisors.length})</span>
           </button>
 
           {/* Bouton pour enregistrer une arrivée */}
           <button
             type="button"
             onClick={() => setIsNewModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-[#2A7B76] hover:bg-[#236863] rounded-xl shadow-xs transition cursor-pointer"
+            className="w-full sm:w-auto justify-center inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-[#2A7B76] hover:bg-[#236863] rounded-2xl shadow-xs transition cursor-pointer active:scale-98"
           >
-            <LogIn className="w-4 h-4" /> Enregistrer une Arrivée
+            <LogIn className="w-4 h-4" />
+            <span>Arrivée</span>
           </button>
         </div>
       </div>

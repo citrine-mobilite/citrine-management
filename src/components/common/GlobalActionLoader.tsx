@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Sparkles, X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { asyncActionTrackerService, AsyncLoadingState } from '../../services/asyncActionTrackerService';
 
 export const GlobalActionLoader: React.FC = () => {

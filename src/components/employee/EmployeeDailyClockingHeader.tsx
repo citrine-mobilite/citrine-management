@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, QrCode, Sparkles } from 'lucide-react';
+import { Clock, QrCode } from 'lucide-react';
 import { AppUser, Employee } from '../../types';
 import { getHolidayInfo } from '../../utils/cameroonHolidays';
 import { getTimeBasedGreeting } from '../../utils/dateUtils';
@@ -105,7 +105,7 @@ export const EmployeeDailyClockingHeader: React.FC<EmployeeDailyClockingHeaderPr
 
       {/* Dynamic Contextual Welcoming Header Banner */}
       <div className={`p-4 rounded-2xl border ${greeting.style} flex items-start gap-3 transition-all duration-300`}>
-        <Sparkles className={`h-5 w-5 ${greeting.iconColor} shrink-0 mt-0.5`} />
+        <Clock className={`h-5 w-5 ${greeting.iconColor} shrink-0 mt-0.5`} />
         <div className="space-y-0.5">
           <h3 className="text-xs font-bold font-serif">
             {greeting.mainGreeting} {employeeProfile.name} !

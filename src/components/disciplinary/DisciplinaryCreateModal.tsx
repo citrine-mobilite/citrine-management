@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShieldAlert, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
+import { X, ShieldAlert, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
 import { DisciplinaryIncident, Employee, IncidentCategory, IncidentSeverity } from '../../types';
 
 interface DisciplinaryCreateModalProps {
@@ -343,7 +343,7 @@ export const DisciplinaryCreateModal: React.FC<DisciplinaryCreateModalProps> = (
                     onClick={handleApplySuggestion}
                     className="inline-flex items-center gap-1 text-[11px] text-[#2A7B76] hover:text-emerald-800 font-bold transition cursor-pointer"
                   >
-                    <Sparkles className="h-3 w-3" /> Insérer un motif type
+                    <FileText className="h-3 w-3" /> Insérer un motif type
                   </button>
                 </div>
                 <textarea

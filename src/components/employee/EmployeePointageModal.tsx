@@ -11,7 +11,6 @@ import {
   MapPin, 
   Check, 
   ArrowLeft,
-  Sparkles,
   Upload,
   CheckCircle2
 } from 'lucide-react';
@@ -645,7 +644,7 @@ export const EmployeePointageModal: React.FC<EmployeePointageModalProps> = ({
                         1. Scanner le QR Code de l'Entrée (Porte des Locaux)
                       </span>
                       <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1">
-                        <Sparkles className="h-2.5 w-2.5" /> Auto-Badge
+                        <CheckCircle2 className="h-2.5 w-2.5" /> Auto-Badge
                       </span>
                     </div>
                     <p className="text-[11px] text-stone-500 leading-relaxed">

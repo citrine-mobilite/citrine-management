@@ -5,7 +5,6 @@ import {
   Users, 
   ArrowUpDown, 
   Filter, 
-  Sparkles, 
   Trophy, 
   Clock, 
   CheckSquare, 
@@ -159,7 +158,7 @@ export const EmployeeRendementHistogram: React.FC<EmployeeRendementHistogramProp
           </div>
 
           <div className="bg-emerald-50 text-[#2A7B76] border border-emerald-200 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5" />
+            <TrendingUp className="h-3.5 w-3.5" />
             <span>Moyenne Équipe : {teamAvgRate}%</span>
           </div>
         </div>

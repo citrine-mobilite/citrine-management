@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, 
   FileText, 
-  Sparkles, 
   User, 
   Hash, 
   CheckCircle2, 
@@ -291,7 +290,7 @@ export const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({
           {/* Sélection du Modèle */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-[#2A7B76]" />
+              <FileText className="h-3.5 w-3.5 text-[#2A7B76]" />
               Type de document ({availableTemplates.length} modèles disponibles en BD)
             </label>
             <select

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Users, Download, FileText } from 'lucide-react';
+import { Users, Download, FileText, ShieldCheck, Plus } from 'lucide-react';
+import { HumaanUsers } from './illustrations/HumaanIllustrations';
 import { AppUser, UserRole, UserStatus, Employee, EmployeeStatus } from '../types';
 import { saveUser, deleteUser } from '../services/userService';
 import { hashPassword } from '../utils/cryptoUtils';
@@ -264,7 +265,49 @@ export default function UserManagementPanel({
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
+      {/* Top Header Banner with HumaanUsers Illustration */}
+      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+        <div className="z-10 text-center md:text-left">
+          <div className="flex items-center justify-center md:justify-start gap-2.5">
+            <div className="p-2.5 bg-white/10 backdrop-blur-xs rounded-2xl border border-white/20">
+              <ShieldCheck className="h-6 w-6 text-emerald-200" />
+            </div>
+            <h2 className="font-serif font-bold text-xl md:text-2xl">
+              Utilisateurs & Rôles Système
+            </h2>
+          </div>
+        </div>
+
+        <div className="hidden lg:block shrink-0 z-10">
+          <HumaanUsers className="w-36 h-28 drop-shadow-md" />
+        </div>
+
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2.5 z-10 w-full sm:w-auto">
+          <button
+            onClick={handleExportExcel}
+            className="w-full sm:w-auto justify-center flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition shadow-xs cursor-pointer active:scale-98"
+          >
+            <Download className="h-3.5 w-3.5 text-emerald-200" />
+            <span>Excel</span>
+          </button>
+          <button
+            onClick={handleExportPdf}
+            className="w-full sm:w-auto justify-center flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition shadow-xs cursor-pointer active:scale-98"
+          >
+            <FileText className="h-3.5 w-3.5 text-rose-300" />
+            <span>PDF</span>
+          </button>
+          <button
+            onClick={handleOpenNewUser}
+            className="w-full sm:w-auto justify-center flex items-center gap-1.5 bg-[#D4A82F] hover:bg-[#c39b28] text-stone-950 px-4 py-2.5 rounded-2xl text-xs font-extrabold shadow-md transition cursor-pointer active:scale-98"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Nouvel Utilisateur</span>
+          </button>
+        </div>
+      </div>
+
       {/* Filter toolbar */}
       <UserFilterToolbar
         searchTerm={searchTerm}

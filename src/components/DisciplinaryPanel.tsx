@@ -25,6 +25,7 @@ import { DisciplinaryCreateModal } from './disciplinary/DisciplinaryCreateModal'
 import { DisciplinaryDetailView } from './disciplinary/DisciplinaryDetailView';
 import { EmployeeDisciplinarySummary } from './disciplinary/EmployeeDisciplinarySummary';
 import { RecognitionPanel } from './disciplinary/RecognitionPanel';
+import { HumaanDiscipline } from './illustrations/HumaanIllustrations';
 import { logSystemAudit } from '../services/adminAuditService';
 import { showSuccessAlert, showErrorAlert, executeOperationWithLoading } from '../utils/sweetAlert';
 import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
@@ -242,9 +243,9 @@ export default function DisciplinaryPanel({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* Clean Banner with Primary Action */}
-      <div className="bg-gradient-to-r from-[#2A7B76] via-[#20635F] to-emerald-950 rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
+      <div className="bg-gradient-to-r from-[#2A7B76] via-[#20635F] to-emerald-950 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+        <div className="space-y-1 text-center md:text-left z-10">
+          <div className="flex items-center justify-center md:justify-start gap-2.5">
             <div className="p-2 bg-white/10 backdrop-blur-xs rounded-xl border border-white/15">
               <Scale className="h-6 w-6 text-emerald-200" />
             </div>
@@ -252,19 +253,20 @@ export default function DisciplinaryPanel({
               Conseil de Discipline &amp; Sanctions
             </h2>
           </div>
-          <p className="text-xs text-emerald-100/90 pl-1 max-w-2xl">
-            Tenue du registre disciplinaire, instruction des manquements, convocations au conseil et sanctions contractuelles.
-          </p>
+        </div>
+
+        <div className="hidden lg:block shrink-0 z-10">
+          <HumaanDiscipline className="w-36 h-28 drop-shadow-md" />
         </div>
 
         {!isRestricted && (
-          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-3 w-full sm:w-auto z-10">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-5 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0"
+              className="w-full sm:w-auto justify-center px-5 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0 active:scale-98"
             >
               <Plus className="h-4 w-4 text-[#2A7B76]" />
-              <span>+ Convoquer Conseil / Consigner Fait</span>
+              <span>Convoquer Conseil / Fait</span>
             </button>
           </div>
         )}

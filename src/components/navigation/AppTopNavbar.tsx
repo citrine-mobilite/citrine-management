@@ -1,5 +1,5 @@
-import React from 'react';
-import { Menu, Shield, Smartphone, Bell, Clock, UserCheck, LayoutDashboard, Trash2, WifiOff } from 'lucide-react';
+import React, { useState } from 'react';
+import { Menu, Shield, Smartphone, Bell, Clock, UserCheck, LayoutDashboard, Trash2, WifiOff, AlertTriangle } from 'lucide-react';
 import { AppUser } from '../../types';
 import { TabType } from '../Sidebar';
 import { CMLogo } from '../CMLogo';
@@ -9,6 +9,7 @@ import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { isEmployeeUser } from '../../utils/roleUtils';
 import { pushNotificationService } from '../../services/pushNotificationService';
 import { CachePurgeModal } from '../common/CachePurgeModal';
+import ErrorPagesShowcaseModal from '../errors/ErrorPagesShowcaseModal';
 
 interface AppTopNavbarProps {
   currentUser: AppUser | null;
@@ -34,7 +35,8 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
 }) => {
   const isEmployee = isEmployeeUser(currentUser);
   const isOnline = useOnlineStatus();
-  const [cacheModalOpen, setCacheModalOpen] = React.useState(false);
+  const [cacheModalOpen, setCacheModalOpen] = useState(false);
+  const [errorModalOpen, setErrorModalOpen] = useState(false);
 
   return (
     <header className="h-14 sm:h-16 glass-header px-2.5 sm:px-6 flex items-center justify-between z-30 sticky top-0">
@@ -163,6 +165,18 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
           <Trash2 className="h-4 w-4" />
         </button>
 
+        {/* Error Pages Test Center Button */}
+        <button
+          onClick={() => {
+            haptic.medium();
+            setErrorModalOpen(true);
+          }}
+          className="p-1.5 sm:p-2 text-stone-500 hover:text-amber-600 hover:bg-amber-50/60 rounded-xl transition relative cursor-pointer"
+          title="Tester les pages d'erreur (404, 500, 403, 405, 429)"
+        >
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+        </button>
+
         {/* PWA Install Button */}
         <PWAInstallButton compact={true} />
 
@@ -197,6 +211,9 @@ export const AppTopNavbar: React.FC<AppTopNavbarProps> = ({
 
       {/* Modal de purge complète du cache */}
       <CachePurgeModal isOpen={cacheModalOpen} onClose={() => setCacheModalOpen(false)} />
+
+      {/* Modal de test des pages d'erreur */}
+      <ErrorPagesShowcaseModal isOpen={errorModalOpen} onClose={() => setErrorModalOpen(false)} />
     </header>
   );
 };

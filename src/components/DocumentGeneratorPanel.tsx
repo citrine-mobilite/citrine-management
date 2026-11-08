@@ -5,7 +5,6 @@ import {
   Plus, 
   Database, 
   RotateCcw, 
-  Sparkles, 
   LayoutGrid, 
   Table as TableIcon,
   FolderPlus
@@ -25,6 +24,7 @@ import { OfficialDocumentModal } from './documents/OfficialDocumentModal';
 import { CreateDocumentModal } from './documents/CreateDocumentModal';
 import { CreateDocTemplateModal } from './documents/CreateDocTemplateModal';
 import { EditDocumentModal } from './documents/EditDocumentModal';
+import { HumaanDocuments } from './illustrations/HumaanIllustrations';
 import { showSuccessAlert, showErrorAlert, confirmActionAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
 import { asyncActionTrackerService } from '../services/asyncActionTrackerService';
@@ -171,38 +171,40 @@ export default function DocumentGeneratorPanel({
   return (
     <div className="space-y-6">
       {/* Banner */}
-      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+        <div className="z-10 text-center md:text-left">
+          <div className="flex items-center justify-center md:justify-start gap-2">
             <FileText className="h-5 w-5 text-emerald-200" />
-            <h2 className="font-serif font-bold text-xl">Générateur de Documents RH & Contrats</h2>
+            <h2 className="font-serif font-bold text-xl md:text-2xl">Générateur de Documents RH & Contrats</h2>
           </div>
-          <p className="text-xs text-emerald-100/90 mt-1">
-            Papier officiel CITRINE SARL · Modèles & Données 100% conservés en base Supabase · Affichage Cards ou DataTable.
-          </p>
         </div>
+
+        <div className="hidden lg:block shrink-0 z-10">
+          <HumaanDocuments className="w-36 h-28 drop-shadow-md" />
+        </div>
+
         {!isRestricted && (
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2.5 z-10 w-full sm:w-auto">
             {/* Bouton pour ajouter un type de modèle sans modifier le code */}
             <button
               type="button"
               onClick={() => setIsCreateTemplateModalOpen(true)}
-              className="px-3.5 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-xs text-white text-xs font-bold rounded-2xl transition flex items-center gap-1.5 border border-white/20 cursor-pointer shadow-xs"
+              className="w-full sm:w-auto justify-center px-3.5 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-xs text-white text-xs font-bold rounded-2xl transition flex items-center gap-1.5 border border-white/20 cursor-pointer shadow-xs active:scale-98"
               title="Créer un nouveau type de document RH stocké en base de données Supabase"
             >
               <FolderPlus className="h-4 w-4 text-emerald-200" />
-              <span>+ Nouveau Type de Modèle</span>
+              <span>Nouveau Modèle</span>
             </button>
 
             <button
               type="button"
               disabled={isResettingTemplates}
               onClick={handleResetTemplates}
-              className="px-3 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-xs text-white text-xs font-semibold rounded-2xl transition flex items-center gap-1.5 border border-white/15 cursor-pointer disabled:opacity-50"
+              className="w-full sm:w-auto justify-center px-3 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-xs text-white text-xs font-semibold rounded-2xl transition flex items-center gap-1.5 border border-white/15 cursor-pointer disabled:opacity-50 active:scale-98"
               title="Synchroniser les modèles RH en base Supabase"
             >
               <RotateCcw className={`h-3.5 w-3.5 ${isResettingTemplates ? 'animate-spin' : ''}`} />
-              <span className="hidden lg:inline">Restaurer Modèles</span>
+              <span>Restaurer</span>
             </button>
 
             <button
@@ -210,10 +212,10 @@ export default function DocumentGeneratorPanel({
                 setSelectedTemplateForModal(null);
                 setIsCreateModalOpen(true);
               }}
-              className="px-4 py-2.5 bg-[#D4A82F] hover:bg-[#b88f24] text-stone-900 text-xs font-bold rounded-2xl transition flex items-center gap-2 shrink-0 cursor-pointer shadow-xs"
+              className="w-full sm:w-auto justify-center px-4 py-2.5 bg-[#D4A82F] hover:bg-[#b88f24] text-stone-900 text-xs font-bold rounded-2xl transition flex items-center gap-2 shrink-0 cursor-pointer shadow-xs active:scale-98"
             >
               <Plus className="h-4 w-4" />
-              <span>Générer un Document</span>
+              <span>Générer</span>
             </button>
           </div>
         )}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HumaanPeople } from './illustrations/HumaanIllustrations';
+import { HumaanCollaborators } from './illustrations/HumaanIllustrations';
 import { 
   Users, 
   Search, 
@@ -24,7 +24,6 @@ import {
   ChevronsRight,
   Download,
   KeyRound,
-  Sparkles,
   Camera,
   AlertCircle,
   ShieldAlert,
@@ -1131,43 +1130,47 @@ export default function CollaboratorPanel({
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-300">
       {/* List Header Banner */}
-      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+        <div className="z-10 text-center md:text-left">
+          <div className="flex items-center justify-center md:justify-start gap-2">
             <Users className="h-5 w-5 text-emerald-200" />
-            <h2 className="font-serif font-bold text-xl">Gestion des Collaborateurs & Effectifs</h2>
+            <h2 className="font-serif font-bold text-xl md:text-2xl">Gestion des Collaborateurs & Effectifs</h2>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="hidden lg:block shrink-0 z-10">
+          <HumaanCollaborators className="w-36 h-28 drop-shadow-md" />
+        </div>
+
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2 shrink-0 z-10 w-full sm:w-auto">
           <button
             onClick={() => setIsAuditHistoryModalOpen(true)}
-            className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+            className="w-full sm:w-auto justify-center bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
             title="Historique des opérations administratives sur les comptes"
           >
             <History className="h-4 w-4 text-amber-300" />
-            <span>Audit Comptes ({auditOpsList.length})</span>
+            <span>Audit ({auditOpsList.length})</span>
           </button>
           <button
             onClick={handleExportExcel}
-            className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+            className="w-full sm:w-auto justify-center bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
           >
             <Download className="h-4 w-4 text-emerald-200" />
             Excel
           </button>
           <button
             onClick={handleExportPDF}
-            className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+            className="w-full sm:w-auto justify-center bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
           >
             <Download className="h-4 w-4 text-rose-300" />
             PDF
           </button>
           <button
             onClick={handleOpenAdd}
-            className="bg-[#D4A82F] hover:bg-[#c39b28] text-stone-950 px-4 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            className="w-full sm:w-auto justify-center bg-[#D4A82F] hover:bg-[#c39b28] text-stone-950 px-4 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-1.5 shadow-md transition cursor-pointer"
           >
             <Plus className="h-4 w-4" />
-            Créer un collaborateur
+            <span>Créer</span>
           </button>
         </div>
       </div>
@@ -1869,7 +1872,7 @@ export default function CollaboratorPanel({
                     onClick={() => setIsAvatarPickerOpen(true)}
                     className="px-3.5 py-2 border border-[#2A7B76]/30 hover:bg-[#2A7B76]/10 text-[#2A7B76] bg-white text-[11px] font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer normal-case shadow-2xs"
                   >
-                    <Sparkles className="h-3.5 w-3.5 text-[#2A7B76]" />
+                    <Camera className="h-3.5 w-3.5 text-[#2A7B76]" />
                     <span>Choisir photo / avatar</span>
                   </button>
                 </div>

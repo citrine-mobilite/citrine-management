@@ -20,7 +20,6 @@ import {
   DoorClosed,
   ShieldCheck,
   RefreshCw,
-  Sparkles,
   FileText,
   Mail
 } from 'lucide-react';

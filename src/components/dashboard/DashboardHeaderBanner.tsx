@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { AppUser } from '../../types';
 import { HumaanDashboardHero } from '../illustrations/HumaanIllustrations';
 
@@ -21,7 +21,7 @@ export const DashboardHeaderBanner: React.FC<DashboardHeaderBannerProps> = ({
       <div className="relative z-10 space-y-2.5 text-center md:text-left">
         <div className="inline-flex items-center gap-2">
           <span className="bg-[#D4A82F] text-stone-900 text-[10px] uppercase font-extrabold px-2.5 py-0.5 rounded-full shadow-2xs flex items-center gap-1">
-            <Sparkles className="h-3 w-3" /> Espace Direction & Pilotage
+            Espace Direction & Pilotage
           </span>
         </div>
         <div>
@@ -29,7 +29,7 @@ export const DashboardHeaderBanner: React.FC<DashboardHeaderBannerProps> = ({
             Bonjour, {currentUser?.name || 'Administrateur'}
           </h1>
           <p className="text-xs text-emerald-100/90 font-medium capitalize mt-0.5">
-            {currentDateFormatted} • Suivi en temps réel de l'activité Citrine
+            {currentDateFormatted}
           </p>
         </div>
 

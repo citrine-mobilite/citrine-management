@@ -7,7 +7,6 @@ import {
   Trophy, 
   CheckCircle2, 
   AlertCircle,
-  Sparkles,
   Zap
 } from 'lucide-react';
 import { Task, TaskStatus } from '../../../types';
@@ -204,7 +203,7 @@ export const TaskTimePyramid: React.FC<TaskTimePyramidProps> = ({
       {/* Guide visuel de lecture de la pyramide */}
       <div className="flex flex-wrap items-center justify-between text-[11px] text-stone-500 px-2 py-1 bg-stone-50 rounded-xl border border-stone-200/60">
         <span className="flex items-center gap-1.5 font-medium">
-          <Sparkles className="w-3.5 h-3.5 text-[#2A7B76]" />
+          <TrendingUp className="w-3.5 h-3.5 text-[#2A7B76]" />
           <span>Axe vertical central : Les ailes s'étendent proportionnellement au temps passé (en heures)</span>
         </span>
         <div className="flex items-center gap-3">

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Mail, Building, Smartphone, CheckCircle2, Sparkles } from 'lucide-react';
+import { User, Mail, Building, Smartphone, CheckCircle2, Camera } from 'lucide-react';
 import { AppUser } from '../../types';
 import { saveUser } from '../../services/userService';
 import { saveDocument, COLLECTIONS } from '../../services/dataService';
@@ -181,7 +181,7 @@ export const ProfileInfoSubTab: React.FC<ProfileInfoSubTabProps> = ({
               className="absolute bottom-0 right-0 bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 rounded-full shadow-lg transition-transform hover:scale-105 flex items-center justify-center"
               title="Changer l'avatar"
             >
-              <Sparkles className="w-4 h-4" />
+              <Camera className="w-4 h-4" />
             </button>
           </div>
 
