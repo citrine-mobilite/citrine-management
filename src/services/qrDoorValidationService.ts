@@ -55,37 +55,36 @@ export function extractCleanQrToken(rawInput: string): string {
 }
 
 /**
- * Vérifie si un jeton scanné correspond à un jeton officiel configuré,
- * en testant la correspondance directe, insensible à la casse, ou avec suppression d'horodatage.
+ * Vérifie si un jeton scanné correspond STRICTEMENT au jeton officiel actif.
+ * Tolère uniquement la suppression de l'horodatage numérique hérité (ex: "JETON-1793364" -> "JETON").
+ * AUCUN wildcard, AUCUN préfixe partiel (startsWith) pour garantir qu'un ancien QR code soit toujours rejeté.
  */
 function isTokenMatch(candidate: string, target: string): boolean {
   if (!candidate || !target) return false;
   const c = candidate.trim().toUpperCase();
   const t = target.trim().toUpperCase();
 
-  // Égalité parfaite
+  // Égalité stricte insensible à la casse
   if (c === t) return true;
 
-  // Si le candidat a un suffixe d'horodatage hérité (ex: "JETON-1793364" ou "JETON-597321")
+  // Si le candidat a un suffixe d'horodatage hérité (ex: "JETON-1793364")
   const candidateRoot = c.replace(/-\d{4,}$/, '');
   if (candidateRoot === t) return true;
 
-  // Si la cible a un suffixe d'horodatage
+  // Si la cible a un suffixe d'horodatage hérité
   const targetRoot = t.replace(/-\d{4,}$/, '');
-  if (c === targetRoot) return true;
-
-  // Tolérance si l'un contient l'autre et fait au moins 8 caractères signifiants
-  if (c.length >= 8 && t.length >= 8) {
-    if (c.startsWith(t) || t.startsWith(c)) return true;
-  }
+  if (c === targetRoot || candidateRoot === targetRoot) return true;
 
   return false;
 }
 
 /**
- * Validation ultra-robuste du QR Code de porte
- * Interroge en priorité la configuration locale, puis recharge IMMÉDIATEMENT
- * la base de données fraîche (Supabase / local fallback) si la correspondance n'est pas immédiate.
+ * Validation stricte du QR Code de porte
+ * Règle de sécurité absolue :
+ * 1. Tout QR code révoqué ou présent dans la liste des jetons révoqués est IMMÉDIATEMENT REJETÉ.
+ * 2. Si doorQrCodeRevoked === true, AUCUN pointage n'est permis.
+ * 3. Le jeton scanné DOIT correspondre STRICTEMENT au jeton officiel actif.
+ * 4. AUCUN fallback en dur ni tolérance par préfixe n'est autorisée.
  */
 export async function verifyDoorQrToken(
   scannedRaw: string,
@@ -108,15 +107,41 @@ export async function verifyDoorQrToken(
     };
   }
 
-  // Liste des jetons officiels connus en local
+  const cleanUpper = cleanToken.toUpperCase();
+
+  // Vérification immédiate si le jeton porte une signature de révocation
+  if (cleanUpper.includes('REVOKED') || cleanUpper.includes('INVALIDE') || cleanUpper.includes('EXPIRED')) {
+    return {
+      valid: false,
+      cleanToken,
+      officialToken: '',
+      isRevoked: true,
+      error: "Ce QR Code d'entrée a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle.",
+    };
+  }
+
+  // 1. Récupération des paramètres en mémoire / configuration locale
   const localDoorToken = (moduleConfig?.doorQrCodeToken || '').trim();
   const localSecret = (moduleConfig?.qrCodeSecret || '').trim();
   const isLocalRevoked = moduleConfig?.doorQrCodeRevoked === true;
+  const localRevokedList: string[] = Array.isArray(moduleConfig?.revokedDoorTokens)
+    ? moduleConfig.revokedDoorTokens.map((t) => String(t).toUpperCase().trim())
+    : [];
 
-  // 1. Première passe avec la configuration en mémoire
+  // Si le QR code est explicitement révoqué en local
+  if (isLocalRevoked || localRevokedList.includes(cleanUpper)) {
+    return {
+      valid: false,
+      cleanToken,
+      officialToken: localDoorToken,
+      isRevoked: true,
+      error: "Ce QR Code d'entrée n'est plus valide : il a été révoqué par la direction.",
+    };
+  }
+
+  // 2. Première passe : correspondance stricte avec la configuration en mémoire
   if (
     localDoorToken &&
-    !isLocalRevoked &&
     (isTokenMatch(cleanToken, localDoorToken) || (localSecret && isTokenMatch(cleanToken, localSecret)))
   ) {
     return {
@@ -127,9 +152,8 @@ export async function verifyDoorQrToken(
     };
   }
 
-  // 2. Deuxième passe : Interrogation directe et fraîche de la base de données Supabase
-  // Cela résout le problème si le responsable a généré un QR code et que le téléphone de l'employé
-  // avait un cache mémoire non rafraîchi !
+  // 3. Deuxième passe : Interrogation directe et fraîche de la base de données Supabase
+  // (permet de synchroniser instantanément si le responsable vient de changer le QR code)
   try {
     const client = supabaseAdmin || supabase;
     const { data: dbRows, error: dbErr } = await client
@@ -144,17 +168,26 @@ export async function verifyDoorQrToken(
         const serverDoorToken = (raw.doorQrCodeToken || raw.qrCodeSecret || '').trim();
         const serverSecret = (raw.qrCodeSecret || '').trim();
         const serverRevoked = raw.doorQrCodeRevoked === true;
+        const serverRevokedList: string[] = Array.isArray(raw.revokedDoorTokens)
+          ? raw.revokedDoorTokens.map((t: string) => String(t).toUpperCase().trim())
+          : [];
 
-        if (serverRevoked && (isTokenMatch(cleanToken, serverDoorToken) || isTokenMatch(cleanToken, serverSecret))) {
+        // Révocation détectée sur le serveur
+        if (
+          serverRevoked ||
+          serverRevokedList.includes(cleanUpper) ||
+          (serverRevoked && (isTokenMatch(cleanToken, serverDoorToken) || isTokenMatch(cleanToken, serverSecret)))
+        ) {
           return {
             valid: false,
             cleanToken,
             officialToken: serverDoorToken,
             isRevoked: true,
-            error: "Ce QR Code d'entrée a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle.",
+            error: "Ce QR Code d'entrée n'est plus valide : il a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle.",
           };
         }
 
+        // Correspondance stricte avec le jeton actif en base
         if (
           !serverRevoked &&
           (isTokenMatch(cleanToken, serverDoorToken) || (serverSecret && isTokenMatch(cleanToken, serverSecret)))
@@ -172,13 +205,28 @@ export async function verifyDoorQrToken(
     console.warn('[verifyDoorQrToken] Erreur vérification directe base Supabase:', netErr);
   }
 
-  // 3. Troisième passe : Vérification avec le stockage persistant local de l'application
+  // 4. Troisième passe : Vérification avec le stockage persistant local de l'application
   try {
     const cachedCfg = getStoredModuleConfig();
     const cachedDoor = (cachedCfg?.doorQrCodeToken || '').trim();
     const cachedSec = (cachedCfg?.qrCodeSecret || '').trim();
+    const cachedRevoked = cachedCfg?.doorQrCodeRevoked === true;
+    const cachedRevokedList: string[] = Array.isArray(cachedCfg?.revokedDoorTokens)
+      ? cachedCfg.revokedDoorTokens.map((t) => String(t).toUpperCase().trim())
+      : [];
+
+    if (cachedRevoked || cachedRevokedList.includes(cleanUpper)) {
+      return {
+        valid: false,
+        cleanToken,
+        officialToken: cachedDoor,
+        isRevoked: true,
+        error: "Ce QR Code d'entrée a été révoqué par la direction.",
+      };
+    }
+
     if (
-      !cachedCfg?.doorQrCodeRevoked &&
+      !cachedRevoked &&
       (isTokenMatch(cleanToken, cachedDoor) || (cachedSec && isTokenMatch(cleanToken, cachedSec)))
     ) {
       return {
@@ -190,46 +238,13 @@ export async function verifyDoorQrToken(
     }
   } catch {}
 
-  // 4. Quatrième passe : Tolérance sur les jetons officiels certifiés de Citrine Mobilité
-  // Si le jeton commence par la signature certifiée de l'entreprise et n'est pas explicitement révoqué
-  const knownOfficialFallbacks = [
-    'CITRINE_HQ_NOVEMBRE_2026',
-    'CITRINE_DOOR_HQ_MAIN_2026',
-    'CITRINE_SECRET_2026',
-    'CITRINE-HQ-SECRET-KEY-2026',
-  ];
-
-  for (const fallback of knownOfficialFallbacks) {
-    if (isTokenMatch(cleanToken, fallback)) {
-      return {
-        valid: true,
-        cleanToken,
-        officialToken: fallback,
-        isRevoked: false,
-      };
-    }
-  }
-
-  // Si le token scanné porte la signature explicite de génération Citrine (CITRINE_DOOR_... ou CITRINE_HQ_...)
-  const upper = cleanToken.toUpperCase();
-  if (upper.startsWith('CITRINE_DOOR_') || upper.startsWith('CITRINE_HQ_') || upper.startsWith('CITRINE-HQ-')) {
-    if (!upper.includes('REVOKED') && !upper.includes('INVALIDE')) {
-      return {
-        valid: true,
-        cleanToken,
-        officialToken: cleanToken,
-        isRevoked: false,
-      };
-    }
-  }
-
-  // Si aucun critère n'a matché
-  const currentOfficial = localDoorToken || 'CITRINE_HQ_NOVEMBRE_2026';
+  // 5. Tout autre jeton est STRICTEMENT INVALIDE (plus aucun fallback en dur ni acceptation par préfixe)
+  const currentOfficial = localDoorToken || 'QR Code non configuré';
   return {
     valid: false,
     cleanToken,
     officialToken: currentOfficial,
     isRevoked: isLocalRevoked,
-    error: `Le QR Code scanné ("${cleanToken.length > 25 ? cleanToken.substring(0, 25) + '...' : cleanToken}") ne correspond pas au jeton officiel configuré pour la porte.`,
+    error: `QR Code invalide ou expiré ("${cleanToken.length > 25 ? cleanToken.substring(0, 25) + '...' : cleanToken}"). Seul le QR Code officiel affiché à la porte est accepté.`,
   };
 }

@@ -32,6 +32,8 @@ import SystemLogsPanel from '../SystemLogsPanel';
 import CollaboratorPanel from '../CollaboratorPanel';
 import UserManagementPanel from '../UserManagementPanel';
 import ProfilePage from '../ProfilePage';
+import { Error404Page, Error403Page } from '../errors';
+import { canAccessTab } from '../../services/sessionService';
 import { taskService } from '../../services/taskService';
 
 const LeaveManagementPanel = lazy(() => import('../LeaveManagementPanel'));
@@ -112,9 +114,49 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
     leaveRequests = [], onUpdateLeaveRequests,
   } = props;
 
+  const VALID_TABS: TabType[] = [
+    'dashboard', 'employee_portal', 'presences', 'leave_requests', 'statistics', 'tasks',
+    'reminders', 'logs', 'collaborators', 'discipline', 'documents',
+    'communications', 'finances', 'inventory', 'partners', 'users',
+    'settings', 'calls', 'recruitment', 'expense_claims', 'hse',
+    'visitors', 'ideas_surveys', 'profile'
+  ];
+
+  // 1. Contrôle d'Accès Stricte (Page d'erreur 403 en cas de permissions insuffisantes)
+  const isUnauthorized = Boolean(
+    currentUser &&
+    activeTab &&
+    activeTab !== 'profile' &&
+    activeTab !== 'employee_portal' &&
+    VALID_TABS.includes(activeTab) &&
+    !canAccessTab(currentUser.role, activeTab)
+  );
+
+  // 2. Détection d'Onglet Inconnu (Page d'erreur 404 en cas d'URL ou module inexistant)
+  const isNotFound = Boolean(activeTab && !VALID_TABS.includes(activeTab));
+
   return (
     <Suspense fallback={<ModuleSkeletonLoader title={activeTab || 'Chargement...'} />}>
-      {activeTab === 'dashboard' && (
+      {/* Rendu réel de la Page 403 - Accès Refusé */}
+      {isUnauthorized && (
+        <Error403Page
+          currentUser={currentUser}
+          onNavigate={setActiveTab}
+          attemptedTab={activeTab}
+          requiredRole="Administrateur ou Responsable"
+        />
+      )}
+
+      {/* Rendu réel de la Page 404 - Page Introuvable */}
+      {isNotFound && !isUnauthorized && (
+        <Error404Page
+          currentUser={currentUser}
+          onNavigate={setActiveTab}
+          attemptedTab={activeTab}
+        />
+      )}
+
+      {!isUnauthorized && !isNotFound && activeTab === 'dashboard' && (
         <AdminDashboardOverview
           currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}
           reminders={reminders} currentTime={currentTime} onSelectTab={setActiveTab}
@@ -358,14 +400,8 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
         />
       )}
 
-      {/* Fallback universel sécurisé : garantit qu'aucun onglet vide ou inconnu ne produise un écran blanc */}
-      {(!activeTab || ![
-        'dashboard', 'employee_portal', 'presences', 'leave_requests', 'statistics', 'tasks',
-        'reminders', 'logs', 'collaborators', 'discipline', 'documents',
-        'communications', 'finances', 'inventory', 'partners', 'users',
-        'settings', 'calls', 'recruitment', 'expense_claims', 'hse',
-        'visitors', 'ideas_surveys', 'profile'
-      ].includes(activeTab)) && (
+      {/* Fallback universel : si activeTab est vide, atterrir sur le portail approprié */}
+      {!activeTab && (
         currentUser?.role === 'employé' ? (
           <EmployeePortal
             currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}

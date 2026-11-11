@@ -23,9 +23,9 @@ import { DisciplinaryIncidentCard } from './disciplinary/DisciplinaryIncidentCar
 import { DisciplinaryTableView } from './disciplinary/DisciplinaryTableView';
 import { DisciplinaryCreateModal } from './disciplinary/DisciplinaryCreateModal';
 import { DisciplinaryDetailView } from './disciplinary/DisciplinaryDetailView';
+import { HumaanShield } from './illustrations/HumaanIllustrations';
 import { EmployeeDisciplinarySummary } from './disciplinary/EmployeeDisciplinarySummary';
 import { RecognitionPanel } from './disciplinary/RecognitionPanel';
-import { HumaanDiscipline } from './illustrations/HumaanIllustrations';
 import { logSystemAudit } from '../services/adminAuditService';
 import { showSuccessAlert, showErrorAlert, executeOperationWithLoading } from '../utils/sweetAlert';
 import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
@@ -242,31 +242,35 @@ export default function DisciplinaryPanel({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
-      {/* Clean Banner with Primary Action */}
-      <div className="bg-gradient-to-r from-[#2A7B76] via-[#20635F] to-emerald-950 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
-        <div className="space-y-1 text-center md:text-left z-10">
+      {/* Clean Banner avec HumaanShield et boutons d'actions */}
+      <div className="bg-gradient-to-r from-[#2A7B76] via-[#20635F] to-emerald-950 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        <div className="space-y-2 z-10 w-full md:w-auto text-center md:text-left">
           <div className="flex items-center justify-center md:justify-start gap-2.5">
             <div className="p-2 bg-white/10 backdrop-blur-xs rounded-xl border border-white/15">
               <Scale className="h-6 w-6 text-emerald-200" />
             </div>
-            <h2 className="font-serif font-bold text-xl sm:text-2xl text-white">
+            <h2 className="font-serif font-bold text-2xl md:text-3xl text-white">
               Conseil de Discipline &amp; Sanctions
             </h2>
           </div>
+          <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl text-xs font-semibold text-emerald-100 border border-white/15">
+            <span>{incidents.length} dossier{incidents.length > 1 ? 's' : ''} au registre</span>
+          </div>
         </div>
 
-        <div className="hidden lg:block shrink-0 z-10">
-          <HumaanDiscipline className="w-36 h-28 drop-shadow-md" />
+        {/* Illustration Humaine Vectorielle Humaaans */}
+        <div className="shrink-0 z-10 hidden sm:flex items-center justify-center">
+          <HumaanShield className="w-40 h-28 md:w-48 md:h-32 drop-shadow-md" />
         </div>
 
         {!isRestricted && (
-          <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-3 w-full sm:w-auto z-10">
+          <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 shrink-0 z-10 w-full md:w-auto">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="w-full sm:w-auto justify-center px-5 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0 active:scale-98"
+              className="px-5 py-2.5 bg-[#D4A82F] hover:bg-[#c39b28] text-stone-950 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 active:scale-95"
             >
-              <Plus className="h-4 w-4 text-[#2A7B76]" />
-              <span>Convoquer Conseil / Fait</span>
+              <Plus className="h-4 w-4" />
+              <span>Convoquer Conseil / Consigner Fait</span>
             </button>
           </div>
         )}

@@ -298,7 +298,7 @@ export function getSidebarCategories({
       categories.push({ name: 'Sécurité & Vie Entreprise', items: securityItems });
     }
 
-    // Administration : Utilisateurs & Rôles, Journaux & Audit, et Configuration Entreprise
+    // Administration : Utilisateurs & Rôles, Journaux & Audit et Configuration Entreprise
     const adminItems: SidebarItem[] = [
       {
         id: 'users',
@@ -312,7 +312,7 @@ export function getSidebarCategories({
       adminItems.push({
         id: 'logs',
         label: 'Journaux et Audit',
-        description: 'Événements système, audit des comptes et notifications',
+        description: '',
         icon: Terminal,
       });
     }

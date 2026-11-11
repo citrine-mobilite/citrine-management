@@ -12,7 +12,6 @@ import {
   Calendar,
   FileSpreadsheet
 } from 'lucide-react';
-import { HumaanStatistics } from './illustrations/HumaanIllustrations';
 import { Employee, Presence, Task, AttendanceIncident, AppUser } from '../types';
 import { computePresenceStatistics } from './presence/statistics/statisticsCalculations';
 import { StatisticsKPIRibbon } from './presence/statistics/StatisticsKPIRibbon';
@@ -23,6 +22,7 @@ import EmployeeRendementHistogram from './presence/statistics/EmployeeRendementH
 import { TimesheetModal } from './timesheet/TimesheetModal';
 import { computeEmployeeRendement } from '../utils/rendementCalculator';
 import { isSelfOnlyUser, findMatchingEmployee, shouldEmployeeClock, isManagerOrAdminEmployee } from '../utils/roleUtils';
+import { HumaanTaskCheck } from './illustrations/HumaanIllustrations';
 
 interface PresenceStatisticsViewProps {
   employees: Employee[];
@@ -175,10 +175,10 @@ export function PresenceStatisticsView({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-950 via-[#2A7B76] to-[#164e4b] rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
-        <div className="space-y-1.5 text-center md:text-left z-10">
-          <div className="flex items-center gap-2 justify-center md:justify-start">
+      {/* Header Banner avec Illustration Humaaans */}
+      <div className="bg-gradient-to-r from-emerald-950 via-[#2A7B76] to-[#164e4b] rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        <div className="space-y-3 z-10 w-full md:w-auto text-center md:text-left">
+          <div className="flex items-center justify-center md:justify-start gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-emerald-100">
               Module RH & Décisionnel
             </span>
@@ -187,15 +187,42 @@ export function PresenceStatisticsView({
           <h2 className="font-serif font-bold text-2xl md:text-3xl text-white">
             Statistiques, Assiduité & Rendement
           </h2>
+          
+          {/* Action buttons & quick navigation */}
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-1">
+            <button
+              onClick={() => setActiveSubTab('assiduite')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95 ${
+                activeSubTab === 'assiduite'
+                  ? 'bg-white text-[#2A7B76] shadow-sm'
+                  : 'bg-white/15 text-white hover:bg-white/25 border border-white/20'
+              }`}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span>Assiduité & Présences</span>
+            </button>
+            <button
+              onClick={() => setActiveSubTab('rendement')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95 ${
+                activeSubTab === 'rendement'
+                  ? 'bg-white text-[#2A7B76] shadow-sm'
+                  : 'bg-white/15 text-white hover:bg-white/25 border border-white/20'
+              }`}
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              <span>Rendement & Tâches ({dynamicTeamRate}%)</span>
+            </button>
+          </div>
         </div>
 
-        <div className="hidden lg:block shrink-0 z-10">
-          <HumaanStatistics className="w-36 h-28 drop-shadow-md" />
+        {/* Illustration Humaine Vectorielle Humaaans */}
+        <div className="shrink-0 z-10 hidden sm:flex items-center justify-center">
+          <HumaanTaskCheck className="w-40 h-28 md:w-48 md:h-32 drop-shadow-md" />
         </div>
 
         {/* Global period filter badge */}
-        <div className="w-full sm:w-auto bg-white/10 backdrop-blur-md border border-white/20 px-4 py-3 rounded-2xl flex items-center justify-center sm:justify-start gap-3 z-10">
-          <Calendar className="h-5 w-5 text-emerald-300 shrink-0" />
+        <div className="bg-white/10 backdrop-blur-md border border-white/20 px-4 py-3 rounded-2xl flex items-center gap-3 shrink-0 self-center md:self-auto z-10">
+          <Calendar className="h-5 w-5 text-emerald-300" />
           <div className="text-xs">
             <div className="text-emerald-200 text-[10px] uppercase font-bold">Période Analysée</div>
             <div className="font-bold text-white">
@@ -381,9 +408,8 @@ export function PresenceStatisticsView({
               </div>
               <div>
                 <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Rendement Global Équipe</span>
-                <h3 className="text-xl font-bold font-serif text-stone-900 mt-0.5 flex items-center gap-1.5">
+                <h3 className="text-xl font-bold font-serif text-stone-900 mt-0.5">
                   <span>{dynamicTeamRate}%</span>
-                  <Trophy className="h-4 w-4 text-amber-500" />
                 </h3>
                 <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded-md">
                   Calcul dynamique continu

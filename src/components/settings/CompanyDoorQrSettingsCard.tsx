@@ -61,11 +61,16 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
     const timestampHex = Date.now().toString(36).toUpperCase();
     const newToken = `CITRINE_DOOR_${randomHex}_${timestampHex}`;
     const nowIso = new Date().toISOString();
+    const oldToken = currentToken;
+    const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
+    const updatedRevoked = oldToken && !existingRevoked.includes(oldToken) ? [...existingRevoked, oldToken] : existingRevoked;
 
     const updated: any = {
       ...(moduleConfig || {}),
       doorQrCodeToken: newToken,
       qrCodeSecret: newToken, // Rétrocompatibilité
+      doorQrCodeRevoked: false,
+      revokedDoorTokens: updatedRevoked,
       doorQrCodeGeneratedAt: nowIso,
       doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
       doorQrRequireGps: requireGps,
@@ -77,7 +82,7 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
 
     if (showToast) {
       showToast(
-        'Nouveau QR Code d’Entrée généré ! Pensez à réimprimer la nouvelle affiche pour la porte.',
+        'Nouveau QR Code d’Entrée généré ! L\'ancien QR code est révoqué et ne permettra plus aucun pointage.',
         'success'
       );
     }
@@ -85,10 +90,18 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
 
   const handleApplyToken = () => {
     const newToken = tokenInput.trim() || 'CITRINE_DOOR_HQ_MAIN_2026';
+    const oldToken = currentToken;
+    const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
+    const updatedRevoked = oldToken && oldToken !== newToken && !existingRevoked.includes(oldToken)
+      ? [...existingRevoked, oldToken]
+      : existingRevoked;
+
     const updated: any = {
       ...(moduleConfig || {}),
       doorQrCodeToken: newToken,
       qrCodeSecret: newToken,
+      doorQrCodeRevoked: false,
+      revokedDoorTokens: updatedRevoked,
       doorQrCodeGeneratedAt: new Date().toISOString(),
       doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
       doorQrRequireGps: requireGps,
@@ -109,11 +122,17 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
     });
     if (!isConfirmed) return;
 
+    const oldToken = currentToken;
+    const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
+    const updatedRevoked = oldToken && !existingRevoked.includes(oldToken) ? [...existingRevoked, oldToken] : existingRevoked;
     const revokedToken = `CITRINE_REVOKED_${Math.random().toString(36).substring(2, 8).toUpperCase()}_${Date.now()}`;
+
     const updated: any = {
       ...(moduleConfig || {}),
       doorQrCodeToken: revokedToken,
       qrCodeSecret: revokedToken,
+      doorQrCodeRevoked: true,
+      revokedDoorTokens: [...updatedRevoked, revokedToken],
       doorQrCodeGeneratedAt: new Date().toISOString(),
       doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
       doorQrRequireGps: requireGps,
@@ -121,9 +140,9 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
     onUpdateModuleConfig(updated);
     setTokenInput(revokedToken);
     if (showToast) {
-      showToast('QR Code invalidé et remplacé par un nouveau jeton sécurisé.', 'success');
+      showToast('QR Code invalidé et révoqué.', 'success');
     }
-    await showSuccessAlert('QR Code invalidé !', 'Le QR Code d\'entrée a été révoqué et renouvelé avec succès.');
+    await showSuccessAlert('QR Code invalidé !', 'Le QR Code d\'entrée a été révoqué avec succès. Aucun ancien badge ne sera accepté.');
   };
 
   const handleSaveParams = (e: React.FormEvent) => {

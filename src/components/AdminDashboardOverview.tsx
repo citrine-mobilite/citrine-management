@@ -101,17 +101,28 @@ export default function AdminDashboardOverview({
             <h2 className="font-serif font-bold text-2xl sm:text-3xl text-white tracking-tight">
               Bonjour, {currentUser?.name || 'Administrateur'}
             </h2>
-            <p className="text-xs text-emerald-100/90 font-medium capitalize mt-1">
-              {currentDateFormatted} • Suivi en temps réel de l'activité Citrine
-            </p>
           </div>
           
-          <div className="inline-flex items-center gap-3 bg-white/15 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/20 text-xs font-mono font-bold shadow-2xs">
-            <span className="text-emerald-200">🕒 {realTime}</span>
-            <span className="text-white/40">|</span>
-            <span className="text-emerald-100 font-sans font-semibold text-[11px]">
-              {presentCount} collaborateur{presentCount > 1 ? 's' : ''} en poste
-            </span>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="inline-flex items-center gap-3 bg-white/15 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/20 text-xs font-mono font-bold shadow-2xs">
+              <span className="text-emerald-200">🕒 {realTime}</span>
+              <span className="text-white/40">|</span>
+              <span className="text-emerald-100 font-sans font-semibold text-[11px]">
+                {presentCount} collaborateur{presentCount > 1 ? 's' : ''} en poste
+              </span>
+            </div>
+            <button
+              onClick={() => onSelectTab('presences')}
+              className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-semibold backdrop-blur-md border border-white/20 transition cursor-pointer active:scale-95"
+            >
+              Voir les Présences
+            </button>
+            <button
+              onClick={() => onSelectTab('tasks')}
+              className="px-3 py-1.5 bg-[#D4A82F] hover:bg-[#c49826] text-stone-900 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+            >
+              Gérer les Tâches
+            </button>
           </div>
         </div>
 

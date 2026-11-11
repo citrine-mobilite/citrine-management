@@ -58,6 +58,10 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
   const handleRegenerateToken = () => {
     const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
     const newToken = `CITRINE_DOOR_${Date.now().toString(36).toUpperCase()}_${randomSuffix}`;
+    const oldToken = currentToken;
+    const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
+    const updatedRevoked = oldToken && !existingRevoked.includes(oldToken) ? [...existingRevoked, oldToken] : existingRevoked;
+
     setTokenInput(newToken);
     setIsInvalidated(false);
     
@@ -67,9 +71,10 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
         doorQrCodeToken: newToken,
         qrCodeSecret: newToken,
         doorQrCodeRevoked: false,
+        revokedDoorTokens: updatedRevoked,
       });
     }
-    setSuccessMsg('Nouveau jeton généré avec succès ! Vous pouvez le télécharger ou l\'enregistrer.');
+    setSuccessMsg('Nouveau jeton généré avec succès ! L\'ancien QR code est désormais définitivement invalidé.');
     setTimeout(() => setSuccessMsg(null), 3500);
   };
 
@@ -89,13 +94,19 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
   const handleToggleInvalidate = () => {
     const nextState = !isInvalidated;
     setIsInvalidated(nextState);
+    const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
+    const updatedRevoked = nextState && currentToken && !existingRevoked.includes(currentToken)
+      ? [...existingRevoked, currentToken]
+      : existingRevoked;
+
     if (onUpdateConfig && moduleConfig) {
       onUpdateConfig({
         ...moduleConfig,
         doorQrCodeRevoked: nextState,
+        revokedDoorTokens: updatedRevoked,
       });
     }
-    setSuccessMsg(nextState ? 'Ce QR Code a été invalidé. Les anciens badges refuseront l\'accès.' : 'QR Code réactivé.');
+    setSuccessMsg(nextState ? 'Ce QR Code a été invalidé. Tout ancien ou actuel badge refusera l\'accès.' : 'QR Code réactivé.');
     setTimeout(() => setSuccessMsg(null), 3500);
   };
 

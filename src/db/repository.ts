@@ -892,30 +892,29 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
         if (settingsData && settingsData.length > 0) {
           const cfg = settingsData.find((s: any) => s.id === 'main_config' || s.doc_id === 'main_config') || settingsData[0];
           const rawCfg = (cfg.raw_data && typeof cfg.raw_data === 'object') ? cfg.raw_data : (cfg.setting_value && typeof cfg.setting_value === 'object' ? cfg.setting_value : cfg);
-          const serverDoorToken = (rawCfg.doorQrCodeToken || rawCfg.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026').trim();
+          const serverDoorToken = (rawCfg.doorQrCodeToken || rawCfg.qrCodeSecret || '').trim();
           const serverRevoked = rawCfg.doorQrCodeRevoked === true;
-
-          if (serverRevoked) {
-            throw new Error("Pointage rejeté : Le QR Code de porte officiel a été révoqué par la direction.");
-          }
+          const serverRevokedList: string[] = Array.isArray(rawCfg.revokedDoorTokens)
+            ? rawCfg.revokedDoorTokens.map((t: string) => String(t).toUpperCase().trim())
+            : [];
 
           const clientToken = (presence.qrCodeToken || '').trim();
-          if (clientToken && serverDoorToken) {
+          if (clientToken) {
             const cUpper = clientToken.toUpperCase();
             const sUpper = serverDoorToken.toUpperCase();
             const secUpper = (rawCfg.qrCodeSecret || '').trim().toUpperCase();
             const cRoot = cUpper.replace(/-\d{4,}$/, '');
 
+            if (serverRevoked || serverRevokedList.includes(cUpper) || cUpper.includes('REVOKED') || cUpper.includes('INVALIDE')) {
+              throw new Error("Pointage rejeté : Ce QR Code d'entrée n'est plus valide (révoqué par la direction).");
+            }
+
             const matches = 
-              cUpper === sUpper || 
-              cRoot === sUpper ||
-              (secUpper && (cUpper === secUpper || cRoot === secUpper)) ||
-              (cUpper.length >= 8 && (cUpper.startsWith(sUpper) || sUpper.startsWith(cUpper))) ||
-              cUpper === 'CITRINE_HQ_NOVEMBRE_2026' ||
-              cUpper === 'CITRINE_DOOR_HQ_MAIN_2026';
+              (sUpper && (cUpper === sUpper || cRoot === sUpper)) || 
+              (secUpper && (cUpper === secUpper || cRoot === secUpper));
 
             if (!matches) {
-              throw new Error(`Pointage rejeté : Le jeton QR Code ("${clientToken}") ne correspond pas au jeton officiel en base.`);
+              throw new Error(`Pointage rejeté : Le jeton QR Code ("${clientToken}") n'est plus valide ou ne correspond pas au jeton officiel actif.`);
             }
           }
         }

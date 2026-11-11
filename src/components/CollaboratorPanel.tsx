@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HumaanCollaborators } from './illustrations/HumaanIllustrations';
+import { HumaanPeople } from './illustrations/HumaanIllustrations';
 import { 
   Users, 
   Search, 
@@ -1129,48 +1129,52 @@ export default function CollaboratorPanel({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-300">
-      {/* List Header Banner */}
-      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
-        <div className="z-10 text-center md:text-left">
+      {/* List Header Banner avec HumaanPeople */}
+      <div className="bg-gradient-to-r from-[#2A7B76] via-[#216762] to-emerald-900 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        <div className="space-y-2 z-10 w-full md:w-auto text-center md:text-left">
           <div className="flex items-center justify-center md:justify-start gap-2">
             <Users className="h-5 w-5 text-emerald-200" />
-            <h2 className="font-serif font-bold text-xl md:text-2xl">Gestion des Collaborateurs & Effectifs</h2>
+            <h2 className="font-serif font-bold text-2xl md:text-3xl">Gestion des Collaborateurs & Effectifs</h2>
+          </div>
+          <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl text-xs font-semibold text-emerald-100 border border-white/15">
+            <span>{employees.length} collaborateurs enregistrés</span>
           </div>
         </div>
 
-        <div className="hidden lg:block shrink-0 z-10">
-          <HumaanCollaborators className="w-36 h-28 drop-shadow-md" />
+        {/* Illustration Humaine Vectorielle Humaaans */}
+        <div className="shrink-0 z-10 hidden sm:flex items-center justify-center">
+          <HumaanPeople className="w-40 h-28 md:w-48 md:h-32 drop-shadow-md" />
         </div>
 
-        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2 shrink-0 z-10 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 shrink-0 z-10 w-full md:w-auto">
           <button
             onClick={() => setIsAuditHistoryModalOpen(true)}
-            className="w-full sm:w-auto justify-center bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+            className="bg-white/15 hover:bg-white/25 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
             title="Historique des opérations administratives sur les comptes"
           >
             <History className="h-4 w-4 text-amber-300" />
-            <span>Audit ({auditOpsList.length})</span>
+            <span>Audit Comptes ({auditOpsList.length})</span>
           </button>
           <button
             onClick={handleExportExcel}
-            className="w-full sm:w-auto justify-center bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+            className="bg-white/15 hover:bg-white/25 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
           >
             <Download className="h-4 w-4 text-emerald-200" />
             Excel
           </button>
           <button
             onClick={handleExportPDF}
-            className="w-full sm:w-auto justify-center bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+            className="bg-white/15 hover:bg-white/25 border border-white/20 text-white px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
           >
             <Download className="h-4 w-4 text-rose-300" />
             PDF
           </button>
           <button
             onClick={handleOpenAdd}
-            className="w-full sm:w-auto justify-center bg-[#D4A82F] hover:bg-[#c39b28] text-stone-950 px-4 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            className="bg-[#D4A82F] hover:bg-[#c39b28] text-stone-950 px-4 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-1.5 shadow-md transition cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4" />
-            <span>Créer</span>
+            Créer un collaborateur
           </button>
         </div>
       </div>

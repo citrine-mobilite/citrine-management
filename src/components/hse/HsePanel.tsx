@@ -18,8 +18,8 @@ import { HseIncidentsGrid } from './HseIncidentsGrid';
 import { HseDetailModal } from './HseDetailModal';
 import { HseIncidentModal } from './HseIncidentModal';
 import { SearchableSelect, SelectOption } from '../common/SearchableSelect';
-import { HumaanHse } from '../illustrations/HumaanIllustrations';
 import { executeOperationWithLoading, executeDeleteWithSweetAlert } from '../../utils/sweetAlert';
+import { HumaanSecurity } from '../illustrations/HumaanIllustrations';
 
 interface HsePanelProps {
   currentUser?: AppUser | null;
@@ -215,30 +215,34 @@ export const HsePanel: React.FC<HsePanelProps> = ({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-5 bg-white p-6 rounded-3xl border border-stone-200/80 shadow-xs relative overflow-hidden">
-        <div className="flex items-center justify-center md:justify-start gap-3 text-center md:text-left z-10">
-          <div className="p-2.5 bg-amber-50 text-amber-700 rounded-2xl border border-amber-100 shrink-0">
-            <ShieldAlert className="w-6 h-6" />
+      {/* Header Banner avec HumaanSecurity */}
+      <div className="bg-gradient-to-r from-amber-950 via-[#2A7B76] to-emerald-950 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        <div className="space-y-2 z-10 w-full md:w-auto text-center md:text-left">
+          <div className="flex items-center justify-center md:justify-start gap-2.5">
+            <div className="p-2.5 bg-white/10 backdrop-blur-xs text-amber-300 rounded-2xl border border-white/15">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h1 className="text-2xl md:text-3xl font-serif font-bold text-white">Registre Hygiène, Sécurité &amp; Environnement (HSE)</h1>
           </div>
-          <div>
-            <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-800">Registre Hygiène, Sécurité & Environnement (HSE)</h1>
+          <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl text-xs font-semibold text-emerald-100 border border-white/15">
+            <span>{incidents.length} événement{incidents.length > 1 ? 's' : ''} consigné{incidents.length > 1 ? 's' : ''}</span>
           </div>
         </div>
 
-        <div className="hidden lg:block shrink-0 z-10">
-          <HumaanHse className="w-32 h-24 drop-shadow-sm" />
+        {/* Illustration Humaine Vectorielle Humaaans */}
+        <div className="shrink-0 z-10 hidden sm:flex items-center justify-center">
+          <HumaanSecurity className="w-40 h-28 md:w-48 md:h-32 drop-shadow-md" />
         </div>
 
-        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2.5 w-full sm:w-auto z-10">
+        <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 shrink-0 z-10 w-full md:w-auto">
           <button
             onClick={() => {
               setEditingIncident(null);
               setIsModalOpen(true);
             }}
-            className="w-full sm:w-auto justify-center inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-2xl shadow-xs transition cursor-pointer active:scale-98"
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-extrabold text-stone-950 bg-[#D4A82F] hover:bg-[#c39b28] rounded-2xl shadow-md transition cursor-pointer active:scale-95"
           >
-            <AlertTriangle className="w-4 h-4" />
+            <AlertTriangle className="w-4 h-4 text-stone-950" />
             <span>Déclarer un Incident / Danger</span>
           </button>
         </div>

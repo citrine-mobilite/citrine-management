@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Package, Search, Plus, Heart, Layers, LayoutGrid, Table } from 'lucide-react';
-import { HumaanInventory } from './illustrations/HumaanIllustrations';
 import { InventoryItem, Role, Employee, NotificationLog, AppUser, InventoryAssignment } from '../types';
 import { InventoryStatsCards } from './inventory/InventoryStatsCards';
 import { InventoryItemCard } from './inventory/InventoryItemCard';
@@ -13,6 +12,7 @@ import { InventoryDonationsPanel } from './inventory/InventoryDonationsPanel';
 import { InventoryDetailDrawer } from './inventory/InventoryDetailDrawer';
 import { InventoryDonateModal } from './inventory/InventoryDonateModal';
 import { showSuccessAlert, executeOperationWithLoading, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
+import { HumaanFinance } from './illustrations/HumaanIllustrations';
 
 interface InventoryPanelProps {
   inventoryItems: InventoryItem[];
@@ -118,28 +118,34 @@ export default function InventoryPanel({
 
   return (
     <div className="space-y-6">
-      {/* Clean Banner with Aligned Primary Action */}
-      <div className="bg-[#2A7B76] rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
-        <div className="flex items-center justify-center md:justify-start gap-2.5 z-10 text-center md:text-left">
-          <Package className="h-6 w-6 text-emerald-200" />
-          <h2 className="font-serif font-bold text-xl sm:text-2xl text-white">
-            Gestion du Matériel & Inventaires
-          </h2>
+      {/* Clean Banner avec HumaanFinance */}
+      <div className="bg-gradient-to-r from-[#2A7B76] via-[#216762] to-emerald-900 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        <div className="space-y-2 z-10 w-full md:w-auto text-center md:text-left">
+          <div className="flex items-center justify-center md:justify-start gap-2.5">
+            <Package className="h-6 w-6 text-emerald-200" />
+            <h2 className="font-serif font-bold text-2xl md:text-3xl text-white">
+              Gestion du Matériel &amp; Inventaires
+            </h2>
+          </div>
+          <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl text-xs font-semibold text-emerald-100 border border-white/15">
+            <span>{effectiveItems.length} article{effectiveItems.length > 1 ? 's' : ''} répertorié{effectiveItems.length > 1 ? 's' : ''}</span>
+          </div>
         </div>
 
-        <div className="hidden lg:block shrink-0 z-10">
-          <HumaanInventory className="w-36 h-28 drop-shadow-md" />
+        {/* Illustration Humaine Vectorielle Humaaans */}
+        <div className="shrink-0 z-10 hidden sm:flex items-center justify-center">
+          <HumaanFinance className="w-40 h-28 md:w-48 md:h-32 drop-shadow-md" />
         </div>
 
-        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-3 w-full sm:w-auto z-10">
+        <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 shrink-0 z-10 w-full md:w-auto">
           <button
             onClick={() => {
               setEditingItem(null);
               setShowCreateModal(true);
             }}
-            className="w-full sm:w-auto justify-center px-5 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 shrink-0 active:scale-98"
+            className="px-5 py-2.5 bg-[#D4A82F] hover:bg-[#c39b28] text-stone-950 rounded-2xl text-xs font-extrabold transition shadow-md cursor-pointer flex items-center gap-2 active:scale-95"
           >
-            <Plus className="h-4 w-4 text-[#2A7B76]" />
+            <Plus className="h-4 w-4" />
             <span>Nouveau Matériel</span>
           </button>
         </div>
