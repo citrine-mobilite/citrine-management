@@ -233,7 +233,8 @@ export default function PresencePanel({
     const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
 
     if (nextStep.action === 'arrival') {
-      const isLateNow = timeNow > lateThreshold;
+      const exemptLate = activeEmployee?.allowLateArrival8_930 === true && timeNow >= '08:00' && timeNow <= '09:30';
+      const isLateNow = !exemptLate && timeNow > lateThreshold;
       const newPresence: Presence = {
         id: `pres-${Date.now()}`,
         employeeId: activeEmployee.id,
@@ -293,7 +294,8 @@ export default function PresencePanel({
         if (nextStep.action === 'pause_end') updatedObj.pauseEnd = timeNow;
         if (nextStep.action === 'departure') {
           updatedObj.departureTime = timeNow;
-          if (timeNow < plannedDeparture) {
+          const exemptEarly = activeEmployee?.allowEarlyDeparture15_17 === true && timeNow >= '15:00' && timeNow <= '17:00';
+          if (!exemptEarly && timeNow < plannedDeparture) {
             updatedObj.departureReason = "Sortie prématurée (avant 16:30)";
             if (!updatedObj.emergencies) updatedObj.emergencies = [];
             updatedObj.emergencies.push({

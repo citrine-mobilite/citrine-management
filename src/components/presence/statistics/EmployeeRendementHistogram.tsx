@@ -240,7 +240,7 @@ export const EmployeeRendementHistogram: React.FC<EmployeeRendementHistogramProp
                         onMouseLeave={() => setHoveredMetric(null)}
                         onClick={() => onSelectEmployee(m.employee)}
                         className="flex-1 min-w-[50px] max-w-[80px] h-full flex flex-col justify-end items-center group cursor-pointer relative"
-                        title={`Cliquez pour ouvrir la fiche de détail et feuille de temps de ${m.employee.name}`}
+                        title={`Cliquez pour ouvrir la fiche de détail et feuille de tâches de ${m.employee.name}`}
                       >
                         {/* Rate number badge above bar */}
                         <div className={`mb-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold transition-transform group-hover:scale-110 shadow-3xs ${getBarBg(rate)}`}>
@@ -325,7 +325,7 @@ export const EmployeeRendementHistogram: React.FC<EmployeeRendementHistogramProp
         </div>
       )}
 
-      {/* 📊 MODE 2: VUE HORIZONTALE DÉTAILLÉE AVEC DOUBLE BÂTONS & FEUILLES DE TEMPS */}
+      {/* 📊 MODE 2: VUE HORIZONTALE DÉTAILLÉE AVEC DOUBLE BÂTONS & FEUILLES DE TÂCHES */}
       {viewMode === 'horizontal' && (
         <div className="space-y-4">
           {/* Visual Legend */}
@@ -413,10 +413,10 @@ export const EmployeeRendementHistogram: React.FC<EmployeeRendementHistogramProp
                             onOpenTimesheet(m.employee, 'month');
                           }}
                           className="px-2.5 py-1.5 bg-white hover:bg-emerald-600 hover:text-white text-stone-700 border border-stone-200 hover:border-emerald-600 font-bold text-[11px] rounded-xl flex items-center gap-1 shadow-3xs transition cursor-pointer"
-                          title="Générer automatiquement la feuille de temps de ce collaborateur"
+                          title="Générer automatiquement la feuille de tâches de ce collaborateur"
                         >
                           <FileSpreadsheet className="h-3.5 w-3.5 text-[#2A7B76] group-hover:text-white" />
-                          <span className="hidden md:inline">Feuille de Temps</span>
+                          <span className="hidden md:inline">Feuille de Tâches</span>
                         </button>
                       )}
                     </div>

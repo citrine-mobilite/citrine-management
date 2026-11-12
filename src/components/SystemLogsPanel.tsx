@@ -342,7 +342,7 @@ export default function SystemLogsPanel({
       case 'conseil_discipline':
         return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⚖️ Conseil Discipline</span>;
       case 'feuille_de_temps':
-        return <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-[10px] font-bold">📅 Feuille de Temps</span>;
+        return <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-[10px] font-bold">📅 Feuille de Tâches</span>;
       case 'presence_pointage':
         return <span className="bg-cyan-100 text-cyan-800 border border-cyan-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⏱️ Pointage & Présence</span>;
       case 'securite_connexion':
@@ -792,7 +792,7 @@ export default function SystemLogsPanel({
                     <option value="all">Tous les types</option>
                     <option value="conge_permission">🌴 Congé & Permission</option>
                     <option value="conseil_discipline">⚖️ Conseil de Discipline</option>
-                    <option value="feuille_de_temps">📅 Feuille de Temps</option>
+                    <option value="feuille_de_temps">📅 Feuille de Tâches</option>
                     <option value="presence_pointage">⏱️ Pointage & Présence</option>
                     <option value="securite_connexion">🛡️ Sécurité & Connexion</option>
                     <option value="creation">👤 Création de Compte</option>

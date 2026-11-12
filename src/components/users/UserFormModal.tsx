@@ -15,6 +15,8 @@ interface UserFormModalProps {
     employmentStatus: EmployeeStatus;
     department: string;
     password?: string;
+    allowEarlyDeparture15_17?: boolean;
+    allowLateArrival8_930?: boolean;
   }) => void;
 }
 
@@ -31,6 +33,8 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   const [employmentStatus, setEmploymentStatus] = useState<EmployeeStatus>('en_poste');
   const [department, setDepartment] = useState('');
   const [password, setPassword] = useState('');
+  const [allowEarlyDeparture15_17, setAllowEarlyDeparture15_17] = useState(false);
+  const [allowLateArrival8_930, setAllowLateArrival8_930] = useState(false);
 
   // Synchronise toujours les champs dès que editingUser change ou que le modal s'ouvre
   useEffect(() => {
@@ -42,6 +46,8 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       setEmploymentStatus(editingUser.employmentStatus || (editingUser.status === 'inactif' ? 'suspendu' : 'en_poste'));
       setDepartment(editingUser.department || '');
       setPassword('');
+      setAllowEarlyDeparture15_17(editingUser.allowEarlyDeparture15_17 || false);
+      setAllowLateArrival8_930(editingUser.allowLateArrival8_930 || false);
     } else {
       setName('');
       setEmail('');
@@ -50,6 +56,8 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       setEmploymentStatus('en_poste');
       setDepartment('');
       setPassword('');
+      setAllowEarlyDeparture15_17(false);
+      setAllowLateArrival8_930(false);
     }
   }, [editingUser, isOpen]);
 
@@ -66,7 +74,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ name, email, role, status, employmentStatus, department, password });
+    onSave({ name, email, role, status, employmentStatus, department, password, allowEarlyDeparture15_17, allowLateArrival8_930 });
   };
 
   const isEditing = Boolean(editingUser);
@@ -235,6 +243,28 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 ℹ️ Si ce champ reste vide, le mot de passe actuel de l'utilisateur ne sera pas modifié.
               </span>
             )}
+          </div>
+
+          <div className="p-3.5 rounded-2xl border bg-amber-50/50 border-amber-200/80 space-y-2">
+            <h4 className="font-bold text-stone-900 text-xs">Dérogations d'assiduité spéciales :</h4>
+            <label className="flex items-center gap-2 cursor-pointer font-medium text-stone-800">
+              <input
+                type="checkbox"
+                checked={allowLateArrival8_930}
+                onChange={(e) => setAllowLateArrival8_930(e.target.checked)}
+                className="rounded border-stone-300 text-[#2A7B76] focus:ring-[#2A7B76] h-4 w-4"
+              />
+              <span>Autoriser l'arrivée entre 08:00 et 09:30 sans création de retard</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer font-medium text-stone-800">
+              <input
+                type="checkbox"
+                checked={allowEarlyDeparture15_17}
+                onChange={(e) => setAllowEarlyDeparture15_17(e.target.checked)}
+                className="rounded border-stone-300 text-[#2A7B76] focus:ring-[#2A7B76] h-4 w-4"
+              />
+              <span>Autoriser le départ entre 15:00 et 17:00 sans création de sortie prématurée</span>
+            </label>
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100">

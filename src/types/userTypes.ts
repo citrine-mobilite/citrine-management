@@ -20,6 +20,8 @@ export interface AppUser {
   department?: string;
   phone?: string;
   employeeId?: string;
+  allowEarlyDeparture15_17?: boolean;
+  allowLateArrival8_930?: boolean;
   createdAt: string;
   lastLoginAt?: string;
 }

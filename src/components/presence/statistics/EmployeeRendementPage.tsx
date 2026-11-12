@@ -61,10 +61,58 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
   currentUser,
   currentRole,
 }) => {
-  // Calcul DYNAMIQUE du rendement complet (tâches, sous-tâches, jalons, heures)
+  // Filtres d'affichage
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [durationFilter, setDurationFilter] = useState<DurationFilter>('all');
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [limitToTen, setLimitToTen] = useState(true);
+
+  // Expanded task state
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [newSubtaskTitles, setNewSubtaskTitles] = useState<{ [taskId: string]: string }>({});
+  const [newSubtaskDueDates, setNewSubtaskDueDates] = useState<{ [taskId: string]: string }>({});
+  const [activeModalTask, setActiveModalTask] = useState<Task | null>(null);
+
+  // Timesheet Modal State
+  const [isTimesheetOpen, setIsTimesheetOpen] = useState(false);
+  const [timesheetMode, setTimesheetMode] = useState<'day' | 'month' | 'year'>('month');
+
+  const taskDetailSectionRef = useRef<HTMLDivElement>(null);
+
+  // Dates pour le filtre de période
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const periodRange = useMemo(() => {
+    if (periodFilter === 'all') return undefined;
+    if (periodFilter === 'today') return { startStr: todayStr, endStr: todayStr, period: 'today' };
+    if (periodFilter === 'week') {
+      const day = now.getDay();
+      const diffToMonday = day === 0 ? -6 : 1 - day;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diffToMonday);
+      return { startStr: `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`, endStr: todayStr, period: 'this_week' };
+    }
+    if (periodFilter === 'month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { startStr: `${firstDay.getFullYear()}-${pad(firstDay.getMonth() + 1)}-${pad(firstDay.getDate())}`, endStr: todayStr, period: 'this_month' };
+    }
+    if (periodFilter === 'quarter') {
+      const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      return { startStr: `${threeMonthsAgo.getFullYear()}-${pad(threeMonthsAgo.getMonth() + 1)}-${pad(threeMonthsAgo.getDate())}`, endStr: todayStr, period: 'last_3_months' };
+    }
+    return undefined;
+  }, [periodFilter, todayStr]);
+
+  // Calcul DYNAMIQUE du rendement complet (tâches, sous-tâches, jalons, heures) selon la période
   const metrics = useMemo(() => {
-    return computeEmployeeRendement(employee, tasks, assiduiteRate);
-  }, [employee, tasks, assiduiteRate]);
+    return computeEmployeeRendement(employee, tasks, assiduiteRate, periodRange);
+  }, [employee, tasks, assiduiteRate, periodRange]);
 
   // Tasks with dynamic hours & progress
   const tasksWithDynamicData = useMemo(() => {
@@ -88,31 +136,6 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
       };
     });
   }, [metrics.assignedTasks]);
-
-  // Filtres d'affichage
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [durationFilter, setDurationFilter] = useState<DurationFilter>('all');
-  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [limitToTen, setLimitToTen] = useState(true);
-
-  // Expanded task state
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [newSubtaskTitles, setNewSubtaskTitles] = useState<{ [taskId: string]: string }>({});
-  const [activeModalTask, setActiveModalTask] = useState<Task | null>(null);
-
-  // Timesheet Modal State
-  const [isTimesheetOpen, setIsTimesheetOpen] = useState(false);
-  const [timesheetMode, setTimesheetMode] = useState<'day' | 'month' | 'year'>('month');
-
-  const taskDetailSectionRef = useRef<HTMLDivElement>(null);
-
-  // Dates pour le filtre de période
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   // Filtrage des tâches
   const filteredTasks = useMemo(() => {
@@ -259,11 +282,15 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
     if (!title) return;
     haptic.medium();
 
+    const taskSubDueDate = newSubtaskDueDates[task.id] || todayStr;
+
     const newSub: Subtask = {
       id: `sub-${Date.now()}`,
       title,
       completed: false,
       status: 'todo',
+      dueDate: taskSubDueDate,
+      endDate: taskSubDueDate,
       estimatedHours: 2,
     };
 
@@ -283,6 +310,29 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
     if (onUpdateTask) onUpdateTask(updatedTask);
     setNewSubtaskTitles({ ...newSubtaskTitles, [task.id]: '' });
     if (showToast) showToast('Sous-tâche ajoutée et rendement recalculé.', 'success');
+  };
+
+  const handleUpdateSubtaskDueDate = (task: Task, subtaskId: string, newDueDate: string) => {
+    haptic.light();
+    const updatedSubtasks = (task.subtasks || []).map((sub) => {
+      if (sub.id === subtaskId) {
+        return {
+          ...sub,
+          dueDate: newDueDate,
+          endDate: newDueDate,
+        };
+      }
+      return sub;
+    });
+
+    const updatedTask: Task = {
+      ...task,
+      subtasks: updatedSubtasks,
+      lastUpdatedTime: new Date().toISOString(),
+    };
+
+    if (onUpdateTask) onUpdateTask(updatedTask);
+    if (showToast) showToast('Date d\'échéance de la sous-tâche mise à jour.', 'success');
   };
 
   const handleDeleteSubtask = (task: Task, subtaskId: string) => {
@@ -769,7 +819,7 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
                       {subtasks.map((sub) => (
                         <div
                           key={sub.id}
-                          className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 hover:border-[#2A7B76]/50 transition shadow-3xs"
+                          className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 hover:border-[#2A7B76]/50 transition shadow-3xs gap-2"
                         >
                           <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
                             <input
@@ -792,13 +842,32 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
                             )}
                           </label>
 
-                          <button
-                            onClick={() => handleDeleteSubtask(task, sub.id)}
-                            className="p-1 text-stone-400 hover:text-rose-600 transition cursor-pointer ml-2"
-                            title="Supprimer cette sous-tâche"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                            <label
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center gap-1 bg-stone-50 hover:bg-stone-100 border border-stone-200 px-2 py-0.5 rounded-md text-[10px] cursor-pointer"
+                              title="Modifier la date d'échéance propre de cette sous-tâche"
+                            >
+                              <span className="text-[9px] text-stone-500 font-bold">Fin :</span>
+                              <input
+                                type="date"
+                                value={sub.dueDate || sub.endDate || ''}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateSubtaskDueDate(task, sub.id, e.target.value);
+                                }}
+                                className="font-mono font-bold text-stone-800 bg-transparent outline-none cursor-pointer text-[10px]"
+                              />
+                            </label>
+
+                            <button
+                              onClick={() => handleDeleteSubtask(task, sub.id)}
+                              className="p-1 text-stone-400 hover:text-rose-600 transition cursor-pointer"
+                              title="Supprimer cette sous-tâche"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                       ))}
 
@@ -814,14 +883,14 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
                       <button
                         type="button"
                         onClick={() => setActiveModalTask(task)}
-                        className="w-full sm:w-auto px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-[#2A7B76] border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="w-full sm:w-auto px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-[#2A7B76] border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                         title="Créer une sous-tâche complète"
                       >
                         <Plus className="h-3.5 w-3.5" />
                         <span>Nouvelle sous-tâche détaillée</span>
                       </button>
 
-                      <div className="flex items-center gap-2 flex-1 w-full">
+                      <div className="flex flex-col sm:flex-row items-center gap-2 flex-1 w-full">
                         <input
                           type="text"
                           value={newSubtaskTitles[task.id] || ''}
@@ -832,15 +901,28 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
                             if (e.key === 'Enter') handleAddSubtask(task);
                           }}
                           placeholder="Ajout rapide de sous-tâche..."
-                          className="flex-1 px-3 py-1.5 bg-white border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#2A7B76]"
+                          className="flex-1 w-full px-3 py-1.5 bg-white border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#2A7B76]"
                         />
-                        <button
-                          onClick={() => handleAddSubtask(task)}
-                          className="px-3 py-1.5 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1 shadow-xs"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          <span>Ajouter</span>
-                        </button>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <label className="flex items-center gap-1 bg-white border border-stone-200 px-2 py-1 rounded-xl text-[11px] shrink-0" title="Date d'échéance de la sous-tâche">
+                            <span className="text-[10px] text-stone-500 font-semibold">Fin :</span>
+                            <input
+                              type="date"
+                              value={newSubtaskDueDates[task.id] || todayStr}
+                              onChange={(e) =>
+                                setNewSubtaskDueDates({ ...newSubtaskDueDates, [task.id]: e.target.value })
+                              }
+                              className="font-mono font-bold text-stone-800 bg-transparent outline-none cursor-pointer text-[10px]"
+                            />
+                          </label>
+                          <button
+                            onClick={() => handleAddSubtask(task)}
+                            className="px-3 py-1.5 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1 shadow-xs shrink-0"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Ajouter</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -874,7 +956,7 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
         />
       )}
 
-      {/* MODAL FEUILLE DE TEMPS (JOUR / MOIS / ANNÉE) */}
+      {/* MODAL FEUILLE DE TÂCHES (JOUR / MOIS / ANNÉE) */}
       {isTimesheetOpen && (
         <TimesheetModal
           isOpen={isTimesheetOpen}

@@ -74,6 +74,7 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   const [comments, setComments] = useState<Comment[]>(task.comments || []);
   const [incidents, setIncidents] = useState<Incident[]>(task.incidents || []);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [quickSubtaskDueDate, setQuickSubtaskDueDate] = useState(new Date().toISOString().split('T')[0]);
   const [newCommentText, setNewCommentText] = useState('');
   const [blockerText, setBlockerText] = useState('');
   const [isSavedRecently, setIsSavedRecently] = useState(false);
@@ -153,18 +154,43 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
     const nowIso = new Date().toISOString();
+    const effectiveDueDate = quickSubtaskDueDate || nowIso.split('T')[0];
     const newSub: Subtask = {
       id: `sub-${Date.now()}`,
       title: newSubtaskTitle.trim(),
       completed: false,
       createdAt: nowIso,
-      dueDate: nowIso.split('T')[0],
+      dueDate: effectiveDueDate,
+      endDate: effectiveDueDate,
       subtasks: [],
     };
     const updated = [...subtasks, newSub];
     setSubtasks(updated);
     setNewSubtaskTitle('');
     onSaveTask({ ...task, subtasks: updated });
+    if (showToast) showToast('Sous-tâche ajoutée avec succès !', 'success');
+  };
+
+  const handleUpdateSubtaskDueDate = (subId: string, newDueDate: string) => {
+    const updateInTree = (list: Subtask[]): Subtask[] => {
+      return list.map((s) => {
+        if (s.id === subId) {
+          return {
+            ...s,
+            dueDate: newDueDate,
+            endDate: newDueDate,
+          };
+        }
+        if (s.subtasks && s.subtasks.length > 0) {
+          return { ...s, subtasks: updateInTree(s.subtasks) };
+        }
+        return s;
+      });
+    };
+    const updated = updateInTree(subtasks);
+    setSubtasks(updated);
+    onSaveTask({ ...task, subtasks: updated });
+    if (showToast) showToast('Date de fin de la sous-tâche mise à jour.', 'success');
   };
 
   const handleToggleSubtask = (subId: string) => {
@@ -557,7 +583,23 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 text-[10px] shrink-0 self-end sm:self-auto">
+                      <div className="flex items-center gap-2 text-[10px] shrink-0 self-end sm:self-auto flex-wrap justify-end">
+                        <label
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 bg-stone-50 hover:bg-stone-100 border border-stone-200 px-2 py-0.5 rounded-md cursor-pointer"
+                          title="Modifier directement la date d'échéance propre de cette sous-tâche"
+                        >
+                          <span className="text-[9px] text-stone-500 font-bold">Fin :</span>
+                          <input
+                            type="date"
+                            value={sub.dueDate || sub.endDate || ''}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleUpdateSubtaskDueDate(sub.id, e.target.value);
+                            }}
+                            className="font-mono font-bold text-stone-800 bg-transparent outline-none cursor-pointer text-[10px]"
+                          />
+                        </label>
                         {(sub.status === 'blocked' || sub.isBlocked || (sub.incidents && sub.incidents.length > 0)) && (
                           <span className="px-2 py-0.5 rounded-md font-bold text-[9px] bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 shrink-0">
                             <AlertTriangle className="h-2.5 w-2.5 text-rose-600" />
@@ -626,22 +668,33 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
               <input
                 type="text"
                 placeholder="Ajouter une sous-tâche..."
                 value={newSubtaskTitle}
                 onChange={(e) => setNewSubtaskTitle(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddSubtask(); } }}
-                className="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-xs outline-none focus:ring-2 focus:ring-[#2A7B76]"
+                className="flex-1 w-full px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-xs outline-none focus:ring-2 focus:ring-[#2A7B76]"
               />
-              <button
-                type="button"
-                onClick={handleAddSubtask}
-                className="px-3 py-1.5 bg-[#2A7B76] text-white rounded-xl text-xs font-bold hover:bg-[#23635f] cursor-pointer"
-              >
-                Ajouter
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <label className="flex items-center gap-1 bg-white border border-stone-200 px-2 py-1 rounded-xl text-[11px]" title="Date d'échéance propre de la sous-tâche">
+                  <span className="text-[10px] text-stone-500 font-semibold">Fin :</span>
+                  <input
+                    type="date"
+                    value={quickSubtaskDueDate}
+                    onChange={(e) => setQuickSubtaskDueDate(e.target.value)}
+                    className="font-mono font-bold text-stone-800 bg-transparent outline-none cursor-pointer text-[10px]"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAddSubtask}
+                  className="px-3 py-1.5 bg-[#2A7B76] text-white rounded-xl text-xs font-bold hover:bg-[#23635f] cursor-pointer shrink-0"
+                >
+                  Ajouter
+                </button>
+              </div>
             </div>
           </div>
 
@@ -657,7 +710,7 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
               </span>
             </div>
             <p className="text-[10px] text-stone-500 italic">
-              Vos commentaires rédigés ici font office de points à signaler au manager dans votre feuille de temps.
+              Vos commentaires rédigés ici font office de points à signaler au manager dans votre feuille de tâches.
             </p>
             <div className="space-y-2 max-h-36 overflow-y-auto">
               {comments.map((com) => (
@@ -701,11 +754,11 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
                 <span>Blocages &amp; Difficultés signalés ({incidents.length})</span>
               </h4>
               <span className="text-[10px] text-rose-700 font-semibold bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200">
-                Imprévus en feuille de temps
+                Imprévus en feuille de tâches
               </span>
             </div>
             <p className="text-[10px] text-rose-600/90 italic">
-              Les blocages signalés ici font office d'imprévus dans la feuille de temps (signalés directement par le collaborateur assigné).
+              Les blocages signalés ici font office d'imprévus dans la feuille de tâches (signalés directement par le collaborateur assigné).
             </p>
 
             {incidents.length > 0 && (

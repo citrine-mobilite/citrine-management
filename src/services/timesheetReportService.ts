@@ -181,14 +181,6 @@ function preparePlanDuJourData(data: TimesheetReportData) {
       status: data.items.filter((i) => i.taskTitle === p).every((i) => i.status === 'completed') ? 'Fait' : 'En cours',
       isMilestone: false,
     }));
-
-    if (topPriorities.length === 0) {
-      topPriorities = [
-        { title: 'Prise de contact & coordination opérationnelle', priority: 'P1', status: 'Fait' },
-        { title: 'Traitement des sous-tâches prioritaires', priority: 'P2', status: 'En cours' },
-        { title: 'Clôture, bilan et transmission de la feuille de temps', priority: 'P3', status: 'En cours' },
-      ];
-    }
   }
 
   // 2. Tâches détaillées (Sous-tâches concrètes traitées)
@@ -228,7 +220,7 @@ function preparePlanDuJourData(data: TimesheetReportData) {
   const taskBlockedRate = totalTasks > 0 ? Math.round((blockedTasks / totalTasks) * 100) : 0;
   const postponedCount = Math.max(0, totalTasks - completedTasks);
 
-  // 🎯 Taux de succès sur les 3 Priorités du jour (P1, P2, P3)
+  // 🎯 Taux de succès sur les Priorités du jour
   const prioritiesTotal = topPriorities.length;
   const prioritiesCompleted = topPriorities.filter((p) => p.status === 'Fait' || p.status === 'completed').length;
   const prioritiesInProgress = topPriorities.filter((p) => p.status === 'En cours' || p.status === 'in_progress').length;
@@ -251,7 +243,10 @@ function preparePlanDuJourData(data: TimesheetReportData) {
   let capacityStatus: 'optimal' | 'overloaded' | 'available' = 'optimal';
   let capacityAdvice = '';
 
-  if (plannedMinutes > 600) {
+  if (totalTasks === 0) {
+    capacityStatus = 'available';
+    capacityAdvice = `ℹ️ Aucune activité opérationnelle enregistrée : le collaborateur n'a rien fait ce jour (aucune sous-tâche en cours ni terminée).`;
+  } else if (plannedMinutes > 600) {
     // Plus de 10h par jour (> 600 min) = Surcharge effective
     capacityStatus = 'overloaded';
     capacityAdvice = `⚠️ Surcharge détectée : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (dépassement du seuil de 10h/jour, capacité max 12h). Risque d'inachèvement : priorisez ou reportez certaines sous-tâches.`;
@@ -265,24 +260,31 @@ function preparePlanDuJourData(data: TimesheetReportData) {
     capacityAdvice = `💡 Capacité disponible : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (capacité max : 12h). Vous pouvez traiter des sous-tâches supplémentaires.`;
   }
 
-  // 🕒 4. Plan horaire dynamique STRICTEMENT CONFORME AUX RÈGLES DE CITRINE :
-  // - Heures de travail : 08h00 à 17h00 (8h effectives nettes)
-  // - Pause déjeuner : STRICTEMENT et UNIQUEMENT 12h00 – 13h00 (aucune autre pause)
-  // - Aucun créneau tampon imprévus : les imprévus opérationnels ont leur section dédiée
+  // 🕒 4. Plan horaire dynamique (AUCUNE INVENTION)
   let scheduleSlots = data.scheduleSlots || [];
   if (scheduleSlots.length === 0 || scheduleSlots.some(s => s.timeRange.includes('13:00 – 14:00'))) {
-    const s1 = tasks[0]?.title || topPriorities[0]?.title || 'Prise de contact, cadrage & démarrage';
-    const s2 = tasks[1]?.title || topPriorities[1]?.title || 'Exécution des livrables opérationnels P1';
-    const s3 = tasks[2]?.title || 'Reprise & finalisation active des dossiers';
-    const s4 = tasks[3]?.title || 'Clôture opérationnelle de journée, bilan & transmission feuille de temps';
+    if (totalTasks === 0) {
+      scheduleSlots = [
+        { timeRange: '08:00 – 10:00', activity: "N'a rien fait", resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour' },
+        { timeRange: '10:00 – 12:00', activity: "N'a rien fait", resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour' },
+        { timeRange: '12:00 – 13:00', activity: 'Pause Déjeuner (12h00 – 13h00)', isBreak: true, isBuffer: false, resolutionNote: 'Pause obligatoire 12h–13h respectée' },
+        { timeRange: '13:00 – 15:30', activity: "N'a rien fait", resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour' },
+        { timeRange: '15:30 – 17:00', activity: "N'a rien fait", isBreak: false, isBuffer: false, resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour' },
+      ];
+    } else {
+      const s1 = tasks[0]?.title || topPriorities[0]?.title || 'Non assigné';
+      const s2 = tasks[1]?.title || topPriorities[1]?.title || (tasks[0] ? `Suite : ${tasks[0].title}` : 'Non assigné');
+      const s3 = tasks[2]?.title || (tasks[1] ? `Suite : ${tasks[1].title}` : (tasks[0] ? `Suite : ${tasks[0].title}` : 'Non assigné'));
+      const s4 = tasks[3]?.title || (tasks[2] ? `Suite : ${tasks[2].title}` : (tasks[0] ? `Finalisation : ${tasks[0].title}` : 'Non assigné'));
 
-    scheduleSlots = [
-      { timeRange: '08:00 – 10:00', activity: s1, resolutionNote: tasks[0]?.isDone ? 'Sous-tâche finalisée avec succès' : 'Traitement en cours' },
-      { timeRange: '10:00 – 12:00', activity: s2, resolutionNote: tasks[1]?.isDone ? 'Livrables produits et vérifiés' : 'Avancement nominal' },
-      { timeRange: '12:00 – 13:00', activity: 'Pause Déjeuner (12h00 – 13h00)', isBreak: true, isBuffer: false, resolutionNote: 'Pause obligatoire 12h–13h respectée' },
-      { timeRange: '13:00 – 15:30', activity: s3, resolutionNote: tasks[2]?.isDone ? 'Terminé' : 'En cours d’achèvement' },
-      { timeRange: '15:30 – 17:00', activity: s4, isBreak: false, isBuffer: false, resolutionNote: 'Revue des engagements, clôture & envoi feuille de temps' },
-    ];
+      scheduleSlots = [
+        { timeRange: '08:00 – 10:00', activity: s1, resolutionNote: tasks[0]?.isDone ? 'Sous-tâche finalisée avec succès' : 'Traitement en cours' },
+        { timeRange: '10:00 – 12:00', activity: s2, resolutionNote: tasks[1]?.isDone ? 'Livrables produits et vérifiés' : 'Avancement nominal' },
+        { timeRange: '12:00 – 13:00', activity: 'Pause Déjeuner (12h00 – 13h00)', isBreak: true, isBuffer: false, resolutionNote: 'Pause obligatoire 12h–13h respectée' },
+        { timeRange: '13:00 – 15:30', activity: s3, resolutionNote: tasks[2]?.isDone ? 'Terminé' : 'En cours d’achèvement' },
+        { timeRange: '15:30 – 17:00', activity: s4, isBreak: false, isBuffer: false, resolutionNote: 'Fin de journée opérationnelle' },
+      ];
+    }
   }
 
   // Nettoyer rigoureusement les slots existants : seul 12h00-13h00 est une pause, aucun créneau tampon
@@ -301,7 +303,7 @@ function preparePlanDuJourData(data: TimesheetReportData) {
         .trim();
       if (!cleanActivity) {
         cleanActivity = s.timeRange.includes('15:30')
-          ? 'Clôture opérationnelle de journée, bilan & transmission feuille de temps'
+          ? 'Clôture opérationnelle de journée, bilan & transmission feuille de tâches'
           : 'Traitement des sous-tâches prioritaires';
       }
     }

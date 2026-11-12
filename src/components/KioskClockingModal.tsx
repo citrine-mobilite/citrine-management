@@ -59,7 +59,8 @@ export default function KioskClockingModal({
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const scheduleStart = moduleConfig?.lateThresholdTime || '08:30';
     const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
-    const late = action === 'arrival' && isLate(timeStr, scheduleStart);
+    const exemptLate = emp.allowLateArrival8_930 === true && timeStr >= '08:00' && timeStr <= '09:30';
+    const late = action === 'arrival' && !exemptLate && isLate(timeStr, scheduleStart);
 
     let targetIncident: AttendanceIncident | null = null;
     if (action === 'arrival' && late) {
@@ -77,21 +78,24 @@ export default function KioskClockingModal({
         status: 'automatique',
         createdAt: new Date().toISOString(),
       };
-    } else if (action === 'departure' && timeStr < plannedDeparture) {
-      targetIncident = {
-        id: `inc-${Date.now()}`,
-        employeeId: emp.id,
-        employeeName: emp.name,
-        date: todayStr,
-        timeString: timeStr,
-        type: 'sortie_prematuree',
-        origin: 'automatique_pointage',
-        reason: `Sortie prématurée constatée sur la borne à ${timeStr} avant 16h30 (horaire de référence: ${plannedDeparture})`,
-        isDeclaredInAdvance: false,
-        isJustified: false,
-        status: 'automatique',
-        createdAt: new Date().toISOString(),
-      };
+    } else if (action === 'departure') {
+      const exemptEarly = emp.allowEarlyDeparture15_17 === true && timeStr >= '15:00' && timeStr <= '17:00';
+      if (!exemptEarly && timeStr < plannedDeparture) {
+        targetIncident = {
+          id: `inc-${Date.now()}`,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          date: todayStr,
+          timeString: timeStr,
+          type: 'sortie_prematuree',
+          origin: 'automatique_pointage',
+          reason: `Sortie prématurée constatée sur la borne à ${timeStr} avant 16h30 (horaire de référence: ${plannedDeparture})`,
+          isDeclaredInAdvance: false,
+          isJustified: false,
+          status: 'automatique',
+          createdAt: new Date().toISOString(),
+        };
+      }
     }
 
     const kioskLat = COMPANY_HQ_LOCATION.latitude;

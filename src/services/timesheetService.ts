@@ -171,8 +171,8 @@ export function generateDailyTimesheet(
     return (pWeight[b.priority] || 2) - (pWeight[a.priority] || 2);
   });
 
-  // 2. LES 3 PRIORITÉS DU JOUR (Les grandes tâches / Job Description)
-  const topPriorities = sortedParentTasks.slice(0, 3).map((t) => ({
+  // 2. LES PRIORITÉS DU JOUR (dérivées uniquement si des tâches/sous-tâches sont traitées aujourd'hui)
+  const rawTopPriorities = sortedParentTasks.slice(0, 3).map((t) => ({
     id: t.id,
     title: t.title,
     priority: t.priority,
@@ -237,8 +237,9 @@ export function generateDailyTimesheet(
   const ratePercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   const postponedTasks = subtaskItems.filter((t) => t.status !== 'Fait').map((t) => t.title);
   const postponedCount = postponedTasks.length;
+  const topPriorities = totalTasks === 0 ? [] : rawTopPriorities;
 
-  // 4. CALCUL DE CAPACITÉ JOURNALIÈRE (basée sur les sous-tâches, 12h max, seuil de surcharge > 10h par jour)
+  // 4. CALCUL DE CAPACITÉ JOURNALIÈRE (basée sur les sous-tâches réelles)
   const workMinutesNet = 720; // 12 heures maximum par jour
   const plannedMinutes = subtaskItems.reduce((sum, s) => sum + s.estimatedMinutes, 0);
   const activeMilestone = sortedParentTasks.find((t) => t.isMilestone && t.status !== 'completed');
@@ -249,7 +250,10 @@ export function generateDailyTimesheet(
   let capacityStatus: 'optimal' | 'overloaded' | 'available' = 'optimal';
   let capacityAdvice = '';
 
-  if (plannedMinutes > 600) {
+  if (totalTasks === 0) {
+    capacityStatus = 'available';
+    capacityAdvice = `ℹ️ Aucune activité opérationnelle enregistrée : le collaborateur n'a rien fait ce jour (aucune sous-tâche en cours ni terminée).`;
+  } else if (plannedMinutes > 600) {
     // Plus de 10h par jour (> 600 min) = Surcharge effective
     capacityStatus = 'overloaded';
     capacityAdvice = `⚠️ Surcharge détectée : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (seuil de surcharge > 10h, capacité maximale 12h/jour). Risque d'inachèvement : priorisez ou déléguez certaines sous-tâches.`;
@@ -274,25 +278,53 @@ export function generateDailyTimesheet(
     capacityAdvice,
   };
 
-  // 5. PLAN HORAIRE DYNAMIQUE (RÉSOLUTIONS DE SOUS-TÂCHES & PAUSE OBLIGATOIRE 13h-14h)
-  const s1 = subtaskItems[0];
-  const s2 = subtaskItems[1];
-  const s3 = subtaskItems[2];
-  const s4 = subtaskItems[3];
-  const s5 = subtaskItems[4];
-
-  const scheduleSlots = [
+  // 5. PLAN HORAIRE STRICTEMENT BASÉ SUR LES RÉALISATIONS CONCRÈTES (AUCUNE INVENTION)
+  const scheduleSlots = totalTasks === 0 ? [
     {
       timeRange: '08:00 – 10:00',
-      activity: s1 ? `${s1.title} (${s1.parentTaskTitle})` : 'Prise de contact, lecture des priorités & mise en route',
-      resolutionNote: s1?.status === 'Fait' ? 'Sous-tâche résolue et clôturée ✓' : 'Traitement opérationnel des livrables',
-      statusBadge: s1?.status || 'En cours',
+      activity: "N'a rien fait",
+      resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour',
+      statusBadge: 'Inactif',
     },
     {
       timeRange: '10:00 – 12:00',
-      activity: s2 ? `${s2.title} (${s2.parentTaskTitle})` : (s1 ? `Suite résolution : ${s1.title}` : 'Avancement des tâches prioritaires P1'),
-      resolutionNote: s2?.status === 'Fait' ? 'Sous-tâche validée ✓' : 'Exécution technique et validations',
-      statusBadge: s2?.status || 'En cours',
+      activity: "N'a rien fait",
+      resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour',
+      statusBadge: 'Inactif',
+    },
+    {
+      timeRange: '12:00 – 13:00',
+      activity: '🍽️ Pause Déjeuner Officielle (12h00 – 13h00)',
+      resolutionNote: 'Coupure obligatoire — aucune tâche planifiée',
+      isBreak: true,
+      isBuffer: false,
+      statusBadge: 'Pause',
+    },
+    {
+      timeRange: '13:00 – 15:30',
+      activity: "N'a rien fait",
+      resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour',
+      statusBadge: 'Inactif',
+    },
+    {
+      timeRange: '15:30 – 17:00',
+      activity: "N'a rien fait",
+      resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour',
+      isBuffer: false,
+      statusBadge: 'Inactif',
+    },
+  ] : [
+    {
+      timeRange: '08:00 – 10:00',
+      activity: subtaskItems[0] ? `${subtaskItems[0].title} (${subtaskItems[0].parentTaskTitle})` : "Aucune tâche assignée sur ce créneau",
+      resolutionNote: subtaskItems[0]?.status === 'Fait' ? 'Sous-tâche résolue et clôturée ✓' : (subtaskItems[0] ? 'Traitement opérationnel' : 'Non assigné'),
+      statusBadge: subtaskItems[0]?.status || 'Inactif',
+    },
+    {
+      timeRange: '10:00 – 12:00',
+      activity: subtaskItems[1] ? `${subtaskItems[1].title} (${subtaskItems[1].parentTaskTitle})` : (subtaskItems[0] ? `Suite résolution : ${subtaskItems[0].title}` : "Aucune tâche assignée"),
+      resolutionNote: subtaskItems[1]?.status === 'Fait' ? 'Sous-tâche validée ✓' : (subtaskItems[1] ? 'Exécution technique' : 'Non assigné'),
+      statusBadge: subtaskItems[1]?.status || subtaskItems[0]?.status || 'Inactif',
     },
     {
       timeRange: '12:00 – 13:00',
@@ -304,16 +336,16 @@ export function generateDailyTimesheet(
     },
     {
       timeRange: '13:00 – 15:30',
-      activity: s3 ? `${s3.title} (${s3.parentTaskTitle})` : (s2 ? `Reprise et finalisation : ${s2.title}` : 'Exécution des sous-tâches de l’après-midi'),
-      resolutionNote: s3?.status === 'Fait' ? 'Sous-tâche achevée ✓' : 'Déploiement et revues de code/dossier',
-      statusBadge: s3?.status || 'En cours',
+      activity: subtaskItems[2] ? `${subtaskItems[2].title} (${subtaskItems[2].parentTaskTitle})` : (subtaskItems[1] ? `Suite : ${subtaskItems[1].title}` : (subtaskItems[0] ? `Suite : ${subtaskItems[0].title}` : "Aucune tâche assignée")),
+      resolutionNote: subtaskItems[2]?.status === 'Fait' ? 'Sous-tâche achevée ✓' : (subtaskItems[2] ? 'En cours de réalisation' : 'Non assigné'),
+      statusBadge: subtaskItems[2]?.status || 'En cours',
     },
     {
       timeRange: '15:30 – 17:00',
-      activity: s4 ? `${s4.title} (${s4.parentTaskTitle})` : 'Clôture opérationnelle de journée, bilan & transmission feuille de temps',
-      resolutionNote: 'Revue des critères d’acceptation et reporting au manager (fin à 17h00)',
+      activity: subtaskItems[3] ? `${subtaskItems[3].title} (${subtaskItems[3].parentTaskTitle})` : (subtaskItems[2] ? `Suite : ${subtaskItems[2].title}` : (subtaskItems[0] ? `Finalisation : ${subtaskItems[0].title}` : "Aucune tâche assignée")),
+      resolutionNote: subtaskItems[3]?.status === 'Fait' ? 'Sous-tâche achevée ✓' : 'Fin de journée opérationnelle (17h00)',
       isBuffer: false,
-      statusBadge: 'Bilan',
+      statusBadge: subtaskItems[3]?.status || 'Bilan',
     },
   ];
 

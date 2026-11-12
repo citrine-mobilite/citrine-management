@@ -16,45 +16,57 @@ export interface EmployeeStatRow {
 
 export type RankingSortTab = 'all' | 'presences' | 'assiduite' | 'ponctualite';
 
+export type StatisticsPeriod = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month' | 'last_3_months' | 'all' | 'custom';
+
 export function computePresenceStatistics(
   employees: Employee[],
   presences: Presence[],
-  period: 'this_month' | 'last_month' | 'last_3_months' | 'all' | 'custom',
+  period: StatisticsPeriod,
   customStart?: string,
   customEnd?: string
 ) {
+  const pad = (n: number) => String(n).padStart(2, '0');
   const now = new Date();
-  const start = new Date();
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
   let startStr = '';
   let endStr = '';
 
-  if (period === 'custom' && customStart && customEnd) {
-    startStr = customStart;
-    endStr = customEnd;
+  if (period === 'today') {
+    startStr = todayStr;
+    endStr = todayStr;
+  } else if (period === 'yesterday') {
+    const yDate = new Date();
+    yDate.setDate(yDate.getDate() - 1);
+    const yesterdayStr = `${yDate.getFullYear()}-${pad(yDate.getMonth() + 1)}-${pad(yDate.getDate())}`;
+    startStr = yesterdayStr;
+    endStr = yesterdayStr;
+  } else if (period === 'this_week') {
+    const day = now.getDay(); // 0: Dimanche, 1: Lundi...
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diffToMonday);
+    startStr = `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`;
+    endStr = todayStr;
+  } else if (period === 'this_month') {
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    startStr = `${firstDay.getFullYear()}-${pad(firstDay.getMonth() + 1)}-${pad(firstDay.getDate())}`;
+    endStr = todayStr;
+  } else if (period === 'last_month') {
+    const firstLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    startStr = `${firstLastMonth.getFullYear()}-${pad(firstLastMonth.getMonth() + 1)}-${pad(firstLastMonth.getDate())}`;
+    endStr = `${lastDayLastMonth.getFullYear()}-${pad(lastDayLastMonth.getMonth() + 1)}-${pad(lastDayLastMonth.getDate())}`;
+  } else if (period === 'last_3_months') {
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+    startStr = `${threeMonthsAgo.getFullYear()}-${pad(threeMonthsAgo.getMonth() + 1)}-${pad(threeMonthsAgo.getDate())}`;
+    endStr = todayStr;
+  } else if (period === 'custom' && (customStart || customEnd)) {
+    startStr = customStart || customEnd || todayStr;
+    endStr = customEnd || customStart || todayStr;
   } else {
-    if (period === 'this_month') {
-      start.setDate(1);
-      start.setHours(0, 0, 0, 0);
-    } else if (period === 'last_month') {
-      start.setMonth(start.getMonth() - 1);
-      start.setDate(1);
-      start.setHours(0, 0, 0, 0);
-      end.setDate(0);
-      end.setHours(23, 59, 59, 59);
-    } else if (period === 'last_3_months') {
-      start.setMonth(start.getMonth() - 3);
-      start.setDate(1);
-      start.setHours(0, 0, 0, 0);
-    } else {
-      start.setFullYear(2024, 0, 1);
-      start.setHours(0, 0, 0, 0);
-    }
-
-    const pad = (n: number) => String(n).padStart(2, '0');
-    startStr = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
-    endStr = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
+    startStr = '2024-01-01';
+    endStr = todayStr;
   }
 
   const inRangePresences = presences.filter((p) => p.date >= startStr && p.date <= endStr);

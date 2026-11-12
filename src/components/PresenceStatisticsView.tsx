@@ -13,7 +13,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { Employee, Presence, Task, AttendanceIncident, AppUser } from '../types';
-import { computePresenceStatistics } from './presence/statistics/statisticsCalculations';
+import { computePresenceStatistics, StatisticsPeriod } from './presence/statistics/statisticsCalculations';
 import { StatisticsKPIRibbon } from './presence/statistics/StatisticsKPIRibbon';
 import { StatisticsChartsSection } from './presence/statistics/StatisticsChartsSection';
 import { StatisticsEmployeeRankTable } from './presence/statistics/StatisticsEmployeeRankTable';
@@ -51,12 +51,12 @@ export function PresenceStatisticsView({
   const matchedEmp = useMemo(() => findMatchingEmployee(employees, currentUser), [employees, currentUser]);
 
   const [activeSubTab, setActiveSubTab] = useState<'assiduite' | 'rendement'>('assiduite');
-  const [period, setPeriod] = useState<'this_month' | 'last_month' | 'last_3_months' | 'all' | 'custom'>('this_month');
+  const [period, setPeriod] = useState<StatisticsPeriod>('this_month');
   
   const todayStr = new Date().toISOString().split('T')[0];
   const firstDayOfMonthStr = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
 
-  const [customStart, setCustomStart] = useState<string>(firstDayOfMonthStr);
+  const [customStart, setCustomStart] = useState<string>(todayStr);
   const [customEnd, setCustomEnd] = useState<string>(todayStr);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -108,14 +108,18 @@ export function PresenceStatisticsView({
     );
   }, [statsByEmployeeList, searchQuery]);
 
-  // 🚀 Métriques DYNAMIQUES de rendement calculées à partir des tâches, sous-tâches et jalons
+  // 🚀 Métriques DYNAMIQUES de rendement calculées à partir des tâches et sous-tâches DE LA PÉRIODE CHOISIE
   const employeeRendementMetricsList = useMemo(() => {
     return trackedEmployees.map((emp) => {
       const statRow = statsByEmployeeList.find((s) => s.employee.id === emp.id);
       const empAssiduite = statRow ? statRow.assiduiteRate : 100;
-      return computeEmployeeRendement(emp, tasks, empAssiduite);
+      return computeEmployeeRendement(emp, tasks, empAssiduite, {
+        startStr: stats.startStr,
+        endStr: stats.endStr,
+        period,
+      });
     });
-  }, [trackedEmployees, tasks, statsByEmployeeList]);
+  }, [trackedEmployees, tasks, statsByEmployeeList, stats.startStr, stats.endStr, period]);
 
   const filteredMetricsList = useMemo(() => {
     if (!searchQuery.trim()) return employeeRendementMetricsList;
@@ -127,31 +131,44 @@ export function PresenceStatisticsView({
     );
   }, [employeeRendementMetricsList, searchQuery]);
 
-  // Moyenne dynamique de l'équipe
+  // Moyenne dynamique de l'équipe pour la période sélectionnée
   const dynamicTeamRate = useMemo(() => {
     if (employeeRendementMetricsList.length === 0) return 0;
     const sum = employeeRendementMetricsList.reduce((acc, m) => acc + m.taskRendementRate, 0);
     return Math.round(sum / employeeRendementMetricsList.length);
   }, [employeeRendementMetricsList]);
 
-  // Total sous-tâches et jalons
+  // Totaux sous-tâches et tâches calculés spécifiquement sur la période sélectionnée
   const totalSubtasksCount = useMemo(() => {
-    return tasks.reduce((sum, t) => sum + (t.subtasks?.length || 0), 0);
-  }, [tasks]);
+    return employeeRendementMetricsList.reduce((sum, m) => sum + m.totalSubtasks, 0);
+  }, [employeeRendementMetricsList]);
 
   const completedSubtasksCount = useMemo(() => {
-    return tasks.reduce(
-      (sum, t) => sum + (t.subtasks?.filter((s) => s.completed || s.status === 'completed').length || 0),
-      0
-    );
-  }, [tasks]);
+    return employeeRendementMetricsList.reduce((sum, m) => sum + m.completedSubtasks, 0);
+  }, [employeeRendementMetricsList]);
+
+  const totalAssignedTasksPeriod = useMemo(() => {
+    return employeeRendementMetricsList.reduce((sum, m) => sum + m.totalTasks, 0);
+  }, [employeeRendementMetricsList]);
+
+  const totalCompletedTasksPeriod = useMemo(() => {
+    return employeeRendementMetricsList.reduce((sum, m) => sum + m.completedTasks, 0);
+  }, [employeeRendementMetricsList]);
+
+  const totalInProgressTasksPeriod = useMemo(() => {
+    return employeeRendementMetricsList.reduce((sum, m) => sum + m.inProgressTasks, 0);
+  }, [employeeRendementMetricsList]);
+
+  const totalMilestonesPeriod = useMemo(() => {
+    return employeeRendementMetricsList.reduce((sum, m) => sum + m.milestonesCount, 0);
+  }, [employeeRendementMetricsList]);
 
   const handleOpenTimesheetModal = (employee: Employee, mode: 'day' | 'month' | 'year' = 'month') => {
     setTimesheetEmployee(employee);
     setTimesheetMode(mode);
   };
 
-  // Si un employé est sélectionné pour le détail du rendement, on affiche la page dédiée avec feuilles de temps
+  // Si un employé est sélectionné pour le détail du rendement, on affiche la page dédiée avec feuilles de tâches
   if (selectedRendementEmployee) {
     const statRow = statsByEmployeeList.find((s) => s.employee.id === selectedRendementEmployee.id);
     const empAssiduite = statRow ? statRow.assiduiteRate : 100;
@@ -226,11 +243,14 @@ export function PresenceStatisticsView({
           <div className="text-xs">
             <div className="text-emerald-200 text-[10px] uppercase font-bold">Période Analysée</div>
             <div className="font-bold text-white">
-              {period === 'this_month' && 'Ce mois-ci'}
-              {period === 'last_month' && 'Mois dernier'}
+              {period === 'today' && "Aujourd'hui"}
+              {period === 'yesterday' && 'Hier'}
+              {period === 'this_week' && 'Cette semaine'}
+              {period === 'this_month' && 'Ce mois'}
               {period === 'last_3_months' && '3 derniers mois'}
+              {period === 'last_month' && 'Mois dernier'}
               {period === 'all' && 'Tout l’historique'}
-              {period === 'custom' && `Du ${customStart} au ${customEnd}`}
+              {period === 'custom' && (customStart === customEnd ? `Le ${customStart}` : `Du ${customStart} au ${customEnd}`)}
             </div>
           </div>
         </div>
@@ -271,14 +291,15 @@ export function PresenceStatisticsView({
       {/* Main Filter & Search Toolbar */}
       <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-3xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-stone-400 font-bold uppercase text-[10px] mr-1">Filtrer par période :</span>
-          {(['this_month', 'last_month', 'last_3_months', 'all', 'custom'] as const).map((p) => {
-            const labels = {
-              this_month: 'Ce mois',
-              last_month: 'Mois dernier',
-              last_3_months: '3 derniers mois',
-              all: 'Tout l’historique',
-              custom: 'Personnalisé',
+          <span className="text-stone-400 font-bold uppercase text-[10px] mr-1">Filtrer le rendement par :</span>
+          {(['today', 'yesterday', 'this_week', 'this_month', 'last_3_months', 'custom'] as const).map((p) => {
+            const labels: Record<string, string> = {
+              today: "Aujourd'hui",
+              yesterday: 'Hier',
+              this_week: 'La semaine',
+              this_month: 'Le mois',
+              last_3_months: 'Les 3 mois',
+              custom: 'Date personnalisée',
             };
             return (
               <button
@@ -314,19 +335,24 @@ export function PresenceStatisticsView({
         <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 flex flex-wrap items-center gap-4 text-xs animate-in fade-in duration-200">
           <span className="font-bold text-[#2A7B76] flex items-center gap-1.5">
             <Calendar className="h-4 w-4" />
-            <span>Sélection de la plage personnalisée :</span>
+            <span>Sélectionner une date ou plage de rendement :</span>
           </span>
           <div className="flex items-center gap-2">
-            <label className="text-stone-600 font-medium">Du :</label>
+            <label className="text-stone-600 font-medium">Date (ou début) :</label>
             <input
               type="date"
               value={customStart}
-              onChange={(e) => setCustomStart(e.target.value)}
+              onChange={(e) => {
+                setCustomStart(e.target.value);
+                if (!customEnd || customEnd < e.target.value) {
+                  setCustomEnd(e.target.value);
+                }
+              }}
               className="bg-white border border-stone-200 rounded-xl px-2.5 py-1 text-xs text-stone-800 font-bold focus:outline-none focus:border-[#2A7B76]"
             />
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-stone-600 font-medium">Au :</label>
+            <label className="text-stone-600 font-medium">Fin (optionnelle) :</label>
             <input
               type="date"
               value={customEnd}
@@ -334,6 +360,13 @@ export function PresenceStatisticsView({
               className="bg-white border border-stone-200 rounded-xl px-2.5 py-1 text-xs text-stone-800 font-bold focus:outline-none focus:border-[#2A7B76]"
             />
           </div>
+          <button
+            type="button"
+            onClick={() => setCustomEnd(customStart)}
+            className="px-2.5 py-1 bg-white border border-stone-300 rounded-lg text-[11px] font-semibold text-stone-600 hover:text-stone-900 cursor-pointer shadow-3xs"
+          >
+            Jour unique ({customStart})
+          </button>
         </div>
       )}
 
@@ -362,12 +395,12 @@ export function PresenceStatisticsView({
                 <CheckSquare className="h-6 w-6" />
               </div>
               <div>
-                <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Tâches Assignées</span>
+                <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Tâches sur la Période</span>
                 <h3 className="text-xl font-bold font-serif text-stone-900 mt-0.5">
-                  {tasks.length}
+                  {totalAssignedTasksPeriod}
                 </h3>
                 <span className="text-[10px] text-stone-400 font-medium">
-                  Dont {tasks.filter((t) => t.isMilestone).length} jalons stratégiques
+                  Dont {totalMilestonesPeriod} jalon(s) stratégique(s)
                 </span>
               </div>
             </div>
@@ -379,10 +412,10 @@ export function PresenceStatisticsView({
               <div>
                 <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Tâches Clôturées</span>
                 <h3 className="text-xl font-bold font-serif text-stone-900 mt-0.5">
-                  {tasks.filter((t) => t.status === 'completed').length} / {tasks.length}
+                  {totalCompletedTasksPeriod} / {totalAssignedTasksPeriod}
                 </h3>
                 <span className="text-[10px] text-stone-400 font-medium">
-                  {tasks.filter((t) => t.status === 'in_progress').length} en cours
+                  {totalInProgressTasksPeriod} en cours sur la période
                 </span>
               </div>
             </div>
@@ -481,31 +514,46 @@ export function PresenceStatisticsView({
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center font-mono font-medium text-stone-700">
-                        <div>
-                          <span>{m.completedTasks} / {m.totalTasks} tâches</span>
-                          <span className="text-[10px] text-stone-400 block">
-                            ({m.completedSubtasks}/{m.totalSubtasks} sous-tâches)
-                          </span>
-                        </div>
+                        {m.hasActivity ? (
+                          <div>
+                            <span>{m.completedTasks} / {m.totalTasks} tâches</span>
+                            <span className="text-[10px] text-stone-400 block">
+                              ({m.completedSubtasks}/{m.totalSubtasks} sous-tâches)
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                              N'a rien fait
+                            </span>
+                            <span className="text-[9px] text-stone-400 mt-0.5">Aucune activité</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="w-20 bg-stone-100 h-2 rounded-full overflow-hidden border border-stone-200/50">
-                            <div
-                              className={`h-full rounded-full transition-all duration-300 ${
-                                m.taskRendementRate >= 80 
-                                  ? 'bg-emerald-500' 
-                                  : m.taskRendementRate >= 50 
-                                  ? 'bg-[#2A7B76]' 
-                                  : 'bg-amber-500'
-                              }`}
-                              style={{ width: `${Math.max(m.taskRendementRate, 4)}%` }}
-                            />
+                        {m.hasActivity ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-20 bg-stone-100 h-2 rounded-full overflow-hidden border border-stone-200/50">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  m.taskRendementRate >= 80 
+                                    ? 'bg-emerald-500' 
+                                    : m.taskRendementRate >= 50 
+                                    ? 'bg-[#2A7B76]' 
+                                    : 'bg-amber-500'
+                                }`}
+                                style={{ width: `${Math.max(m.taskRendementRate, 4)}%` }}
+                              />
+                            </div>
+                            <span className="font-bold text-stone-800 font-mono text-[11px]">
+                              {m.taskRendementRate}%
+                            </span>
                           </div>
-                          <span className="font-bold text-stone-800 font-mono text-[11px]">
-                            {m.taskRendementRate}%
+                        ) : (
+                          <span className="font-bold text-rose-600 font-mono text-[11px] bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                            0%
                           </span>
-                        </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span
@@ -567,7 +615,7 @@ export function PresenceStatisticsView({
         </div>
       )}
 
-      {/* 📄 MODAL FEUILLE DE TEMPS (JOUR / MOIS / ANNÉE) */}
+      {/* 📄 MODAL FEUILLE DE TÂCHES (JOUR / MOIS / ANNÉE) */}
       {timesheetEmployee && (
         <TimesheetModal
           isOpen={Boolean(timesheetEmployee)}

@@ -421,11 +421,11 @@ export const SubtaskDetailModal: React.FC<SubtaskDetailModalProps> = ({
                 <span>Blocages &amp; Difficultés signalés ({incidents.length})</span>
               </h4>
               <span className="text-[10px] text-rose-700 font-semibold bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200">
-                Imprévus en feuille de temps
+                Imprévus en feuille de tâches
               </span>
             </div>
             <p className="text-[10px] text-rose-600/90 italic">
-              Les blocages signalés ici font office d'imprévus dans la feuille de temps (signalés directement par le collaborateur assigné).
+              Les blocages signalés ici font office d'imprévus dans la feuille de tâches (signalés directement par le collaborateur assigné).
             </p>
 
             {incidents.length > 0 && (
@@ -494,7 +494,7 @@ export const SubtaskDetailModal: React.FC<SubtaskDetailModalProps> = ({
               </span>
             </div>
             <p className="text-[10px] text-stone-500 italic">
-              Vos commentaires rédigés ici font office de points à signaler au manager dans votre feuille de temps.
+              Vos commentaires rédigés ici font office de points à signaler au manager dans votre feuille de tâches.
             </p>
             <div className="space-y-2 max-h-36 overflow-y-auto">
               {comments.map((com) => (

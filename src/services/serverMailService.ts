@@ -378,7 +378,7 @@ export async function sendThreadedEmployeeEmail(
   // Le Sujet (Subject) DOIT ÊTRE STRICTEMENT CONSTANT pour tous les e-mails d'un même collaborateur sur ce thème.
   // Jamais de date dans le titre pour ne pas ouvrir une nouvelle boucle chaque jour !
   const threadSubject = options.threadSubject || (isTimesheet
-    ? `Feuille de temps - ${cleanCollabName}`
+    ? `Feuille de tâches - ${cleanCollabName}`
     : (options.eventTitle ? `${options.eventTitle} - ${cleanCollabName}` : `Dossier RH - ${cleanCollabName}`));
 
   // Domaine expéditeur pour identifiants RFC 2822
@@ -422,7 +422,7 @@ export async function sendThreadedEmployeeEmail(
     `Fil de discussion : ${threadSubject}`,
     `Date : ${new Intl.DateTimeFormat('fr-FR', { timeZone: 'Africa/Douala', dateStyle: 'full', timeStyle: 'short' }).format(new Date())}`,
     `--------------------------------------------------`,
-    `La feuille de temps officielle ainsi que le relevé d'activité sont consultables dans le corps du message et via le fichier tableur joint (.xlsx).`,
+    `La feuille de tâches officielle ainsi que le relevé d'activité sont consultables dans le corps du message et via le fichier tableur joint (.xlsx).`,
     ``,
     `Direction des Ressources Humaines & Opérations`,
     `Citrine Mobilité — Douala, Cameroun`,

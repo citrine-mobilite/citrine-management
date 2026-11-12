@@ -76,7 +76,8 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
     const existingIdx = updatedPresences.findIndex(
       (p) => p.employeeId === targetEmployee.id && p.date === todayStr
     );
-    const isLateNow = clockAction === 'arrival' && nowTime > lateThreshold;
+    const exemptLate = targetEmployee?.allowLateArrival8_930 === true && nowTime >= '08:00' && nowTime <= '09:30';
+    const isLateNow = clockAction === 'arrival' && !exemptLate && nowTime > lateThreshold;
 
     let targetPresence: Presence;
     if (existingIdx >= 0) {
@@ -136,21 +137,24 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
         status: 'automatique',
         createdAt: new Date().toISOString(),
       };
-    } else if (clockAction === 'departure' && nowTime < plannedDeparture) {
-      targetIncident = {
-        id: `inc-${Date.now()}`,
-        employeeId: targetEmployee.id,
-        employeeName: targetEmployee.name,
-        date: todayStr,
-        timeString: nowTime,
-        type: 'sortie_prematuree',
-        origin: 'signale_par_responsable',
-        reason: `Sortie prématurée constatée lors du pointage administratif par ${adminName} à ${nowTime} avant 16h30 (horaire de référence: ${plannedDeparture}). Motif: ${reasonInput.trim()}`,
-        isDeclaredInAdvance: false,
-        isJustified: false,
-        status: 'automatique',
-        createdAt: new Date().toISOString(),
-      };
+    } else if (clockAction === 'departure') {
+      const exemptEarly = targetEmployee?.allowEarlyDeparture15_17 === true && nowTime >= '15:00' && nowTime <= '17:00';
+      if (!exemptEarly && nowTime < plannedDeparture) {
+        targetIncident = {
+          id: `inc-${Date.now()}`,
+          employeeId: targetEmployee.id,
+          employeeName: targetEmployee.name,
+          date: todayStr,
+          timeString: nowTime,
+          type: 'sortie_prematuree',
+          origin: 'signale_par_responsable',
+          reason: `Sortie prématurée constatée lors du pointage administratif par ${adminName} à ${nowTime} avant 16h30 (horaire de référence: ${plannedDeparture}). Motif: ${reasonInput.trim()}`,
+          isDeclaredInAdvance: false,
+          isJustified: false,
+          status: 'automatique',
+          createdAt: new Date().toISOString(),
+        };
+      }
     }
 
     let targetNotification: NotificationLog | null = null;

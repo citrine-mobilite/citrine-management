@@ -94,7 +94,7 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
   const [newUnforeseenSubject, setNewUnforeseenSubject] = useState('');
   const [newUnforeseenLostMin, setNewUnforeseenLostMin] = useState(30);
 
-  // Gestion interactive des Points à Signaler dans la Feuille de Temps
+  // Gestion interactive des Points à Signaler dans la Feuille de Tâches
   const [timesheetNotes, setTimesheetNotes] = useState<TimesheetNote[]>([]);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState('');
@@ -398,7 +398,7 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                 </h1>
                 <div className="font-bold text-sm text-[#164e4b] mt-0.5">
                   {mode === 'day' && `PLAN DU JOUR — ${dailyData.department.toUpperCase()}`}
-                  {mode === 'month' && `FEUILLE DE TEMPS MENSUELLE — ${monthlyData.monthName.toUpperCase()}`}
+                  {mode === 'month' && `FEUILLE DE TÂCHES MENSUELLE — ${monthlyData.monthName.toUpperCase()}`}
                   {mode === 'year' && `BILAN ANNUEL D'ACTIVITÉ — ${yearlyData.year}`}
                 </div>
               </div>
@@ -537,8 +537,8 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                       </div>
                     ))}
                     {dailyData.topPriorities.length === 0 && (
-                      <div className="p-3 text-center text-stone-400 italic">
-                        Aucune mission prioritaire définie pour aujourd'hui.
+                      <div className="p-3 text-center text-stone-500 font-medium italic bg-stone-50">
+                        Aucune priorité aujourd'hui (le collaborateur n'a rien fait ce jour).
                       </div>
                     )}
                   </div>
@@ -594,8 +594,11 @@ export const TimesheetModal: React.FC<TimesheetModalProps> = ({
                       ))}
                       {dailyData.tasks.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-stone-400 italic">
-                            Aucune sous-tâche planifiée aujourd'hui.
+                          <td colSpan={6} className="py-8 text-center bg-stone-50">
+                            <div className="inline-flex flex-col items-center gap-1 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900">
+                              <span className="font-bold text-xs uppercase tracking-wide">N'a rien fait aujourd'hui</span>
+                              <span className="text-[11px] text-rose-700">Aucune sous-tâche en cours ni terminée ce jour.</span>
+                            </div>
                           </td>
                         </tr>
                       )}

@@ -76,17 +76,16 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
     }
   }, [isEmpOrIntern, myName]);
 
-  // Synchronisation de la tâche parente
+  // Synchronisation de la tâche parente sans écraser la date choisie pour la sous-tâche
   useEffect(() => {
     if (parentTask) {
       setSelectedTaskId(parentTask.id);
-      if (parentTask.date) setDueDate(parentTask.date);
     } else if (defaultTaskId) {
       setSelectedTaskId(defaultTaskId);
     } else if (availableTasks.length > 0 && !selectedTaskId) {
       setSelectedTaskId(availableTasks[0].id);
     }
-  }, [parentTask, defaultTaskId, availableTasks]);
+  }, [parentTask, defaultTaskId, availableTasks, selectedTaskId]);
 
   if (!isOpen) return null;
 
@@ -127,7 +126,8 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
       status,
       assignedTo,
       employeeId: assignedEmp?.id,
-      dueDate, // Date stricte sans heure
+      dueDate, // Date d'échéance propre à la sous-tâche
+      endDate: dueDate, // Date de fin propre à la sous-tâche
       estimatedHours: Number(estimatedHours) || 2,
       actualHours: Number(actualHours) || 0,
       tags: [selectedTag].filter(Boolean),

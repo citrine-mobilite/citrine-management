@@ -65,6 +65,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   const [newSubtaskAssignee, setNewSubtaskAssignee] = useState(isEmpOrIntern ? myName : (currentUser?.name || employees[0]?.name || 'Équipe'));
   const [newSubtaskHours, setNewSubtaskHours] = useState<number>(2);
   const [newSubtaskPriority, setNewSubtaskPriority] = useState<TaskPriority>('medium');
+  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState(new Date().toISOString().split('T')[0]);
   const [showSubtaskForm, setShowSubtaskForm] = useState(false);
 
   useEffect(() => {
@@ -89,6 +90,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   const handleAddSubtaskQuick = () => {
     if (!newSubtaskTitle.trim()) return;
     const assignedEmp = employees.find((e) => e.name === newSubtaskAssignee);
+    const subDueDate = newSubtaskDueDate || date || new Date().toISOString().split('T')[0];
     const newSub: Subtask = {
       id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       title: newSubtaskTitle.trim(),
@@ -96,13 +98,22 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
       priority: newSubtaskPriority,
       assignedTo: newSubtaskAssignee,
       employeeId: assignedEmp?.id,
-      dueDate: date,
+      dueDate: subDueDate,
+      endDate: subDueDate,
       estimatedHours: Number(newSubtaskHours) || 2,
       subtasks: [],
       createdAt: new Date().toISOString(),
     };
     setSubtasks([...subtasks, newSub]);
     setNewSubtaskTitle('');
+  };
+
+  const handleUpdateSubtaskDueDateInline = (index: number, updatedDate: string) => {
+    const updated = [...subtasks];
+    if (updated[index]) {
+      updated[index] = { ...updated[index], dueDate: updatedDate, endDate: updatedDate };
+      setSubtasks(updated);
+    }
   };
 
   const handleRemoveSubtask = (idx: number) => {
@@ -395,12 +406,21 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
             {subtasks.length > 0 && (
               <div className="space-y-1.5">
                 {subtasks.map((sub, i) => (
-                  <div key={sub.id || i} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-stone-200 text-xs">
+                  <div key={sub.id || i} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white px-3 py-2 rounded-xl border border-stone-200 text-xs gap-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="w-2 h-2 rounded-full bg-[#2A7B76]"></span>
                       <strong className="text-stone-800 truncate">{sub.title}</strong>
                     </div>
-                    <div className="flex items-center gap-2 text-[10px]">
+                    <div className="flex items-center gap-2 text-[10px] flex-wrap justify-end">
+                      <label className="flex items-center gap-1 bg-stone-50 border border-stone-200 px-1.5 py-0.5 rounded-md" title="Date d'échéance / fin propre à cette sous-tâche">
+                        <span className="text-[9px] text-stone-500 font-semibold">Fin :</span>
+                        <input
+                          type="date"
+                          value={sub.dueDate || ''}
+                          onChange={(e) => handleUpdateSubtaskDueDateInline(i, e.target.value)}
+                          className="font-mono font-bold text-stone-800 bg-transparent outline-none cursor-pointer text-[10px]"
+                        />
+                      </label>
                       <span className="bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-medium">
                         {sub.assignedTo}
                       </span>
@@ -430,7 +450,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
                   onChange={(e) => setNewSubtaskTitle(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50 text-xs font-semibold outline-none focus:bg-white focus:ring-1 focus:ring-[#2A7B76]"
                 />
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                   <select
                     value={newSubtaskAssignee}
                     onChange={(e) => setNewSubtaskAssignee(e.target.value)}
@@ -441,6 +461,15 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
                       <option key={emp.id} value={emp.name}>{emp.name}</option>
                     ))}
                   </select>
+                  <label className="flex items-center gap-1 px-2 py-1 rounded-lg border border-stone-200 bg-stone-50 text-[11px]" title="Date d'échéance propre de la sous-tâche">
+                    <span className="text-[10px] text-stone-500 font-semibold">Fin :</span>
+                    <input
+                      type="date"
+                      value={newSubtaskDueDate}
+                      onChange={(e) => setNewSubtaskDueDate(e.target.value)}
+                      className="w-full bg-transparent font-mono font-bold text-stone-800 text-[10px] outline-none"
+                    />
+                  </label>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"

@@ -606,8 +606,8 @@ export function useTaskLogic({
       const totalEstimated = items.reduce((sum, i) => sum + i.estimatedHours, 0);
       const totalActual = items.reduce((sum, i) => sum + i.actualHours, 0);
 
-      // 🎯 Top 3 priorités du jour
-      const topPriorities = myTasks.slice(0, 3).map((t, idx) => ({
+      // 🎯 Top priorités du jour (vide si aucune tâche effectuée)
+      const topPriorities = items.length === 0 ? [] : myTasks.slice(0, 3).map((t, idx) => ({
         id: t.id,
         title: t.title,
         priority: (idx === 0 ? 'P1' : idx === 1 ? 'P2' : 'P3') as 'P1' | 'P2' | 'P3',
@@ -641,15 +641,15 @@ export function useTaskLogic({
 
       const safeCollabName = myName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
       const safeDate = doualaTime.dayIso.replace(/-/g, '_');
-      const excelFilename = `feuille_de_temps_${safeCollabName}_${safeDate}.xlsx`;
+      const excelFilename = `feuille_de_taches_${safeCollabName}_${safeDate}.xlsx`;
 
       const result = await clientMailService.sendThreadedEmail({
         employeeName: myName,
         employeeId: myId,
         employeeEmail: myEmail,
-        eventTitle: `Feuille de temps`,
+        eventTitle: `Feuille de tâches`,
         threadCategory: 'timesheet',
-        threadSubject: `Feuille de temps - ${myName}`,
+        threadSubject: `Feuille de tâches - ${myName}`,
         htmlContent,
         attachments: [
           {
@@ -662,13 +662,13 @@ export function useTaskLogic({
       });
 
       if (result.success) {
-        console.log("✅ [FICHE DE TEMPS SUCCÈS] Transmission confirmée :", result);
-        if (showToast) showToast("Fiche de temps Excel envoyée avec succès !", "success");
+        console.log("✅ [FEUILLE DE TÂCHES SUCCÈS] Transmission confirmée :", result);
+        if (showToast) showToast("Feuille de tâches Excel envoyée avec succès !", "success");
         onAddNotification({
           id: `notif-${Date.now()}`,
-          title: "Fiche de temps transmise",
-          content: `Votre fiche de temps (${items.length} activités, ${totalActual}h réelles) a été transmise aux RH avec la pièce jointe Excel.`,
-          message: `Votre fiche de temps (${items.length} activités, ${totalActual}h réelles) a été transmise aux RH avec la pièce jointe Excel.`,
+          title: "Feuille de tâches transmise",
+          content: `Votre feuille de tâches (${items.length} activités, ${totalActual}h réelles) a été transmise aux RH avec la pièce jointe Excel.`,
+          message: `Votre feuille de tâches (${items.length} activités, ${totalActual}h réelles) a été transmise aux RH avec la pièce jointe Excel.`,
           type: "email",
           recipient: myEmail || myName,
           payload: JSON.stringify({ employeeId: myId }),

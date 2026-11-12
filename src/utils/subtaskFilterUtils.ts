@@ -11,27 +11,31 @@ import { Subtask, Task } from '../types';
  * 6. Date du jour en repli
  */
 export function getSubtaskTimestamp(subtask: Subtask, parentTaskDate?: string): number {
-  if (subtask.createdAt) {
-    const t = new Date(subtask.createdAt).getTime();
-    if (!isNaN(t)) return t;
-  }
-
+  // PRIORITÉ 1 : Date d'échéance propre de la sous-tâche (dueDate)
   if (subtask.dueDate) {
     const t = new Date(`${subtask.dueDate}T12:00:00`).getTime();
     if (!isNaN(t)) return t;
   }
 
+  // PRIORITÉ 2 : Date de fin explicite de la sous-tâche (endDate)
   if (subtask.endDate) {
     const t = new Date(`${subtask.endDate}T12:00:00`).getTime();
     if (!isNaN(t)) return t;
   }
 
+  // PRIORITÉ 3 : Date de début de la sous-tâche (startDate)
   if (subtask.startDate) {
     const t = new Date(`${subtask.startDate}T12:00:00`).getTime();
     if (!isNaN(t)) return t;
   }
 
-  // Si l'identifiant est généré comme sub-1730000...
+  // PRIORITÉ 4 : Date de création exacte de la sous-tâche (createdAt)
+  if (subtask.createdAt) {
+    const t = new Date(subtask.createdAt).getTime();
+    if (!isNaN(t)) return t;
+  }
+
+  // PRIORITÉ 5 : Si l'identifiant est généré comme sub-1730000...
   if (subtask.id) {
     const match = subtask.id.match(/sub-(\d{10,13})/);
     if (match && match[1]) {
@@ -42,6 +46,7 @@ export function getSubtaskTimestamp(subtask: Subtask, parentTaskDate?: string): 
     }
   }
 
+  // PRIORITÉ 6 : Repli sur la date de la tâche parente UNIQUEMENT si la sous-tâche n'a aucune date propre
   if (parentTaskDate) {
     const t = new Date(`${parentTaskDate}T12:00:00`).getTime();
     if (!isNaN(t)) return t;
@@ -120,6 +125,22 @@ export function filterAndSortSubtasks(
  * Formate lisiblement la date relative d'une sous-tâche (ex: "Aujourd'hui", "Hier", "Il y a 2 j", "26/10/2026")
  */
 export function formatSubtaskRelativeDate(subtask: Subtask, parentTaskDate?: string): string {
+  if (subtask.dueDate) {
+    const parts = subtask.dueDate.split('-');
+    if (parts.length === 3) {
+      const targetDay = new Date(`${subtask.dueDate}T12:00:00`);
+      const today = new Date();
+      today.setHours(12, 0, 0, 0);
+      const diffDays = Math.round((targetDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 0) return "Aujourd'hui";
+      if (diffDays === 1) return 'Demain';
+      if (diffDays === -1) return 'Hier';
+      if (diffDays > 1 && diffDays <= 7) return `Dans ${diffDays} j (${parts[2]}/${parts[1]})`;
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+  }
+
   const ts = getSubtaskTimestamp(subtask, parentTaskDate);
   const date = new Date(ts);
   const today = new Date();
@@ -133,6 +154,6 @@ export function formatSubtaskRelativeDate(subtask: Subtask, parentTaskDate?: str
   if (diffDays === 0) return "Aujourd'hui";
   if (diffDays === 1) return 'Hier';
   if (diffDays === 2) return 'Il y a 2 j';
-  if (diffDays < 0) return `Prévue (${date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })})`;
+  if (diffDays < 0) return `Échéance : ${date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}`;
   return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
 }

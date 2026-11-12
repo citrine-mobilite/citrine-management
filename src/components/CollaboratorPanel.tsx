@@ -198,6 +198,8 @@ export default function CollaboratorPanel({
     createUserAccount: true,
     userPassword: '',
     userRole: 'employé' as UserRole,
+    allowEarlyDeparture15_17: false,
+    allowLateArrival8_930: false,
   });
 
   const handleOpenAdd = () => {
@@ -222,6 +224,8 @@ export default function CollaboratorPanel({
       createUserAccount: true,
       userPassword: '',
       userRole: 'employé',
+      allowEarlyDeparture15_17: false,
+      allowLateArrival8_930: false,
     });
     setIsModalOpen(true);
   };
@@ -272,6 +276,8 @@ export default function CollaboratorPanel({
       createUserAccount: !linkedUser,
       userPassword: '',
       userRole: resolvedUserRole,
+      allowEarlyDeparture15_17: emp.allowEarlyDeparture15_17 || false,
+      allowLateArrival8_930: emp.allowLateArrival8_930 || false,
     });
     setIsModalOpen(true);
   };
@@ -487,6 +493,8 @@ export default function CollaboratorPanel({
           departureReason: formData.departureReason,
           suspensionReason: formData.suspensionReason,
           avatarUrl: formData.avatarUrl,
+          allowEarlyDeparture15_17: formData.allowEarlyDeparture15_17,
+          allowLateArrival8_930: formData.allowLateArrival8_930,
         });
 
         // 1. Mise à jour de l'état local React des collaborateurs
@@ -1647,6 +1655,29 @@ export default function CollaboratorPanel({
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800 text-xs font-mono font-bold"
                   />
                 </div>
+              </div>
+
+              {/* Dérogations d'assiduité spéciales */}
+              <div className="p-3.5 rounded-2xl border bg-amber-50/50 border-amber-200/80 space-y-2">
+                <h4 className="font-bold text-stone-900 text-xs">Dérogations d'assiduité spéciales :</h4>
+                <label className="flex items-center gap-2 cursor-pointer font-medium text-stone-800">
+                  <input
+                    type="checkbox"
+                    checked={formData.allowLateArrival8_930}
+                    onChange={(e) => setFormData({ ...formData, allowLateArrival8_930: e.target.checked })}
+                    className="rounded border-stone-300 text-[#2A7B76] focus:ring-[#2A7B76] h-4 w-4"
+                  />
+                  <span>Autoriser l'arrivée entre 08:00 et 09:30 sans création de retard</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer font-medium text-stone-800">
+                  <input
+                    type="checkbox"
+                    checked={formData.allowEarlyDeparture15_17}
+                    onChange={(e) => setFormData({ ...formData, allowEarlyDeparture15_17: e.target.checked })}
+                    className="rounded border-stone-300 text-[#2A7B76] focus:ring-[#2A7B76] h-4 w-4"
+                  />
+                  <span>Autoriser le départ entre 15:00 et 17:00 sans création de sortie prématurée</span>
+                </label>
               </div>
 
               {/* Compte Utilisateur Associé & Rôle Système (Création et Modification) */}

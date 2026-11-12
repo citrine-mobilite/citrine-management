@@ -62,6 +62,8 @@ export interface Employee {
   statusReason?: string;
   statusStartDate?: string;
   statusEndDate?: string;
+  allowEarlyDeparture15_17?: boolean; // Autorisation de départ entre 15h et 17h
+  allowLateArrival8_930?: boolean;     // Autorisation d'arrivée entre 8h et 9h30 sans retard
   missionHistory?: Array<{
     id: string;
     reason: string;

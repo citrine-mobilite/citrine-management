@@ -95,14 +95,81 @@ export function getTaskDynamicProgress(task: Task): number {
 /**
  * Calcule le rendement complet d'un collaborateur à partir des tâches et présences
  */
+export interface RendementPeriodFilter {
+  startStr: string;
+  endStr: string;
+  period?: string;
+}
+
+export interface EmployeeRendementMetrics {
+  employee: Employee;
+  assignedTasks: Task[];
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  blockedTasks: number;
+  totalSubtasks: number;
+  completedSubtasks: number;
+  milestonesCount: number;
+  completedMilestones: number;
+  estimatedHoursTotal: number;
+  actualHoursTotal: number;
+  taskRendementRate: number;      // Taux d'achèvement dynamique réel (%)
+  assiduiteRate: number;          // Taux d'assiduité / présence (%)
+  globalCombinedScore: number;    // Score combiné RH (Assiduité 50% + Rendement 50%)
+  capacityStatus: 'overloaded' | 'optimal' | 'available';
+  hasActivity: boolean;           // Indique si le collaborateur a des sous-tâches en cours ou tâches terminées dans la période
+  periodLabel?: string;
+}
+
+/**
+ * Extrait la date d'achèvement (YYYY-MM-DD) d'une tâche ou sous-tâche
+ */
+function getItemCompletionDate(item: Task | Subtask, fallbackParentDate?: string): string | null {
+  const isDone = item.status === 'completed' || (item as any).completed === true || (item.status as string) === 'fait';
+  if (!isDone) return null;
+
+  if (item.completedAt && typeof item.completedAt === 'string') {
+    const d = item.completedAt.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  }
+  const lastUpdated = (item as any).lastUpdatedTime || (item as any).updatedAt || (item as any).updated_at;
+  if (lastUpdated && typeof lastUpdated === 'string') {
+    const d = lastUpdated.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  }
+  const itemCreatedAt = (item as any).createdAt;
+  if (itemCreatedAt && typeof itemCreatedAt === 'string') {
+    const d = itemCreatedAt.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  }
+  if ((item as any).date && typeof (item as any).date === 'string') {
+    const d = (item as any).date.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  }
+  if (fallbackParentDate && /^\d{4}-\d{2}-\d{2}$/.test(fallbackParentDate)) {
+    return fallbackParentDate;
+  }
+  return null;
+}
+
+/**
+ * Calcule le rendement complet d'un collaborateur à partir des tâches et présences
+ * Supporte le filtrage strict par période (aujourd'hui, hier, semaine, mois, 3 mois, personnalisé)
+ */
 export function computeEmployeeRendement(
   employee: Employee,
   allTasks: Task[],
-  assiduiteRate: number = 100
+  assiduiteRate: number = 100,
+  periodFilter?: RendementPeriodFilter
 ): EmployeeRendementMetrics {
-  const assignedTasks = allTasks.filter((t) => isTaskAssignedToEmployee(t, employee));
+  const rawAssignedTasks = allTasks.filter((t) => isTaskAssignedToEmployee(t, employee));
 
-  let totalTasks = assignedTasks.length;
+  let assignedTasks = rawAssignedTasks;
+  let totalWorkUnits = 0;
+  let completedWorkUnits = 0;
+  let hasActivity = false;
+
   let completedTasks = 0;
   let inProgressTasks = 0;
   let blockedTasks = 0;
@@ -112,69 +179,206 @@ export function computeEmployeeRendement(
   let completedMilestones = 0;
   let estimatedHoursTotal = 0;
   let actualHoursTotal = 0;
-
   let totalProgressSum = 0;
 
-  assignedTasks.forEach((t) => {
-    const isCompleted = t.status === 'completed' || (t as any).completed === true || (Boolean(t.subtasks && t.subtasks.length > 0 && t.subtasks.every(s => s.completed || s.status === 'completed')));
-    if (isCompleted) completedTasks++;
-    else if (t.status === 'in_progress' || t.status === 'en_cours' || t.status === 'pending_validation') inProgressTasks++;
-    else if (t.status === 'blocked') blockedTasks++;
+  if (periodFilter && periodFilter.startStr && periodFilter.endStr) {
+    const { startStr, endStr } = periodFilter;
+    const isSingleDay = startStr === endStr;
 
-    if (t.isMilestone) {
-      milestonesCount++;
-      if (isCompleted || (t.milestoneProgress ?? 0) >= 100) completedMilestones++;
-    }
+    // Filtrer les tâches et sous-tâches pertinentes pour la plage de dates
+    const relevantTasks: Task[] = [];
 
-    // Heures
-    // Heures de charge calculées exclusivement sur les sous-tâches (règle opérationnelle Citrine)
-    if (t.subtasks && t.subtasks.length > 0) {
-      totalSubtasks += t.subtasks.length;
-      t.subtasks.forEach((s) => {
-        if (s.completed || s.status === 'completed') completedSubtasks++;
-        estimatedHoursTotal += Number(s.estimatedHours) || 1.5;
-        actualHoursTotal += Number(s.actualHours) || 0;
-      });
-    } else {
-      // Tâche élémentaire sans sous-tâche découpée
-      estimatedHoursTotal += 1;
-    }
+    rawAssignedTasks.forEach((t) => {
+      const subs = t.subtasks || [];
+      const empSubs = subs.filter((s) => isTaskAssignedToEmployee(s, employee) || isTaskAssignedToEmployee(t, employee));
+      const effectiveSubs = empSubs.length > 0 ? empSubs : subs;
 
-    totalProgressSum += getTaskDynamicProgress(t);
-  });
+      if (effectiveSubs.length > 0) {
+        // Filtrer les sous-tâches de la période
+        const periodSubs: Subtask[] = [];
 
-  // Calcul du rendement opérationnel STRICTEMENT basé sur le nombre de sous-tâches terminées
-  let totalWorkUnits = 0;
-  let completedWorkUnits = 0;
+        effectiveSubs.forEach((sub) => {
+          const compDate = getItemCompletionDate(sub, t.date);
+          const isDone = Boolean(sub.completed || sub.status === 'completed' || (sub.status as string) === 'fait');
+          const isInProgress = sub.status === 'in_progress' || sub.status === 'en_cours';
+          const isBlocked = sub.status === 'blocked' || sub.isBlocked;
 
-  assignedTasks.forEach((t) => {
-    if (t.subtasks && t.subtasks.length > 0) {
-      totalWorkUnits += t.subtasks.length;
-      t.subtasks.forEach((s) => {
-        if (s.completed || s.status === 'completed') {
-          completedWorkUnits++;
+          if (isSingleDay) {
+            // Jour unique (ex: Aujourd'hui ou Hier) :
+            // Règle stricte demandée par l'utilisateur :
+            // Soit la sous-tâche est en cours ce jour, soit elle a été terminée ce jour
+            const isCompletedThisDay = isDone && (compDate === startStr || (!compDate && (t.date === startStr || (sub as any).date === startStr)));
+            const isProgressThisDay = isInProgress && (!compDate || compDate >= startStr);
+
+            if (isCompletedThisDay) {
+              hasActivity = true;
+              completedWorkUnits++;
+              totalWorkUnits++;
+              periodSubs.push(sub);
+            } else if (isProgressThisDay) {
+              hasActivity = true;
+              totalWorkUnits++;
+              periodSubs.push(sub);
+            } else if (isBlocked && ((sub as any).date === startStr || t.date === startStr)) {
+              hasActivity = true;
+              totalWorkUnits++;
+              periodSubs.push(sub);
+            }
+          } else {
+            // Plage de dates (ex: semaine, mois, 3 mois, personnalisé) :
+            const isCompletedInRange = isDone && compDate && compDate >= startStr && compDate <= endStr;
+            const isProgressInRange = isInProgress;
+            const isDueInRange = (sub.dueDate && sub.dueDate >= startStr && sub.dueDate <= endStr) || (t.date && t.date >= startStr && t.date <= endStr);
+
+            if (isCompletedInRange) {
+              hasActivity = true;
+              completedWorkUnits++;
+              totalWorkUnits++;
+              periodSubs.push(sub);
+            } else if (isProgressInRange) {
+              hasActivity = true;
+              totalWorkUnits++;
+              periodSubs.push(sub);
+            } else if (isDueInRange) {
+              totalWorkUnits++;
+              if (isDone) completedWorkUnits++;
+              periodSubs.push(sub);
+            }
+          }
+        });
+
+        if (periodSubs.length > 0) {
+          relevantTasks.push({
+            ...t,
+            subtasks: periodSubs,
+          });
         }
-      });
-    } else {
-      // Tâche élémentaire sans découpage : compte comme 1 unité de travail
-      totalWorkUnits += 1;
-      if (t.status === 'completed' || (t as any).completed === true) {
-        completedWorkUnits++;
+      } else {
+        // Tâche unitaire sans sous-tâche
+        const compDate = getItemCompletionDate(t);
+        const isDone = Boolean(t.status === 'completed' || (t as any).completed === true);
+        const isInProgress = t.status === 'in_progress' || t.status === 'en_cours' || t.status === 'pending_validation';
+        const isBlocked = t.status === 'blocked';
+
+        if (isSingleDay) {
+          const isCompletedThisDay = isDone && (compDate === startStr || (!compDate && t.date === startStr));
+          const isProgressThisDay = isInProgress;
+
+          if (isCompletedThisDay) {
+            hasActivity = true;
+            completedWorkUnits++;
+            totalWorkUnits++;
+            relevantTasks.push(t);
+          } else if (isProgressThisDay) {
+            hasActivity = true;
+            totalWorkUnits++;
+            relevantTasks.push(t);
+          } else if (isBlocked && t.date === startStr) {
+            hasActivity = true;
+            totalWorkUnits++;
+            relevantTasks.push(t);
+          }
+        } else {
+          const isCompletedInRange = isDone && compDate && compDate >= startStr && compDate <= endStr;
+          const isProgressInRange = isInProgress;
+          const isDueInRange = (t.dueDate && t.dueDate >= startStr && t.dueDate <= endStr) || (t.date && t.date >= startStr && t.date <= endStr);
+
+          if (isCompletedInRange) {
+            hasActivity = true;
+            completedWorkUnits++;
+            totalWorkUnits++;
+            relevantTasks.push(t);
+          } else if (isProgressInRange || isDueInRange) {
+            if (isProgressInRange) hasActivity = true;
+            totalWorkUnits++;
+            if (isDone) completedWorkUnits++;
+            relevantTasks.push(t);
+          }
+        }
       }
-    }
-  });
+    });
+
+    assignedTasks = relevantTasks;
+
+    // Calcul des compteurs
+    assignedTasks.forEach((t) => {
+      const isCompleted = t.status === 'completed' || (t as any).completed === true || (Boolean(t.subtasks && t.subtasks.length > 0 && t.subtasks.every(s => s.completed || s.status === 'completed')));
+      if (isCompleted) completedTasks++;
+      else if (t.status === 'in_progress' || t.status === 'en_cours' || t.status === 'pending_validation') inProgressTasks++;
+      else if (t.status === 'blocked') blockedTasks++;
+
+      if (t.isMilestone) {
+        milestonesCount++;
+        if (isCompleted || (t.milestoneProgress ?? 0) >= 100) completedMilestones++;
+      }
+
+      if (t.subtasks && t.subtasks.length > 0) {
+        totalSubtasks += t.subtasks.length;
+        t.subtasks.forEach((s) => {
+          if (s.completed || s.status === 'completed') completedSubtasks++;
+          estimatedHoursTotal += Number(s.estimatedHours) || 1.5;
+          actualHoursTotal += Number(s.actualHours) || 0;
+        });
+      } else {
+        estimatedHoursTotal += 1;
+      }
+
+      totalProgressSum += getTaskDynamicProgress(t);
+    });
+
+  } else {
+    // Mode global (sans filtre de période)
+    assignedTasks.forEach((t) => {
+      const isCompleted = t.status === 'completed' || (t as any).completed === true || (Boolean(t.subtasks && t.subtasks.length > 0 && t.subtasks.every(s => s.completed || s.status === 'completed')));
+      if (isCompleted) completedTasks++;
+      else if (t.status === 'in_progress' || t.status === 'en_cours' || t.status === 'pending_validation') inProgressTasks++;
+      else if (t.status === 'blocked') blockedTasks++;
+
+      if (t.isMilestone) {
+        milestonesCount++;
+        if (isCompleted || (t.milestoneProgress ?? 0) >= 100) completedMilestones++;
+      }
+
+      if (t.subtasks && t.subtasks.length > 0) {
+        totalSubtasks += t.subtasks.length;
+        t.subtasks.forEach((s) => {
+          if (s.completed || s.status === 'completed') completedSubtasks++;
+          estimatedHoursTotal += Number(s.estimatedHours) || 1.5;
+          actualHoursTotal += Number(s.actualHours) || 0;
+        });
+      } else {
+        estimatedHoursTotal += 1;
+      }
+
+      totalProgressSum += getTaskDynamicProgress(t);
+    });
+
+    assignedTasks.forEach((t) => {
+      if (t.subtasks && t.subtasks.length > 0) {
+        totalWorkUnits += t.subtasks.length;
+        t.subtasks.forEach((s) => {
+          if (s.completed || s.status === 'completed') completedWorkUnits++;
+        });
+      } else {
+        totalWorkUnits += 1;
+        if (t.status === 'completed' || (t as any).completed === true) completedWorkUnits++;
+      }
+    });
+
+    hasActivity = totalWorkUnits > 0 || assignedTasks.length > 0;
+  }
 
   // Taux de rendement dynamique des sous-tâches (0 - 100%)
-  const taskRendementRate = totalWorkUnits > 0 
-    ? Math.round((completedWorkUnits / totalWorkUnits) * 100) 
-    : (totalTasks > 0 ? Math.round(totalProgressSum / totalTasks) : 0);
+  // Si le collaborateur n'a rien fait ce jour (aucune sous-tâche en cours ni terminée), le taux est strictement 0%
+  const taskRendementRate = !hasActivity || totalWorkUnits === 0 
+    ? 0 
+    : Math.round((completedWorkUnits / totalWorkUnits) * 100);
 
-  // Score combiné RH (Synthèse : 50% Assiduité & Ponctualité + 50% Rendement sous-tâches)
-  const globalCombinedScore = totalWorkUnits > 0 || totalTasks > 0
+  // Score combiné RH
+  const globalCombinedScore = hasActivity && totalWorkUnits > 0
     ? Math.round(0.5 * assiduiteRate + 0.5 * taskRendementRate)
-    : assiduiteRate;
+    : Math.round(assiduiteRate * 0.5); // Si aucune activité de tâche, le score reflète l'inactivité
 
-  // Statut capacitaire (Surcharge > 10h/jour, soit > 50h sur une semaine de 5 jours)
   let capacityStatus: 'overloaded' | 'optimal' | 'available' = 'optimal';
   if (estimatedHoursTotal > 50) {
     capacityStatus = 'overloaded';
@@ -185,7 +389,7 @@ export function computeEmployeeRendement(
   return {
     employee,
     assignedTasks,
-    totalTasks,
+    totalTasks: assignedTasks.length,
     completedTasks,
     inProgressTasks,
     blockedTasks,
@@ -199,5 +403,6 @@ export function computeEmployeeRendement(
     assiduiteRate,
     globalCombinedScore,
     capacityStatus,
+    hasActivity,
   };
 }

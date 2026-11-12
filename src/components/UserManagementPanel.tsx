@@ -98,6 +98,8 @@ export default function UserManagementPanel({
     employmentStatus: EmployeeStatus;
     department: string;
     password?: string;
+    allowEarlyDeparture15_17?: boolean;
+    allowLateArrival8_930?: boolean;
   }) => {
     try {
       let passwordHash = editingUser?.passwordHash;
@@ -113,6 +115,8 @@ export default function UserManagementPanel({
         status: data.status,
         employmentStatus: data.employmentStatus,
         department: data.department.trim(),
+        allowEarlyDeparture15_17: data.allowEarlyDeparture15_17 || false,
+        allowLateArrival8_930: data.allowLateArrival8_930 || false,
         createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
         passwordHash,
       };
@@ -162,6 +166,8 @@ export default function UserManagementPanel({
             status: isEmpActive,
             employmentStatus: data.employmentStatus,
             userId: userToSave.id,
+            allowEarlyDeparture15_17: data.allowEarlyDeparture15_17 || false,
+            allowLateArrival8_930: data.allowLateArrival8_930 || false,
           };
           onUpdateEmployees(employees.map((e, i) => (i === empIdx ? updatedEmp : e)));
         }

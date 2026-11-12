@@ -149,7 +149,8 @@ export function useClockingActions({
       let targetIncident: AttendanceIncident | null = null;
 
       if (action === 'arrival') {
-        isLateArrival = isLate(timeStr, lateThreshold);
+        const exemptLate = employeeProfile.allowLateArrival8_930 === true && timeStr >= '08:00' && timeStr <= '09:30';
+        isLateArrival = !exemptLate && isLate(timeStr, lateThreshold);
         if (isLateArrival) {
           status = 'late';
           if (declaredRetard) {
@@ -186,7 +187,8 @@ export function useClockingActions({
           }
         }
       } else if (action === 'departure') {
-        const isEarlyDeparture = timeStr < plannedDeparture;
+        const exemptEarly = employeeProfile.allowEarlyDeparture15_17 === true && timeStr >= '15:00' && timeStr <= '17:00';
+        const isEarlyDeparture = !exemptEarly && timeStr < plannedDeparture;
         if (isEarlyDeparture) {
           if (declaredEarlyDept) {
             const reasonBase = declaredEarlyDept.reason || 'Sortie prématurée';

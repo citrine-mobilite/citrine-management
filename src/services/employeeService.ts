@@ -119,6 +119,8 @@ export interface TransactionalCollaboratorInput {
   suspensionReason?: string;
   avatarUrl?: string;
   userPassword?: string;
+  allowEarlyDeparture15_17?: boolean;
+  allowLateArrival8_930?: boolean;
 }
 
 export interface TransactionalCollaboratorResult {
@@ -256,6 +258,8 @@ export async function createCollaboratorWithUserTransactional(
         avatarUrl: input.avatarUrl || null,
         departureReason: input.departureReason || null,
         suspensionReason: input.suspensionReason || null,
+        allowEarlyDeparture15_17: input.allowEarlyDeparture15_17 || false,
+        allowLateArrival8_930: input.allowLateArrival8_930 || false,
       }
     };
 
@@ -420,6 +424,8 @@ export async function createCollaboratorWithUserTransactional(
       status: 'en_poste',
       employmentStatus: 'en_poste',
       avatarUrl: rawEmpData.photo_url,
+      allowEarlyDeparture15_17: input.allowEarlyDeparture15_17 || false,
+      allowLateArrival8_930: input.allowLateArrival8_930 || false,
     };
 
     const finalUser: AppUser = {
@@ -435,6 +441,8 @@ export async function createCollaboratorWithUserTransactional(
       phone: input.phone || '',
       employeeId: empDocId,
       avatarUrl: rawEmpData.photo_url,
+      allowEarlyDeparture15_17: input.allowEarlyDeparture15_17 || false,
+      allowLateArrival8_930: input.allowLateArrival8_930 || false,
       createdAt: new Date().toISOString(),
     };
 

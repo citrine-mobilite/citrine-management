@@ -229,7 +229,7 @@ export async function executeDailyTimesheetDispatch(options?: { forceWeekday?: b
         const totalEstimated = items.reduce((sum, i) => sum + i.estimatedHours, 0);
         const totalActual = items.reduce((sum, i) => sum + i.actualHours, 0);
 
-        const topPriorities = empTasks.slice(0, 3).map((t: any, idx: number) => ({
+        const topPriorities = items.length === 0 ? [] : empTasks.slice(0, 3).map((t: any, idx: number) => ({
           id: t.id,
           title: t.title,
           priority: (idx === 0 ? 'P1' : idx === 1 ? 'P2' : 'P3') as 'P1' | 'P2' | 'P3',
@@ -357,15 +357,15 @@ export async function executeDailyTimesheetDispatch(options?: { forceWeekday?: b
 
         const safeCollabName = empName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
         const safeDate = doualaTime.dayIso.replace(/-/g, '_');
-        const excelFilename = `feuille_de_temps_${safeCollabName}_${safeDate}.xlsx`;
+        const excelFilename = `feuille_de_taches_${safeCollabName}_${safeDate}.xlsx`;
 
         await sendThreadedEmployeeEmail({
           employeeName: empName,
           employeeId: empId,
           employeeEmail: empEmail,
-          eventTitle: `Feuille de temps`,
+          eventTitle: `Feuille de tâches`,
           threadCategory: 'timesheet',
-          threadSubject: `Feuille de temps - ${empName}`,
+          threadSubject: `Feuille de tâches - ${empName}`,
           htmlContent,
           recipientEmails: adminEmails,
           attachments: [
@@ -378,7 +378,7 @@ export async function executeDailyTimesheetDispatch(options?: { forceWeekday?: b
         });
 
         sentEmployees.push(empName);
-        console.log(`✅ [CRON 19:30] Feuille de temps envoyée pour ${empName} (${empEmail}).`);
+        console.log(`✅ [CRON 19:30] Feuille de tâches envoyée pour ${empName} (${empEmail}).`);
       } catch (empErr: any) {
         const msg = `Erreur envoi feuille pour ${empName}: ${empErr?.message || String(empErr)}`;
         console.error(`❌ [CRON 19:30 Error]:`, msg);
@@ -388,7 +388,7 @@ export async function executeDailyTimesheetDispatch(options?: { forceWeekday?: b
 
     return {
       success: errors.length === 0,
-      message: `Feuilles de temps transmises avec succès pour ${sentEmployees.length} collaborateur(s).`,
+      message: `Feuilles de tâches transmises avec succès pour ${sentEmployees.length} collaborateur(s).`,
       processedCount: sentEmployees.length,
       sentEmployees,
       errors,

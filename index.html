@@ -4,6 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Citrine Management - Application Mobile & Web de Gestion</title>
+    <script>
+      (function() {
+        var isWsError = function(target) {
+          if (!target) return false;
+          var str = String(target.message || target.reason || target || '');
+          return str.indexOf('WebSocket') !== -1 || str.indexOf('@vite/client') !== -1;
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isWsError(event && (event.reason || event))) {
+            event.preventDefault();
+          }
+        });
+        window.addEventListener('error', function(event) {
+          if (isWsError(event && (event.error || event.message || event))) {
+            event.preventDefault();
+          }
+        });
+      })();
+    </script>
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
