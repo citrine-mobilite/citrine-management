@@ -1,15 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  Bell,
-  Plus,
-  Search,
-  LayoutGrid,
-  ListOrdered,
-  CheckCircle2,
-  Filter,
-} from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { Reminder, Employee, ReminderCategory } from '../types';
-import { soundService } from '../services/soundService';
 import {
   ReminderStatsCards,
   ReminderItemCard,
@@ -18,7 +9,6 @@ import {
   ActiveAlarmBanner,
 } from './reminders';
 import {
-  REMINDER_CATEGORY_META,
   computeReminderUrgency,
   formatDeadlineFrenchDate,
   renewOrResolveReminder,
@@ -28,6 +18,8 @@ import {
   executeOperationWithLoading,
   executeDeleteWithSweetAlert,
 } from '../utils/sweetAlert';
+import { useReminderAlarmScheduler } from './reminders/useReminderAlarmScheduler';
+import { ReminderToolbarAndHeader } from './reminders/ReminderToolbarAndHeader';
 
 interface ReminderPanelProps {
   reminders: Reminder[];
@@ -54,100 +46,13 @@ export default function ReminderPanel({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
-  const [activeRingingReminder, setActiveRingingReminder] = useState<Reminder | null>(null);
 
-  const handleStartAlarm = useCallback(
-    (reminder: Reminder) => {
-      setActiveRingingReminder(reminder);
-      soundService.startContinuousAlertRingtone(0.7);
-      if (showToast) {
-        showToast(
-          `Sonnerie d'alerte activée : "${reminder.title || reminder.note || 'Alerte'}"`,
-          'success'
-        );
-      }
-    },
-    [showToast]
-  );
-
-  const handleStopAlarm = useCallback(() => {
-    soundService.stopContinuousAlertRingtone();
-    if (activeRingingReminder && showToast) {
-      showToast('Sonnerie arrêtée avec succès.', 'success');
-    }
-    setActiveRingingReminder(null);
-  }, [activeRingingReminder, showToast]);
-
-  const handleSnooze5m = useCallback(() => {
-    soundService.stopContinuousAlertRingtone();
-    if (activeRingingReminder) {
-      const now = new Date();
-      now.setMinutes(now.getMinutes() + 5);
-      const newTime = `${String(now.getHours()).padStart(2, '0')}:${String(
-        now.getMinutes()
-      ).padStart(2, '0')}`;
-      const updated = reminders.map((r) =>
-        r.id === activeRingingReminder.id ? { ...r, time: newTime } : r
-      );
-      onUpdateReminders(updated);
-      if (showToast) showToast('Alerte reportée de 5 minutes.', 'success');
-    }
-    setActiveRingingReminder(null);
-  }, [activeRingingReminder, reminders, onUpdateReminders, showToast]);
-
-  // Real-time scheduler for hourly sound reminders
-  useEffect(() => {
-    const checkSchedule = () => {
-      const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
-      const currentTotalMin = now.getHours() * 60 + now.getMinutes();
-
-      for (const r of reminders) {
-        if (r.stopped || r.isResolved) continue;
-        if (!r.date || !r.time) continue;
-        if (r.date !== todayStr) continue;
-
-        const [rH, rM] = r.time.split(':').map(Number);
-        if (isNaN(rH) || isNaN(rM)) continue;
-        const targetTotalMin = rH * 60 + rM;
-
-        const periods =
-          r.triggerPeriods && r.triggerPeriods.length > 0 ? r.triggerPeriods : ['exact'];
-        const triggered = r.triggeredPeriods || [];
-
-        for (const period of periods) {
-          if (triggered.includes(period)) continue;
-
-          let shouldRing = false;
-          if (period === 'exact' && currentTotalMin === targetTotalMin) shouldRing = true;
-          else if (period === '5m' && targetTotalMin - currentTotalMin === 5) shouldRing = true;
-          else if (period === '15m' && targetTotalMin - currentTotalMin === 15) shouldRing = true;
-          else if (period === '30m' && targetTotalMin - currentTotalMin === 30) shouldRing = true;
-          else if (period === '1h' && targetTotalMin - currentTotalMin === 60) shouldRing = true;
-
-          if (shouldRing) {
-            const updated = reminders.map((rem) =>
-              rem.id === r.id
-                ? { ...rem, triggeredPeriods: [...(rem.triggeredPeriods || []), period] }
-                : rem
-            );
-            onUpdateReminders(updated);
-            handleStartAlarm(r);
-            break;
-          }
-        }
-      }
-    };
-
-    const interval = setInterval(checkSchedule, 10000);
-    return () => clearInterval(interval);
-  }, [reminders, onUpdateReminders, handleStartAlarm]);
-
-  useEffect(() => {
-    return () => {
-      soundService.stopContinuousAlertRingtone();
-    };
-  }, []);
+  const {
+    activeRingingReminder,
+    handleStartAlarm,
+    handleStopAlarm,
+    handleSnooze5m,
+  } = useReminderAlarmScheduler(reminders, onUpdateReminders, showToast);
 
   const handleOpenCreateModal = () => {
     setEditingReminder(null);
@@ -273,154 +178,21 @@ export default function ReminderPanel({
         />
       )}
 
-      {/* En-tête sobre & professionnel */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-stone-200/85 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-start gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200/70 text-[#2A7B76] flex items-center justify-center shrink-0">
-            <Bell className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="font-serif font-bold text-xl sm:text-2xl text-stone-950 tracking-tight">
-              Échéances, Documents & Rappels
-            </h2>
-            <p className="text-xs text-stone-500 mt-0.5">
-              Suivi des cartes grises, impôts trimestriels ou annuels, contrats et rappels horaires —
-              avec alerte sur la page d&apos;accueil 7 à 14 jours avant expiration.
-            </p>
-          </div>
-        </div>
+      <ReminderToolbarAndHeader
+        onOpenCreateModal={handleOpenCreateModal}
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        categoryFilter={categoryFilter}
+        setCategoryFilter={setCategoryFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        actionableCount={actionableCount}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+      />
 
-        <button
-          type="button"
-          onClick={handleOpenCreateModal}
-          className="bg-[#2A7B76] hover:bg-[#226763] text-white px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition cursor-pointer active:scale-98 shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Ajouter une échéance / alerte</span>
-        </button>
-      </div>
-
-      {/* KPIs d'urgence */}
       <ReminderStatsCards reminders={reminders} />
 
-      {/* Barre de recherche, filtres et mode d'affichage */}
-      <div className="bg-white p-3.5 rounded-2xl border border-stone-200/85 shadow-2xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
-          <div className="relative flex-1 sm:max-w-xs">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-            <input
-              type="text"
-              placeholder="Rechercher véhicule, impôt, réf..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-stone-50 rounded-xl border border-stone-200 text-xs focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <Filter className="h-3.5 w-3.5 text-stone-400 shrink-0 hidden sm:block" />
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as 'all' | ReminderCategory)}
-              className="px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 text-xs font-semibold text-stone-700 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none w-full sm:w-auto"
-            >
-              <option value="all">Toutes catégories</option>
-              {(Object.keys(REMINDER_CATEGORY_META) as ReminderCategory[]).map((cat) => (
-                <option key={cat} value={cat}>
-                  {REMINDER_CATEGORY_META[cat].label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2">
-          {/* Segmented status filter */}
-          <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200/70 text-xs overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => setStatusFilter('all')}
-              className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
-                statusFilter === 'all'
-                  ? 'bg-white text-stone-900 shadow-2xs'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              Toutes
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('actionable')}
-              className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 ${
-                statusFilter === 'actionable'
-                  ? 'bg-white text-amber-800 shadow-2xs'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <span>À traiter</span>
-              {actionableCount > 0 && (
-                <span className="font-mono tabular-nums text-[10px] text-rose-700 font-extrabold">
-                  ({actionableCount})
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('upcoming')}
-              className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
-                statusFilter === 'upcoming'
-                  ? 'bg-white text-[#2A7B76] shadow-2xs'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              À jour
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('resolved')}
-              className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
-                statusFilter === 'resolved'
-                  ? 'bg-white text-emerald-800 shadow-2xs'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              Validées
-            </button>
-          </div>
-
-          {/* View Mode */}
-          <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200/70 text-xs">
-            <button
-              type="button"
-              onClick={() => setViewMode('cards')}
-              className={`px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                viewMode === 'cards'
-                  ? 'bg-white text-[#2A7B76] shadow-2xs'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-              title="Vue en cartes"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Cartes</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                viewMode === 'table'
-                  ? 'bg-white text-[#2A7B76] shadow-2xs'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-              title="Vue en tableau"
-            >
-              <ListOrdered className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Tableau</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
       {viewMode === 'cards' ? (
         <div className="space-y-2.5">
           {sortedAndFiltered.length === 0 ? (

@@ -1,27 +1,22 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Users, 
-  Clock, 
-  CheckSquare, 
-  Bell, 
-  AlertTriangle, 
-  Settings, 
-  ArrowRight,
-  TrendingUp,
-  LayoutDashboard
-} from 'lucide-react';
-import { Employee, Presence, Task, Reminder, AppUser, StrategicProject, CompanyModuleConfig } from '../types';
+import React from 'react';
+import { LayoutDashboard } from 'lucide-react';
+import {
+  Employee,
+  Presence,
+  Task,
+  Reminder,
+  AppUser,
+  StrategicProject,
+  CompanyModuleConfig,
+} from '../types';
 import { TabType } from './Sidebar';
-import { isEmployeeOnlyRole } from '../utils/roleUtils';
-import { HumaanDashboardHero, HumaanRelaxedState } from './illustrations/HumaanIllustrations';
+import { HumaanDashboardHero } from './illustrations/HumaanIllustrations';
 import { ProjectMilestonesWidget } from './projects/ProjectMilestonesWidget';
 import { HomeExpirationAlertsBanner } from './reminders';
-import {
-  computeReminderUrgency,
-  formatDeadlineFrenchDate,
-  getHomeUrgentReminders,
-  sortRemindersByUrgency,
-} from '../services/reminderService';
+import { useAdminDashboardLogic } from './dashboard/useAdminDashboardLogic';
+import { AdminDashboardKpiGrid } from './dashboard/AdminDashboardKpiGrid';
+import { AdminDashboardTodayClockingsCard } from './dashboard/AdminDashboardTodayClockingsCard';
+import { AdminDashboardBottomWidgets } from './dashboard/AdminDashboardBottomWidgets';
 
 interface AdminDashboardOverviewProps {
   currentUser: AppUser | null;
@@ -53,78 +48,18 @@ export default function AdminDashboardOverview({
   moduleConfig,
   showToast,
 }: AdminDashboardOverviewProps) {
-  const [realTime, setRealTime] = useState(() => {
-    return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const logic = useAdminDashboardLogic({
+    employees,
+    presences,
+    tasks,
+    reminders,
+    onUpdateReminders,
+    showToast,
   });
-
-  const currentDateFormatted = useMemo(() => {
-    return new Date().toLocaleDateString('fr-FR', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setRealTime(new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Les administrateurs et responsables ne badgent pas : on les exclut du pointage du jour
-  const clockableEmployees = useMemo(() => {
-    return employees.filter((e) => {
-      const isRoleOk = isEmployeeOnlyRole(e.roleType || e.role || e.position);
-      const st = e.employmentStatus || (typeof e.status === 'string' ? e.status : (e.status ? 'en_poste' : 'parti'));
-      const isInPoste = st === 'en_poste' || st === ('true' as any);
-      return isRoleOk && isInPoste;
-    });
-  }, [employees]);
-
-  const clockableEmployeeIds = useMemo(() => new Set(clockableEmployees.map((e) => String(e.id))), [clockableEmployees]);
-
-  // Filter values based on today's date
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayPresences = presences.filter((p) => p.date === todayStr && clockableEmployeeIds.has(String(p.employeeId)));
-  const presentCount = todayPresences.filter((p) => p.status === 'present' && p.arrivalTime).length;
-  const lateCount = todayPresences.filter((p) => p.status === 'late' && p.arrivalTime).length;
-  const badgedEmpIds = new Set(todayPresences.filter((p) => p.arrivalTime || p.status === 'present' || p.status === 'late').map((p) => String(p.employeeId)));
-  const absentCount = clockableEmployees.filter((e) => !badgedEmpIds.has(String(e.id))).length;
-  
-  // Pending and active tasks & urgent deadlines
-  const pendingTasks = tasks.filter((t) => t.status !== 'completed');
-  const urgentReminders = useMemo(() => getHomeUrgentReminders(reminders), [reminders]);
-  const sortedReminders = useMemo(() => sortRemindersByUrgency(reminders), [reminders]);
-  const activeRemindersCount = urgentReminders.length;
-
-  const handleRenewOrResolveFromHome = (renewedReminder: Reminder) => {
-    if (!onUpdateReminders) return;
-    const updated = reminders.map((r) => (r.id === renewedReminder.id ? renewedReminder : r));
-    onUpdateReminders(updated);
-    if (showToast) {
-      const nextDate = renewedReminder.expirationDate || renewedReminder.date;
-      showToast(
-        renewedReminder.isResolved
-          ? `"${renewedReminder.title}" validé avec succès.`
-          : `"${renewedReminder.title}" renouvelé jusqu'au ${formatDeadlineFrenchDate(nextDate)}.`,
-        'success'
-      );
-    }
-  };
-
-  const attendanceRate = clockableEmployees.length > 0 
-    ? Math.round((presentCount / clockableEmployees.length) * 100) 
-    : 0;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
-      
-      {/* Dashboard Top Header Banner avec Illustration Humaaans */}
       <div className="bg-gradient-to-r from-[#2A7B76] via-[#216762] to-[#164844] rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-emerald-600/30 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
-        
-        {/* Glow ambient background */}
         <div className="absolute top-0 right-1/4 -mt-12 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="space-y-3 z-10 text-center md:text-left">
@@ -137,13 +72,13 @@ export default function AdminDashboardOverview({
               Bonjour, {currentUser?.name || 'Administrateur'}
             </h2>
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <div className="inline-flex items-center gap-3 bg-white/15 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/20 text-xs font-mono font-bold shadow-2xs">
-              <span className="text-emerald-200">🕒 {realTime}</span>
+              <span className="text-emerald-200">🕒 {logic.realTime}</span>
               <span className="text-white/40">|</span>
               <span className="text-emerald-100 font-sans font-semibold text-[11px]">
-                {presentCount} collaborateur{presentCount > 1 ? 's' : ''} en poste
+                {logic.presentCount} collaborateur{logic.presentCount > 1 ? 's' : ''} en poste
               </span>
             </div>
             <button
@@ -161,137 +96,31 @@ export default function AdminDashboardOverview({
           </div>
         </div>
 
-        {/* Illustration Humaine Vectorielle Humaaans */}
         <div className="shrink-0 z-10 flex items-center justify-center">
           <HumaanDashboardHero className="w-56 h-36 sm:w-64 sm:h-40 drop-shadow-md" />
         </div>
       </div>
 
-      {/* Message d'alerte automatique (7 à 14 jours avant expiration ou échéances en retard) */}
       {moduleConfig?.enableReminders !== false && (
         <HomeExpirationAlertsBanner
           reminders={reminders}
           employees={employees}
-          onRenewOrResolve={onUpdateReminders ? handleRenewOrResolveFromHome : undefined}
+          onRenewOrResolve={onUpdateReminders ? logic.handleRenewOrResolveFromHome : undefined}
           onOpenRemindersModule={() => onSelectTab('reminders')}
         />
       )}
 
-      {/* KPI Cards in Glassmorphism */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* PRESENCES DU JOUR CARD */}
-        <div 
-          onClick={() => onSelectTab('presences')}
-          className="glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 hover:border-emerald-300"
-          title="Afficher le registre des présences et la feuille du jour"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Présences du Jour</span>
-            <div className="p-1.5 rounded-xl bg-emerald-500/15 text-emerald-700">
-              <Users className="h-4 w-4" />
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-bold text-stone-900">
-              {presentCount} / {employees.length}{' '}
-              <span className="text-xs text-emerald-700 font-semibold">({attendanceRate}%)</span>
-            </div>
-            {/* Progress Bar */}
-            <div className="w-full bg-stone-200/60 h-1.5 rounded-full mt-2 overflow-hidden">
-              <div 
-                className="bg-[#2A7B76] h-full rounded-full transition-all duration-500" 
-                style={{ width: `${attendanceRate}%` }}
-              />
-            </div>
-          </div>
-        </div>
+      <AdminDashboardKpiGrid
+        presentCount={logic.presentCount}
+        employeesCount={employees.length}
+        attendanceRate={logic.attendanceRate}
+        lateCount={logic.lateCount}
+        pendingTasksCount={logic.pendingTasks.length}
+        activeRemindersCount={logic.activeRemindersCount}
+        totalRemindersCount={reminders.length}
+        onSelectTab={onSelectTab}
+      />
 
-        {/* ANOMALIES & RETARDS CARD */}
-        <div 
-          onClick={() => onSelectTab('presences')}
-          className="glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 hover:border-amber-300"
-          title="Consulter les anomalies et retards consignés"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Anomalies & Retards</span>
-            <div className="p-1.5 rounded-xl bg-amber-500/15 text-amber-700">
-              <AlertTriangle className="h-4 w-4" />
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-bold text-stone-900">{lateCount}</div>
-            <button 
-              onClick={(e) => { e.stopPropagation(); onSelectTab('statistics'); }}
-              className="text-[11px] text-[#2A7B76] font-bold hover:underline mt-2 inline-flex items-center gap-1 cursor-pointer"
-              title="Voir l'analyse détaillée d'assiduité"
-            >
-              Analyse d'assiduité &gt;
-            </button>
-          </div>
-        </div>
-
-        {/* TACHES EN COURS CARD */}
-        <div 
-          onClick={() => onSelectTab('tasks')}
-          className="glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 hover:border-blue-300"
-          title="Ouvrir le module de gestion des tâches"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Tâches en Cours</span>
-            <div className="p-1.5 rounded-xl bg-blue-500/15 text-blue-700">
-              <CheckSquare className="h-4 w-4" />
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-bold text-stone-900">{pendingTasks.length}</div>
-            <button 
-              onClick={(e) => { e.stopPropagation(); onSelectTab('tasks'); }}
-              className="text-[11px] text-[#2A7B76] font-bold hover:underline mt-2 inline-flex items-center gap-1 cursor-pointer"
-            >
-              Tableau des tâches &gt;
-            </button>
-          </div>
-        </div>
-
-        {/* ÉCHÉANCES & ALERTES CARD */}
-        <div 
-          onClick={() => onSelectTab('reminders')}
-          className={`glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 ${
-            activeRemindersCount > 0 ? 'hover:border-amber-300' : 'hover:border-emerald-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">
-              Échéances à traiter
-            </span>
-            <div
-              className={`p-1.5 rounded-xl ${
-                activeRemindersCount > 0
-                  ? 'bg-amber-500/15 text-amber-700'
-                  : 'bg-emerald-500/15 text-emerald-700'
-              }`}
-            >
-              <Bell className="h-4 w-4" />
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-bold font-mono tabular-nums text-stone-900">
-              {activeRemindersCount}
-              <span className="text-xs font-sans font-semibold text-stone-400 ml-1.5">
-                / {reminders.length} suivi{reminders.length > 1 ? 's' : ''}
-              </span>
-            </div>
-            <button 
-              onClick={(e) => { e.stopPropagation(); onSelectTab('reminders'); }}
-              className="text-[11px] text-[#2A7B76] font-bold hover:underline mt-2 inline-flex items-center gap-1 cursor-pointer"
-            >
-              Consulter les échéances &gt;
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Évolution des Projets & Prochains Jalons */}
       {moduleConfig?.enableStrategicProjects !== false && (
         <ProjectMilestonesWidget
           projects={strategicProjects}
@@ -302,261 +131,21 @@ export default function AdminDashboardOverview({
         />
       )}
 
-      {/* Main Grid with full width Pointages and widgets underneath */}
       <div className="space-y-6">
-        
-        {/* FULL WIDTH: Pointages du Jour in Glass Card */}
-        <div className="glass-card rounded-3xl p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-stone-200/60 pb-3">
-            <h3 className="font-serif font-bold text-sm text-stone-900 flex items-center gap-1.5">
-              <Clock className="h-4.5 w-4.5 text-[#2A7B76]" />
-              Pointages du Jour
-            </h3>
-            <button 
-              onClick={() => onSelectTab('presences')}
-              className="text-[11px] font-bold text-[#2A7B76] hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              Registre complet &rarr;
-            </button>
-          </div>
+        <AdminDashboardTodayClockingsCard
+          clockableEmployees={logic.clockableEmployees}
+          todayPresences={logic.todayPresences}
+          onSelectTab={onSelectTab}
+          onSelectEmployee={onSelectEmployee}
+        />
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="text-stone-400 font-bold uppercase tracking-wider text-[9px] border-b border-stone-100">
-                  <th className="pb-3">Collaborateur</th>
-                  <th className="pb-3">Poste</th>
-                  <th className="pb-3">Arrivée</th>
-                  <th className="pb-3">Statut</th>
-                  <th className="pb-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {clockableEmployees.slice(0, 5).map((emp) => {
-                  const p = todayPresences.find((x) => x.employeeId === emp.id);
-                  return (
-                    <tr key={emp.id} className="hover:bg-stone-50/50 transition">
-                      <td className="py-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden shadow-3xs border border-emerald-100">
-                            {emp.avatarUrl ? (
-                              <img src={emp.avatarUrl} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <span>{emp.name.slice(0, 2).toUpperCase()}</span>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <span className="block font-bold text-stone-950 truncate text-[11px]">{emp.name}</span>
-                            <span className="block text-[9px] text-stone-400 font-mono truncate">{emp.phone || '+237 655500443'}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 text-stone-500 font-medium truncate max-w-[120px]">
-                        {emp.roleType || 'Collaborateur'}
-                      </td>
-                      <td className="py-3 font-mono font-bold text-stone-800">
-                        {p?.arrivalTime || '—'}
-                      </td>
-                      <td className="py-3">
-                        <span className={`px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase border ${
-                          p?.status === 'present' 
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                            : p?.status === 'late' 
-                            ? 'bg-amber-50 text-amber-700 border-amber-100' 
-                            : 'bg-stone-50 text-stone-400 border-stone-100'
-                        }`}>
-                          {p?.status === 'present' ? 'Présent' : p?.status === 'late' ? 'En retard' : 'Non pointé'}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right">
-                        <button
-                          onClick={() => onSelectEmployee(emp.id)}
-                          className="px-2 py-1 rounded bg-[#2A7B76]/5 text-[#2A7B76] hover:bg-[#2A7B76] hover:text-white transition font-bold text-[10px] cursor-pointer"
-                        >
-                          Fiche
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* BOTTOM SECTION: Sidebar Widgets side-by-side */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-          {/* widget 1: Échéances & Rappels */}
-          <div className="glass-card rounded-3xl p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-stone-200/60 pb-2">
-              <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
-                <Bell className="h-4 w-4 text-[#2A7B76]" />
-                Échéances & Rappels
-              </h4>
-              <span className="text-[10px] font-mono tabular-nums bg-stone-100 text-stone-700 font-bold px-2 py-0.5 rounded-lg border border-stone-200/70">
-                {activeRemindersCount} urgente{activeRemindersCount > 1 ? 's' : ''}
-              </span>
-            </div>
-
-            <div className="py-2 text-center flex flex-col items-center justify-center">
-              {sortedReminders.filter((r) => computeReminderUrgency(r).level !== 'resolved').length === 0 ? (
-                <div className="flex flex-col items-center py-2 space-y-1">
-                  <HumaanRelaxedState className="w-20 h-20" />
-                  <p className="text-stone-600 font-bold text-xs">Tout est sous contrôle !</p>
-                  <p className="text-stone-400 text-[10px]">Aucun document ni impôt proche de l&apos;échéance.</p>
-                </div>
-              ) : (
-                <div className="w-full text-left space-y-2 max-h-40 overflow-y-auto">
-                  {sortedReminders
-                    .filter((r) => computeReminderUrgency(r).level !== 'resolved')
-                    .slice(0, 3)
-                    .map((r) => {
-                      const u = computeReminderUrgency(r);
-                      return (
-                        <div
-                          key={r.id}
-                          className="p-2.5 glass-chip rounded-xl flex items-center justify-between gap-2 text-[11px]"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-bold text-stone-900 truncate">{r.title}</p>
-                            <p className="text-[10px] text-stone-500 truncate">
-                              {r.entityName ? `${r.entityName} · ` : ''}
-                              {formatDeadlineFrenchDate(u.targetDateStr)}
-                            </p>
-                          </div>
-                          <span
-                            className={`font-mono tabular-nums font-bold text-[10px] shrink-0 ${
-                              u.level === 'expired' || u.level === 'critical'
-                                ? 'text-rose-700'
-                                : u.level === 'warning'
-                                ? 'text-amber-700'
-                                : 'text-[#2A7B76]'
-                            }`}
-                          >
-                            {u.shortCountdown}
-                          </span>
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={() => onSelectTab('reminders')}
-              className="w-full py-2 glass-chip text-stone-700 hover:text-stone-900 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
-            >
-              Ouvrir Échéances & Alertes &gt;
-            </button>
-          </div>
-
-          {/* widget 2: Tâches en Cours */}
-          <div className="glass-card rounded-3xl p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-stone-200/60 pb-2">
-              <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
-                <CheckSquare className="h-4 w-4 text-[#2A7B76]" />
-                Tâches en Cours ({pendingTasks.length})
-              </h4>
-            </div>
-
-            <div className="py-2 space-y-2">
-              {pendingTasks.length === 0 ? (
-                <p className="text-stone-400 italic text-[11px] text-center py-4">Aucune tâche en cours.</p>
-              ) : (
-                pendingTasks.slice(0, 1).map((t) => (
-                  <div key={t.id} className="p-3 glass-chip rounded-2xl flex items-center justify-between gap-3 text-[11px]">
-                    <div className="space-y-0.5 min-w-0">
-                      <span className="block font-bold text-stone-900 truncate">{t.title}</span>
-                      <span className="block text-[10px] text-stone-500">Assigné à : {t.assignedTo}</span>
-                    </div>
-                    <span className="text-[9px] font-bold px-2 py-0.5 bg-stone-100 border text-stone-600 rounded-md shrink-0 uppercase tracking-wide">
-                      Normale
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <button
-              onClick={() => onSelectTab('tasks')}
-              className="w-full py-2 glass-chip text-stone-700 hover:text-stone-900 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
-              title="Voir la liste complète des tâches"
-            >
-              Accéder aux tâches &gt;
-            </button>
-          </div>
-
-        </div>
+        <AdminDashboardBottomWidgets
+          sortedReminders={logic.sortedReminders}
+          activeRemindersCount={logic.activeRemindersCount}
+          pendingTasks={logic.pendingTasks}
+          onSelectTab={onSelectTab}
+        />
       </div>
-
-      {/* Shortcuts bar */}
-      <div className="glass-card rounded-3xl p-5 space-y-4">
-        <div className="flex items-center justify-between border-b border-stone-200/60 pb-2.5">
-          <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
-            <Settings className="h-4 w-4 text-[#2A7B76]" />
-            Raccourcis Directs
-          </h4>
-          <button 
-            onClick={() => onSelectTab('settings')}
-            className="text-[10px] font-bold text-[#2A7B76] hover:underline flex items-center gap-1 cursor-pointer"
-            title="Ouvrir la configuration des paramètres et modules"
-          >
-            Paramètres & Modules &rarr;
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {/* ANNUAIRE */}
-          <div 
-            onClick={() => onSelectTab('collaborators')}
-            className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
-            title="Ouvrir l'annuaire des collaborateurs"
-          >
-            <div className="p-2 rounded-xl bg-blue-50 text-blue-600 shrink-0">
-              <Users className="h-4 w-4" />
-            </div>
-            <span className="text-xs font-bold text-stone-800">Annuaire</span>
-          </div>
-
-          {/* POINTAGE */}
-          <div 
-            onClick={() => onSelectTab('presences')}
-            className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
-            title="Ouvrir le module de pointage"
-          >
-            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
-              <Clock className="h-4 w-4" />
-            </div>
-            <span className="text-xs font-bold text-stone-800">Pointage</span>
-          </div>
-
-          {/* TACHES */}
-          <div 
-            onClick={() => onSelectTab('tasks')}
-            className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
-            title="Ouvrir le module des tâches"
-          >
-            <div className="p-2 rounded-xl bg-purple-50 text-purple-600 shrink-0">
-              <CheckSquare className="h-4 w-4" />
-            </div>
-            <span className="text-xs font-bold text-stone-800">Tâches</span>
-          </div>
-
-          {/* PARAMETRES */}
-          <div 
-            onClick={() => onSelectTab('settings')}
-            className="flex items-center gap-3 p-3 bg-stone-50/50 hover:bg-emerald-50/30 rounded-2xl border border-stone-200/80 cursor-pointer transition"
-            title="Ouvrir les paramètres"
-          >
-            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
-              <Settings className="h-4 w-4" />
-            </div>
-            <span className="text-xs font-bold text-stone-800">Paramètres</span>
-          </div>
-        </div>
-      </div>
-
     </div>
   );
 }

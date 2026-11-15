@@ -1,22 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Task, NotificationLog, Employee, TaskStatus, TaskPriority, TaskProject, AppUser, Subtask } from '../../types';
+import { Task, NotificationLog, Employee, TaskStatus, TaskProject, AppUser, Subtask } from '../../types';
 import { DEFAULT_TASK_PROJECTS } from './taskConstants';
 import { taskService } from '../../services/taskService';
-import { clientMailService } from '../../services/clientMailService';
-import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
-import { showSuccessAlert, showErrorAlert, confirmDeleteAlert, executeOperationWithLoading, executeDeleteWithSweetAlert } from '../../utils/sweetAlert';
+import { showErrorAlert } from '../../utils/sweetAlert';
 import { isSelfOnlyUser } from '../../utils/roleUtils';
+import { computeTaskVisibilityScope, filterTasksByCriteria } from './logic/taskFilterHelpers';
+import { executeSendManualTimesheet } from './logic/taskManualTimesheetHelper';
 import {
-  getDoualaDateInfo,
-  buildTimesheetHtmlReport,
-  buildTimesheetExcelBase64,
-  TimesheetItem,
-  TimesheetBlocker,
-  TimesheetManagerPoint
-} from '../../services/timesheetReportService';
-import { getTimesheetNotes } from '../../services/timesheetNotesService';
-import { isSubtaskInLast3Days, sortSubtasksNewestFirst } from '../../utils/subtaskFilterUtils';
-import { notifyExceptionalTaskCompletion } from '../../services/exceptionalTaskCompletionService';
+  confirmDeleteTaskWithPrompt,
+  createNewProjectAction,
+  createNewTaskAction,
+  deleteTaskWithSweetAlert,
+} from './logic/taskCrudHelpers';
+import { changeTaskStatusAction, saveUpdatedTaskAction } from './logic/taskStatusHelpers';
 
 interface UseTaskLogicProps {
   tasks: Task[];
@@ -37,20 +33,15 @@ export function useTaskLogic({
   currentUser,
   showToast,
 }: UseTaskLogicProps) {
-  // Project & View Tabs
   const [projects, setProjects] = useState<TaskProject[]>(DEFAULT_TASK_PROJECTS);
-
   const [activeProjectId, setActiveProjectId] = useState<string>('all');
   const [activeView, setActiveView] = useState<'kanban' | 'table' | 'rendement'>('kanban');
-
-  // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [filterType, setFilterType] = useState<'all' | 'tasks' | 'milestones'>('all');
   const [filterDatePeriod, setFilterDatePeriod] = useState<'all' | '3days' | 'today' | 'week' | 'month'>('all');
 
-  // Modals & Drawers
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isMilestoneModalDefault, setIsMilestoneModalDefault] = useState(false);
   const [createModalDefaultStatus, setCreateModalDefaultStatus] = useState<TaskStatus>('todo');
@@ -61,158 +52,19 @@ export function useTaskLogic({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
-  const handleOpenDeleteModal = async (task: Task) => {
-    const isConfirmed = await confirmDeleteAlert({
-      title: 'Supprimer la tâche',
-      text: 'Voulez-vous vraiment supprimer cette tâche ? Cette action est irréversible.',
-      itemName: task.title,
-      confirmButtonText: 'Oui, supprimer la tâche',
-    });
-
-    if (!isConfirmed) return;
-
-    const targetId = String(task.id);
-    const targetDocId = task.docId ? String(task.docId) : '';
-
-    try {
-      await taskService.deleteTask(targetId);
-      if (targetDocId && targetDocId !== targetId) {
-        await taskService.deleteTask(targetDocId);
-      }
-
-      const updated = tasks.filter((t) => {
-        const tId = String(t.id);
-        const tDocId = t.docId ? String(t.docId) : '';
-        if (tId === targetId || (targetDocId && tId === targetDocId)) return false;
-        if (tDocId && (tDocId === targetId || (targetDocId && tDocId === targetDocId))) return false;
-        return true;
-      });
-
-      onUpdateTasks(updated);
-
-      if (
-        selectedTaskForDetail &&
-        (String(selectedTaskForDetail.id) === targetId || (targetDocId && String(selectedTaskForDetail.id) === targetDocId))
-      ) {
-        setSelectedTaskForDetail(null);
-      }
-
-      if (showToast) {
-        showToast('Tâche supprimée avec succès.', 'success');
-      }
-    } catch (err: any) {
-      await showErrorAlert('Erreur de suppression', err?.message || 'Impossible de supprimer la tâche.');
-    }
-  };
-
-  const handleDeleteTaskConfirm = async () => {
-    // Maintenu pour rétrocompatibilité
-  };
-
-  // Connected employee
-  const currentEmployee = useMemo(() => {
-    if (!currentUser) return null;
-    return employees.find((e) => e.email === currentUser.email || e.name === currentUser.name || e.id === currentUser.id);
-  }, [currentUser, employees]);
-
   const isRestrictedStaff = isSelfOnlyUser(currentUser, currentRole);
 
-  // Visible employees for filters and workload view (employees only see themselves)
-  const visibleEmployees = useMemo(() => {
-    if (!isRestrictedStaff) return employees;
-    if (currentEmployee) return [currentEmployee];
-    const matched = employees.filter(e => 
-      e.id === currentUser?.id || 
-      (currentUser?.email && e.email === currentUser.email) ||
-      (currentUser?.name && e.name === currentUser.name)
-    );
-    return matched.length > 0 ? matched : employees.slice(0, 1);
-  }, [employees, isRestrictedStaff, currentEmployee, currentUser]);
+  const { currentEmployee, visibleEmployees, visibleProjects } = useMemo(
+    () => computeTaskVisibilityScope(employees, projects, isRestrictedStaff, currentUser),
+    [employees, projects, isRestrictedStaff, currentUser]
+  );
 
-  // Project restriction: non-admin users only see projects they belong to
-  const visibleProjects = useMemo(() => {
-    if (!isRestrictedStaff) return projects;
-
-    return projects.filter((p) => {
-      if (p.id === 'all') return true;
-      if (!p.memberIds || p.memberIds.length === 0) return true;
-      if (currentEmployee && p.memberIds.includes(currentEmployee.id)) return true;
-      if (currentUser && p.memberIds.includes(currentUser.id)) return true;
-      return false;
-    });
-  }, [projects, isRestrictedStaff, currentUser, currentEmployee]);
-
-  // Sync selected task details with tasks updates
   useEffect(() => {
     if (selectedTaskForDetail) {
       const latest = tasks.find((t) => t.id === selectedTaskForDetail.id);
       if (latest) setSelectedTaskForDetail(latest);
     }
   }, [tasks]);
-
-  const saveProjects = (updatedProjects: TaskProject[]) => {
-    setProjects(updatedProjects);
-  };
-
-  const handleCreateProject = async (newProject: TaskProject) => {
-    await executeOperationWithLoading({
-      loadingTitle: 'Création du projet...',
-      loadingText: 'Enregistrement du projet en base...',
-      action: async () => {
-        const updated = [...projects, newProject];
-        saveProjects(updated);
-        setActiveProjectId(newProject.id);
-      },
-      successTitle: 'Projet créé !',
-      successMessage: `Le projet "${newProject.name}" a été créé avec succès.`,
-    });
-  };
-
-  const handleCreateTask = async (taskData: Omit<Task, 'id' | 'comments' | 'incidents'> & { subtasks?: Subtask[] }) => {
-    const taskItem: Task = {
-      id: `task-${Date.now()}`,
-      ...taskData,
-      subtasks: taskData.subtasks || [],
-      comments: [],
-      incidents: [],
-      lastUpdatedTime: new Date().toISOString(),
-    };
-
-    await executeOperationWithLoading({
-      loadingTitle: 'Création de la tâche...',
-      loadingText: 'Enregistrement et synchronisation en base de données...',
-      action: async () => {
-        await taskService.saveTask(taskItem);
-        const updatedTasks = [taskItem, ...tasks];
-        onUpdateTasks(updatedTasks);
-
-        onAddNotification({
-          id: `notif-${Date.now()}`,
-          recipient: taskItem.assignedTo || 'Équipe',
-          type: 'system',
-          title: 'Nouvelle Tâche Assignée',
-          content: `${taskItem.title} (${taskItem.date})`,
-          payload: '{}',
-          timestamp: new Date().toISOString(),
-        });
-
-        pushNotificationBridgeService.sendPush({
-          title: 'Nouvelle Tâche Assignée 📋',
-          message: `${taskItem.title} vous a été assignée pour le ${taskItem.date}.`,
-          senderName: currentRole || 'Responsable',
-          type: 'task_assigned',
-          link: 'tasks',
-        });
-      },
-      successTitle: 'Tâche créée !',
-      successMessage: `La tâche "${taskItem.title}" a été enregistrée avec succès.`,
-    });
-  };
-
-  const handleOpenCreateSubtask = (task?: Task) => {
-    setTaskForSubtaskModal(task || null);
-    setIsSubtaskModalOpen(true);
-  };
 
   const handleCreateSubtask = async (subtask: Subtask, targetTaskId?: string) => {
     try {
@@ -228,474 +80,45 @@ export function useTaskLogic({
       };
 
       await taskService.saveTask(updatedTask);
-      const updatedTasks = tasks.map((t) => (t.id === taskIdToUpdate ? updatedTask : t));
-      onUpdateTasks(updatedTasks);
-
+      onUpdateTasks(tasks.map((t) => (t.id === taskIdToUpdate ? updatedTask : t)));
       if (selectedTaskForDetail && selectedTaskForDetail.id === taskIdToUpdate) {
         setSelectedTaskForDetail(updatedTask);
       }
-
-      if (showToast) {
-        showToast(`Sous-tâche "${subtask.title}" créée avec succès !`, 'success');
-      }
+      if (showToast) showToast(`Sous-tâche "${subtask.title}" créée avec succès !`, 'success');
     } catch (err: any) {
-      await showErrorAlert('Erreur', err?.message || 'Impossible d\'ajouter la sous-tâche.');
+      await showErrorAlert('Erreur', err?.message || "Impossible d'ajouter la sous-tâche.");
     }
   };
 
-  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
-    const targetTask = tasks.find((t) => t.id === taskId);
-    if (!targetTask) return;
-
-    // Si la tâche est marquée comme terminée, marquer également toutes ses sous-tâches comme terminées
-    const updatedSubtasks = (targetTask.subtasks || []).map((s) => {
-      if (newStatus === 'completed') {
-        return { ...s, completed: true, status: 'completed' as TaskStatus };
-      }
-      return s;
-    });
-
-    const updatedTask: Task = { 
-      ...targetTask, 
-      status: newStatus, 
-      subtasks: updatedSubtasks,
-      lastUpdatedTime: new Date().toISOString() 
-    };
-    await taskService.saveTask(updatedTask);
-
-    const updated = tasks.map((t) => (t.id === taskId ? updatedTask : t));
-    onUpdateTasks(updated);
-
-    if (selectedTaskForDetail && selectedTaskForDetail.id === taskId) {
-      setSelectedTaskForDetail(updatedTask);
-    }
-
-    const statusLabels: Record<string, string> = {
-      todo: 'À faire',
-      in_progress: 'En cours',
-      review: 'En révision',
-      completed: 'Terminée',
-    };
-    const label = statusLabels[newStatus] || newStatus;
-    const targetRecipient = targetTask.assignedTo || targetTask.employeeId || 'Collaborateur';
-
-    onAddNotification({
-      id: `notif-task-move-${Date.now()}-${taskId}`,
-      recipient: targetRecipient,
-      type: 'system',
-      title: `Mouvement de Tâche : ${targetTask.title}`,
-      content: `La tâche est passée au statut « ${label} ».`,
-      payload: JSON.stringify({
-        source: 'task_movement',
-        taskId: targetTask.id,
-        employeeId: targetRecipient,
-        newStatus,
-        previousStatus: targetTask.status,
+  const filteredTasks = useMemo(
+    () =>
+      filterTasksByCriteria({
+        tasks,
+        projects,
+        isRestrictedStaff,
+        currentEmployee,
+        currentUser,
+        searchTerm,
+        activeProjectId,
+        filterPriority,
+        filterAssignee,
+        filterType,
+        filterDatePeriod,
       }),
-      timestamp: new Date().toISOString(),
-      read: false,
-    });
-
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-    }
-
-    pushNotificationBridgeService.sendPush({
-      title: 'Mise à jour de Tâche 🔄',
-      message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
-      senderName: currentRole || 'Collaborateur',
-      type: 'task_assigned',
-      link: 'tasks',
-    });
-
-    if (newStatus === 'completed' && targetTask.status !== 'completed') {
-      notifyExceptionalTaskCompletion(
-        updatedTask,
-        targetTask.assignedTo,
-        onAddNotification as any
-      );
-    }
-
-    if (showToast) showToast('Statut mis à jour et enregistré.', 'success');
-  };
-
-  const handleSaveTask = async (updatedTask: Task) => {
-    const prevTask = tasks.find((t) => t.id === updatedTask.id);
-    const finalizedTask = { ...updatedTask, updatedAt: new Date().toISOString() };
-
-    await executeOperationWithLoading({
-      loadingTitle: 'Enregistrement de la tâche...',
-      loadingText: 'Mise à jour et synchronisation sur le serveur...',
-      action: async () => {
-        await taskService.saveTask(finalizedTask);
-        const updated = tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t));
-        onUpdateTasks(updated);
-        setSelectedTaskForDetail(finalizedTask);
-
-        if (finalizedTask.assignedTo) {
-          const isStatusChanged = prevTask && prevTask.status !== finalizedTask.status;
-          const isPriorityChanged = prevTask && prevTask.priority !== finalizedTask.priority;
-          if (isStatusChanged || isPriorityChanged || !prevTask) {
-            onAddNotification({
-              id: `notif-task-update-${Date.now()}-${finalizedTask.id}`,
-              recipient: finalizedTask.assignedTo,
-              type: 'system',
-              title: `Mise à jour de tâche : ${finalizedTask.title}`,
-              content: isStatusChanged 
-                ? `Statut modifié : passage à « ${finalizedTask.status} »` 
-                : `Détails de la tâche mis à jour.`,
-              payload: JSON.stringify({
-                source: 'task_movement',
-                taskId: finalizedTask.id,
-                employeeId: finalizedTask.assignedTo,
-                newStatus: finalizedTask.status,
-              }),
-              timestamp: new Date().toISOString(),
-              read: false,
-            });
-
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-            }
-          }
-        }
-      },
-      successTitle: 'Tâche mise à jour !',
-      successMessage: `La tâche "${finalizedTask.title}" a été enregistrée avec succès.`,
-    });
-  };
-
-  const handleDeleteTask = async (id: string) => {
-    const taskToDelete = tasks.find((t) => t.id === id);
-    await executeDeleteWithSweetAlert({
-      title: 'Supprimer la tâche ?',
-      text: 'Voulez-vous vraiment supprimer définitivement cette tâche ?',
-      itemName: taskToDelete?.title,
-      action: async () => {
-        await taskService.deleteTask(id);
-        const updated = tasks.filter((t) => t.id !== id);
-        onUpdateTasks(updated);
-        setSelectedTaskForDetail(null);
-      },
-      successTitle: 'Tâche supprimée !',
-      successMessage: 'La tâche a été retirée avec succès.',
-    });
-  };
-
-  // Filter tasks based on search, project permissions, priority, assignee, and milestone filter
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((t) => {
-      if (isRestrictedStaff) {
-        const empName = currentEmployee?.name || currentUser?.name;
-        const empId = currentEmployee?.id || currentUser?.id;
-        const userEmail = currentUser?.email;
-
-        const assignedField = t.assignedTo || '';
-        const assignedList = assignedField.split(',').map(s => s.trim());
-
-        const assignedToMe = assignedList.some(a => 
-          (empName && a.toLowerCase() === empName.toLowerCase()) ||
-          (empId && a === empId) ||
-          (userEmail && a.toLowerCase() === userEmail.toLowerCase()) ||
-          a === 'Équipe' || a === 'Tous'
-        ) || (t.employeeId && (t.employeeId === empId || t.employeeId === currentUser?.id));
-        if (!assignedToMe) return false;
-      }
-
-      if (isRestrictedStaff && t.projectId && t.projectId !== 'general') {
-        const p = projects.find((proj) => proj.id === t.projectId);
-        if (p && p.memberIds && p.memberIds.length > 0) {
-          const isMember = (currentEmployee && p.memberIds.includes(currentEmployee.id)) ||
-                           (currentUser && p.memberIds.includes(currentUser.id));
-          if (!isMember) return false;
-        }
-      }
-
-      const matchSearch =
-        t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (t.description && t.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (t.milestoneTarget && t.milestoneTarget.toLowerCase().includes(searchTerm.toLowerCase()));
-
-      const matchProject =
-        activeProjectId === 'all'
-          ? true
-          : t.projectId === activeProjectId || (!t.projectId && activeProjectId === 'general');
-
-      const matchPriority = filterPriority === 'all' ? true : t.priority === filterPriority;
-
-      const assignedList = (t.assignedTo || 'Équipe').split(',').map(s => s.trim());
-      const matchAssignee =
-        filterAssignee === 'all'
-          ? true
-          : assignedList.includes(filterAssignee) || (!t.assignedTo && filterAssignee === 'Équipe');
-
-      const matchType =
-        filterType === 'all'
-          ? true
-          : filterType === 'milestones'
-          ? !!t.isMilestone
-          : !t.isMilestone;
-
-      // Filtre temporel (notamment pour les responsables et la vue d'ensemble)
-      let matchDate = true;
-      if (filterDatePeriod !== 'all' && t.date) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const taskDate = new Date(`${t.date}T12:00:00`);
-
-        if (filterDatePeriod === 'today') {
-          const todayStr = today.toISOString().split('T')[0];
-          matchDate = t.date === todayStr;
-        } else if (filterDatePeriod === '3days') {
-          const cutoff = new Date(today);
-          cutoff.setDate(cutoff.getDate() - 2); // 3 derniers jours (J, J-1, J-2)
-          matchDate = taskDate.getTime() >= cutoff.getTime();
-        } else if (filterDatePeriod === 'week') {
-          const weekCutoff = new Date(today);
-          weekCutoff.setDate(weekCutoff.getDate() - 6);
-          matchDate = taskDate.getTime() >= weekCutoff.getTime();
-        } else if (filterDatePeriod === 'month') {
-          const monthCutoff = new Date(today);
-          monthCutoff.setDate(monthCutoff.getDate() - 29);
-          matchDate = taskDate.getTime() >= monthCutoff.getTime();
-        }
-      }
-
-      return matchSearch && matchProject && matchPriority && matchAssignee && matchType && matchDate;
-    });
-  }, [tasks, searchTerm, activeProjectId, filterPriority, filterAssignee, filterType, filterDatePeriod, currentRole, currentUser, currentEmployee, projects]);
-
-  const handleSendManualTimesheet = async () => {
-    try {
-      if (showToast) showToast("Génération et envoi de votre fiche de temps...", "success");
-
-      const myName = currentUser?.name || currentEmployee?.name || "Collaborateur";
-      const myEmail = currentUser?.email || currentEmployee?.email || "";
-      const myId = currentUser?.id || currentEmployee?.id || "emp-001";
-      const department = currentEmployee?.department || "Direction Générale";
-
-      const doualaTime = getDoualaDateInfo();
-
-      const myTasks = tasks.filter((t) => {
-        const assigned = (t.assignedTo || "").toLowerCase();
-        return assigned.includes(myName.toLowerCase()) || assigned.includes(myEmail.toLowerCase()) || t.employeeId === myId;
-      });
-
-      let itemIndex = 1;
-      const items: TimesheetItem[] = [];
-      const blockers: TimesheetBlocker[] = [];
-      const managerPoints: TimesheetManagerPoint[] = [];
-
-      myTasks.forEach((t) => {
-        // Blocages sur la tâche parente
-        if (t.incidents && Array.isArray(t.incidents) && t.incidents.length > 0) {
-          t.incidents.forEach((inc) => {
-            blockers.push({
-              sourceTask: t.title,
-              reason: inc.title || inc.description || 'Incident ou blocage signalé',
-              status: inc.resolved ? 'Résolu' : 'Bloqué',
-            });
-          });
-        } else if (t.status === 'blocked') {
-          blockers.push({
-            sourceTask: t.title,
-            reason: 'Tâche déclarée bloquée',
-            status: 'Bloqué',
-          });
-        }
-
-        // Remontées des commentaires sur la tâche parente -> Points à signaler au manager
-        if (t.comment && typeof t.comment === 'string' && t.comment.trim()) {
-          managerPoints.push({
-            sourceTask: t.title,
-            content: t.comment.trim(),
-            author: myName,
-          });
-        }
-        if (Array.isArray(t.comments) && t.comments.length > 0) {
-          t.comments.forEach((c) => {
-            managerPoints.push({
-              sourceTask: t.title,
-              content: c.text || '',
-              author: c.author || myName,
-              time: c.timestamp || '',
-            });
-          });
-        }
-
-        // Traitement des sous-tâches (priorité aux sous-tâches des 3 derniers jours triées du plus récent au plus ancien)
-        if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
-          const sortedSubs = sortSubtasksNewestFirst(t.subtasks, t.date);
-          const recentSubs = sortedSubs.filter((s) => isSubtaskInLast3Days(s, t.date));
-          const subsToProcess = recentSubs.length > 0 ? recentSubs : sortedSubs;
-
-          subsToProcess.forEach((sub) => {
-            const isBlocked = sub.status === 'blocked' || sub.isBlocked || Boolean(sub.blockerReason);
-            items.push({
-              index: itemIndex++,
-              taskTitle: t.title,
-              subTitle: sub.title,
-              status: sub.status || (sub.completed ? 'completed' : 'todo'),
-              statusLabel: sub.completed ? 'TERMINÉ' : (sub.status === 'in_progress' ? 'EN COURS' : 'À FAIRE'),
-              estimatedHours: Number(sub.estimatedHours) || 0,
-              actualHours: Number(sub.actualHours) || 0,
-              blockerReason: sub.blockerReason,
-              isBlocked,
-            });
-
-            if (isBlocked) {
-              blockers.push({
-                sourceTask: `${sub.title} (sur "${t.title}")`,
-                reason: sub.blockerReason || 'Difficulté opérationnelle signalée',
-                status: 'Bloqué',
-              });
-            }
-
-            if (Array.isArray(sub.comments)) {
-              sub.comments.forEach((c) => {
-                managerPoints.push({
-                  sourceTask: `${sub.title} (sur "${t.title}")`,
-                  content: c.text || '',
-                  author: c.author || myName,
-                  time: c.timestamp || '',
-                });
-              });
-            }
-          });
-        } else {
-          // Tâche simple sans sous-tâches : intégrée directement comme tâche du jour
-          const isBlocked = t.status === 'blocked';
-          items.push({
-            index: itemIndex++,
-            taskTitle: t.title,
-            subTitle: t.title,
-            status: t.status || 'todo',
-            statusLabel: t.status === 'completed' ? 'TERMINÉ' : (t.status === 'in_progress' ? 'EN COURS' : 'À FAIRE'),
-            estimatedHours: Number(t.estimatedHours) || 1,
-            actualHours: Number(t.actualHours) || 0,
-            blockerReason: isBlocked ? 'Tâche bloquée' : undefined,
-            isBlocked,
-          });
-        }
-      });
-
-      // Intégrer également les notes consignées du collaborateur pour aujourd'hui
-      try {
-        const recordedNotes = getTimesheetNotes(String(myId), doualaTime.dayIso);
-        recordedNotes.forEach((n) => {
-          if (n.category === 'bloquant' || n.category === 'materiel') {
-            blockers.push({
-              sourceTask: `Note consignée (${n.category.toUpperCase()})`,
-              reason: n.content,
-              time: n.time,
-              status: n.status,
-            });
-          } else {
-            managerPoints.push({
-              sourceTask: `Note consignée (${n.category.toUpperCase()})`,
-              content: n.content,
-              author: n.authorName || myName,
-              time: n.time,
-            });
-          }
-        });
-      } catch (err) {
-        // Fallback silencieux
-      }
-
-      const totalEstimated = items.reduce((sum, i) => sum + i.estimatedHours, 0);
-      const totalActual = items.reduce((sum, i) => sum + i.actualHours, 0);
-
-      // 🎯 Top priorités du jour (vide si aucune tâche effectuée)
-      const topPriorities = items.length === 0 ? [] : myTasks.slice(0, 3).map((t, idx) => ({
-        id: t.id,
-        title: t.title,
-        priority: (idx === 0 ? 'P1' : idx === 1 ? 'P2' : 'P3') as 'P1' | 'P2' | 'P3',
-        status: t.status === 'completed' ? 'Fait' : (t.status === 'in_progress' ? 'En cours' : 'À faire'),
-        isMilestone: !!t.isMilestone,
-      }));
-
-      // ☑️ Tâches non complètes à reporter à demain
-      const postponedTasks = myTasks
-        .filter((t) => t.status !== 'completed')
-        .map((t) => t.title);
-
-      const timesheetData = {
-        employeeName: myName,
-        employeeEmail: myEmail,
-        employeeId: myId,
-        department,
-        dateStr: doualaTime.dateOnly,
-        timeStr: doualaTime.timeOnly,
-        items,
-        blockers,
-        managerPoints,
-        totalEstimatedHours: totalEstimated,
-        totalActualHours: totalActual,
-        topPriorities,
-        postponedTasks,
-      };
-
-      const htmlContent = buildTimesheetHtmlReport(timesheetData);
-      const excelBase64 = buildTimesheetExcelBase64(timesheetData);
-
-      const safeCollabName = myName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-      const safeDate = doualaTime.dayIso.replace(/-/g, '_');
-      const excelFilename = `feuille_de_taches_${safeCollabName}_${safeDate}.xlsx`;
-
-      const result = await clientMailService.sendThreadedEmail({
-        employeeName: myName,
-        employeeId: myId,
-        employeeEmail: myEmail,
-        eventTitle: `Feuille de tâches`,
-        threadCategory: 'timesheet',
-        threadSubject: `Feuille de tâches - ${myName}`,
-        htmlContent,
-        attachments: [
-          {
-            filename: excelFilename,
-            content: excelBase64,
-            encoding: 'base64',
-            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          },
-        ],
-      });
-
-      if (result.success) {
-        console.log("✅ [FEUILLE DE TÂCHES SUCCÈS] Transmission confirmée :", result);
-        if (showToast) showToast("Feuille de tâches Excel envoyée avec succès !", "success");
-        onAddNotification({
-          id: `notif-${Date.now()}`,
-          title: "Feuille de tâches transmise",
-          content: `Votre feuille de tâches (${items.length} activités, ${totalActual}h réelles) a été transmise aux RH avec la pièce jointe Excel.`,
-          message: `Votre feuille de tâches (${items.length} activités, ${totalActual}h réelles) a été transmise aux RH avec la pièce jointe Excel.`,
-          type: "email",
-          recipient: myEmail || myName,
-          payload: JSON.stringify({ employeeId: myId }),
-          timestamp: new Date().toISOString(),
-          read: false,
-          senderName: "Système RH",
-        });
-      } else {
-        const rawError = result.error || "Erreur inconnue lors de l'envoi de la fiche de temps.";
-        console.error("❌ [FICHE DE TEMPS ÉCHEC] Véritable exception reçue du serveur :", {
-          error: rawError,
-          fullResult: result,
-        });
-        if (showToast) showToast(rawError, "error");
-        await showErrorAlert("Échec d'envoi de la fiche de temps", rawError);
-      }
-    } catch (err: any) {
-      const rawException = err?.message || String(err);
-      console.error("💥 [FICHE DE TEMPS EXCEPTION CLIENT BRUTE]:", {
-        message: rawException,
-        stack: err?.stack,
-        errorObj: err,
-      });
-      if (showToast) showToast(rawException, "error");
-      await showErrorAlert("Exception inattendue", rawException);
-    }
-  };
+    [
+      tasks,
+      searchTerm,
+      activeProjectId,
+      filterPriority,
+      filterAssignee,
+      filterType,
+      filterDatePeriod,
+      currentRole,
+      currentUser,
+      currentEmployee,
+      projects,
+    ]
+  );
 
   return {
     projects,
@@ -728,22 +151,55 @@ export function useTaskLogic({
     setIsSubtaskModalOpen,
     taskForSubtaskModal,
     setTaskForSubtaskModal,
-    handleOpenCreateSubtask,
+    handleOpenCreateSubtask: (task?: Task) => {
+      setTaskForSubtaskModal(task || null);
+      setIsSubtaskModalOpen(true);
+    },
     handleCreateSubtask,
     filteredTasks,
-    handleCreateProject,
-    handleCreateTask,
-    handleStatusChange,
-    handleSaveTask,
-    handleDeleteTask,
+    handleCreateProject: (newProject: TaskProject) =>
+      createNewProjectAction({ newProject, projects, setProjects, setActiveProjectId }),
+    handleCreateTask: (taskData: Omit<Task, 'id' | 'comments' | 'incidents'> & { subtasks?: Subtask[] }) =>
+      createNewTaskAction({ taskData, tasks, currentRole, onUpdateTasks, onAddNotification }),
+    handleStatusChange: (taskId: string, newStatus: TaskStatus) =>
+      changeTaskStatusAction({
+        taskId,
+        newStatus,
+        tasks,
+        currentRole,
+        selectedTaskForDetail,
+        onUpdateTasks,
+        setSelectedTaskForDetail,
+        onAddNotification,
+        showToast,
+      }),
+    handleSaveTask: (updatedTask: Task) =>
+      saveUpdatedTaskAction({
+        updatedTask,
+        tasks,
+        onUpdateTasks,
+        setSelectedTaskForDetail,
+        onAddNotification,
+      }),
+    handleDeleteTask: (id: string) =>
+      deleteTaskWithSweetAlert({ id, tasks, onUpdateTasks, setSelectedTaskForDetail }),
     isDeleteModalOpen,
     setIsDeleteModalOpen,
     taskToDelete,
     setTaskToDelete,
-    handleOpenDeleteModal,
-    handleDeleteTaskConfirm,
+    handleOpenDeleteModal: (task: Task) =>
+      confirmDeleteTaskWithPrompt({
+        task,
+        tasks,
+        selectedTaskForDetail,
+        onUpdateTasks,
+        setSelectedTaskForDetail,
+        showToast,
+      }),
+    handleDeleteTaskConfirm: async () => {},
     isRestrictedStaff,
     visibleEmployees,
-    handleSendManualTimesheet,
+    handleSendManualTimesheet: () =>
+      executeSendManualTimesheet({ tasks, currentUser, currentEmployee, onAddNotification, showToast }),
   };
 }

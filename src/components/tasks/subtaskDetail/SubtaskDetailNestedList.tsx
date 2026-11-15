@@ -1,0 +1,195 @@
+import React from 'react';
+import { Trash2, Filter, History } from 'lucide-react';
+import { Subtask } from '../../../types';
+import { formatSubtaskRelativeDate } from '../../../utils/subtaskFilterUtils';
+
+interface SubtaskDetailNestedListProps {
+  displayedSubtasks: Subtask[];
+  hiddenCount: number;
+  totalCount: number;
+  subtaskFilterPeriod: 'last3days' | 'all';
+  setSubtaskFilterPeriod: (p: 'last3days' | 'all') => void;
+  draftDueDate: string;
+  newSubtaskTitle: string;
+  setNewSubtaskTitle: (v: string) => void;
+  onAddSubtask: () => void;
+  onToggleSubtask: (subId: string) => void;
+  onSelectNestedSubtask: (sub: Subtask) => void;
+  onDeleteSubtask: (subId: string) => void;
+}
+
+export const SubtaskDetailNestedList: React.FC<SubtaskDetailNestedListProps> = ({
+  displayedSubtasks,
+  hiddenCount,
+  totalCount,
+  subtaskFilterPeriod,
+  setSubtaskFilterPeriod,
+  draftDueDate,
+  newSubtaskTitle,
+  setNewSubtaskTitle,
+  onAddSubtask,
+  onToggleSubtask,
+  onSelectNestedSubtask,
+  onDeleteSubtask,
+}) => {
+  return (
+    <div className="space-y-2.5 bg-stone-50 p-4 rounded-2xl border border-stone-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-stone-200/60">
+        <h4 className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
+          <span>Sous-tâches subordonnées</span>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-200/80 text-stone-700 font-semibold">
+            {displayedSubtasks.length}/{totalCount}
+          </span>
+        </h4>
+
+        <div className="flex items-center gap-1 self-start sm:self-auto bg-stone-200/70 p-0.5 rounded-xl text-[10px] font-bold">
+          <button
+            type="button"
+            onClick={() => setSubtaskFilterPeriod('last3days')}
+            className={`px-2 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+              subtaskFilterPeriod === 'last3days'
+                ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+            title="3 derniers jours uniquement"
+          >
+            <Filter className="h-2.5 w-2.5" />
+            <span>3 derniers jours</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubtaskFilterPeriod('all')}
+            className={`px-2 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+              subtaskFilterPeriod === 'all'
+                ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+            title="Toutes les sous-tâches"
+          >
+            <History className="h-2.5 w-2.5" />
+            <span>Toutes ({totalCount})</span>
+          </button>
+        </div>
+      </div>
+
+      {subtaskFilterPeriod === 'last3days' && hiddenCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1.5 text-[10px] text-amber-900 flex items-center justify-between gap-1">
+          <span>💡 {hiddenCount} sous-tâche(s) antérieure(s) masquée(s).</span>
+          <button
+            type="button"
+            onClick={() => setSubtaskFilterPeriod('all')}
+            className="font-bold underline cursor-pointer"
+          >
+            Afficher tout
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        {displayedSubtasks.length === 0 ? (
+          <div className="text-center py-4 bg-white rounded-xl border border-dashed border-stone-200 text-stone-400 text-xs">
+            {totalCount > 0
+              ? `Aucune sur les 3 derniers jours (${totalCount} antérieure${totalCount > 1 ? 's' : ''}).`
+              : 'Aucune sous-tâche subordonnée.'}
+          </div>
+        ) : (
+          displayedSubtasks.map((sub) => {
+            const relDate = formatSubtaskRelativeDate(sub, draftDueDate);
+            return (
+              <div
+                key={sub.id}
+                className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 gap-2"
+              >
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={sub.completed}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      onToggleSubtask(sub.id);
+                    }}
+                    className="w-4 h-4 rounded border-stone-300 text-[#2A7B76] cursor-pointer shrink-0"
+                  />
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectNestedSubtask(sub);
+                    }}
+                    className="flex-1 min-w-0 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs block truncate hover:underline ${
+                          sub.completed ? 'line-through text-stone-400' : 'text-stone-800 font-bold'
+                        }`}
+                      >
+                        {sub.title}
+                      </span>
+                      <span className="text-[9px] font-mono px-1 rounded bg-stone-100 text-stone-500">
+                        📅 {relDate}
+                      </span>
+                    </div>
+                  </div>
+                  {(sub.status === 'blocked' ||
+                    sub.isBlocked ||
+                    (sub.incidents && sub.incidents.length > 0)) && (
+                    <span className="px-1.5 py-0.5 rounded-md font-bold text-[9px] bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-0.5 shrink-0">
+                      <span>🚨</span>
+                      <span>Bloquée</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectNestedSubtask(sub);
+                    }}
+                    className="px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[10px] font-bold cursor-pointer"
+                  >
+                    Ouvrir ⚙️
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteSubtask(sub.id);
+                    }}
+                    className="text-stone-400 hover:text-rose-600 p-1 cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 pt-1">
+        <input
+          type="text"
+          placeholder="Ajouter une sous-tâche..."
+          value={newSubtaskTitle}
+          onChange={(e) => setNewSubtaskTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              onAddSubtask();
+            }
+          }}
+          className="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-xs outline-none focus:ring-2 focus:ring-[#2A7B76]"
+        />
+        <button
+          type="button"
+          onClick={onAddSubtask}
+          className="px-3 py-1.5 bg-[#2A7B76] text-white rounded-xl text-xs font-bold hover:bg-[#23635f] cursor-pointer"
+        >
+          Ajouter
+        </button>
+      </div>
+    </div>
+  );
+};

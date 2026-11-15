@@ -1,354 +1,31 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  AppUser, 
-  Employee,
-  Presence,
-  Task,
-  Reminder,
-  NotificationLog,
-  SalaryPayment,
-  FinancialTransaction,
-  EmployeeSalaryDebt,
-  GeneratedDocument,
-  DisciplinaryIncident,
-  AttendanceIncident,
-  InventoryItem,
-  Partner,
-  CompanyModuleConfig,
-  LeaveRequest,
-} from './types';
-import { ToastMessage } from './components/Toast';
+import React from 'react';
 import { useAppInitialData } from './hooks/useAppInitialData';
-import { loadSecureSession, storeSecureSession, clearSecureSession, canAccessTab } from './services/sessionService';
-import { safeStorage } from './utils/safeStorage';
-import { subscribeToUsers } from './services/userService';
-import { authService } from './services/auth/authService';
-import { supabase } from './lib/supabase';
-import { getDefaultPortalForUser, isEmployeeUser, isEmployeeOnlyRole, canSeeAllNotifications } from './utils/roleUtils';
-import Sidebar, { TabType } from './components/Sidebar';
+import { useAppOrchestration } from './hooks/useAppOrchestration';
+import { storeSecureSession } from './services/sessionService';
+import { isEmployeeUser } from './utils/roleUtils';
+import Sidebar from './components/Sidebar';
 import { AppTopNavbar } from './components/navigation/AppTopNavbar';
 import { AppTabRouter } from './components/navigation/AppTabRouter';
 import { AppMobileBottomNav } from './components/navigation/AppMobileBottomNav';
 import LoginModal from './components/LoginModal';
-import ProfileModal from './components/ProfileModal';
-import KioskClockingModal from './components/KioskClockingModal';
-import OfficeQRCodeModal from './components/OfficeQRCodeModal';
 import ToastContainer from './components/Toast';
 import { DatabaseHealthBanner } from './components/common/DatabaseHealthBanner';
 import OfflineStatusBanner from './components/OfflineStatusBanner';
-import { GlobalTooltipContainer } from './components/common/GlobalTooltipContainer';
-import { PushNotificationPopupContainer } from './components/notifications/PushNotificationPopupContainer';
-import { GlobalActionLoader } from './components/common/GlobalActionLoader';
-import { showSuccessAlert, showErrorAlert, showPendingAlert } from './utils/sweetAlert';
-import { asyncActionTrackerService } from './services/asyncActionTrackerService';
-import { PwaUpdateToast } from './components/pwa/PwaUpdateToast';
+import { AppOverlays } from './components/app/AppOverlays';
 import { getHomeUrgentReminders } from './services/reminderService';
 
 export default function App() {
   const initialData = useAppInitialData();
-
-  // Dynamic Favicon and App Icon sync with Company Logo settings
-  useEffect(() => {
-    const logoBase64 = initialData.moduleConfig?.companyLogoBase64;
-    if (logoBase64) {
-      const links = document.querySelectorAll("link[rel*='icon'], link[rel='apple-touch-icon']");
-      links.forEach((link) => {
-        (link as HTMLLinkElement).href = logoBase64;
-      });
-    }
-  }, [initialData.moduleConfig?.companyLogoBase64]);
-
-  // Global anti-silent error interceptor (Catches all unhandled runtime errors & promise rejections)
-  useEffect(() => {
-    const handleGlobalError = (event: ErrorEvent) => {
-      const msg = event.message || '';
-      if (!msg.includes('WebSocket') && !msg.includes('vite/client')) {
-        console.error("Global uncaught error caught:", event.error || event.message);
-        showErrorAlert("Erreur Inattendue", msg || "Une erreur critique est survenue dans l'application.");
-      }
-    };
-
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const reasonStr = String(event.reason?.message || event.reason || '');
-      if (!reasonStr.includes('WebSocket') && !reasonStr.includes('vite/client')) {
-        console.error("Global unhandled promise rejection caught:", event.reason);
-        showErrorAlert("Erreur Asynchrone", reasonStr || "Une opération en arrière-plan a échoué.");
-      }
-    };
-
-    window.addEventListener('error', handleGlobalError);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
-    return () => {
-      window.removeEventListener('error', handleGlobalError);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-    };
-  }, []);
-
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-
-  // Navigation & UI States
-  const [activeTab, setActiveTabState] = useState<TabType>(() => (safeStorage.getItem('citrine_active_tab') as TabType) || 'dashboard');
-  const setActiveTab = (tab: TabType) => {
-    setActiveTabState(tab);
-    safeStorage.setItem('citrine_active_tab', tab);
-  };
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // Modals
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [kioskModalOpen, setKioskModalOpen] = useState(false);
-  const [officeQrModalOpen, setOfficeQrModalOpen] = useState(false);
-
-  // Toasts
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const deduceTitle = (text: string, t: string): string => {
-    const lower = text.toLowerCase();
-    if (lower.includes('pointage') || lower.includes('badgé') || lower.includes('arrivée') || lower.includes('départ') || lower.includes('pause')) return 'Pointage de Présence';
-    if (lower.includes('permission') || lower.includes('congé') || lower.includes('absence')) return 'Demande de Permission / Congé';
-    if (lower.includes('frais') || lower.includes('remboursement') || lower.includes('dépense')) return 'Note de Frais';
-    if (lower.includes('paie') || lower.includes('salaire') || lower.includes('bulletin')) return 'Rémunération & Paie';
-    if (lower.includes('prêt') || lower.includes('acompte')) return 'Avance & Prêt Financier';
-    if (lower.includes('tâche') || lower.includes('task')) return 'Gestion des Tâches';
-    if (lower.includes('incident') || lower.includes('retard') || lower.includes('discipline')) return 'Signalement RH / Incident';
-    if (lower.includes('profil') || lower.includes('avatar') || lower.includes('mot de passe') || lower.includes('compte')) return 'Gestion du Profil';
-    if (lower.includes('code') || lower.includes('badge') || lower.includes('qr')) return 'Code d’Accès & Badge';
-    if (lower.includes('supprim') || lower.includes('annul')) return 'Suppression effectuée';
-    if (lower.includes('modifi') || lower.includes('mis à jour')) return 'Mise à jour enregistrée';
-    if (t === 'error') return 'Attention requise';
-    if (t === 'warning') return 'Avertissement système';
-    if (t === 'info') return 'Information Citrine';
-    return 'Opération confirmée';
-  };
-
-  const lastToastRef = useRef<{ message: string; time: number }>({ message: '', time: 0 });
-
-  const showToast = (
-    titleOrMessage: string,
-    messageOrType?: string | 'success' | 'error' | 'warning' | 'info',
-    type?: 'success' | 'error' | 'warning' | 'info'
-  ) => {
-    let resolvedTitle = '';
-    let resolvedMessage = '';
-    let resolvedType: 'success' | 'error' | 'warning' | 'info' = 'success';
-
-    if (type) {
-      resolvedTitle = titleOrMessage;
-      resolvedMessage = String(messageOrType || '');
-      resolvedType = type;
-    } else if (
-      messageOrType === 'success' || 
-      messageOrType === 'error' || 
-      messageOrType === 'warning' || 
-      messageOrType === 'info'
-    ) {
-      resolvedType = messageOrType;
-      resolvedTitle = deduceTitle(titleOrMessage, resolvedType);
-      resolvedMessage = titleOrMessage;
-    } else if (typeof messageOrType === 'string' && messageOrType.trim().length > 0) {
-      resolvedTitle = titleOrMessage;
-      resolvedMessage = messageOrType;
-      resolvedType = 'success';
-    } else {
-      resolvedType = 'success';
-      resolvedTitle = deduceTitle(titleOrMessage, resolvedType);
-      resolvedMessage = titleOrMessage;
-    }
-
-    const now = Date.now();
-    if (lastToastRef.current.message === resolvedMessage && now - lastToastRef.current.time < 3500) {
-      return; // Ignore duplicate feedback within 3.5 seconds
-    }
-    lastToastRef.current = { message: resolvedMessage, time: now };
-
-    // Règle stricte : attendre que tout loader serveur en cours soit achevé et invisible.
-    // Le loader et le SweetAlert ne doivent jamais s'afficher au même moment.
-    (async () => {
-      try {
-        await asyncActionTrackerService.waitForIdle();
-        // Délai pour transition de rendu propre
-        await new Promise((r) => setTimeout(r, 60));
-
-        if (resolvedType === 'error') {
-          await showErrorAlert(resolvedTitle || "Échec de l'opération", resolvedMessage);
-        } else if (resolvedType === 'warning' || resolvedType === 'info') {
-          await showPendingAlert(resolvedTitle || 'Information Citrine', resolvedMessage);
-        } else {
-          await showSuccessAlert(resolvedTitle || 'Opération confirmée', resolvedMessage);
-        }
-      } catch (err) {
-        console.warn('[App] Erreur lors de l\'affichage de SweetAlert:', err);
-      }
-    })();
-  };
-
-  const dismissToast = (_id: string) => {};
-
-  // Clock
-  const [currentTime, setCurrentTime] = useState<string>(() => {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const app = useAppOrchestration({
+    employees: initialData.employees,
+    presences: initialData.presences,
+    notifications: initialData.notifications,
+    leaveRequests: initialData.leaveRequests,
+    attendanceIncidents: initialData.attendanceIncidents,
+    moduleConfig: initialData.moduleConfig,
   });
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const d = new Date();
-      setCurrentTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Restore authenticated session on mount with immediate local trust (preventing refresh logout) and background sync
-  useEffect(() => {
-    loadSecureSession().then(async (user) => {
-      if (user && user.email) {
-        // Restaurer immédiatement l'utilisateur depuis la session locale sécurisée pour éviter toute déconnexion au rafraîchissement
-        setCurrentUser(user);
-        const savedTab = safeStorage.getItem('citrine_active_tab') as TabType;
-        const defaultTab = getDefaultPortalForUser(user) as TabType;
-        if (savedTab && canAccessTab(user.role, savedTab)) {
-          setActiveTabState(savedTab);
-        } else {
-          setActiveTabState(defaultTab);
-        }
-
-        // Vérification en arrière-plan non bloquante en base de données
-        try {
-          const { fetchDatabaseUserByEmail } = await import('./services/userService');
-          const dbUser = await fetchDatabaseUserByEmail(user.email);
-          if (dbUser && dbUser.status === 'actif') {
-            setCurrentUser(dbUser);
-            await storeSecureSession(dbUser);
-          } else if (dbUser && dbUser.status !== 'actif') {
-            clearSecureSession();
-            safeStorage.removeItem('citrine_active_tab');
-            setCurrentUser(null);
-          }
-        } catch (err) {
-          console.warn('[App] Vérification de session en arrière-plan ignorée (mode hors-ligne ou timeout):', err);
-        }
-      }
-      setIsAuthLoading(false);
-    }).catch(() => {
-      setIsAuthLoading(false);
-    });
-  }, []);
-
-  // Real-time synchronization of currentUser (avatar, name, phone, etc.) across devices
-  useEffect(() => {
-    if (!currentUser) return;
-    const unsub = subscribeToUsers((usersList) => {
-      const latest = usersList.find(
-        (u) => u.email.toLowerCase() === currentUser.email.toLowerCase() || u.id === currentUser.id
-      );
-      if (latest) {
-        if (
-          latest.avatarUrl !== currentUser.avatarUrl ||
-          latest.name !== currentUser.name ||
-          latest.phone !== currentUser.phone ||
-          latest.department !== currentUser.department ||
-          latest.birthDate !== currentUser.birthDate ||
-          latest.team !== currentUser.team ||
-          JSON.stringify(latest.teams || []) !== JSON.stringify(currentUser.teams || []) ||
-          latest.managerId !== currentUser.managerId ||
-          latest.managerName !== currentUser.managerName ||
-          latest.role !== currentUser.role ||
-          latest.status !== currentUser.status ||
-          Boolean(latest.allowEarlyDeparture15_17) !== Boolean(currentUser.allowEarlyDeparture15_17) ||
-          Boolean(latest.allowLateArrival8_930) !== Boolean(currentUser.allowLateArrival8_930)
-        ) {
-          setCurrentUser(latest);
-          storeSecureSession(latest);
-        }
-      }
-    });
-    return () => unsub();
-  }, [currentUser?.email, currentUser?.id]);
-
-  const handleLoginSuccess = async (user: AppUser) => {
-    setCurrentUser(user);
-    await storeSecureSession(user);
-    const defaultTab = getDefaultPortalForUser(user) as TabType;
-    setActiveTab(defaultTab);
-    showToast(`Bienvenue, ${user.name} !`);
-  };
-
-  const handleLogout = async () => {
-    clearSecureSession();
-    safeStorage.removeItem('citrine_active_tab');
-    try {
-      await authService.logout();
-    } catch {
-      try {
-        await supabase.auth.signOut();
-      } catch {}
-    }
-    try {
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i);
-        if (key && (key.includes('sb-') || key.includes('auth-token') || key.includes('supabase'))) {
-          localStorage.removeItem(key);
-        }
-      }
-    } catch {}
-    setCurrentUser(null);
-    setProfileModalOpen(false);
-    showToast('Vous avez été déconnecté.');
-  };
-
-  // Badges counts
-  const unreadNotificationsCount = useMemo(() => {
-    if (!currentUser) return 0;
-    const canSeeAll = canSeeAllNotifications(currentUser);
-    if (canSeeAll) {
-      return initialData.notifications.filter((n) => !n.read).length;
-    }
-    return initialData.notifications.filter(
-      (n) => !n.read && (
-        (n.targetUserId && (String(n.targetUserId) === String(currentUser.id) || String(n.targetUserId) === String(currentUser.email))) ||
-        n.recipient === currentUser.name || 
-        n.recipient === currentUser.email || 
-        n.recipient === 'Tous' ||
-        n.recipient === 'Broadcast' ||
-        (currentUser.phone && n.recipient.includes(currentUser.phone))
-      )
-    ).length;
-  }, [initialData.notifications, currentUser]);
-
-  const pendingLeavesCount = useMemo(() => {
-    return initialData.leaveRequests.filter((l) => l.status === 'pending').length;
-  }, [initialData.leaveRequests]);
-
-  const pendingPresencesRequestsCount = useMemo(() => {
-    return initialData.attendanceIncidents.filter((i) => i.status === 'signale' || !i.isJustified).length;
-  }, [initialData.attendanceIncidents]);
-
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
-
-  // Décompte strict : seuls les employés badgent (les responsables et admins ne badgent pas).
-  // Affiche uniquement le nombre d'employés qui n'ont pas badgé aujourd'hui (ex: 5 employés, 3 ont badgé -> affiche 2).
-  const nonBadgedEmployeesCount = useMemo(() => {
-    const eligibleEmployees = initialData.employees.filter((emp) => {
-      if (emp.status === false || emp.status === 'parti' || emp.status === 'renvoye' || emp.status === 'demissionne' || emp.status === 'suspendu') return false;
-      return isEmployeeOnlyRole(emp.roleType || emp.role);
-    });
-
-    if (eligibleEmployees.length === 0) return 0;
-
-    const badgedIds = new Set(
-      initialData.presences
-        .filter((p) => p.date === todayStr && (Boolean(p.arrivalTime) || p.status === 'present' || p.status === 'late'))
-        .map((p) => p.employeeId)
-    );
-
-    const badgedCount = eligibleEmployees.filter((emp) => badgedIds.has(emp.id)).length;
-    return Math.max(0, eligibleEmployees.length - badgedCount);
-  }, [initialData.employees, initialData.presences, todayStr]);
-
-  if (isAuthLoading) {
+  if (app.isAuthLoading) {
     return (
       <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
         <div className="flex flex-col items-center gap-3">
@@ -359,82 +36,72 @@ export default function App() {
     );
   }
 
-  // Not authenticated -> Show Login Screen
-  if (!currentUser) {
+  if (!app.currentUser) {
     return (
       <div className="min-h-screen ambient-glass-bg flex flex-col justify-between relative overflow-hidden">
-        {/* Subtle decorative glass orbs */}
         <div className="fixed -top-32 -right-32 w-96 h-96 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
         <div className="fixed -bottom-32 -left-32 w-96 h-96 rounded-full bg-[#D4A82F]/10 blur-3xl pointer-events-none" />
         <DatabaseHealthBanner />
         <div className="flex-1 flex items-center justify-center p-4 relative z-10">
           <LoginModal
             users={initialData.users}
-            onLoginSuccess={handleLoginSuccess}
+            onLoginSuccess={app.handleLoginSuccess}
             onAddNotification={initialData.handleAddNotification}
           />
         </div>
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+        <ToastContainer toasts={app.toasts} onDismiss={app.dismissToast} />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen ambient-glass-bg flex flex-col text-stone-900 font-sans selection:bg-[#2A7B76] selection:text-white relative">
-      {/* Background ambient lighting orbs for real-time glass refraction on PC, Tablet & Mobile */}
       <div className="fixed top-0 right-1/4 w-[500px] h-[500px] rounded-full bg-emerald-500/8 blur-[120px] pointer-events-none -z-10" />
       <div className="fixed bottom-10 left-10 w-[450px] h-[450px] rounded-full bg-[#D4A82F]/7 blur-[100px] pointer-events-none -z-10" />
       <div className="fixed top-1/2 left-1/3 w-[600px] h-[600px] rounded-full bg-[#2A7B76]/5 blur-[140px] pointer-events-none -z-10" />
 
-      {/* Database Diagnostic and Permission Health Banner */}
       <DatabaseHealthBanner />
-
-      {/* Offline Status */}
       <OfflineStatusBanner />
 
-      {/* Top Navbar */}
       <AppTopNavbar
-        currentUser={currentUser}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        onOpenProfile={() => setActiveTab('profile')}
-        onOpenKioskModal={() => setKioskModalOpen(true)}
-        onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
-        unreadNotificationsCount={unreadNotificationsCount}
-        liveTimeString={currentTime}
-        onOpenEmployeeAlerts={() => setActiveTab('communications')}
+        currentUser={app.currentUser}
+        activeTab={app.activeTab}
+        setActiveTab={app.setActiveTab}
+        onOpenProfile={() => app.setActiveTab('profile')}
+        onOpenKioskModal={() => app.setKioskModalOpen(true)}
+        onToggleMobileMenu={() => app.setMobileMenuOpen((prev) => !prev)}
+        unreadNotificationsCount={app.unreadNotificationsCount}
+        liveTimeString={app.currentTime}
+        onOpenEmployeeAlerts={() => app.setActiveTab('communications')}
       />
 
-      {/* Main Layout Container */}
       <div className="flex-1 flex w-full max-w-[1920px] mx-auto overflow-hidden relative">
-        {/* Desktop Sidebar (Admins & Managers) */}
-        {!isEmployeeUser(currentUser) && (
+        {!isEmployeeUser(app.currentUser) && (
           <Sidebar
-            activeTab={activeTab}
+            activeTab={app.activeTab}
             onSelectTab={(tab) => {
-              setActiveTab(tab);
-              setMobileMenuOpen(false);
+              app.setActiveTab(tab);
+              app.setMobileMenuOpen(false);
             }}
-            isOpen={isSidebarOpen}
-            onToggleOpen={() => setIsSidebarOpen((prev) => !prev)}
+            isOpen={app.isSidebarOpen}
+            onToggleOpen={() => app.setIsSidebarOpen((prev) => !prev)}
             unreadRemindersCount={getHomeUrgentReminders(initialData.reminders).length}
-            pendingPresencesRequestsCount={pendingPresencesRequestsCount}
-            pendingLeavesCount={pendingLeavesCount}
-            nonBadgedEmployeesCount={nonBadgedEmployeesCount}
-            mobileMenuOpen={mobileMenuOpen}
-            onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
-            onCloseMobileMenu={() => setMobileMenuOpen(false)}
-            currentUser={currentUser}
+            pendingPresencesRequestsCount={app.pendingPresencesRequestsCount}
+            pendingLeavesCount={app.pendingLeavesCount}
+            nonBadgedEmployeesCount={app.nonBadgedEmployeesCount}
+            mobileMenuOpen={app.mobileMenuOpen}
+            onToggleMobileMenu={() => app.setMobileMenuOpen((prev) => !prev)}
+            onCloseMobileMenu={() => app.setMobileMenuOpen(false)}
+            currentUser={app.currentUser}
             moduleConfig={initialData.moduleConfig}
           />
         )}
 
-        {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-28 sm:pb-24 md:pb-8 space-y-4">
           <AppTabRouter
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            currentUser={currentUser}
+            activeTab={app.activeTab}
+            setActiveTab={app.setActiveTab}
+            currentUser={app.currentUser}
             employees={initialData.employees}
             presences={initialData.presences}
             tasks={initialData.tasks}
@@ -450,9 +117,9 @@ export default function App() {
             partners={initialData.partners}
             users={initialData.users}
             moduleConfig={initialData.moduleConfig}
-            selectedEmployeeId={selectedEmployeeId}
-            setSelectedEmployeeId={setSelectedEmployeeId}
-            currentTime={currentTime}
+            selectedEmployeeId={app.selectedEmployeeId}
+            setSelectedEmployeeId={app.setSelectedEmployeeId}
+            currentTime={app.currentTime}
             onUpdatePresences={initialData.handleUpdatePresences}
             onUpdateTasks={initialData.setTasks}
             onUpdateReminders={initialData.setReminders}
@@ -470,88 +137,53 @@ export default function App() {
             onUpdatePartners={initialData.setPartners}
             onUpdateUsers={initialData.setUsers}
             onUpdateModuleConfig={initialData.handleUpdateModuleConfig}
-            onOpenProfileModal={() => setActiveTab('profile')}
-            showToast={showToast}
-            handleSetCurrentUser={setCurrentUser}
+            onOpenProfileModal={() => app.setActiveTab('profile')}
+            showToast={app.showToast}
+            handleSetCurrentUser={app.setCurrentUser}
             onUpdateUser={(updated) => {
-              setCurrentUser(updated);
+              app.setCurrentUser(updated);
               storeSecureSession(updated);
             }}
             leaveRequests={initialData.leaveRequests}
             onUpdateLeaveRequests={initialData.setLeaveRequests}
             strategicProjects={initialData.strategicProjects}
             onUpdateStrategicProjects={initialData.setStrategicProjects}
-            onLogout={handleLogout}
+            onLogout={app.handleLogout}
           />
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
       <AppMobileBottomNav
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        currentUser={currentUser}
-        setMobileMenuOpen={setMobileMenuOpen}
+        activeTab={app.activeTab}
+        setActiveTab={app.setActiveTab}
+        currentUser={app.currentUser}
+        setMobileMenuOpen={app.setMobileMenuOpen}
       />
 
-      {/* Profile Modal */}
-      {profileModalOpen && (
-        <ProfileModal
-          currentUser={currentUser}
-          onClose={() => setProfileModalOpen(false)}
-          onLogout={handleLogout}
-          onAddNotification={initialData.handleAddNotification}
-          onUpdateUser={(u) => {
-            setCurrentUser(u);
-            storeSecureSession(u);
-          }}
-        />
-      )}
-
-      {/* Kiosk Mode Clocking Modal */}
-      {kioskModalOpen && (
-        <KioskClockingModal
-          isOpen={kioskModalOpen}
-          onClose={() => setKioskModalOpen(false)}
-          employees={initialData.employees}
-          presences={initialData.presences}
-          onUpdatePresences={initialData.handleUpdatePresences}
-          onAddNotification={initialData.handleAddNotification}
-          companyName={initialData.moduleConfig.companyName}
-          moduleConfig={initialData.moduleConfig}
-          onAddAttendanceIncident={initialData.handleAddAttendanceIncident}
-        />
-      )}
-
-      {/* Office QR Code Modal */}
-      {officeQrModalOpen && (
-        <OfficeQRCodeModal
-          isOpen={officeQrModalOpen}
-          onClose={() => setOfficeQrModalOpen(false)}
-          qrSecret={initialData.moduleConfig.qrCodeSecret}
-          companyName={initialData.moduleConfig.companyName}
-          managerName={currentUser.name}
-          onLaunchKiosk={() => {
-            setOfficeQrModalOpen(false);
-            setKioskModalOpen(true);
-          }}
-        />
-      )}
-
-      {/* Push Notification Visual Popup Stream */}
-      <PushNotificationPopupContainer onNavigateTab={setActiveTab} />
-
-      {/* Toast Notification Container */}
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-
-      {/* Global Luxury Tooltip Engine */}
-      <GlobalTooltipContainer />
-
-      {/* Global Action Loader (Déclenchement automatique pour toute action > 1 seconde) */}
-      <GlobalActionLoader />
-
-      {/* PWA Update Toast Notification */}
-      <PwaUpdateToast />
+      <AppOverlays
+        currentUser={app.currentUser}
+        profileModalOpen={app.profileModalOpen}
+        onCloseProfileModal={() => app.setProfileModalOpen(false)}
+        kioskModalOpen={app.kioskModalOpen}
+        onCloseKioskModal={() => app.setKioskModalOpen(false)}
+        officeQrModalOpen={app.officeQrModalOpen}
+        onCloseOfficeQrModal={() => app.setOfficeQrModalOpen(false)}
+        onLaunchKioskFromQr={() => {
+          app.setOfficeQrModalOpen(false);
+          app.setKioskModalOpen(true);
+        }}
+        onLogout={app.handleLogout}
+        onUpdateUser={app.setCurrentUser}
+        employees={initialData.employees}
+        presences={initialData.presences}
+        moduleConfig={initialData.moduleConfig}
+        onUpdatePresences={initialData.handleUpdatePresences}
+        onAddNotification={initialData.handleAddNotification}
+        onAddAttendanceIncident={initialData.handleAddAttendanceIncident}
+        onNavigateTab={app.setActiveTab}
+        toasts={app.toasts}
+        onDismissToast={app.dismissToast}
+      />
     </div>
   );
 }

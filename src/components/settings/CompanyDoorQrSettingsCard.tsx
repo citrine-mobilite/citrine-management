@@ -1,21 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  QrCode, 
-  RefreshCw, 
-  Download, 
-  Copy, 
-  Check, 
-  MapPin, 
-  ShieldCheck, 
-  ExternalLink,
-  Printer,
-  Info,
-  Ban,
-  Save
-} from 'lucide-react';
+import React from 'react';
+import { QrCode, RefreshCw, Check, MapPin, Info, Ban, Save } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
-import { generateAndDownloadQrPoster } from '../../utils/qrPosterGenerator';
-import { confirmActionAlert, showSuccessAlert } from '../../utils/sweetAlert';
+import { useDoorQrSettingsActions } from './doorQr/useDoorQrSettingsActions';
+import { DoorQrPreviewColumn } from './doorQr/DoorQrPreviewColumn';
 
 interface CompanyDoorQrSettingsCardProps {
   moduleConfig: CompanyModuleConfig;
@@ -28,165 +15,37 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
   onUpdateModuleConfig,
   showToast,
 }) => {
-  const currentToken = moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026';
-  const currentSiteName = moduleConfig?.doorQrSiteName || moduleConfig?.hqName || 'Entrée Principale (HQ Siège)';
-  const generatedAt = moduleConfig?.doorQrCodeGeneratedAt 
-    ? new Date(moduleConfig.doorQrCodeGeneratedAt).toLocaleString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : 'Configuré par défaut';
+  const {
+    currentToken,
+    generatedAt,
+    siteName,
+    setSiteName,
+    requireGps,
+    setRequireGps,
+    tokenInput,
+    setTokenInput,
+    copiedToken,
+    copiedLink,
+    isGenerating,
+    handleGenerateNewDoorQr,
+    handleApplyToken,
+    handleInvalidateToken,
+    handleSaveParams,
+    handleCopyToken,
+    handleCopyDirectBadgeLink,
+    handleDownloadPoster,
+  } = useDoorQrSettingsActions({
+    moduleConfig,
+    onUpdateModuleConfig,
+    showToast,
+  });
 
-  const [siteName, setSiteName] = useState(currentSiteName);
-  const [requireGps, setRequireGps] = useState<boolean>(moduleConfig?.doorQrRequireGps ?? false);
-  const [tokenInput, setTokenInput] = useState(currentToken);
-  const [copiedToken, setCopiedToken] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  useEffect(() => {
-    setTokenInput(currentToken);
-  }, [currentToken]);
-
-  // URL de l'image QR Code en haute résolution
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&data=${encodeURIComponent(tokenInput || currentToken)}`;
-
-  // Génération d'un tout nouveau token de badge d'entrée
-  const handleGenerateNewDoorQr = () => {
-    setIsGenerating(true);
-    const randomHex = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const timestampHex = Date.now().toString(36).toUpperCase();
-    const newToken = `CITRINE_DOOR_${randomHex}_${timestampHex}`;
-    const nowIso = new Date().toISOString();
-    const oldToken = currentToken;
-    const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
-    const updatedRevoked = oldToken && !existingRevoked.includes(oldToken) ? [...existingRevoked, oldToken] : existingRevoked;
-
-    const updated: any = {
-      ...(moduleConfig || {}),
-      doorQrCodeToken: newToken,
-      qrCodeSecret: newToken, // Rétrocompatibilité
-      doorQrCodeRevoked: false,
-      revokedDoorTokens: updatedRevoked,
-      doorQrCodeGeneratedAt: nowIso,
-      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
-      doorQrRequireGps: requireGps,
-    };
-
-    onUpdateModuleConfig(updated);
-    setTokenInput(newToken);
-    setIsGenerating(false);
-
-    if (showToast) {
-      showToast(
-        'Nouveau QR Code d’Entrée généré ! L\'ancien QR code est révoqué et ne permettra plus aucun pointage.',
-        'success'
-      );
-    }
-  };
-
-  const handleApplyToken = () => {
-    const newToken = tokenInput.trim() || 'CITRINE_DOOR_HQ_MAIN_2026';
-    const oldToken = currentToken;
-    const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
-    const updatedRevoked = oldToken && oldToken !== newToken && !existingRevoked.includes(oldToken)
-      ? [...existingRevoked, oldToken]
-      : existingRevoked;
-
-    const updated: any = {
-      ...(moduleConfig || {}),
-      doorQrCodeToken: newToken,
-      qrCodeSecret: newToken,
-      doorQrCodeRevoked: false,
-      revokedDoorTokens: updatedRevoked,
-      doorQrCodeGeneratedAt: new Date().toISOString(),
-      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
-      doorQrRequireGps: requireGps,
-    };
-    onUpdateModuleConfig(updated);
-    if (showToast) {
-      showToast('Jeton du QR Code mis à jour avec succès !', 'success');
-    }
-  };
-
-  const handleInvalidateToken = async () => {
-    const isConfirmed = await confirmActionAlert({
-      title: 'Invalider ce QR Code ?',
-      text: 'Voulez-vous vraiment invalider ce QR Code ? L\'ancien jeton cessera immédiatement de fonctionner.',
-      confirmButtonText: 'Oui, invalider',
-      isDestructive: true,
-      icon: 'warning',
-    });
-    if (!isConfirmed) return;
-
-    const oldToken = currentToken;
-    const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
-    const updatedRevoked = oldToken && !existingRevoked.includes(oldToken) ? [...existingRevoked, oldToken] : existingRevoked;
-    const revokedToken = `CITRINE_REVOKED_${Math.random().toString(36).substring(2, 8).toUpperCase()}_${Date.now()}`;
-
-    const updated: any = {
-      ...(moduleConfig || {}),
-      doorQrCodeToken: revokedToken,
-      qrCodeSecret: revokedToken,
-      doorQrCodeRevoked: true,
-      revokedDoorTokens: [...updatedRevoked, revokedToken],
-      doorQrCodeGeneratedAt: new Date().toISOString(),
-      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
-      doorQrRequireGps: requireGps,
-    };
-    onUpdateModuleConfig(updated);
-    setTokenInput(revokedToken);
-    if (showToast) {
-      showToast('QR Code invalidé et révoqué.', 'success');
-    }
-    await showSuccessAlert('QR Code invalidé !', 'Le QR Code d\'entrée a été révoqué avec succès. Aucun ancien badge ne sera accepté.');
-  };
-
-  const handleSaveParams = (e: React.FormEvent) => {
-    e.preventDefault();
-    const updated: any = {
-      ...(moduleConfig || {}),
-      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
-      doorQrRequireGps: requireGps,
-    };
-    onUpdateModuleConfig(updated);
-    if (showToast) {
-      showToast('Paramètres de la borne d’entrée enregistrés.', 'success');
-    }
-  };
-
-  const handleCopyToken = () => {
-    navigator.clipboard.writeText(tokenInput || currentToken);
-    setCopiedToken(true);
-    setTimeout(() => setCopiedToken(false), 2000);
-  };
-
-  const handleCopyDirectBadgeLink = () => {
-    const origin = window.location.origin;
-    const directUrl = `${origin}/#clocking?token=${encodeURIComponent(tokenInput || currentToken)}`;
-    navigator.clipboard.writeText(directUrl);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
-  const handleDownloadPoster = () => {
-    generateAndDownloadQrPoster(tokenInput || currentToken, {
-      companyName: moduleConfig?.companyName || 'Citrine SARL',
-      siteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
-      title: 'BORNE OFFICIELLE DE POINTAGE',
-      subtitle: 'Scannez ce QR Code avec l’application Citrine pour valider votre badgeage.',
-    });
-    if (showToast) {
-      showToast('Téléchargement de l’affiche HD lancé !', 'success');
-    }
-  };
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&data=${encodeURIComponent(
+    tokenInput || currentToken
+  )}`;
 
   return (
     <div className="bg-white rounded-3xl border border-stone-200/90 shadow-2xs overflow-hidden space-y-6">
-      {/* En-tête de la carte */}
       <div className="p-6 bg-gradient-to-r from-teal-900/90 via-[#2A7B76] to-emerald-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-xs border border-white/20">
@@ -197,9 +56,7 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
               <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-400/20 text-emerald-200 px-2.5 py-0.5 rounded-full border border-emerald-400/30">
                 Borne Fixe d'Accueil
               </span>
-              <span className="text-[10px] text-teal-200">
-                Génération permanente
-              </span>
+              <span className="text-[10px] text-teal-200">Génération permanente</span>
             </div>
             <h3 className="font-serif font-bold text-lg text-white mt-1">
               QR Code de Badge d'Entrée & Paramètres
@@ -210,7 +67,6 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
           </div>
         </div>
 
-        {/* Bouton Générer un Nouveau QR Code */}
         <button
           type="button"
           onClick={handleGenerateNewDoorQr}
@@ -223,11 +79,12 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
       </div>
 
       <div className="p-6 pt-0 space-y-6">
-        {/* Token Customization Input */}
         <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2">
           <label className="text-xs font-bold text-stone-700 flex items-center justify-between">
             <span>Modifier / Personnaliser le Jeton du QR Code</span>
-            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Modifiable avant, pendant ou après téléchargement</span>
+            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+              Modifiable avant, pendant ou après téléchargement
+            </span>
           </label>
           <div className="flex gap-2">
             <input
@@ -258,79 +115,19 @@ export const CompanyDoorQrSettingsCard: React.FC<CompanyDoorQrSettingsCardProps>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Colonne Gauche : Aperçu & Téléchargement de l'affiche */}
-          <div className="lg:col-span-5 flex flex-col items-center bg-stone-50 p-6 rounded-3xl border border-stone-200 text-center space-y-4">
-            <div className="space-y-1">
-              <span className="text-[11px] font-bold text-[#2A7B76] uppercase tracking-wider block">
-                {moduleConfig?.companyName || 'Citrine SARL'}
-              </span>
-              <h4 className="font-serif font-bold text-stone-900 text-sm">
-                Aperçu de la Borne d'Entrée
-              </h4>
-              <p className="text-[11px] text-stone-500 flex items-center justify-center gap-1">
-                <MapPin className="h-3 w-3 text-amber-600" />
-                {siteName}
-              </p>
-            </div>
+          <DoorQrPreviewColumn
+            companyName={moduleConfig?.companyName || 'Citrine SARL'}
+            siteName={siteName}
+            qrImageUrl={qrImageUrl}
+            tokenInput={tokenInput}
+            generatedAt={generatedAt}
+            copiedToken={copiedToken}
+            copiedLink={copiedLink}
+            onCopyToken={handleCopyToken}
+            onDownloadPoster={handleDownloadPoster}
+            onCopyDirectBadgeLink={handleCopyDirectBadgeLink}
+          />
 
-            {/* Rendu du QR Code avec cadre de borne */}
-            <div className="relative p-4 bg-white rounded-2xl border-2 border-[#2A7B76]/30 shadow-md">
-              <img
-                src={qrImageUrl}
-                alt="QR Code de Badge d'Entrée"
-                className="w-48 h-48 mx-auto object-contain rounded-lg"
-              />
-              <div className="absolute top-2 right-2 bg-emerald-500 text-white rounded-full p-1 shadow-xs" title="Borne Active">
-                <ShieldCheck className="h-3.5 w-3.5" />
-              </div>
-            </div>
-
-            {/* Informations Jeton */}
-            <div className="w-full bg-white p-3 rounded-xl border border-stone-200 text-left space-y-1">
-              <span className="text-[9px] font-bold text-stone-400 uppercase tracking-wider block">
-                Jeton actif du QR Code :
-              </span>
-              <div className="flex items-center justify-between gap-2">
-                <code className="text-[11px] font-mono font-bold text-stone-800 truncate">
-                  {tokenInput}
-                </code>
-                <button
-                  type="button"
-                  onClick={handleCopyToken}
-                  className="p-1 hover:bg-stone-100 rounded-md text-stone-600 transition cursor-pointer"
-                  title="Copier le jeton"
-                >
-                  {copiedToken ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                </button>
-              </div>
-              <span className="text-[10px] text-stone-400 block pt-0.5">
-                Dernière génération : {generatedAt}
-              </span>
-            </div>
-
-            {/* Boutons d'impression et téléchargement */}
-            <div className="w-full space-y-2">
-              <button
-                type="button"
-                onClick={handleDownloadPoster}
-                className="w-full py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                <span>Télécharger l'Affiche A4 Imprimable (HD)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleCopyDirectBadgeLink}
-                className="w-full py-2 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
-              >
-                {copiedLink ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-                <span>{copiedLink ? 'Lien direct copié !' : 'Copier le lien direct de pointage'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Colonne Droite : Paramètres et configuration */}
           <div className="lg:col-span-7 space-y-5">
             <form onSubmit={handleSaveParams} className="bg-stone-50 p-6 rounded-3xl border border-stone-200 space-y-4">
               <h4 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2">

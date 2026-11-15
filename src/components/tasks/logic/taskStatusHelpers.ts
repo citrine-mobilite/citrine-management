@@ -1,0 +1,144 @@
+import { Task, NotificationLog, TaskStatus } from '../../../types';
+import { taskService } from '../../../services/taskService';
+import { pushNotificationBridgeService } from '../../../services/pushNotificationBridgeService';
+import { executeOperationWithLoading } from '../../../utils/sweetAlert';
+import { notifyExceptionalTaskCompletion } from '../../../services/exceptionalTaskCompletionService';
+
+export async function changeTaskStatusAction(params: {
+  taskId: string;
+  newStatus: TaskStatus;
+  tasks: Task[];
+  currentRole: string;
+  selectedTaskForDetail: Task | null;
+  onUpdateTasks: (updated: Task[]) => void;
+  setSelectedTaskForDetail: (t: Task | null) => void;
+  onAddNotification: (log: NotificationLog) => void;
+  showToast?: (message: string, type?: 'success' | 'error') => void;
+}) {
+  const {
+    taskId,
+    newStatus,
+    tasks,
+    currentRole,
+    selectedTaskForDetail,
+    onUpdateTasks,
+    setSelectedTaskForDetail,
+    onAddNotification,
+    showToast,
+  } = params;
+
+  const targetTask = tasks.find((t) => t.id === taskId);
+  if (!targetTask) return;
+
+  const updatedSubtasks = (targetTask.subtasks || []).map((s) =>
+    newStatus === 'completed' ? { ...s, completed: true, status: 'completed' as TaskStatus } : s
+  );
+
+  const updatedTask: Task = {
+    ...targetTask,
+    status: newStatus,
+    subtasks: updatedSubtasks,
+    lastUpdatedTime: new Date().toISOString(),
+  };
+  await taskService.saveTask(updatedTask);
+
+  onUpdateTasks(tasks.map((t) => (t.id === taskId ? updatedTask : t)));
+  if (selectedTaskForDetail && selectedTaskForDetail.id === taskId) {
+    setSelectedTaskForDetail(updatedTask);
+  }
+
+  const statusLabels: Record<string, string> = {
+    todo: 'À faire',
+    in_progress: 'En cours',
+    review: 'En révision',
+    completed: 'Terminée',
+  };
+  const label = statusLabels[newStatus] || newStatus;
+  const targetRecipient = targetTask.assignedTo || targetTask.employeeId || 'Collaborateur';
+
+  onAddNotification({
+    id: `notif-task-move-${Date.now()}-${taskId}`,
+    recipient: targetRecipient,
+    type: 'system',
+    title: `Mouvement de Tâche : ${targetTask.title}`,
+    content: `La tâche est passée au statut « ${label} ».`,
+    payload: JSON.stringify({
+      source: 'task_movement',
+      taskId: targetTask.id,
+      employeeId: targetRecipient,
+      newStatus,
+      previousStatus: targetTask.status,
+    }),
+    timestamp: new Date().toISOString(),
+    read: false,
+  });
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+  }
+
+  pushNotificationBridgeService.sendPush({
+    title: 'Mise à jour de Tâche 🔄',
+    message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
+    senderName: currentRole || 'Collaborateur',
+    type: 'task_assigned',
+    link: 'tasks',
+  });
+
+  if (newStatus === 'completed' && targetTask.status !== 'completed') {
+    notifyExceptionalTaskCompletion(updatedTask, targetTask.assignedTo, onAddNotification as any);
+  }
+
+  if (showToast) showToast('Statut mis à jour et enregistré.', 'success');
+}
+
+export async function saveUpdatedTaskAction(params: {
+  updatedTask: Task;
+  tasks: Task[];
+  onUpdateTasks: (updated: Task[]) => void;
+  setSelectedTaskForDetail: (t: Task | null) => void;
+  onAddNotification: (log: NotificationLog) => void;
+}) {
+  const { updatedTask, tasks, onUpdateTasks, setSelectedTaskForDetail, onAddNotification } = params;
+  const prevTask = tasks.find((t) => t.id === updatedTask.id);
+  const finalizedTask = { ...updatedTask, updatedAt: new Date().toISOString() };
+
+  await executeOperationWithLoading({
+    loadingTitle: 'Enregistrement de la tâche...',
+    loadingText: 'Mise à jour et synchronisation sur le serveur...',
+    action: async () => {
+      await taskService.saveTask(finalizedTask);
+      onUpdateTasks(tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t)));
+      setSelectedTaskForDetail(finalizedTask);
+
+      if (finalizedTask.assignedTo) {
+        const isStatusChanged = prevTask && prevTask.status !== finalizedTask.status;
+        const isPriorityChanged = prevTask && prevTask.priority !== finalizedTask.priority;
+        if (isStatusChanged || isPriorityChanged || !prevTask) {
+          onAddNotification({
+            id: `notif-task-update-${Date.now()}-${finalizedTask.id}`,
+            recipient: finalizedTask.assignedTo,
+            type: 'system',
+            title: `Mise à jour de tâche : ${finalizedTask.title}`,
+            content: isStatusChanged
+              ? `Statut modifié : passage à « ${finalizedTask.status} »`
+              : 'Détails de la tâche mis à jour.',
+            payload: JSON.stringify({
+              source: 'task_movement',
+              taskId: finalizedTask.id,
+              employeeId: finalizedTask.assignedTo,
+              newStatus: finalizedTask.status,
+            }),
+            timestamp: new Date().toISOString(),
+            read: false,
+          });
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+          }
+        }
+      }
+    },
+    successTitle: 'Tâche mise à jour !',
+    successMessage: `La tâche "${finalizedTask.title}" a été enregistrée avec succès.`,
+  });
+}

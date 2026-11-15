@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
 import { Users, Download, FileText, ShieldCheck, Plus } from 'lucide-react';
 import { HumaanUsers } from './illustrations/HumaanIllustrations';
-import { AppUser, UserRole, UserStatus, Employee, EmployeeStatus } from '../types';
-import { saveUser, deleteUser } from '../services/userService';
-import { hashPassword } from '../utils/cryptoUtils';
-import { logAdminOperation } from '../services/adminAuditService';
+import { AppUser, Employee } from '../types';
 import { UserFormModal } from './users/UserFormModal';
 import { UserTableItemRow } from './users/UserTableItemRow';
 import { UserFilterToolbar } from './users/UserFilterToolbar';
 import { exportToExcel } from '../services/excelExportService';
 import { exportElementToPdf } from '../services/pdfExportService';
-import { showSuccessAlert, showErrorAlert, confirmDeleteAlert } from '../utils/sweetAlert';
+import { useUserManagementActions } from './users/useUserManagementActions';
 
 interface UserManagementPanelProps {
   users: AppUser[];
@@ -58,202 +55,18 @@ export default function UserManagementPanel({
     setIsModalOpen(true);
   };
 
-  const handleDeleteUser = async (user: AppUser) => {
-    const isConfirmed = await confirmDeleteAlert({
-      title: 'Supprimer cet utilisateur ?',
-      text: `Voulez-vous vraiment supprimer définitivement le compte de ${user.name} (${user.email}) ? Cette action est irréversible.`,
-      itemName: user.name,
-      confirmButtonText: 'Oui, supprimer le compte',
-    });
-
-    if (!isConfirmed) return;
-
-    try {
-      await deleteUser(user.id);
-      if (onUpdateUsers) {
-        onUpdateUsers(users.filter((u) => u.id !== user.id));
-      }
-      logAdminOperation({
-        authorName: currentUser.name,
-        authorRole: currentUser.role,
-        targetUserId: user.id,
-        targetName: user.name,
-        operationType: 'status_change',
-        operationLabel: 'Suppression de Compte',
-        details: `Compte utilisateur ${user.email} supprimé définitivement.`,
-      });
-      if (showToast) {
-        showToast(`Le compte de "${user.name}" a été supprimé avec succès.`, 'success');
-      }
-    } catch (err: any) {
-      await showErrorAlert('Échec de la suppression', err?.message || 'Erreur lors de la suppression de l\'utilisateur.');
-    }
-  };
-
-  const handleSaveUser = async (data: {
-    name: string;
-    email: string;
-    role: UserRole;
-    status: UserStatus;
-    employmentStatus: EmployeeStatus;
-    department: string;
-    password?: string;
-    allowEarlyDeparture15_17?: boolean;
-    allowLateArrival8_930?: boolean;
-  }) => {
-    try {
-      let passwordHash = editingUser?.passwordHash;
-      if (data.password) {
-        passwordHash = await hashPassword(data.password);
-      }
-
-      const userToSave: AppUser = {
-        ...(editingUser || {}),
-        id: editingUser ? editingUser.id : `user-${Date.now()}`,
-        name: data.name.trim(),
-        email: data.email.trim(),
-        role: data.role,
-        roleId: data.role === 'administrateur' ? 1 : data.role === 'responsable' ? 2 : 3,
-        status: data.status,
-        employmentStatus: data.employmentStatus,
-        department: data.department.trim(),
-        allowEarlyDeparture15_17: Boolean(data.allowEarlyDeparture15_17),
-        allowLateArrival8_930: Boolean(data.allowLateArrival8_930),
-        createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
-        passwordHash,
-      };
-
-      const savedUser = await saveUser(userToSave, editingUser || undefined);
-
-      // Mettre à jour l'état React des utilisateurs
-      if (onUpdateUsers) {
-        if (editingUser) {
-          onUpdateUsers(users.map((u) => (u.id === userToSave.id || u.id === savedUser.id ? savedUser : u)));
-        } else {
-          onUpdateUsers([savedUser, ...users]);
-        }
-      }
-
-      // Synchroniser immédiatement le collaborateur associé dans l'état React et en base
-      if (onUpdateEmployees && employees && employees.length > 0) {
-        const targetEmail = savedUser.email.toLowerCase();
-        const oldEmail = editingUser?.email ? editingUser.email.toLowerCase() : '';
-        const empIdx = employees.findIndex(
-          (e) =>
-            (savedUser.employeeId && (String(e.id) === String(savedUser.employeeId) || e.uid === savedUser.employeeId || (e as any).doc_id === savedUser.employeeId)) ||
-            (e.userId && (String(e.userId) === String(savedUser.id) || String(e.userId) === String(userToSave.id))) ||
-            (e.email && (e.email.toLowerCase() === targetEmail || (oldEmail && e.email.toLowerCase() === oldEmail)))
-        );
-
-        if (empIdx >= 0) {
-          const emp = employees[empIdx];
-          const isEmpActive =
-            savedUser.status === 'actif' &&
-            data.employmentStatus !== 'renvoye' &&
-            data.employmentStatus !== 'demissionne' &&
-            data.employmentStatus !== 'suspendu' &&
-            data.employmentStatus !== 'parti';
-
-          const resolvedRoleId = savedUser.role === 'administrateur' ? 1 : savedUser.role === 'responsable' ? 2 : 3;
-          const resolvedRoleType = savedUser.role === 'administrateur' ? 'Super Administrateur' : savedUser.role === 'responsable' ? 'Responsable' : (emp.roleType || 'Employé');
-
-          const updatedEmp: Employee = {
-            ...emp,
-            name: savedUser.name,
-            email: savedUser.email,
-            department: savedUser.department || emp.department,
-            roleId: resolvedRoleId,
-            roleType: resolvedRoleType,
-            role: resolvedRoleType,
-            status: isEmpActive,
-            employmentStatus: data.employmentStatus,
-            userId: savedUser.id,
-            allowEarlyDeparture15_17: Boolean(data.allowEarlyDeparture15_17),
-            allowLateArrival8_930: Boolean(data.allowLateArrival8_930),
-          };
-          onUpdateEmployees(employees.map((e, i) => (i === empIdx ? updatedEmp : e)));
-        }
-      }
-
-      // Audit log
-      if (editingUser) {
-        if (editingUser.role !== data.role) {
-          logAdminOperation({
-            authorName: currentUser.name,
-            authorRole: currentUser.role,
-            targetUserId: userToSave.id,
-            targetName: userToSave.name,
-            operationType: 'role_change',
-            operationLabel: 'Modification Rôle Utilisateur',
-            details: `Rôle modifié : ${editingUser.role} ➔ ${data.role}`,
-          });
-        }
-        if (editingUser.status !== data.status) {
-          logAdminOperation({
-            authorName: currentUser.name,
-            authorRole: currentUser.role,
-            targetUserId: userToSave.id,
-            targetName: userToSave.name,
-            operationType: 'status_change',
-            operationLabel: 'Changement Statut Compte',
-            details: `Statut modifié : ${editingUser.status} ➔ ${data.status}`,
-          });
-        }
-        if (data.password) {
-          logAdminOperation({
-            authorName: currentUser.name,
-            authorRole: currentUser.role,
-            targetUserId: userToSave.id,
-            targetName: userToSave.name,
-            operationType: 'password_reset',
-            operationLabel: 'Réinitialisation Mot de Passe',
-            details: 'Mot de passe réinitialisé par l’administrateur',
-          });
-        }
-      } else {
-        logAdminOperation({
-          authorName: currentUser.name,
-          authorRole: currentUser.role,
-          targetUserId: userToSave.id,
-          targetName: userToSave.name,
-          operationType: 'creation',
-          operationLabel: 'Création de Compte',
-          details: `Création compte ${userToSave.role} (${userToSave.email})`,
-        });
-
-        const userNotif = {
-          id: `notif-user-${Date.now()}`,
-          type: 'system',
-          title: 'Nouveau compte utilisateur créé',
-          content: `Le compte pour ${userToSave.name} (${userToSave.email}) avec le rôle ${userToSave.role} a été créé.`,
-          recipient: 'Administrateurs',
-          payload: JSON.stringify({ userId: userToSave.id, email: userToSave.email, role: userToSave.role }),
-          timestamp: new Date().toISOString(),
-          read: false,
-        };
-        onAddNotification(userNotif);
-        console.log('🔔 [NOTIFICATION CRÉÉE] Utilisateur:', userNotif);
-      }
-
-      if (showToast) {
-        showToast(
-          editingUser ? 'Utilisateur mis à jour avec succès' : 'Nouvel utilisateur créé avec succès',
-          'success'
-        );
-      }
-      await showSuccessAlert(
-        editingUser ? 'Utilisateur mis à jour !' : 'Utilisateur créé !',
-        editingUser ? `Le compte "${userToSave.name}" a été mis à jour.` : `Le compte "${userToSave.name}" a été créé avec succès.`
-      );
-      setIsModalOpen(false);
-      setEditingUser(null);
-    } catch (err: any) {
-      if (showToast) showToast('Erreur lors de l’enregistrement de l’utilisateur', 'error');
-      await showErrorAlert('Erreur', err?.message || 'Erreur lors de l\'enregistrement de l\'utilisateur.');
-    }
-  };
-
-
+  const { handleDeleteUser, handleSaveUser } = useUserManagementActions({
+    users,
+    currentUser,
+    editingUser,
+    employees,
+    onAddNotification,
+    onUpdateUsers,
+    onUpdateEmployees,
+    showToast,
+    setIsModalOpen,
+    setEditingUser,
+  });
 
   const handleExportExcel = () => {
     const headers = ['ID', 'Nom', 'Email', 'Rôle', 'Département', 'Statut'];
@@ -274,7 +87,6 @@ export default function UserManagementPanel({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
-      {/* Top Header Banner with HumaanUsers Illustration */}
       <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
         <div className="z-10 text-center md:text-left">
           <div className="flex items-center justify-center md:justify-start gap-2.5">
@@ -316,7 +128,6 @@ export default function UserManagementPanel({
         </div>
       </div>
 
-      {/* Filter toolbar */}
       <UserFilterToolbar
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
@@ -327,7 +138,6 @@ export default function UserManagementPanel({
         onOpenNewUser={handleOpenNewUser}
       />
 
-      {/* Users table */}
       <div id="users-table-container" className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-stone-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-50/50">
           <h3 className="font-serif font-bold text-xs text-stone-900 flex items-center gap-1.5">

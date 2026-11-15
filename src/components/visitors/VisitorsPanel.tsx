@@ -1,29 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Contact2, LogIn, Search, Settings, Calendar } from 'lucide-react';
-import { 
-  VisitorLog, 
-  VisitorPurpose, 
-  AppUser, 
-  Employee,
-  PersonType 
-} from '../../types';
-import { 
-  subscribeToVisitorLogs, 
-  saveVisitorLog,
-  deleteVisitorLog
-} from '../../services/visitorLogService';
-import { 
-  subscribeToBuildingSupervisors, 
-  BuildingSupervisor 
-} from '../../services/supervisorService';
+import React, { useState, useEffect } from 'react';
+import { VisitorLog, AppUser, Employee } from '../../types';
+import { subscribeToVisitorLogs } from '../../services/visitorLogService';
+import { subscribeToBuildingSupervisors, BuildingSupervisor } from '../../services/supervisorService';
 import { VisitorsKpiCards } from './VisitorsKpiCards';
 import { VisitorDetailModal } from './VisitorDetailModal';
 import { NewVisitorModal } from './NewVisitorModal';
 import { VisitorsTable } from './VisitorsTable';
 import { SupervisorConfigModal } from './SupervisorConfigModal';
-import { SearchableSelect, SelectOption } from '../common/SearchableSelect';
-import { HumaanReception } from '../illustrations/HumaanIllustrations';
-import { executeOperationWithLoading, executeDeleteWithSweetAlert, showSuccessAlert, showPendingAlert } from '../../utils/sweetAlert';
+import { useVisitorsActions } from './useVisitorsActions';
+import { VisitorsHeaderAndFilters } from './VisitorsHeaderAndFilters';
 
 interface VisitorsPanelProps {
   currentUser?: AppUser | null;
@@ -33,7 +18,6 @@ interface VisitorsPanelProps {
 }
 
 export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
-  currentUser,
   employees,
   onAddNotification,
   showToast,
@@ -41,13 +25,12 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
   const [visitors, setVisitors] = useState<VisitorLog[]>([]);
   const [supervisors, setSupervisors] = useState<BuildingSupervisor[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Filtres demandés : type, statut, date (site retiré)
+
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [personTypeFilter, setPersonTypeFilter] = useState<string>('all');
-  
+
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isSupervisorsModalOpen, setIsSupervisorsModalOpen] = useState(false);
   const [selectedVisitor, setSelectedVisitor] = useState<VisitorLog | null>(null);
@@ -69,19 +52,18 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
   const todayTotal = visitors.filter((v) => v.checkInDate === todayStr).length;
 
   const filteredVisitors = visitors.filter((v) => {
-    const matchSearch = 
-      v.visitorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (v.visitorCompany && v.visitorCompany.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      v.badgeNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (v.vehiclePlate && v.vehiclePlate.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      v.hostEmployeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (v.supervisorName && v.supervisorName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (v.idCardNumber && v.idCardNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+    const q = searchTerm.toLowerCase();
+    const matchSearch =
+      v.visitorName.toLowerCase().includes(q) ||
+      (v.visitorCompany && v.visitorCompany.toLowerCase().includes(q)) ||
+      v.badgeNumber.toLowerCase().includes(q) ||
+      (v.vehiclePlate && v.vehiclePlate.toLowerCase().includes(q)) ||
+      v.hostEmployeeName.toLowerCase().includes(q) ||
+      (v.supervisorName && v.supervisorName.toLowerCase().includes(q)) ||
+      (v.idCardNumber && v.idCardNumber.toLowerCase().includes(q));
 
     const matchStatus = statusFilter === 'all' || v.status === statusFilter;
     const matchType = personTypeFilter === 'all' || (v.personType || 'visiteur') === personTypeFilter;
-
-    // Filtre par date
     const matchDate =
       dateFilter === 'all'
         ? true
@@ -92,296 +74,49 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
     return matchSearch && matchStatus && matchType && matchDate;
   });
 
-  const handleQuickCheckOut = async (visitor: VisitorLog) => {
-    try {
-      const now = new Date();
-      const checkOutTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const updated: VisitorLog = {
-        ...visitor,
-        status: 'sorti',
-        checkOutTime,
-      };
-      await saveVisitorLog(updated);
-      showToast?.(`Sortie enregistrée pour ${visitor.visitorName} à ${checkOutTime}.`, 'success');
-      onAddNotification?.({
-        title: 'Sortie Enregistrée',
-        message: `${visitor.visitorName} a quitté ${visitor.siteLocation} (Badge ${visitor.badgeNumber} restitué).`,
-        type: 'info',
-      });
-    } catch {
-      showToast?.('Erreur lors de l\'enregistrement de sortie.', 'error');
-    }
-  };
-
-  const handleQuickCheckIn = async (visitor: VisitorLog) => {
-    try {
-      const now = new Date();
-      const checkInTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const updated: VisitorLog = {
-        ...visitor,
-        status: 'sur_site',
-        checkInTime,
-        checkOutTime: undefined,
-      };
-      await saveVisitorLog(updated);
-      showToast?.(`Arrivée confirmée pour ${visitor.visitorName} à ${checkInTime}.`, 'success');
-    } catch {
-      showToast?.('Erreur lors de l\'enregistrement d\'arrivée.', 'error');
-    }
-  };
-
-  const handleAuthorizeAccess = async (visitor: VisitorLog) => {
-    try {
-      const updated: VisitorLog = {
-        ...visitor,
-        status: 'sur_site',
-        authorizationConfirmed: true,
-      };
-      await saveVisitorLog(updated);
-      showToast?.(`Accès autorisé pour ${visitor.visitorName}. Badge ${visitor.badgeNumber} remis.`, 'success');
-      onAddNotification?.({
-        title: 'Accès Bâtiment Autorisé',
-        message: `${visitor.visitorName} (${visitor.visitorCompany}) a reçu l'autorisation d'accès.`,
-        type: 'info',
-      });
-    } catch {
-      showToast?.('Erreur lors de la validation d\'accès.', 'error');
-    }
-  };
-
-  const handleRejectAccess = async (visitor: VisitorLog) => {
-    try {
-      const updated: VisitorLog = {
-        ...visitor,
-        status: 'refuse',
-        authorizationConfirmed: false,
-      };
-      await saveVisitorLog(updated);
-      showToast?.(`Accès refusé pour ${visitor.visitorName}.`, 'error');
-    } catch {
-      showToast?.('Erreur lors du refus d\'accès.', 'error');
-    }
-  };
-
-  const handleCreateVisitor = async (visitorData: Partial<VisitorLog>) => {
-    if (!visitorData.visitorName || !visitorData.visitorPhone) {
-      showToast?.('Nom et téléphone obligatoires.', 'error');
-      return;
-    }
-
-    const selectedHost = employees.find((emp) => emp.id === visitorData.hostEmployeeId);
-    const now = new Date();
-    const checkInTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    const checkInDate = now.toISOString().split('T')[0];
-
-    const pType: PersonType = visitorData.personType || 'visiteur';
-
-    const visitorToSave: VisitorLog = {
-      id: `vis-${Date.now()}`,
-      personType: pType,
-      workerDomain: pType === 'travailleur' ? visitorData.workerDomain : undefined,
-      supervisorName: pType === 'travailleur' ? visitorData.supervisorName : undefined,
-      interventionPerimeter: pType === 'travailleur' ? visitorData.interventionPerimeter : undefined,
-      isPreAuthorized: visitorData.isPreAuthorized,
-      authorizationConfirmed: visitorData.authorizationConfirmed,
-      visitorName: visitorData.visitorName,
-      visitorCompany: visitorData.visitorCompany || (pType === 'travailleur' ? 'Prestataire BTP' : 'Particulier'),
-      visitorPhone: visitorData.visitorPhone,
-      idCardNumber: visitorData.idCardNumber || '',
-      siteLocation: visitorData.siteLocation || 'Siège Japoma (Carrefour Matango)',
-      purpose: (visitorData.purpose as VisitorPurpose) || 'rdv_commercial',
-      hostEmployeeId: selectedHost?.id || '',
-      hostEmployeeName: selectedHost ? selectedHost.name : (visitorData.hostEmployeeName || (pType === 'travailleur' ? (visitorData.supervisorName || 'Superviseur Bâtiment') : 'Accueil Citrine')),
-      hostDepartment: selectedHost?.department || (pType === 'travailleur' ? 'Technique & Bâtiment' : 'Général'),
-      badgeNumber: visitorData.badgeNumber || `BADGE-${String(visitors.length + 1).padStart(2, '0')}`,
-      vehiclePlate: visitorData.vehiclePlate || '',
-      checkInTime,
-      checkInDate,
-      status: visitorData.status || 'sur_site',
-      notes: visitorData.notes || '',
-      createdAt: now.toISOString(),
-    };
-
-    await executeOperationWithLoading({
-      loadingTitle: 'Enregistrement à l\'accueil...',
-      loadingText: 'Synchronisation de la fiche de visite avec le serveur...',
-      action: async () => {
-        await saveVisitorLog(visitorToSave);
-        setIsNewModalOpen(false);
-
-        onAddNotification?.({
-          title: pType === 'travailleur' ? 'Arrivée Travailleur Bâtiment' : 'Arrivée Visiteur',
-          message: `${visitorToSave.visitorName} (${visitorToSave.visitorCompany}) est enregistré sur le site ${visitorToSave.siteLocation}.`,
-          type: 'info',
-        });
-      },
-      isPendingCheck: () => visitorToSave.status !== 'sur_site',
-      pendingTitle: 'Visiteur en attente',
-      pendingMessage: `${visitorToSave.visitorName} a été enregistré en attente d'accord à l'accueil.`,
-      successTitle: 'Accès autorisé !',
-      successMessage: `${pType === 'travailleur' ? 'Le travailleur' : 'Le visiteur'} "${visitorToSave.visitorName}" a été enregistré et autorisé sur le site.`,
-    });
-  };
-
-  const handleDeleteVisitor = async (visitor: VisitorLog) => {
-    const vId = visitor.id || visitor.docId;
-    if (!vId) return;
-
-    await executeDeleteWithSweetAlert({
-      title: 'Supprimer cette fiche visite ?',
-      text: 'Voulez-vous vraiment retirer cet enregistrement du registre des visiteurs ?',
-      itemName: visitor.visitorName,
-      action: async () => {
-        await deleteVisitorLog(vId);
-        setVisitors((prev) => prev.filter((v) => v.id !== vId && v.docId !== vId));
-      },
-      successTitle: 'Fiche supprimée',
-      successMessage: `La fiche de ${visitor.visitorName} a été supprimée du registre.`,
-    });
-  };
-
-  // Options Select2 (SearchableSelect) pour les filtres
-  const typeFilterOptions: SelectOption[] = [
-    { value: 'all', label: 'Tous les flux (Visiteurs & Travailleurs)' },
-    { value: 'visiteur', label: '👤 Visiteurs uniquement', description: 'Visites de tiers / Rendez-vous' },
-    { value: 'travailleur', label: '🔧 Travailleurs uniquement', description: 'Intervenants sous supervision' },
-  ];
-
-  const statusFilterOptions: SelectOption[] = [
-    { value: 'all', label: 'Tous les statuts' },
-    { value: 'sur_site', label: '🟢 Sur site (Autorisé)' },
-    { value: 'attente_validation', label: '🟡 En attente accord accueil' },
-    { value: 'sorti', label: '⚪ Sorti' },
-    { value: 'attendu', label: '🔵 Attendu' },
-    { value: 'refuse', label: '🔴 Accès refusé' },
-  ];
-
-  const dateFilterOptions: SelectOption[] = [
-    { value: 'all', label: '📅 Toutes les dates' },
-    { value: 'today', label: `📅 Aujourd'hui (${todayStr})` },
-    { value: 'custom', label: '📅 Choisir une date précise...' },
-  ];
+  const {
+    handleQuickCheckOut,
+    handleQuickCheckIn,
+    handleAuthorizeAccess,
+    handleRejectAccess,
+    handleCreateVisitor,
+    handleDeleteVisitor,
+  } = useVisitorsActions({
+    employees,
+    visitorsCount: visitors.length,
+    setVisitors,
+    setIsNewModalOpen,
+    onAddNotification,
+    showToast,
+  });
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-5 bg-white p-6 rounded-3xl border border-stone-200/80 shadow-xs relative overflow-hidden">
-        <div className="flex items-center justify-center md:justify-start gap-3 text-center md:text-left z-10">
-          <div className="p-2.5 bg-[#2A7B76]/10 text-[#2A7B76] rounded-2xl border border-[#2A7B76]/20 shrink-0">
-            <Contact2 className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-              <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-800">Contrôle des Accès & Sécurité du Bâtiment</h1>
-              <span className="text-[10px] font-bold bg-amber-50 text-amber-900 px-2 py-0.5 rounded-full border border-amber-200">
-                Siège Japoma
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="hidden lg:block shrink-0 z-10">
-          <HumaanReception className="w-32 h-24 drop-shadow-sm" />
-        </div>
-
-        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2.5 w-full sm:w-auto z-10">
-          {/* Bouton pour modifier la liste des superviseurs */}
-          <button
-            type="button"
-            onClick={() => setIsSupervisorsModalOpen(true)}
-            className="w-full sm:w-auto justify-center inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-2xl transition cursor-pointer border border-stone-200 active:scale-98"
-            title="Gérer les superviseurs enregistrés en base de données"
-          >
-            <Settings className="w-4 h-4 text-stone-500" />
-            <span>Superviseurs ({supervisors.length})</span>
-          </button>
-
-          {/* Bouton pour enregistrer une arrivée */}
-          <button
-            type="button"
-            onClick={() => setIsNewModalOpen(true)}
-            className="w-full sm:w-auto justify-center inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-[#2A7B76] hover:bg-[#236863] rounded-2xl shadow-xs transition cursor-pointer active:scale-98"
-          >
-            <LogIn className="w-4 h-4" />
-            <span>Arrivée</span>
-          </button>
-        </div>
-      </div>
-
-      <VisitorsKpiCards
-        currentOnSite={currentOnSite}
-        todayDeparted={todayDeparted}
-        expectedVisitors={pendingApprovals}
-        todayTotal={todayTotal}
+      <VisitorsHeaderAndFilters
+        supervisorsCount={supervisors.length}
+        todayStr={todayStr}
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        personTypeFilter={personTypeFilter}
+        setPersonTypeFilter={setPersonTypeFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        dateFilter={dateFilter}
+        setDateFilter={setDateFilter}
+        selectedDate={selectedDate}
+        setSelectedDate={setSelectedDate}
+        onOpenSupervisorsModal={() => setIsSupervisorsModalOpen(true)}
+        onOpenNewModal={() => setIsNewModalOpen(true)}
+        kpiSlot={
+          <VisitorsKpiCards
+            currentOnSite={currentOnSite}
+            todayDeparted={todayDeparted}
+            expectedVisitors={pendingApprovals}
+            todayTotal={todayTotal}
+          />
+        }
       />
 
-      {/* Barre de Filtres avec Select 2 (SearchableSelect) & Filtre de Dates */}
-      <div className="bg-white p-3.5 rounded-xl border border-stone-200 space-y-3">
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
-          {/* Recherche textuelle */}
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Rechercher par nom, entreprise, badge, superviseur, CNI..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-stone-200 focus:outline-none focus:border-[#2A7B76] bg-stone-50/50"
-            />
-          </div>
-
-          {/* Filtre Type (Select2) */}
-          <div className="w-full lg:w-64">
-            <SearchableSelect
-              options={typeFilterOptions}
-              value={personTypeFilter}
-              onChange={(val) => setPersonTypeFilter(String(val))}
-              placeholder="Filtrer par type..."
-              searchPlaceholder="Rechercher un type..."
-              size="sm"
-            />
-          </div>
-
-          {/* Filtre Statut (Select2) */}
-          <div className="w-full lg:w-56">
-            <SearchableSelect
-              options={statusFilterOptions}
-              value={statusFilter}
-              onChange={(val) => setStatusFilter(String(val))}
-              placeholder="Filtrer par statut..."
-              searchPlaceholder="Rechercher un statut..."
-              size="sm"
-            />
-          </div>
-
-          {/* Filtre Date (Select2) */}
-          <div className="w-full lg:w-56">
-            <SearchableSelect
-              options={dateFilterOptions}
-              value={dateFilter}
-              onChange={(val) => setDateFilter(String(val))}
-              placeholder="Filtrer par date..."
-              searchPlaceholder="Date..."
-              size="sm"
-            />
-          </div>
-
-          {/* Sélecteur de date spécifique si 'custom' est sélectionné */}
-          {dateFilter === 'custom' && (
-            <div className="flex items-center gap-1.5 bg-stone-50 px-3 py-1 rounded-xl border border-stone-200 animate-in fade-in">
-              <Calendar className="w-4 h-4 text-[#2A7B76]" />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="text-xs bg-transparent text-stone-800 font-semibold focus:outline-none"
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Table avec pagination par 25 & Bouton Détails */}
       <VisitorsTable
         visitors={filteredVisitors}
         onSelectVisitor={setSelectedVisitor}
@@ -391,7 +126,6 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
         onRejectAccess={handleRejectAccess}
       />
 
-      {/* Modal Nouvel Enregistrement (avec sélection travailleur récurrent sans CNI & Select 2) */}
       {isNewModalOpen && (
         <NewVisitorModal
           employees={employees}
@@ -402,7 +136,6 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
         />
       )}
 
-      {/* Modal de Configuration des Superviseurs (directement en base de données) */}
       {isSupervisorsModalOpen && (
         <SupervisorConfigModal
           currentSupervisors={supervisors}
@@ -413,7 +146,6 @@ export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
         />
       )}
 
-      {/* Modal Détails Complet */}
       {selectedVisitor && (
         <VisitorDetailModal
           visitor={selectedVisitor}

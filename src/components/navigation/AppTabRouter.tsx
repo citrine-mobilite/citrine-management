@@ -1,148 +1,49 @@
-import React, { Suspense, lazy } from 'react';
-import { TabType } from '../Sidebar';
-import { 
-  AppUser, 
-  Employee, 
-  Presence, 
-  Task, 
-  Reminder, 
-  NotificationLog, 
-  SalaryPayment, 
-  FinancialTransaction, 
-  EmployeeSalaryDebt, 
-  GeneratedDocument, 
-  DisciplinaryIncident, 
-  AttendanceIncident,
-  InventoryItem, 
-  Partner, 
-  CompanyModuleConfig,
-  DEFAULT_MODULE_CONFIG,
-  LeaveRequest,
-  StrategicProject
-} from '../../types';
+import React, { Suspense } from 'react';
 import ModuleSkeletonLoader from '../ModuleSkeletonLoader';
-import ErrorBoundary from '../ErrorBoundary';
-
 import AdminDashboardOverview from '../AdminDashboardOverview';
 import EmployeePortal from '../EmployeePortal';
 import PresencePanel from '../PresencePanel';
 import PresenceStatisticsView from '../PresenceStatisticsView';
 import TaskPanel from '../TaskPanel';
-import ReminderPanel from '../ReminderPanel';
-import SystemLogsPanel from '../SystemLogsPanel';
-import CollaboratorPanel from '../CollaboratorPanel';
-import UserManagementPanel from '../UserManagementPanel';
-import ProfilePage from '../ProfilePage';
 import { Error404Page, Error403Page } from '../errors';
 import { canAccessTab } from '../../services/sessionService';
 import { taskService } from '../../services/taskService';
+import {
+  AppTabRouterProps,
+  VALID_ROUTER_TABS,
+  LeaveManagementPanel,
+  StrategicProjectsPanel,
+} from './appRouterLazyModules';
+import { AppOperationsTabRoutes } from './AppOperationsTabRoutes';
 
-const LeaveManagementPanel = lazy(() => import('../LeaveManagementPanel'));
-const DisciplinaryPanel = lazy(() => import('../DisciplinaryPanel'));
-const DocumentGeneratorPanel = lazy(() => import('../DocumentGeneratorPanel'));
-const CommunicationPanel = lazy(() => import('../CommunicationPanel'));
-const FinancePanel = lazy(() => import('../FinancePanel'));
-const InventoryPanel = lazy(() => import('../InventoryPanel'));
-const PartnersPanel = lazy(() => import('../PartnersPanel'));
-const CompanySettingsPanel = lazy(() => import('../CompanySettingsPanel'));
-const TeamCallsPanel = lazy(() => import('../TeamCallsPanel'));
-const RecruitmentPanel = lazy(() => import('../recruitment/RecruitmentPanel'));
-const ExpenseClaimsPanel = lazy(() => import('../expenses/ExpenseClaimsPanel'));
-const HsePanel = lazy(() => import('../hse/HsePanel'));
-const VisitorsPanel = lazy(() => import('../visitors/VisitorsPanel'));
-const IdeasSurveysPanel = lazy(() => import('../ideas/IdeasSurveysPanel'));
-const StrategicProjectsPanel = lazy(() => import('../projects/StrategicProjectsPanel'));
-
-export interface AppTabRouterProps {
-  activeTab: TabType;
-  setActiveTab: (tab: TabType) => void;
-  currentUser: AppUser | null;
-  employees: Employee[];
-  presences: Presence[];
-  tasks: Task[];
-  reminders: Reminder[];
-  notifications: NotificationLog[];
-  salaryPayments: SalaryPayment[];
-  financialTransactions: FinancialTransaction[];
-  salaryDebts: EmployeeSalaryDebt[];
-  documents: GeneratedDocument[];
-  disciplinaryIncidents: DisciplinaryIncident[];
-  attendanceIncidents?: AttendanceIncident[];
-  inventoryItems: InventoryItem[];
-  partners: Partner[];
-  users: AppUser[];
-  moduleConfig: CompanyModuleConfig;
-  selectedEmployeeId: string;
-  setSelectedEmployeeId: (id: string) => void;
-  currentTime: string;
-  employeeInitialSubTab?: string;
-  onUpdatePresences: (p: Presence[]) => void;
-  onUpdateTasks: (t: Task[]) => void;
-  onUpdateReminders: (r: Reminder[]) => void;
-  onAddNotification: (n: any) => void;
-  onUpdateNotifications: (n: NotificationLog[]) => void;
-  onUpdateEmployees: (e: Employee[]) => void;
-  onUpdateSalaryDebts: (d: EmployeeSalaryDebt[]) => void;
-  onUpdateSalaryPayments: (p: SalaryPayment[]) => void;
-  onUpdateFinancialTransactions: (t: FinancialTransaction[]) => void;
-  onUpdateDocuments: (d: GeneratedDocument[]) => void;
-  onUpdateDisciplinaryIncidents: (i: DisciplinaryIncident[]) => void;
-  onUpdateAttendanceIncidents?: (i: AttendanceIncident[]) => void;
-  onAddAttendanceIncident?: (i: AttendanceIncident) => void;
-  onUpdateInventoryItems: (i: InventoryItem[]) => void;
-  onUpdatePartners: (p: Partner[]) => void;
-  onUpdateUsers: (u: AppUser[]) => void;
-  onUpdateModuleConfig: (c: CompanyModuleConfig) => void;
-  onOpenProfileModal: () => void;
-  showToast: (msg: string, type?: 'success' | 'error') => void;
-  handleSetCurrentUser: (u: AppUser | null) => void;
-  onLogout: () => void;
-  onUpdateUser?: (updated: AppUser) => void;
-  leaveRequests?: LeaveRequest[];
-  onUpdateLeaveRequests?: (leaves: LeaveRequest[]) => void;
-  strategicProjects?: StrategicProject[];
-  onUpdateStrategicProjects?: (projects: StrategicProject[]) => void;
-}
+export type { AppTabRouterProps };
 
 export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
   const {
-    activeTab, setActiveTab, currentUser, employees, presences, tasks, reminders, notifications,
-    salaryPayments, financialTransactions, salaryDebts, documents, disciplinaryIncidents,
+    activeTab, setActiveTab, currentUser, employees, presences, tasks, reminders,
+    salaryPayments, financialTransactions, salaryDebts,
     attendanceIncidents = [], onUpdateAttendanceIncidents, onAddAttendanceIncident,
-    inventoryItems, partners, users, moduleConfig, selectedEmployeeId, setSelectedEmployeeId,
+    users, moduleConfig, selectedEmployeeId, setSelectedEmployeeId,
     currentTime, employeeInitialSubTab, onUpdatePresences, onUpdateTasks, onUpdateReminders, onAddNotification,
-    onUpdateNotifications, onUpdateEmployees, onUpdateSalaryDebts, onUpdateSalaryPayments,
-    onUpdateFinancialTransactions, onUpdateDocuments, onUpdateDisciplinaryIncidents,
-    onUpdateInventoryItems, onUpdatePartners, onUpdateUsers, onUpdateModuleConfig,
-    onOpenProfileModal, showToast, handleSetCurrentUser, onUpdateUser, onLogout,
+    onUpdateNotifications, onUpdateEmployees, onUpdateUsers, onUpdateModuleConfig,
+    onOpenProfileModal, showToast, onUpdateUser, onLogout,
     leaveRequests = [], onUpdateLeaveRequests,
-    strategicProjects = [], onUpdateStrategicProjects,
+    strategicProjects = [], onUpdateStrategicProjects, notifications,
   } = props;
 
-  const VALID_TABS: TabType[] = [
-    'dashboard', 'employee_portal', 'presences', 'leave_requests', 'statistics', 'projects', 'tasks',
-    'reminders', 'logs', 'collaborators', 'discipline', 'documents',
-    'communications', 'finances', 'inventory', 'partners', 'users',
-    'settings', 'calls', 'recruitment', 'expense_claims', 'hse',
-    'visitors', 'ideas_surveys', 'profile'
-  ];
-
-  // 1. Contrôle d'Accès Stricte (Page d'erreur 403 en cas de permissions insuffisantes)
   const isUnauthorized = Boolean(
     currentUser &&
-    activeTab &&
-    activeTab !== 'profile' &&
-    activeTab !== 'employee_portal' &&
-    VALID_TABS.includes(activeTab) &&
-    !canAccessTab(currentUser.role, activeTab)
+      activeTab &&
+      activeTab !== 'profile' &&
+      activeTab !== 'employee_portal' &&
+      VALID_ROUTER_TABS.includes(activeTab) &&
+      !canAccessTab(currentUser.role, activeTab)
   );
 
-  // 2. Détection d'Onglet Inconnu (Page d'erreur 404 en cas d'URL ou module inexistant)
-  const isNotFound = Boolean(activeTab && !VALID_TABS.includes(activeTab));
+  const isNotFound = Boolean(activeTab && !VALID_ROUTER_TABS.includes(activeTab));
 
   return (
     <Suspense fallback={<ModuleSkeletonLoader title={activeTab || 'Chargement...'} />}>
-      {/* Rendu réel de la Page 403 - Accès Refusé */}
       {isUnauthorized && (
         <Error403Page
           currentUser={currentUser}
@@ -152,7 +53,6 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
         />
       )}
 
-      {/* Rendu réel de la Page 404 - Page Introuvable */}
       {isNotFound && !isUnauthorized && (
         <Error404Page
           currentUser={currentUser}
@@ -173,6 +73,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           showToast={showToast}
         />
       )}
+
       {activeTab === 'leave_requests' && (
         <LeaveManagementPanel
           leaveRequests={leaveRequests}
@@ -187,6 +88,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           moduleConfig={moduleConfig}
         />
       )}
+
       {activeTab === 'employee_portal' && (
         <EmployeePortal
           currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}
@@ -213,6 +115,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onUpdateStrategicProjects={onUpdateStrategicProjects}
         />
       )}
+
       {activeTab === 'presences' && (
         <PresencePanel
           employees={employees} presences={presences} onUpdatePresences={onUpdatePresences}
@@ -231,6 +134,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onAddAttendanceIncident={onAddAttendanceIncident}
         />
       )}
+
       {activeTab === 'statistics' && (
         <PresenceStatisticsView
           employees={employees}
@@ -248,6 +152,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           showToast={showToast}
         />
       )}
+
       {activeTab === 'projects' && (
         <StrategicProjectsPanel
           projects={strategicProjects}
@@ -257,6 +162,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           showToast={(msg, type) => showToast(msg, type === 'error' ? 'error' : 'success')}
         />
       )}
+
       {activeTab === 'tasks' && (
         <TaskPanel
           tasks={tasks}
@@ -269,159 +175,9 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           currentUser={currentUser}
         />
       )}
-      {activeTab === 'reminders' && (
-        <ReminderPanel
-          reminders={reminders}
-          onUpdateReminders={onUpdateReminders}
-          currentTime={currentTime}
-          employees={employees}
-          currentRole={currentUser?.role}
-          showToast={showToast}
-        />
-      )}
-      {activeTab === 'logs' && (
-        <SystemLogsPanel
-          notifications={notifications}
-          onUpdateNotifications={onUpdateNotifications}
-          onAddNotification={onAddNotification}
-          currentUser={currentUser!}
-          employees={employees}
-          users={users}
-        />
-      )}
-      {activeTab === 'collaborators' && (
-        <CollaboratorPanel
-          employees={employees}
-          presences={presences}
-          tasks={tasks}
-          salaryPayments={salaryPayments}
-          salaryDebts={salaryDebts}
-          onUpdateEmployees={onUpdateEmployees}
-          onUpdatePresences={onUpdatePresences}
-          onUpdateTasks={onUpdateTasks}
-          onUpdateSalaryPayments={onUpdateSalaryPayments}
-          onAddNotification={onAddNotification}
-          showToast={showToast}
-          users={users}
-          onUpdateUsers={onUpdateUsers}
-          moduleConfig={moduleConfig}
-          selectedEmployeeId={selectedEmployeeId}
-        />
-      )}
-      {activeTab === 'discipline' && (
-        <DisciplinaryPanel
-          incidents={disciplinaryIncidents}
-          employees={employees}
-          onUpdateIncidents={onUpdateDisciplinaryIncidents}
-          onAddNotification={onAddNotification}
-          currentUser={currentUser}
-          showToast={showToast}
-        />
-      )}
-      {activeTab === 'documents' && (
-        <DocumentGeneratorPanel
-          employees={employees}
-          documents={documents}
-          onUpdateDocuments={onUpdateDocuments}
-          setDocuments={onUpdateDocuments}
-          onAddNotification={onAddNotification}
-          showToast={showToast}
-          currentUser={currentUser}
-          currentRole={(currentUser?.role || 'admin') as any}
-          moduleConfig={moduleConfig}
-        />
-      )}
-      {activeTab === 'communications' && (
-        <CommunicationPanel employees={employees} currentRole={(currentUser?.role || 'admin') as any} onAddNotification={onAddNotification} showToast={showToast} />
-      )}
-      {activeTab === 'finances' && (
-        <FinancePanel
-          employees={employees} salaryPayments={salaryPayments} financialTransactions={financialTransactions}
-          salaryDebts={salaryDebts} onUpdateSalaryPayments={onUpdateSalaryPayments} onUpdateFinancialTransactions={onUpdateFinancialTransactions}
-          onUpdateSalaryDebts={onUpdateSalaryDebts} onAddNotification={onAddNotification} currentRole={(currentUser?.role || 'admin') as any} showToast={showToast}
-        />
-      )}
-      {activeTab === 'inventory' && (
-        <InventoryPanel inventoryItems={inventoryItems} employees={employees} onUpdateInventoryItems={onUpdateInventoryItems} onAddNotification={onAddNotification} showToast={showToast} />
-      )}
-      {activeTab === 'partners' && (
-        <PartnersPanel partners={partners} onUpdatePartners={onUpdatePartners} onAddNotification={onAddNotification} showToast={showToast} currentRole={(currentUser?.role || 'admin') as any} />
-      )}
-      {activeTab === 'users' && (
-        <UserManagementPanel
-          users={users}
-          onAddNotification={onAddNotification}
-          currentUser={currentUser!}
-          onUpdateUsers={onUpdateUsers}
-          employees={employees}
-          onUpdateEmployees={onUpdateEmployees}
-          showToast={showToast}
-        />
-      )}
-      {activeTab === 'settings' && (
-        <ErrorBoundary>
-          <CompanySettingsPanel moduleConfig={moduleConfig || DEFAULT_MODULE_CONFIG} onUpdateModuleConfig={onUpdateModuleConfig} onAddNotification={onAddNotification} showToast={showToast} />
-        </ErrorBoundary>
-      )}
-      {activeTab === 'calls' && (
-        <TeamCallsPanel
-          employees={employees}
-          users={users}
-          currentUser={currentUser}
-          showToast={showToast}
-        />
-      )}
-      {activeTab === 'recruitment' && (
-        <RecruitmentPanel
-          currentUser={currentUser}
-          employees={employees}
-          onAddNotification={onAddNotification}
-          showToast={showToast}
-          onUpdateEmployees={onUpdateEmployees}
-        />
-      )}
-      {activeTab === 'expense_claims' && (
-        <ExpenseClaimsPanel
-          currentUser={currentUser}
-          employees={employees}
-          onAddNotification={onAddNotification}
-          showToast={showToast}
-        />
-      )}
-      {activeTab === 'hse' && (
-        <HsePanel
-          currentUser={currentUser}
-          employees={employees}
-          onAddNotification={onAddNotification}
-          showToast={showToast}
-        />
-      )}
-      {activeTab === 'visitors' && (
-        <VisitorsPanel
-          currentUser={currentUser}
-          employees={employees}
-          onAddNotification={onAddNotification}
-          showToast={showToast}
-        />
-      )}
-      {activeTab === 'ideas_surveys' && (
-        <IdeasSurveysPanel
-          currentUser={currentUser}
-          employees={employees}
-          onAddNotification={onAddNotification}
-          showToast={showToast}
-        />
-      )}
-      {activeTab === 'profile' && currentUser && (
-        <ProfilePage
-          currentUser={currentUser}
-          onBackToDashboard={() => setActiveTab(currentUser.role === 'employé' ? 'employee_portal' : 'dashboard')}
-          onLogout={onLogout} onAddNotification={onAddNotification} showToast={showToast}
-          onUpdateUser={onUpdateUser}
-        />
-      )}
 
-      {/* Fallback universel : si activeTab est vide, atterrir sur le portail approprié */}
+      <AppOperationsTabRoutes {...props} />
+
       {!activeTab && (
         currentUser?.role === 'employé' ? (
           <EmployeePortal
