@@ -65,12 +65,19 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
   });
 
   const employeeProfile: Employee = {
+    ...(foundEmp || {}),
     id: foundEmp?.id || currentUser?.id || 'unknown',
     uid: foundEmp?.uid,
     _dbId: foundEmp?._dbId,
     userId: foundEmp?.userId || currentUser?.id,
-    roleId: foundEmp?.roleId,
-    managerId: foundEmp?.managerId,
+    roleId: foundEmp?.roleId ?? currentUser?.roleId,
+    managerId: foundEmp?.managerId ?? currentUser?.managerId,
+    managerName: foundEmp?.managerName ?? currentUser?.managerName,
+    team: foundEmp?.team ?? currentUser?.team,
+    teams: (Array.isArray(foundEmp?.teams) && foundEmp.teams.length > 0) ? foundEmp.teams : currentUser?.teams,
+    birthDate: foundEmp?.birthDate || currentUser?.birthDate,
+    allowEarlyDeparture15_17: Boolean(foundEmp?.allowEarlyDeparture15_17 || currentUser?.allowEarlyDeparture15_17),
+    allowLateArrival8_930: Boolean(foundEmp?.allowLateArrival8_930 || currentUser?.allowLateArrival8_930),
     name: currentUser?.name || foundEmp?.name || 'Collaborateur',
     firstName: foundEmp?.firstName,
     lastName: foundEmp?.lastName,

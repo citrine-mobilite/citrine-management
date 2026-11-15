@@ -14,6 +14,7 @@ interface ProfileModalProps {
   onLogout: () => void;
   onAddNotification: (notif: any) => void;
   onUpdateUser?: (updated: AppUser) => void;
+  initialTab?: 'info' | 'security' | 'install' | 'activity' | 'permissions';
 }
 
 export default function ProfileModal({
@@ -22,8 +23,9 @@ export default function ProfileModal({
   onLogout,
   onAddNotification,
   onUpdateUser,
+  initialTab = 'info',
 }: ProfileModalProps) {
-  const [activeTab, setActiveTab] = useState<'info' | 'security' | 'install' | 'activity' | 'permissions'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'security' | 'install' | 'activity' | 'permissions'>(initialTab);
   const [connectionLogs, setConnectionLogs] = useState<ConnectionLog[]>([]);
 
   useEffect(() => {
@@ -107,7 +109,7 @@ export default function ProfileModal({
             />
           )}
           {activeTab === 'security' && (
-            <ProfileSecuritySubTab currentUser={currentUser} />
+            <ProfileSecuritySubTab currentUser={currentUser} onUpdateUser={onUpdateUser} />
           )}
           {activeTab === 'install' && (
             <EmployeePwaInstallTab />

@@ -103,6 +103,7 @@ export interface DynamicQrSession {
 export interface Presence {
   id: string;
   employeeId: string;
+  employeeEmail?: string;
   date: string;
   arrivalTime: string | null;
   pauseStart: string | null;

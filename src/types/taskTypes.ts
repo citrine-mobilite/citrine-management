@@ -99,6 +99,12 @@ export interface Task {
 
 export type ReminderTrigger = '5m' | '15m' | '30m' | '1h' | '1d' | 'none';
 
+export type ReminderKind = 'deadline' | 'alarm';
+
+export type ReminderCategory = 'vehicule' | 'fiscalite' | 'administratif' | 'rh' | 'autre';
+
+export type ReminderRenewalCycle = 'none' | 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+
 export interface Reminder {
   id: string;
   title: string;
@@ -118,5 +124,15 @@ export interface Reminder {
   employeeIds?: string[];
   allEmployees?: boolean;
   recurrence?: 'once' | 'daily' | 'weekdays' | 'weekends';
+  kind?: ReminderKind;
+  category?: ReminderCategory;
+  entityName?: string;
+  documentRef?: string;
+  expirationDate?: string;
+  alertLeadDays?: number;
+  renewalCycle?: ReminderRenewalCycle;
+  lastRenewedAt?: string;
+  isResolved?: boolean;
+  estimatedAmount?: number;
   createdAt: string;
 }

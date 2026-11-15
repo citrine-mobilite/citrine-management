@@ -23,7 +23,8 @@ import {
   ShieldAlert,
   Contact2,
   Lightbulb,
-  CalendarDays
+  CalendarDays,
+  Flag
 } from 'lucide-react';
 import { TabType } from '../Sidebar';
 import { CompanyModuleConfig } from '../../types';
@@ -72,6 +73,15 @@ export function getSidebarCategories({
         icon: UserCheck,
       },
     ];
+
+    if (moduleConfig.enableStrategicProjects !== false) {
+      empPresenceItems.push({
+        id: 'projects',
+        label: 'Projets & Jalons',
+        description: 'Consulter l\'évolution des projets et prochains jalons',
+        icon: Flag,
+      });
+    }
 
     if (moduleConfig.enableExpenseClaims !== false) {
       empPresenceItems.push({
@@ -173,6 +183,14 @@ export function getSidebarCategories({
         label: 'Recrutement & Vivier (ATS)',
         description: 'Offres, candidatures et entretiens de recrutement',
         icon: UserPlus,
+      });
+    }
+    if (moduleConfig.enableStrategicProjects !== false) {
+      opItems.push({
+        id: 'projects',
+        label: 'Gestion de Projets',
+        description: 'Suivi stratégique des projets et jalons clés',
+        icon: Flag,
       });
     }
     if (moduleConfig.enableTasks !== false) {

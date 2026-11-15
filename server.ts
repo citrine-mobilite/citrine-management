@@ -12,7 +12,8 @@ import {
   deleteDocumentData, 
   getOrCreateUserRecord,
   executeCollaboratorCreationTransaction,
-  executeAtomicClockingTransaction
+  executeAtomicClockingTransaction,
+  checkClockingEligibilityBackend
 } from "./src/db/repository";
 import { 
   sendThreadedEmployeeEmail, 
@@ -207,6 +208,21 @@ async function startServer() {
     } catch (error: any) {
       console.error("[API Atomic Clocking Error]:", error);
       res.status(500).json({ success: false, error: error.message || "Échec du pointage atomique." });
+    }
+  });
+
+  // Vérification backend d'éligibilité au départ anticipé (15h-17h) et arrivée différée (8h-9h30)
+  app.get("/api/clocking/eligibility", async (req: express.Request, res: express.Response) => {
+    try {
+      const result = await checkClockingEligibilityBackend({
+        employeeId: req.query.employeeId as string | undefined,
+        userId: req.query.userId as string | undefined,
+        email: req.query.email as string | undefined,
+      });
+      res.json(result);
+    } catch (error: any) {
+      console.error("[API Clocking Eligibility Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Erreur vérification éligibilité pointage." });
     }
   });
 
@@ -420,12 +436,33 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const isHmrDisabled = process.env.DISABLE_HMR === "true";
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
         hmr: false,
+        ws: false,
       },
+      plugins: [
+        {
+          name: "disable-vite-client-ws",
+          transform(code, id) {
+            if (
+              (id.includes("vite/dist/client/client.mjs") || id.includes("@vite/client")) &&
+              code.includes("transport.connect(createHMRHandler(handleMessage))")
+            ) {
+              return code
+                .replace(
+                  "transport.connect(createHMRHandler(handleMessage));",
+                  "/* HMR WebSocket disabled */"
+                )
+                .replace(
+                  "if (!invokeableTransport.send) return;",
+                  "return;"
+                );
+            }
+          },
+        },
+      ],
       appType: "spa",
     });
     app.use(vite.middlewares);

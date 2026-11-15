@@ -39,15 +39,27 @@ export async function syncUsersFromDatabase(): Promise<AppUser[]> {
         }
 
         return {
+          ...raw,
           id: String(u.id),
           uid: u.uid,
+          doc_id: u.doc_id || raw.doc_id,
           name: u.name || raw.name || (u.email ? u.email.split('@')[0] : 'Utilisateur'),
           email: u.email,
           role: resolvedRole,
+          roleId: u.role_id || raw.roleId || (resolvedRole === 'administrateur' ? 1 : resolvedRole === 'responsable' ? 2 : 3),
           status: isUserActive ? 'actif' : 'inactif',
+          employmentStatus: raw.employmentStatus || (isUserActive ? 'en_poste' : 'suspendu'),
           department: u.department || raw.department || 'Général',
           phone: u.phone || raw.phone || '',
           avatarUrl: u.avatar_url || raw.avatarUrl || '',
+          employeeId: raw.employeeId ? String(raw.employeeId) : (raw.employeeDbId ? String(raw.employeeDbId) : undefined),
+          birthDate: raw.birthDate,
+          team: raw.team,
+          teams: Array.isArray(raw.teams) ? raw.teams : undefined,
+          managerId: raw.managerId,
+          managerName: raw.managerName,
+          allowEarlyDeparture15_17: Boolean(raw.allowEarlyDeparture15_17 || u.allow_early_departure_15_17),
+          allowLateArrival8_930: Boolean(raw.allowLateArrival8_930 || u.allow_late_arrival_8_930),
           passwordHash: raw.passwordHash || raw.password_hash || u.password_hash || '',
           createdAt: u.created_at || raw.createdAt || new Date().toISOString()
         };
@@ -170,9 +182,18 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
         phone: cleanUser.phone || null,
         department: cleanUser.department,
         role: cleanUser.role,
+        roleId: resolvedRoleId,
         role_id: resolvedRoleId,
         status: cleanUser.status,
         employmentStatus: cleanUser.employmentStatus,
+        employeeId: cleanUser.employeeId || existingRaw.employeeId || null,
+        allowEarlyDeparture15_17: Boolean(cleanUser.allowEarlyDeparture15_17),
+        allowLateArrival8_930: Boolean(cleanUser.allowLateArrival8_930),
+        birthDate: cleanUser.birthDate ?? existingRaw.birthDate ?? null,
+        team: cleanUser.team ?? existingRaw.team ?? null,
+        teams: cleanUser.teams ?? existingRaw.teams ?? null,
+        managerId: cleanUser.managerId ?? existingRaw.managerId ?? null,
+        managerName: cleanUser.managerName ?? existingRaw.managerName ?? null,
         passwordHash: cleanUser.passwordHash || existingRaw.passwordHash || existingRaw.password_hash || '',
         password_hash: cleanUser.passwordHash || existingRaw.passwordHash || existingRaw.password_hash || '',
         updatedAt: new Date().toISOString(),
@@ -272,6 +293,15 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
 
         const resolvedRoleType = cleanUser.role === 'administrateur' ? 'Super Administrateur' : cleanUser.role === 'responsable' ? 'Responsable' : (matchedEmp.role_type || 'Employé');
 
+        const resolvedEmpAllowEarly =
+          cleanUser.allowEarlyDeparture15_17 !== undefined
+            ? Boolean(cleanUser.allowEarlyDeparture15_17)
+            : Boolean(rawEmp.allowEarlyDeparture15_17);
+        const resolvedEmpAllowLate =
+          cleanUser.allowLateArrival8_930 !== undefined
+            ? Boolean(cleanUser.allowLateArrival8_930)
+            : Boolean(rawEmp.allowLateArrival8_930);
+
         const updatedEmpRaw = {
           ...rawEmp,
           id: String(matchedEmp.id),
@@ -289,6 +319,13 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
           avatarUrl: cleanUser.avatarUrl || matchedEmp.photo_url || rawEmp.avatarUrl || '',
           salary: matchedEmp.salary || 0,
           hireDate: matchedEmp.hire_date || rawEmp.hireDate || new Date().toISOString().split('T')[0],
+          birthDate: cleanUser.birthDate ?? rawEmp.birthDate ?? null,
+          team: cleanUser.team ?? rawEmp.team ?? null,
+          teams: cleanUser.teams ?? rawEmp.teams ?? null,
+          managerId: cleanUser.managerId ?? rawEmp.managerId ?? null,
+          managerName: cleanUser.managerName ?? rawEmp.managerName ?? null,
+          allowEarlyDeparture15_17: resolvedEmpAllowEarly,
+          allowLateArrival8_930: resolvedEmpAllowLate,
         };
 
         const updatedEmp: Employee = {
@@ -312,6 +349,10 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
           updated_at: new Date().toISOString(),
         }).eq('id', matchedEmp.id);
 
+        if (!resolvedUser.employeeId) {
+          resolvedUser.employeeId = String(matchedEmp.id);
+        }
+
         // Mettre à jour le cache local employees
         try {
           const cachedEmps = localStorage.getItem('citrine_employees');
@@ -331,7 +372,7 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
         } catch {}
 
         window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
-        console.log(`✅ [SYNC USER ➔ COLLABORATEUR] Employé "${cleanUser.name}" (${cleanUser.email}) synchronisé.`);
+        console.log(`✅ [SYNC USER ➔ COLLABORATEUR] Employé "${cleanUser.name}" (${cleanUser.email}) synchronisé (départ 15-17h: ${resolvedEmpAllowEarly}).`);
       }
     } catch (syncErr) {
       console.warn('[userService] Notice synchronisation collaborateur associé:', syncErr);
@@ -410,19 +451,29 @@ export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser |
         resolvedRole = 'employé';
       }
 
+      const empRaw = (dbEmp?.raw_data && typeof dbEmp.raw_data === 'object') ? dbEmp.raw_data : {};
       return {
+        ...raw,
         id: String(dbUser.id),
         uid: dbUser.uid,
         name: dbUser.name || raw.name || cleanEmail.split('@')[0],
         email: dbUser.email || cleanEmail,
         role: resolvedRole,
+        roleId: dbUser.role_id || raw.roleId || (resolvedRole === 'administrateur' ? 1 : resolvedRole === 'responsable' ? 2 : 3),
         status: isUserActive ? 'actif' : 'inactif',
         employmentStatus: empStatus,
         department: dbUser.department || dbEmp?.department || raw.department || 'Direction Générale',
         phone: dbUser.phone || dbEmp?.phone || raw.phone || '',
-        avatarUrl: dbUser.avatar_url || dbEmp?.avatar_url || raw.avatarUrl || '',
+        avatarUrl: dbUser.avatar_url || dbEmp?.photo_url || dbEmp?.avatar_url || raw.avatarUrl || '',
         passwordHash: raw.passwordHash || raw.password_hash || dbUser.password_hash || '',
         employeeId: dbEmp?.id ? String(dbEmp.id) : raw.employeeId,
+        birthDate: raw.birthDate || empRaw.birthDate,
+        team: raw.team || empRaw.team,
+        teams: Array.isArray(raw.teams) ? raw.teams : (Array.isArray(empRaw.teams) ? empRaw.teams : undefined),
+        managerId: raw.managerId || empRaw.managerId,
+        managerName: raw.managerName || empRaw.managerName,
+        allowEarlyDeparture15_17: Boolean(raw.allowEarlyDeparture15_17 || empRaw.allowEarlyDeparture15_17),
+        allowLateArrival8_930: Boolean(raw.allowLateArrival8_930 || empRaw.allowLateArrival8_930),
         createdAt: dbUser.created_at || raw.createdAt || new Date().toISOString()
       };
     }
@@ -469,13 +520,21 @@ export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser |
         name: dbEmp.name || `${dbEmp.first_name || ''} ${dbEmp.last_name || ''}`.trim() || raw.name || 'Collaborateur',
         email: dbEmp.email || cleanEmail,
         role: resolvedRole,
+        roleId: dbEmp.role_id || raw.roleId || (resolvedRole === 'administrateur' ? 1 : resolvedRole === 'responsable' ? 2 : 3),
         status: isEmpActive ? 'actif' : 'inactif',
         employmentStatus: empStatus,
         department: dbEmp.department || raw.department || 'Direction Générale',
         phone: dbEmp.phone || raw.phone || '',
-        avatarUrl: dbEmp.avatar_url || raw.avatarUrl || '',
+        avatarUrl: dbEmp.photo_url || dbEmp.avatar_url || raw.avatarUrl || '',
         passwordHash: raw.passwordHash || raw.password_hash || '',
         employeeId: String(dbEmp.id),
+        birthDate: raw.birthDate,
+        team: raw.team,
+        teams: Array.isArray(raw.teams) ? raw.teams : undefined,
+        managerId: raw.managerId,
+        managerName: raw.managerName,
+        allowEarlyDeparture15_17: Boolean(raw.allowEarlyDeparture15_17),
+        allowLateArrival8_930: Boolean(raw.allowLateArrival8_930),
         createdAt: dbEmp.created_at || dbEmp.hire_date || new Date().toISOString()
       };
     }

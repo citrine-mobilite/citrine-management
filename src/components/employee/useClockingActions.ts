@@ -279,8 +279,11 @@ export function useClockingActions({
           method,
           qrCodeToken: customLocation?.qrCodeToken,
         };
-        targetPresence = existing;
-        updatedPresences[existingIdx] = existing;
+        targetPresence = {
+          ...existing,
+          employeeEmail: employeeProfile.email || (existing as any).employeeEmail,
+        };
+        updatedPresences[existingIdx] = targetPresence;
       } else {
         const clockLocations: any = {};
         clockLocations[action] = {
@@ -296,6 +299,7 @@ export function useClockingActions({
           id: `pr-${Date.now()}`,
           employeeId: employeeProfile.id,
           employeeName: employeeProfile.name,
+          employeeEmail: employeeProfile.email,
           date: todayStr,
           status,
           arrivalTime: action === 'arrival' ? timeStr : null,
@@ -310,7 +314,7 @@ export function useClockingActions({
           clockingMethod: method,
           qrCodeToken: customLocation?.qrCodeToken,
           clockLocations,
-        };
+        } as Presence;
         updatedPresences.push(targetPresence);
       }
 

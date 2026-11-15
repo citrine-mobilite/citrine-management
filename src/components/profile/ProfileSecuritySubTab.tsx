@@ -2,16 +2,19 @@ import React, { useState } from 'react';
 import { Lock, Key, CheckCircle2, AlertCircle } from 'lucide-react';
 import { AppUser } from '../../types';
 import { saveUser } from '../../services/userService';
+import { storeSecureSession } from '../../services/sessionService';
 import { hashPassword, verifyPassword } from '../../utils/cryptoUtils';
 
 interface ProfileSecuritySubTabProps {
   currentUser: AppUser;
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onUpdateUser?: (updated: AppUser) => void;
 }
 
 export const ProfileSecuritySubTab: React.FC<ProfileSecuritySubTabProps> = ({
   currentUser,
   showToast,
+  onUpdateUser,
 }) => {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -24,6 +27,11 @@ export const ProfileSecuritySubTab: React.FC<ProfileSecuritySubTabProps> = ({
     e.preventDefault();
     setError(null);
     setSuccess(null);
+
+    if (currentUser.passwordHash && !oldPassword) {
+      setError('Veuillez saisir votre mot de passe actuel.');
+      return;
+    }
 
     if (!newPassword || !confirmPassword) {
       setError('Veuillez remplir tous les champs de mot de passe.');
@@ -42,7 +50,7 @@ export const ProfileSecuritySubTab: React.FC<ProfileSecuritySubTabProps> = ({
 
     setLoading(true);
     try {
-      if (currentUser.passwordHash && oldPassword) {
+      if (currentUser.passwordHash) {
         const isValid = await verifyPassword(oldPassword, currentUser.passwordHash);
         if (!isValid) {
           setError('L’ancien mot de passe est incorrect.');
@@ -52,10 +60,14 @@ export const ProfileSecuritySubTab: React.FC<ProfileSecuritySubTabProps> = ({
       }
 
       const newHash = await hashPassword(newPassword);
-      await saveUser({
+      const updatedUser: AppUser = {
         ...currentUser,
         passwordHash: newHash,
-      });
+      };
+      await saveUser(updatedUser);
+      await storeSecureSession(updatedUser).catch(() => {});
+      window.dispatchEvent(new CustomEvent('citrine:user_updated', { detail: updatedUser }));
+      onUpdateUser?.(updatedUser);
 
       setSuccess('Mot de passe mis à jour avec succès.');
       showToast?.('Mot de passe mis à jour', 'success');

@@ -78,7 +78,7 @@ async function resolveEmployeeDbId(client: any, empIdVal: any): Promise<number |
 // Convert App item into Supabase row format
 function itemToSupabaseRow(collectionName: string, item: any): any {
   const table = mapCollectionToTable(collectionName);
-  const docId = String(item.id || item.docId || (item as any)._id || `doc_${Date.now()}`);
+  const docId = String(item.docId || item.doc_id || item.id || (item as any)._id || `doc_${Date.now()}`);
 
   const base: any = {
     doc_id: docId,
@@ -125,14 +125,18 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
 
       const raw = {
         ...(item.raw_data && typeof item.raw_data === 'object' ? item.raw_data : {}),
+        ...item,
         name: item.name || '',
         email: item.email || '',
         role: item.role || (roleId === 1 ? 'administrateur' : roleId === 2 ? 'responsable' : 'employé'),
+        roleId,
         role_id: roleId,
         department: item.department ? String(item.department).trim() : 'Direction Générale',
         phone: item.phone || null,
         status: isStatusActive ? 'actif' : 'inactif',
         employeeId: item.employeeId || null,
+        allowEarlyDeparture15_17: Boolean(item.allowEarlyDeparture15_17),
+        allowLateArrival8_930: Boolean(item.allowLateArrival8_930),
         passwordHash: item.passwordHash || (item.raw_data as any)?.passwordHash,
       };
 
@@ -254,20 +258,27 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
         icon: item.icon || null,
         member_ids: item.memberIds || [],
       };
-    case 'reminders':
+    case 'reminders': {
+      const empIdNumeric =
+        item.employeeId && /^\d+$/.test(String(item.employeeId))
+          ? Number(item.employeeId)
+          : null;
+      const resolvedDate = (item.expirationDate || item.date || '').trim() || null;
       return {
         ...base,
         title: item.title || 'Rappel',
         note: item.note || null,
-        date: item.date || null,
+        date: resolvedDate,
         time: item.time || null,
-        location: item.location || null,
-        employee_id: item.employeeId || null,
+        location: item.location || item.entityName || null,
+        employee_id: empIdNumeric,
         all_employees: Boolean(item.allEmployees),
-        trigger_before: item.triggerBefore || null,
+        trigger_before: item.triggerBefore || (item.alertLeadDays ? `${item.alertLeadDays}d` : null),
         triggered: Boolean(item.triggered),
-        stopped: Boolean(item.stopped),
+        stopped: Boolean(item.stopped || item.isResolved),
+        raw_data: item,
       };
+    }
     case 'presences': {
       return {
         ...base,
@@ -673,6 +684,7 @@ function supabaseRowToItem(collectionName: string, row: any): any {
     return {
       ...raw,
       id: String(row.id),
+      docId: row.doc_id || raw.docId || raw.doc_id,
       uid: row.uid,
       _dbId: row.id,
       userId: row.user_id ? String(row.user_id) : raw.userId,
@@ -693,6 +705,9 @@ function supabaseRowToItem(collectionName: string, row: any): any {
       salary: typeof row.salary === 'number' ? row.salary : (Number(row.salary) || raw.salary || 0),
       avatarUrl: row.avatar_url || raw.avatarUrl || '',
       team: row.team || raw.team,
+      teams: Array.isArray(raw.teams) ? raw.teams : undefined,
+      allowEarlyDeparture15_17: Boolean(raw.allowEarlyDeparture15_17 || row.allow_early_departure_15_17),
+      allowLateArrival8_930: Boolean(raw.allowLateArrival8_930 || row.allow_late_arrival_8_930),
       departureReason: raw.departureReason,
       suspensionReason: raw.suspensionReason,
       suspensionDate: raw.suspensionDate,
@@ -725,6 +740,7 @@ function supabaseRowToItem(collectionName: string, row: any): any {
     return {
       ...raw,
       id: String(row.id),
+      docId: row.doc_id || raw.docId || raw.doc_id,
       uid: row.uid,
       _dbId: row.id,
       name: row.name || raw.name || 'Utilisateur',
@@ -735,6 +751,8 @@ function supabaseRowToItem(collectionName: string, row: any): any {
       status: (row.status === false || row.status === 'inactif') ? 'inactif' : 'actif',
       department: row.department || raw.department || 'Direction Générale',
       avatarUrl: row.avatar_url || raw.avatarUrl || '',
+      allowEarlyDeparture15_17: Boolean(raw.allowEarlyDeparture15_17 || row.allow_early_departure_15_17),
+      allowLateArrival8_930: Boolean(raw.allowLateArrival8_930 || row.allow_late_arrival_8_930),
       passwordHash: raw.passwordHash || raw.password_hash,
       createdAt: row.created_at || raw.createdAt,
       updatedAt: row.updated_at || raw.updatedAt,
@@ -1119,18 +1137,18 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
       let savedResult: any = null;
       let empErr: any = null;
 
-      if (row.doc_id) {
+      if (row.id && Number.isInteger(row.id)) {
+        const { data, error } = await client.from('employees').upsert(row, { onConflict: 'id' }).select().single();
+        if (!error && data) savedResult = data;
+        else if (error) empErr = error;
+      }
+      if (!savedResult && row.doc_id) {
         const { data, error } = await client.from('employees').upsert(row, { onConflict: 'doc_id' }).select().single();
         if (!error && data) savedResult = data;
         else if (error) empErr = error;
       }
       if (!savedResult && row.email) {
         const { data, error } = await client.from('employees').upsert(row, { onConflict: 'email' }).select().single();
-        if (!error && data) savedResult = data;
-        else if (error) empErr = error;
-      }
-      if (!savedResult && row.id && Number.isInteger(row.id)) {
-        const { data, error } = await client.from('employees').upsert(row, { onConflict: 'id' }).select().single();
         if (!error && data) savedResult = data;
         else if (error) empErr = error;
       }

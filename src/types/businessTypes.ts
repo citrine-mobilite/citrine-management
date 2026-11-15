@@ -309,6 +309,7 @@ export interface CompanyModuleConfig {
   enablePresences?: boolean;
   enableCollaborators?: boolean;
   enableTasks?: boolean;
+  enableStrategicProjects?: boolean;
   enableReminders?: boolean;
   enableFinances: boolean;
   enableDocuments: boolean;
@@ -381,6 +382,7 @@ export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
   enablePresences: true,
   enableCollaborators: true,
   enableTasks: true,
+  enableStrategicProjects: true,
   enableReminders: true,
   enableFinances: true,
   enableDocuments: true,

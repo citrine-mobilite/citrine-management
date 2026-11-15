@@ -19,6 +19,11 @@ export interface AppUser {
   avatarUrl?: string;
   department?: string;
   phone?: string;
+  birthDate?: string;
+  team?: string;
+  teams?: string[];
+  managerId?: string | number;
+  managerName?: string;
   employeeId?: string;
   allowEarlyDeparture15_17?: boolean;
   allowLateArrival8_930?: boolean;

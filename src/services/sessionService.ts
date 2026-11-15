@@ -149,6 +149,7 @@ export function canAccessTab(role: Role | UserRole, tab: string): boolean {
   // Pour les employés standards, accès restreint au portail collaborateur et outils directs
   const allowedEmployeeTabs = [
     'employee_portal',
+    'projects',
     'calls',
     'tasks',
     'reminders',

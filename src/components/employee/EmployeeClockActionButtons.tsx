@@ -9,6 +9,8 @@ interface EmployeeClockActionButtonsProps {
   onTriggerClock: (action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure') => void;
   enableBreakTracking?: boolean;
   moduleConfig?: CompanyModuleConfig;
+  backendCanDepart?: boolean;
+  allowEarlyDeparture15_17?: boolean;
 }
 
 export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProps> = ({
@@ -18,6 +20,8 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
   onTriggerClock,
   enableBreakTracking = true,
   moduleConfig,
+  backendCanDepart,
+  allowEarlyDeparture15_17,
 }) => {
   // Extract current HH:mm from liveTimeString (or real Date)
   const now = new Date();
@@ -39,8 +43,13 @@ export const EmployeeClockActionButtons: React.FC<EmployeeClockActionButtonsProp
   const hasEndedPause = Boolean(todayPresence?.pauseEnd);
   const canEndPause = hasStartedPause && !hasEndedPause && !hasDeparted;
 
-  const isAfterDepartureHour = currentHHMM >= departureActiveStartTime;
-  const canDepart = hasArrived && !hasDeparted && isAfterDepartureHour;
+  const isAfterDepartureHour =
+    currentHHMM >= departureActiveStartTime ||
+    (Boolean(allowEarlyDeparture15_17) && currentHHMM >= '15:00');
+  const canDepart =
+    hasArrived &&
+    !hasDeparted &&
+    (backendCanDepart !== undefined ? backendCanDepart : isAfterDepartureHour);
 
   return (
     <div className="space-y-4 pt-1">

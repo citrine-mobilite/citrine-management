@@ -9,7 +9,8 @@ import {
   deleteDocumentData, 
   getOrCreateUserRecord,
   executeCollaboratorCreationTransaction,
-  executeAtomicClockingTransaction
+  executeAtomicClockingTransaction,
+  checkClockingEligibilityBackend
 } from "../db/repository";
 import { supabaseAdmin } from "../lib/supabase";
 import { Resend } from "resend";
@@ -171,6 +172,23 @@ export default async function handler(req: any, res: any) {
       } catch (error: any) {
         console.error("[API /clocking/atomic Error]:", error);
         return res.status(500).json({ success: false, error: error.message || "Échec du pointage atomique." });
+      }
+    }
+
+    // 6b. Backend Clocking Eligibility Check (départ 15h-17h / arrivée 8h-9h30)
+    if (urlPath === "/clocking/eligibility" && method === "GET") {
+      try {
+        const queryString = rawUrl.includes("?") ? rawUrl.split("?")[1] : "";
+        const searchParams = new URLSearchParams(queryString);
+        const result = await checkClockingEligibilityBackend({
+          employeeId: searchParams.get("employeeId") || undefined,
+          userId: searchParams.get("userId") || undefined,
+          email: searchParams.get("email") || undefined,
+        });
+        return res.status(200).json(result);
+      } catch (error: any) {
+        console.error("[API /clocking/eligibility Error]:", error);
+        return res.status(500).json({ success: false, error: error.message || "Erreur vérification éligibilité." });
       }
     }
 

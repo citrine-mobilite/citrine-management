@@ -57,6 +57,8 @@ export interface Employee {
   birthDate?: string;
   salary?: number;
   team?: string;
+  teams?: string[]; // Multiples équipes de rattachement
+  managerName?: string; // Nom du supérieur hiérarchique direct
   createdAt?: string;
   updatedAt?: string;
   statusReason?: string;

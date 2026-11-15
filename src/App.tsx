@@ -41,8 +41,8 @@ import { PushNotificationPopupContainer } from './components/notifications/PushN
 import { GlobalActionLoader } from './components/common/GlobalActionLoader';
 import { showSuccessAlert, showErrorAlert, showPendingAlert } from './utils/sweetAlert';
 import { asyncActionTrackerService } from './services/asyncActionTrackerService';
-import { PwaInstallBanner } from './components/pwa/PwaInstallBanner';
 import { PwaUpdateToast } from './components/pwa/PwaUpdateToast';
+import { getHomeUrgentReminders } from './services/reminderService';
 
 export default function App() {
   const initialData = useAppInitialData();
@@ -61,17 +61,17 @@ export default function App() {
   // Global anti-silent error interceptor (Catches all unhandled runtime errors & promise rejections)
   useEffect(() => {
     const handleGlobalError = (event: ErrorEvent) => {
-      console.error("Global uncaught error caught:", event.error || event.message);
       const msg = event.message || '';
       if (!msg.includes('WebSocket') && !msg.includes('vite/client')) {
+        console.error("Global uncaught error caught:", event.error || event.message);
         showErrorAlert("Erreur Inattendue", msg || "Une erreur critique est survenue dans l'application.");
       }
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error("Global unhandled promise rejection caught:", event.reason);
       const reasonStr = String(event.reason?.message || event.reason || '');
       if (!reasonStr.includes('WebSocket') && !reasonStr.includes('vite/client')) {
+        console.error("Global unhandled promise rejection caught:", event.reason);
         showErrorAlert("Erreur Asynchrone", reasonStr || "Une opération en arrière-plan a échoué.");
       }
     };
@@ -249,7 +249,16 @@ export default function App() {
           latest.avatarUrl !== currentUser.avatarUrl ||
           latest.name !== currentUser.name ||
           latest.phone !== currentUser.phone ||
-          latest.department !== currentUser.department
+          latest.department !== currentUser.department ||
+          latest.birthDate !== currentUser.birthDate ||
+          latest.team !== currentUser.team ||
+          JSON.stringify(latest.teams || []) !== JSON.stringify(currentUser.teams || []) ||
+          latest.managerId !== currentUser.managerId ||
+          latest.managerName !== currentUser.managerName ||
+          latest.role !== currentUser.role ||
+          latest.status !== currentUser.status ||
+          Boolean(latest.allowEarlyDeparture15_17) !== Boolean(currentUser.allowEarlyDeparture15_17) ||
+          Boolean(latest.allowLateArrival8_930) !== Boolean(currentUser.allowLateArrival8_930)
         ) {
           setCurrentUser(latest);
           storeSecureSession(latest);
@@ -408,7 +417,7 @@ export default function App() {
             }}
             isOpen={isSidebarOpen}
             onToggleOpen={() => setIsSidebarOpen((prev) => !prev)}
-            unreadRemindersCount={initialData.reminders.filter((r) => !r.stopped && !r.triggered).length}
+            unreadRemindersCount={getHomeUrgentReminders(initialData.reminders).length}
             pendingPresencesRequestsCount={pendingPresencesRequestsCount}
             pendingLeavesCount={pendingLeavesCount}
             nonBadgedEmployeesCount={nonBadgedEmployeesCount}
@@ -422,7 +431,6 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-28 sm:pb-24 md:pb-8 space-y-4">
-          <PwaInstallBanner />
           <AppTabRouter
             activeTab={activeTab}
             setActiveTab={setActiveTab}
@@ -471,6 +479,8 @@ export default function App() {
             }}
             leaveRequests={initialData.leaveRequests}
             onUpdateLeaveRequests={initialData.setLeaveRequests}
+            strategicProjects={initialData.strategicProjects}
+            onUpdateStrategicProjects={initialData.setStrategicProjects}
             onLogout={handleLogout}
           />
         </main>

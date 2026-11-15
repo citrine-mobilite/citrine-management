@@ -10,10 +10,18 @@ import {
   TrendingUp,
   LayoutDashboard
 } from 'lucide-react';
-import { Employee, Presence, Task, Reminder, AppUser } from '../types';
+import { Employee, Presence, Task, Reminder, AppUser, StrategicProject, CompanyModuleConfig } from '../types';
 import { TabType } from './Sidebar';
 import { isEmployeeOnlyRole } from '../utils/roleUtils';
 import { HumaanDashboardHero, HumaanRelaxedState } from './illustrations/HumaanIllustrations';
+import { ProjectMilestonesWidget } from './projects/ProjectMilestonesWidget';
+import { HomeExpirationAlertsBanner } from './reminders';
+import {
+  computeReminderUrgency,
+  formatDeadlineFrenchDate,
+  getHomeUrgentReminders,
+  sortRemindersByUrgency,
+} from '../services/reminderService';
 
 interface AdminDashboardOverviewProps {
   currentUser: AppUser | null;
@@ -21,9 +29,14 @@ interface AdminDashboardOverviewProps {
   presences: Presence[];
   tasks: Task[];
   reminders: Reminder[];
+  onUpdateReminders?: (updated: Reminder[]) => void;
   currentTime?: string;
   onSelectTab: (tab: TabType) => void;
   onSelectEmployee: (id: string) => void;
+  strategicProjects?: StrategicProject[];
+  onUpdateStrategicProjects?: (projects: StrategicProject[]) => void;
+  moduleConfig?: CompanyModuleConfig;
+  showToast?: (msg: string, type?: 'success' | 'error') => void;
 }
 
 export default function AdminDashboardOverview({
@@ -32,8 +45,13 @@ export default function AdminDashboardOverview({
   presences = [],
   tasks = [],
   reminders = [],
+  onUpdateReminders,
   onSelectTab,
   onSelectEmployee,
+  strategicProjects = [],
+  onUpdateStrategicProjects,
+  moduleConfig,
+  showToast,
 }: AdminDashboardOverviewProps) {
   const [realTime, setRealTime] = useState(() => {
     return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -75,9 +93,26 @@ export default function AdminDashboardOverview({
   const badgedEmpIds = new Set(todayPresences.filter((p) => p.arrivalTime || p.status === 'present' || p.status === 'late').map((p) => String(p.employeeId)));
   const absentCount = clockableEmployees.filter((e) => !badgedEmpIds.has(String(e.id))).length;
   
-  // Pending and active tasks
+  // Pending and active tasks & urgent deadlines
   const pendingTasks = tasks.filter((t) => t.status !== 'completed');
-  const activeRemindersCount = reminders.length;
+  const urgentReminders = useMemo(() => getHomeUrgentReminders(reminders), [reminders]);
+  const sortedReminders = useMemo(() => sortRemindersByUrgency(reminders), [reminders]);
+  const activeRemindersCount = urgentReminders.length;
+
+  const handleRenewOrResolveFromHome = (renewedReminder: Reminder) => {
+    if (!onUpdateReminders) return;
+    const updated = reminders.map((r) => (r.id === renewedReminder.id ? renewedReminder : r));
+    onUpdateReminders(updated);
+    if (showToast) {
+      const nextDate = renewedReminder.expirationDate || renewedReminder.date;
+      showToast(
+        renewedReminder.isResolved
+          ? `"${renewedReminder.title}" validé avec succès.`
+          : `"${renewedReminder.title}" renouvelé jusqu'au ${formatDeadlineFrenchDate(nextDate)}.`,
+        'success'
+      );
+    }
+  };
 
   const attendanceRate = clockableEmployees.length > 0 
     ? Math.round((presentCount / clockableEmployees.length) * 100) 
@@ -131,6 +166,16 @@ export default function AdminDashboardOverview({
           <HumaanDashboardHero className="w-56 h-36 sm:w-64 sm:h-40 drop-shadow-md" />
         </div>
       </div>
+
+      {/* Message d'alerte automatique (7 à 14 jours avant expiration ou échéances en retard) */}
+      {moduleConfig?.enableReminders !== false && (
+        <HomeExpirationAlertsBanner
+          reminders={reminders}
+          employees={employees}
+          onRenewOrResolve={onUpdateReminders ? handleRenewOrResolveFromHome : undefined}
+          onOpenRemindersModule={() => onSelectTab('reminders')}
+        />
+      )}
 
       {/* KPI Cards in Glassmorphism */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -208,28 +253,54 @@ export default function AdminDashboardOverview({
           </div>
         </div>
 
-        {/* ALERTES ACTIVES CARD */}
+        {/* ÉCHÉANCES & ALERTES CARD */}
         <div 
           onClick={() => onSelectTab('reminders')}
-          className="glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 hover:border-emerald-300"
+          className={`glass-card-interactive p-5 rounded-2xl cursor-pointer flex flex-col justify-between space-y-4 ${
+            activeRemindersCount > 0 ? 'hover:border-amber-300' : 'hover:border-emerald-300'
+          }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">Alertes Actives</span>
-            <div className="p-1.5 rounded-xl bg-emerald-500/15 text-emerald-700">
+            <span className="text-[10px] text-stone-500 font-extrabold uppercase tracking-wide">
+              Échéances à traiter
+            </span>
+            <div
+              className={`p-1.5 rounded-xl ${
+                activeRemindersCount > 0
+                  ? 'bg-amber-500/15 text-amber-700'
+                  : 'bg-emerald-500/15 text-emerald-700'
+              }`}
+            >
               <Bell className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <div className="text-xl font-bold text-stone-900">{activeRemindersCount}</div>
+            <div className="text-xl font-bold font-mono tabular-nums text-stone-900">
+              {activeRemindersCount}
+              <span className="text-xs font-sans font-semibold text-stone-400 ml-1.5">
+                / {reminders.length} suivi{reminders.length > 1 ? 's' : ''}
+              </span>
+            </div>
             <button 
               onClick={(e) => { e.stopPropagation(); onSelectTab('reminders'); }}
               className="text-[11px] text-[#2A7B76] font-bold hover:underline mt-2 inline-flex items-center gap-1 cursor-pointer"
             >
-              Consulter les alertes &gt;
+              Consulter les échéances &gt;
             </button>
           </div>
         </div>
       </div>
+
+      {/* Évolution des Projets & Prochains Jalons */}
+      {moduleConfig?.enableStrategicProjects !== false && (
+        <ProjectMilestonesWidget
+          projects={strategicProjects}
+          onUpdateProjects={onUpdateStrategicProjects}
+          currentUser={currentUser}
+          employees={employees}
+          showToast={showToast ? (msg, type) => showToast(msg, type === 'error' ? 'error' : 'success') : undefined}
+        />
+      )}
 
       {/* Main Grid with full width Pointages and widgets underneath */}
       <div className="space-y-6">
@@ -316,32 +387,58 @@ export default function AdminDashboardOverview({
         {/* BOTTOM SECTION: Sidebar Widgets side-by-side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
-          {/* widget 1: Rappels & Délais */}
+          {/* widget 1: Échéances & Rappels */}
           <div className="glass-card rounded-3xl p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-stone-200/60 pb-2">
               <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
                 <Bell className="h-4 w-4 text-[#2A7B76]" />
-                Rappels & Délais
+                Échéances & Rappels
               </h4>
-              <span className="text-[10px] bg-emerald-500/15 text-emerald-800 font-bold px-2 py-0.5 rounded-lg border border-emerald-400/30">
-                {activeRemindersCount}
+              <span className="text-[10px] font-mono tabular-nums bg-stone-100 text-stone-700 font-bold px-2 py-0.5 rounded-lg border border-stone-200/70">
+                {activeRemindersCount} urgente{activeRemindersCount > 1 ? 's' : ''}
               </span>
             </div>
 
             <div className="py-2 text-center flex flex-col items-center justify-center">
-              {activeRemindersCount === 0 ? (
+              {sortedReminders.filter((r) => computeReminderUrgency(r).level !== 'resolved').length === 0 ? (
                 <div className="flex flex-col items-center py-2 space-y-1">
                   <HumaanRelaxedState className="w-20 h-20" />
                   <p className="text-stone-600 font-bold text-xs">Tout est sous contrôle !</p>
-                  <p className="text-stone-400 text-[10px]">Aucun rappel ni retard critique à signaler.</p>
+                  <p className="text-stone-400 text-[10px]">Aucun document ni impôt proche de l&apos;échéance.</p>
                 </div>
               ) : (
-                <div className="w-full text-left space-y-2 max-h-36 overflow-y-auto">
-                  {reminders.slice(0, 2).map((r) => (
-                    <div key={r.id} className="p-2.5 glass-chip rounded-xl text-[11px] font-medium text-stone-700">
-                      🔔 <b>{r.title}</b> ({r.time})
-                    </div>
-                  ))}
+                <div className="w-full text-left space-y-2 max-h-40 overflow-y-auto">
+                  {sortedReminders
+                    .filter((r) => computeReminderUrgency(r).level !== 'resolved')
+                    .slice(0, 3)
+                    .map((r) => {
+                      const u = computeReminderUrgency(r);
+                      return (
+                        <div
+                          key={r.id}
+                          className="p-2.5 glass-chip rounded-xl flex items-center justify-between gap-2 text-[11px]"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-bold text-stone-900 truncate">{r.title}</p>
+                            <p className="text-[10px] text-stone-500 truncate">
+                              {r.entityName ? `${r.entityName} · ` : ''}
+                              {formatDeadlineFrenchDate(u.targetDateStr)}
+                            </p>
+                          </div>
+                          <span
+                            className={`font-mono tabular-nums font-bold text-[10px] shrink-0 ${
+                              u.level === 'expired' || u.level === 'critical'
+                                ? 'text-rose-700'
+                                : u.level === 'warning'
+                                ? 'text-amber-700'
+                                : 'text-[#2A7B76]'
+                            }`}
+                          >
+                            {u.shortCountdown}
+                          </span>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </div>
@@ -350,7 +447,7 @@ export default function AdminDashboardOverview({
               onClick={() => onSelectTab('reminders')}
               className="w-full py-2 glass-chip text-stone-700 hover:text-stone-900 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
             >
-              Toutes les alertes &gt;
+              Ouvrir Échéances & Alertes &gt;
             </button>
           </div>
 

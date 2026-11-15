@@ -16,7 +16,8 @@ import {
   AppUser, 
   CompanyModuleConfig, 
   DEFAULT_MODULE_CONFIG,
-  LeaveRequest 
+  LeaveRequest,
+  StrategicProject,
 } from '../types';
 import { subscribeToCollection, subscribeToDocument, saveDocument, deleteDocument, getCollection, COLLECTIONS } from '../services/dataService';
 import { subscribeToUsers } from '../services/userService';
@@ -85,6 +86,7 @@ export function useAppInitialData() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [strategicProjects, setStrategicProjects] = useState<StrategicProject[]>([]);
 
   const [moduleConfig, setModuleConfig] = useState<CompanyModuleConfig>(() => getStoredModuleConfig());
 
@@ -185,6 +187,9 @@ export function useAppInitialData() {
       }),
       subscribeToCollection<InventoryItem>(COLLECTIONS.INVENTORY, setInventoryItems),
       subscribeToCollection<Partner>(COLLECTIONS.PARTNERS, setPartners),
+      subscribeToCollection<StrategicProject>(COLLECTIONS.STRATEGIC_PROJECTS, (data) => {
+        setStrategicProjects(data || []);
+      }),
       subscribeToUsers(setUsers),
       // Synchronisation temps réel des paramètres de l'entreprise et du logo stocké en BD
       subscribeToDocument<CompanyModuleConfig>(COLLECTIONS.COMPANY_SETTINGS, 'main_config', (data) => {
@@ -280,6 +285,8 @@ export function useAppInitialData() {
             setPresences(event.data.presences);
           } else if (event.data?.type === 'SYNC_INCIDENTS' && Array.isArray(event.data.incidents)) {
             setAttendanceIncidents(event.data.incidents);
+          } else if (event.data?.type === 'SYNC_STRATEGIC_PROJECTS' && Array.isArray(event.data.strategicProjects)) {
+            setStrategicProjects(event.data.strategicProjects);
           }
         };
       }
@@ -676,6 +683,30 @@ export function useAppInitialData() {
     setLeaveRequests(updated);
   };
 
+  const handleUpdateStrategicProjects = async (updated: StrategicProject[]) => {
+    setStrategicProjects(updated);
+
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bcast = new BroadcastChannel('citrine_cross_tab_sync');
+        bcast.postMessage({ type: 'SYNC_STRATEGIC_PROJECTS', strategicProjects: updated });
+        bcast.close();
+      }
+    } catch {}
+
+    for (const p of updated) {
+      const existing = strategicProjects.find((x) => x.id === p.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(p)) {
+        await saveDocument(COLLECTIONS.STRATEGIC_PROJECTS, p);
+      }
+    }
+    for (const p of strategicProjects) {
+      if (!updated.some((x) => x.id === p.id)) {
+        await deleteDocument(COLLECTIONS.STRATEGIC_PROJECTS, p.id);
+      }
+    }
+  };
+
   const handleUpdateModuleConfig = (newConfig: CompanyModuleConfig) => {
     const fullConfig: CompanyModuleConfig = {
       ...moduleConfig,
@@ -698,6 +729,7 @@ export function useAppInitialData() {
         freshNotifs,
         freshIncidents,
         freshSettings,
+        freshStrategicProjects,
       ] = await Promise.all([
         getCollection<AppUser>(COLLECTIONS.USERS),
         getCollection<Employee>(COLLECTIONS.EMPLOYEES),
@@ -706,6 +738,7 @@ export function useAppInitialData() {
         getCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS),
         getCollection<AttendanceIncident>(COLLECTIONS.ATTENDANCE_INCIDENTS),
         getCollection<CompanyModuleConfig>(COLLECTIONS.COMPANY_SETTINGS),
+        getCollection<StrategicProject>(COLLECTIONS.STRATEGIC_PROJECTS),
       ]);
 
       if (freshUsers) {
@@ -726,6 +759,9 @@ export function useAppInitialData() {
       }
       if (freshIncidents) {
         setAttendanceIncidents(freshIncidents);
+      }
+      if (freshStrategicProjects) {
+        setStrategicProjects(freshStrategicProjects);
       }
       if (freshSettings && freshSettings.length > 0) {
         const dbConfig = freshSettings.find((s: any) => s.id === 'main_config' || s.docId === 'main_config') || freshSettings[0];
@@ -763,12 +799,14 @@ export function useAppInitialData() {
     partners,
     users,
     leaveRequests,
+    strategicProjects,
     moduleConfig,
     refreshAll,
     setTasks: handleUpdateTasks,
     setReminders: handleUpdateReminders,
     setNotifications: handleUpdateNotifications,
     setLeaveRequests: handleUpdateLeaveRequests,
+    setStrategicProjects: handleUpdateStrategicProjects,
     setSalaryPayments: handleUpdateSalaryPayments,
     setFinancialTransactions: handleUpdateFinancialTransactions,
     setSalaryDebts: handleUpdateSalaryDebts,

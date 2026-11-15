@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapPin } from 'lucide-react';
 import { Employee, Presence, AppUser, CompanyModuleConfig, EmergencyType } from '../../types';
 import { EmployeeDailyClockingHeader } from './EmployeeDailyClockingHeader';
@@ -57,6 +57,59 @@ export const EmployeeDailyClockingWidget: React.FC<EmployeeDailyClockingWidgetPr
   setShowCustomClockModal,
   moduleConfig,
 }) => {
+  const [backendCanDepart, setBackendCanDepart] = useState<boolean | undefined>(undefined);
+  const [backendAllowEarly, setBackendAllowEarly] = useState<boolean>(
+    Boolean(employeeProfile.allowEarlyDeparture15_17 || currentUser?.allowEarlyDeparture15_17)
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchEligibility = async () => {
+      try {
+        const params = new URLSearchParams();
+        const empId = employeeProfile._dbId || employeeProfile.id;
+        if (empId && empId !== 'unknown') params.set('employeeId', String(empId));
+        const uid = employeeProfile.userId || currentUser?.id;
+        if (uid) params.set('userId', String(uid));
+        const email = employeeProfile.email || currentUser?.email;
+        if (email) params.set('email', String(email));
+
+        const res = await fetch(`/api/clocking/eligibility?${params.toString()}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data?.success) {
+          setBackendCanDepart(Boolean(data.canActivateDepartureButton));
+          setBackendAllowEarly(Boolean(data.allowEarlyDeparture15_17));
+        }
+      } catch {
+        // En cas d'indisponibilité réseau, le composant conserve le repli sécurisé
+      }
+    };
+
+    fetchEligibility();
+    const timer = setInterval(fetchEligibility, 30000);
+    const onUpdated = () => { fetchEligibility(); };
+    window.addEventListener('citrine:employee_updated', onUpdated);
+    window.addEventListener('citrine:user_updated', onUpdated);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener('citrine:employee_updated', onUpdated);
+      window.removeEventListener('citrine:user_updated', onUpdated);
+    };
+  }, [
+    employeeProfile.id,
+    employeeProfile._dbId,
+    employeeProfile.userId,
+    employeeProfile.email,
+    employeeProfile.allowEarlyDeparture15_17,
+    currentUser?.id,
+    currentUser?.email,
+    currentUser?.allowEarlyDeparture15_17,
+  ]);
+
   const handleTriggerClock = (action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure' | 'sortieProStart' | 'sortieProEnd') => {
     setPendingClockAction(action);
     setQrCodeError(null);
@@ -109,6 +162,8 @@ export const EmployeeDailyClockingWidget: React.FC<EmployeeDailyClockingWidgetPr
         onTriggerClock={handleTriggerClock}
         enableBreakTracking={enableBreakTracking}
         moduleConfig={moduleConfig}
+        backendCanDepart={backendCanDepart}
+        allowEarlyDeparture15_17={backendAllowEarly || Boolean(employeeProfile.allowEarlyDeparture15_17 || currentUser?.allowEarlyDeparture15_17)}
       />
 
       <EmployeeClockEmergencySection

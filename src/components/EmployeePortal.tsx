@@ -12,7 +12,8 @@ import {
   CompanyModuleConfig,
   AttendanceIncident,
   LeaveRequest,
-  Reminder 
+  Reminder,
+  StrategicProject
 } from '../types';
 import OfficeQRCodeModal from './OfficeQRCodeModal';
 import RhReportModal from './RhReportModal';
@@ -36,6 +37,8 @@ import { EmployeeLoanRequestModal } from './employee/EmployeeLoanRequestModal';
 import EmployeePayslipModal from './employee/EmployeePayslipModal';
 import { EmployeeAlertsTab } from './employee/EmployeeAlertsTab';
 import ProfilePage from './ProfilePage';
+import { ProjectMilestonesWidget } from './projects/ProjectMilestonesWidget';
+import { HomeExpirationAlertsBanner } from './reminders';
 
 interface EmployeePortalProps {
   currentUser: AppUser | null;
@@ -66,6 +69,8 @@ interface EmployeePortalProps {
   onUpdateUser?: (updated: AppUser) => void;
   onLogout?: () => void;
   showToast?: (titleOrMessage: string, descOrType?: any, type?: any) => void;
+  strategicProjects?: StrategicProject[];
+  onUpdateStrategicProjects?: (projects: StrategicProject[]) => void;
 }
 
 const formatXAF = (amount: number = 0) => {
@@ -166,30 +171,53 @@ export default function EmployeePortal(props: EmployeePortalProps) {
 
       {/* Main Content Sections */}
       {logic.activeTab === 'clocking' && (
-        <EmployeeDailyClockingWidget
-          currentUser={currentUser}
-          employeeProfile={logic.employeeProfile}
-          todayPresence={logic.todayPresence}
-          todayStr={logic.todayStr}
-          currentDateStr={logic.currentDateStr}
-          liveTimeString={logic.liveTimeString}
-          isLocating={logic.isLocating}
-          sensorsDiagnostic={logic.sensorsDiagnostic}
-          runSensorsDiagnostic={logic.runSensorsDiagnostic}
-          setShowOfficeQRModal={logic.setShowOfficeQRModal}
-          setShowClockingModal={logic.setShowClockingModal}
-          setPendingClockAction={logic.setPendingClockAction}
-          setSelectedClockMethod={logic.setSelectedClockMethod}
-          setQrCodeError={logic.setQrCodeError}
-          startCameraScan={logic.startCameraScan}
-          setEmergencyType={logic.setEmergencyType}
-          setEmergencyReason={logic.setEmergencyReason}
-          setShowEmergencyModal={logic.setShowEmergencyModal}
-          setCustomClockReason={logic.setCustomClockReason}
-          setCustomClockError={logic.setCustomClockError}
-          setShowCustomClockModal={logic.setShowCustomClockModal}
-          moduleConfig={props.moduleConfig}
-        />
+        <div className="space-y-6">
+          <EmployeeDailyClockingWidget
+            currentUser={currentUser}
+            employeeProfile={logic.employeeProfile}
+            todayPresence={logic.todayPresence}
+            todayStr={logic.todayStr}
+            currentDateStr={logic.currentDateStr}
+            liveTimeString={logic.liveTimeString}
+            isLocating={logic.isLocating}
+            sensorsDiagnostic={logic.sensorsDiagnostic}
+            runSensorsDiagnostic={logic.runSensorsDiagnostic}
+            setShowOfficeQRModal={logic.setShowOfficeQRModal}
+            setShowClockingModal={logic.setShowClockingModal}
+            setPendingClockAction={logic.setPendingClockAction}
+            setSelectedClockMethod={logic.setSelectedClockMethod}
+            setQrCodeError={logic.setQrCodeError}
+            startCameraScan={logic.startCameraScan}
+            setEmergencyType={logic.setEmergencyType}
+            setEmergencyReason={logic.setEmergencyReason}
+            setShowEmergencyModal={logic.setShowEmergencyModal}
+            setCustomClockReason={logic.setCustomClockReason}
+            setCustomClockError={logic.setCustomClockError}
+            setShowCustomClockModal={logic.setShowCustomClockModal}
+            moduleConfig={props.moduleConfig}
+          />
+          {moduleConfig?.enableReminders !== false && (
+            <HomeExpirationAlertsBanner
+              reminders={props.reminders || []}
+              employees={props.employees}
+              filterForUser={currentUser}
+              onOpenRemindersModule={() => logic.setActiveTab('alerts')}
+            />
+          )}
+          {moduleConfig?.enableStrategicProjects !== false && (
+            <ProjectMilestonesWidget
+              projects={props.strategicProjects || []}
+              onUpdateProjects={props.onUpdateStrategicProjects}
+              currentUser={currentUser}
+              employees={props.employees}
+              showToast={
+                props.showToast
+                  ? (msg, type) => props.showToast?.(msg, type === 'error' ? 'error' : 'success')
+                  : undefined
+              }
+            />
+          )}
+        </div>
       )}
 
       {logic.activeTab === 'presences' && (

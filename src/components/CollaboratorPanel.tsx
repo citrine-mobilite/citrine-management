@@ -99,6 +99,17 @@ const STATUS_MAP = {
   renvoye: { label: 'Renvoyé', color: 'bg-red-50 text-red-700 border-red-200' },
 };
 
+export const AVAILABLE_TEAMS = [
+  'Équipe IT & Développement',
+  'Équipe Commerciale & Partenariats',
+  'Équipe RH, Paie & Administration',
+  'Équipe Finance & Comptabilité',
+  'Équipe Support & Opérations',
+  'Équipe Direction Générale',
+  'Équipe Logistique & Terrain',
+  'Sécurité & HSE',
+];
+
 function getEmployeeStatusKey(emp: Employee): keyof typeof STATUS_MAP {
   const s = emp.employmentStatus || (typeof emp.status === 'string' ? emp.status : (emp.status ? 'en_poste' : 'parti'));
   if (s && s in STATUS_MAP) {
@@ -186,6 +197,7 @@ export default function CollaboratorPanel({
     department: 'Informatique & IT',
     managerId: '',
     team: 'Équipe IT & Développement',
+    teams: ['Équipe IT & Développement'] as string[],
     hireDate: new Date().toISOString().split('T')[0],
     birthDate: '',
     salary: 200000,
@@ -212,6 +224,7 @@ export default function CollaboratorPanel({
       department: 'Informatique & IT',
       managerId: '',
       team: 'Équipe IT & Développement',
+      teams: ['Équipe IT & Développement'],
       hireDate: new Date().toISOString().split('T')[0],
       birthDate: '',
       salary: 200000,
@@ -256,6 +269,10 @@ export default function CollaboratorPanel({
 
     const resolvedUserRole: UserRole = resolvedRoleId === 1 ? 'administrateur' : resolvedRoleId === 2 ? 'responsable' : 'employé';
 
+    const resolvedTeams: string[] = Array.isArray(emp.teams) && emp.teams.length > 0
+      ? emp.teams
+      : (emp.team ? emp.team.split(',').map((t: string) => t.trim()).filter(Boolean) : ['Équipe IT & Développement']);
+
     setFormData({
       name: emp.name || '',
       email: emp.email || '',
@@ -263,9 +280,10 @@ export default function CollaboratorPanel({
       roleType: emp.roleType || 'employé',
       department: emp.department || 'Informatique & IT',
       managerId: String(emp.managerId || ''),
-      team: emp.team || 'Équipe IT & Développement',
+      team: resolvedTeams.join(', ') || emp.team || 'Équipe IT & Développement',
+      teams: resolvedTeams,
       hireDate: emp.hireDate || new Date().toISOString().split('T')[0],
-      birthDate: emp.birthDate || '2000-01-05',
+      birthDate: emp.birthDate || (linkedUser?.birthDate || ''),
       salary: emp.salary || 200000,
       status: (emp.employmentStatus || (typeof emp.status === 'string' ? emp.status : 'en_poste')) as any,
       departureReason: emp.departureReason || '',
@@ -276,8 +294,8 @@ export default function CollaboratorPanel({
       createUserAccount: !linkedUser,
       userPassword: '',
       userRole: resolvedUserRole,
-      allowEarlyDeparture15_17: emp.allowEarlyDeparture15_17 || false,
-      allowLateArrival8_930: emp.allowLateArrival8_930 || false,
+      allowEarlyDeparture15_17: Boolean(emp.allowEarlyDeparture15_17 || linkedUser?.allowEarlyDeparture15_17),
+      allowLateArrival8_930: Boolean(emp.allowLateArrival8_930 || linkedUser?.allowLateArrival8_930),
     });
     setIsModalOpen(true);
   };
@@ -333,9 +351,20 @@ export default function CollaboratorPanel({
       const targetUserId = formData.userId || editingEmployee.userId || '';
       const isEmpActive = isEmployeeActive({ status: formData.status });
 
+      const resolvedTeams = (formData.teams && formData.teams.length > 0)
+        ? formData.teams
+        : (formData.team ? formData.team.split(',').map(t => t.trim()).filter(Boolean) : ['Équipe IT & Développement']);
+      const teamString = resolvedTeams.join(', ');
+      const managerName = employees.find((x) => String(x.id) === String(formData.managerId))?.name || undefined;
+
       const updatedEmp: Employee = {
         ...editingEmployee,
         ...formData,
+        team: teamString,
+        teams: resolvedTeams,
+        managerId: formData.managerId || undefined,
+        managerName,
+        birthDate: formData.birthDate,
         userId: targetUserId || undefined,
         roleId: resolvedRoleId,
         department: empDepartment,
@@ -376,6 +405,11 @@ export default function CollaboratorPanel({
           department: empDepartment,
           role: formData.userRole,
           roleId: resolvedRoleId,
+          team: teamString,
+          teams: resolvedTeams,
+          managerId: formData.managerId || undefined,
+          managerName,
+          birthDate: formData.birthDate,
           status: isEmpActive ? 'actif' : 'inactif',
           employmentStatus: formData.status as any,
           avatarUrl: formData.avatarUrl || existingUser.avatarUrl || '',
@@ -394,6 +428,11 @@ export default function CollaboratorPanel({
           department: empDepartment,
           role: formData.userRole,
           roleId: resolvedRoleId,
+          team: teamString,
+          teams: resolvedTeams,
+          managerId: formData.managerId || undefined,
+          managerName,
+          birthDate: formData.birthDate,
           status: isEmpActive ? 'actif' : 'inactif',
           employmentStatus: formData.status as any,
           avatarUrl: formData.avatarUrl || '',
@@ -473,6 +512,11 @@ export default function CollaboratorPanel({
         const userEmail = formData.email.trim() ? formData.email.trim() : `collab_${Date.now()}@citrinemgmt.cm`;
         const initialPassword = formData.userPassword.trim() || 'Collab@2026';
 
+        const resolvedTeams = (formData.teams && formData.teams.length > 0)
+          ? formData.teams
+          : (formData.team ? formData.team.split(',').map(t => t.trim()).filter(Boolean) : ['Équipe IT & Développement']);
+        const teamString = resolvedTeams.join(', ');
+
         const result = await createCollaboratorWithUserTransactional({
           name: formData.name.trim(),
           firstName: (formData as any).firstName,
@@ -485,7 +529,8 @@ export default function CollaboratorPanel({
           department: empDepartment,
           position: (formData as any).position || formData.roleType,
           managerId: formData.managerId,
-          team: formData.team,
+          team: teamString,
+          teams: resolvedTeams,
           hireDate: formData.hireDate,
           birthDate: formData.birthDate,
           salary: Number(formData.salary) || 0,
@@ -701,8 +746,12 @@ export default function CollaboratorPanel({
     
     const matchesRole = roleFilter === 'all' || e.roleType === roleFilter;
     const matchesStatus = statusFilter === 'all' || getEmployeeStatusKey(e) === statusFilter;
+    const matchesTeam = teamFilter === 'all' ||
+      (Array.isArray(e.teams) && e.teams.includes(teamFilter)) ||
+      (typeof e.team === 'string' && e.team.includes(teamFilter));
+    const matchesManager = managerFilter === 'all' || String(e.managerId || '') === String(managerFilter);
 
-    return matchesSearch && matchesRole && matchesStatus;
+    return matchesSearch && matchesRole && matchesStatus && matchesTeam && matchesManager;
   });
 
   // Pagination calculations
@@ -821,6 +870,28 @@ export default function CollaboratorPanel({
                   <span className="text-stone-400">🏢</span>
                   <span>{emp.department || 'Citrine Management'}</span>
                 </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-stone-400">👔</span>
+                  <span>
+                    Resp : <b>{emp.managerName || (employees.find((m) => String(m.id) === String(emp.managerId))?.name) || 'Direction Générale'}</b>
+                  </span>
+                </div>
+              </div>
+
+              {/* Équipes multiples de rattachement */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-[11px] font-bold text-stone-500">Équipes :</span>
+                {((Array.isArray(emp.teams) && emp.teams.length > 0)
+                  ? emp.teams
+                  : (emp.team ? emp.team.split(',').map((t: string) => t.trim()).filter(Boolean) : ['Équipe IT & Développement'])
+                ).map((tName: string, tIdx: number) => (
+                  <span
+                    key={tIdx}
+                    className="inline-block px-2.5 py-0.5 rounded-lg bg-purple-50 text-purple-700 font-bold text-[10px] border border-purple-200 shadow-3xs"
+                  >
+                    👥 {tName}
+                  </span>
+                ))}
               </div>
 
               {emp.status === 'renvoye' && emp.departureReason && (
@@ -1307,11 +1378,21 @@ export default function CollaboratorPanel({
                       {/* Équipe & Responsable */}
                       <td className="p-4">
                         <div className="space-y-1">
-                          <span className="inline-block px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-bold text-[10px] border border-purple-100">
-                            {emp.team || 'Équipe IT & Développement'}
-                          </span>
+                          <div className="flex flex-wrap gap-1 max-w-[220px]">
+                            {((Array.isArray(emp.teams) && emp.teams.length > 0)
+                              ? emp.teams
+                              : (emp.team ? emp.team.split(',').map((t: string) => t.trim()).filter(Boolean) : ['Équipe IT & Développement'])
+                            ).map((tName: string, tIdx: number) => (
+                              <span
+                                key={tIdx}
+                                className="inline-block px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-bold text-[10px] border border-purple-100"
+                              >
+                                {tName}
+                              </span>
+                            ))}
+                          </div>
                           <span className="block text-[10px] text-stone-500 font-medium">
-                            👔 Resp : {managerObj ? managerObj.name : 'Direction Générale'}
+                            👔 Resp : {managerObj ? managerObj.name : (emp.managerName || 'Direction Générale')}
                           </span>
                         </div>
                       </td>
@@ -1492,24 +1573,52 @@ export default function CollaboratorPanel({
                   </datalist>
                 </div>
 
-                <div>
-                  <label className="block mb-1.5 text-stone-500">👥 Équipe de Rattachement</label>
-                  <input
-                    type="text"
-                    list="teams-suggested"
-                    placeholder="Ex: Équipe IT & Développement..."
-                    value={formData.team}
-                    onChange={(e) => setFormData({ ...formData, team: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800 text-xs font-semibold"
-                  />
-                  <datalist id="teams-suggested">
-                    <option value="Équipe IT & Développement" />
-                    <option value="Équipe Commerciale & Partenariats" />
-                    <option value="Équipe RH, Paie & Administration" />
-                    <option value="Équipe Finance & Comptabilité" />
-                    <option value="Équipe Support & Opérations" />
-                    <option value="Équipe Direction Générale" />
-                  </datalist>
+                <div className="sm:col-span-2 space-y-2 bg-stone-50/80 p-3.5 rounded-2xl border border-stone-200">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-stone-700 font-bold text-xs">
+                      👥 Équipes de Rattachement (Sélection multiple) *
+                    </label>
+                    <span className="text-[11px] text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100">
+                      {formData.teams.length} sélectionnée{formData.teams.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-500">
+                    Cliquez sur les équipes pour affecter ou retirer le collaborateur. Un collaborateur peut appartenir à plusieurs équipes simultanément.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {AVAILABLE_TEAMS.map((teamName) => {
+                      const isSelected = formData.teams.includes(teamName);
+                      return (
+                        <button
+                          key={teamName}
+                          type="button"
+                          onClick={() => {
+                            const newTeams = isSelected
+                              ? formData.teams.filter((t) => t !== teamName)
+                              : [...formData.teams, teamName];
+                            setFormData({
+                              ...formData,
+                              teams: newTeams,
+                              team: newTeams.join(', '),
+                            });
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                            isSelected
+                              ? 'bg-purple-600 text-white shadow-xs ring-2 ring-purple-300'
+                              : 'bg-white text-stone-600 border border-stone-200 hover:bg-purple-50 hover:text-purple-700'
+                          }`}
+                        >
+                          <span className="text-xs">{isSelected ? '✓' : '+'}</span>
+                          <span>{teamName}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {formData.teams.length === 0 && (
+                    <span className="text-amber-600 text-[11px] font-semibold block pt-1">
+                      ⚠️ Aucune équipe sélectionnée. Veuillez sélectionner au moins une équipe de rattachement.
+                    </span>
+                  )}
                 </div>
               </div>
 

@@ -15,6 +15,7 @@ export type TabType =
   | 'calls'
   | 'presences' 
   | 'statistics' 
+  | 'projects'
   | 'tasks' 
   | 'reminders' 
   | 'logs' 

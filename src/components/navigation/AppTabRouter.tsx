@@ -17,7 +17,8 @@ import {
   Partner, 
   CompanyModuleConfig,
   DEFAULT_MODULE_CONFIG,
-  LeaveRequest
+  LeaveRequest,
+  StrategicProject
 } from '../../types';
 import ModuleSkeletonLoader from '../ModuleSkeletonLoader';
 import ErrorBoundary from '../ErrorBoundary';
@@ -50,6 +51,7 @@ const ExpenseClaimsPanel = lazy(() => import('../expenses/ExpenseClaimsPanel'));
 const HsePanel = lazy(() => import('../hse/HsePanel'));
 const VisitorsPanel = lazy(() => import('../visitors/VisitorsPanel'));
 const IdeasSurveysPanel = lazy(() => import('../ideas/IdeasSurveysPanel'));
+const StrategicProjectsPanel = lazy(() => import('../projects/StrategicProjectsPanel'));
 
 export interface AppTabRouterProps {
   activeTab: TabType;
@@ -98,6 +100,8 @@ export interface AppTabRouterProps {
   onUpdateUser?: (updated: AppUser) => void;
   leaveRequests?: LeaveRequest[];
   onUpdateLeaveRequests?: (leaves: LeaveRequest[]) => void;
+  strategicProjects?: StrategicProject[];
+  onUpdateStrategicProjects?: (projects: StrategicProject[]) => void;
 }
 
 export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
@@ -112,10 +116,11 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
     onUpdateInventoryItems, onUpdatePartners, onUpdateUsers, onUpdateModuleConfig,
     onOpenProfileModal, showToast, handleSetCurrentUser, onUpdateUser, onLogout,
     leaveRequests = [], onUpdateLeaveRequests,
+    strategicProjects = [], onUpdateStrategicProjects,
   } = props;
 
   const VALID_TABS: TabType[] = [
-    'dashboard', 'employee_portal', 'presences', 'leave_requests', 'statistics', 'tasks',
+    'dashboard', 'employee_portal', 'presences', 'leave_requests', 'statistics', 'projects', 'tasks',
     'reminders', 'logs', 'collaborators', 'discipline', 'documents',
     'communications', 'finances', 'inventory', 'partners', 'users',
     'settings', 'calls', 'recruitment', 'expense_claims', 'hse',
@@ -161,6 +166,11 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}
           reminders={reminders} currentTime={currentTime} onSelectTab={setActiveTab}
           onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
+          onUpdateReminders={onUpdateReminders}
+          strategicProjects={strategicProjects}
+          onUpdateStrategicProjects={onUpdateStrategicProjects}
+          moduleConfig={moduleConfig}
+          showToast={showToast}
         />
       )}
       {activeTab === 'leave_requests' && (
@@ -199,6 +209,8 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onUpdateUser={onUpdateUser}
           onLogout={onLogout}
           showToast={showToast}
+          strategicProjects={strategicProjects}
+          onUpdateStrategicProjects={onUpdateStrategicProjects}
         />
       )}
       {activeTab === 'presences' && (
@@ -234,6 +246,15 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
             onUpdateTasks(updated);
           }}
           showToast={showToast}
+        />
+      )}
+      {activeTab === 'projects' && (
+        <StrategicProjectsPanel
+          projects={strategicProjects}
+          onUpdateProjects={onUpdateStrategicProjects}
+          currentUser={currentUser}
+          employees={employees}
+          showToast={(msg, type) => showToast(msg, type === 'error' ? 'error' : 'success')}
         />
       )}
       {activeTab === 'tasks' && (
@@ -413,13 +434,21 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
             onAddAttendanceIncident={onAddAttendanceIncident}
             initialSubTab={employeeInitialSubTab}
             showToast={showToast}
+            onUpdateUser={onUpdateUser}
             onLogout={onLogout}
+            strategicProjects={strategicProjects}
+            onUpdateStrategicProjects={onUpdateStrategicProjects}
           />
         ) : (
           <AdminDashboardOverview
             currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}
             reminders={reminders} currentTime={currentTime} onSelectTab={setActiveTab}
             onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
+            onUpdateReminders={onUpdateReminders}
+            strategicProjects={strategicProjects}
+            onUpdateStrategicProjects={onUpdateStrategicProjects}
+            moduleConfig={moduleConfig}
+            showToast={showToast}
           />
         )
       )}

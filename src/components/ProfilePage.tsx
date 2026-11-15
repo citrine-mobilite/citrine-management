@@ -111,6 +111,7 @@ export default function ProfilePage({
           <ProfileSecuritySubTab
             currentUser={currentUser}
             showToast={showToast}
+            onUpdateUser={onUpdateUser}
           />
         )}
         {activeSubTab === 'activity' && (

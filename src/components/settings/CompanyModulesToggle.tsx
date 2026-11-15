@@ -23,7 +23,8 @@ import {
   UserPlus,
   Receipt,
   Contact2,
-  Lightbulb
+  Lightbulb,
+  Flag
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
 
@@ -68,6 +69,13 @@ const MODULES_LIST: ModuleDefinition[] = [
     title: 'Tâches & Jalons',
     description: 'Attribution de missions, suivi d\'avancement, dates d\'échéance et statuts des livrables.',
     icon: Calendar,
+    category: 'operations',
+  },
+  {
+    key: 'enableStrategicProjects',
+    title: 'Gestion de Projets & Jalons',
+    description: 'Suivi stratégique des projets phares, progression automatique et prochains jalons clés dès l\'accueil.',
+    icon: Flag,
     category: 'operations',
   },
   {

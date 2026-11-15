@@ -578,6 +578,7 @@ export interface CreateCollaboratorTransactionInput {
   position?: string;
   managerId?: string;
   team?: string;
+  teams?: string[];
   hireDate?: string;
   birthDate?: string;
   salary?: number;
@@ -586,6 +587,8 @@ export interface CreateCollaboratorTransactionInput {
   suspensionReason?: string;
   avatarUrl?: string;
   userPassword?: string;
+  allowEarlyDeparture15_17?: boolean;
+  allowLateArrival8_930?: boolean;
 }
 
 /**
@@ -653,11 +656,14 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
       raw_data: {
         doc_id: empDocId,
         team: input.team || null,
+        teams: Array.isArray(input.teams) ? input.teams : null,
         managerId: input.managerId || null,
         birthDate: input.birthDate || null,
         avatarUrl: input.avatarUrl || null,
         departureReason: input.departureReason || null,
         suspensionReason: input.suspensionReason || null,
+        allowEarlyDeparture15_17: Boolean(input.allowEarlyDeparture15_17),
+        allowLateArrival8_930: Boolean(input.allowLateArrival8_930),
       }
     };
 
@@ -707,6 +713,12 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
           employeeId: empDocId,
           employeeDbId: createdEmployeeDbId,
           department: empDepartment,
+          team: input.team || null,
+          teams: Array.isArray(input.teams) ? input.teams : null,
+          managerId: input.managerId || null,
+          birthDate: input.birthDate || null,
+          allowEarlyDeparture15_17: Boolean(input.allowEarlyDeparture15_17),
+          allowLateArrival8_930: Boolean(input.allowLateArrival8_930),
           passwordHash: initialPassword,
           createdAt: new Date().toISOString()
         }
@@ -880,9 +892,37 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
   console.log(`🚀 [TRANSACTION POINTAGE INITIALISÉE] Collaborateur: ${presence.employeeName || presence.employeeId} - Date: ${presence.date}`);
 
   try {
-    // 1. Résolution de l'identifiant employé en base
+    // 1. Résolution de l'identifiant employé en base et lecture des dérogations backend
     const empIdVal = presence.employeeId || presence.employee_id;
     const resolvedEmpDbId = await resolveEmployeeDbId(supabaseAdmin, empIdVal);
+
+    let dbAllowEarlyDeparture15_17 = false;
+    let dbAllowLateArrival8_930 = false;
+    try {
+      let empRow: any = null;
+      if (resolvedEmpDbId) {
+        const { data } = await supabaseAdmin.from('employees').select('*').eq('id', resolvedEmpDbId).maybeSingle();
+        empRow = data;
+      } else if (presence.employeeEmail) {
+        const { data } = await supabaseAdmin.from('employees').select('*').ilike('email', String(presence.employeeEmail).trim()).maybeSingle();
+        empRow = data;
+      }
+      const empRaw = (empRow?.raw_data && typeof empRow.raw_data === 'object') ? empRow.raw_data : {};
+      let userRow: any = null;
+      if (empRow?.user_id) {
+        const { data } = await supabaseAdmin.from('users').select('*').eq('id', empRow.user_id).maybeSingle();
+        userRow = data;
+      } else if (presence.employeeEmail || empRow?.email) {
+        const { data } = await supabaseAdmin.from('users').select('*').ilike('email', String(presence.employeeEmail || empRow.email).trim()).maybeSingle();
+        userRow = data;
+      }
+      const userRaw = (userRow?.raw_data && typeof userRow.raw_data === 'object') ? userRow.raw_data : {};
+
+      dbAllowEarlyDeparture15_17 = Boolean(empRaw.allowEarlyDeparture15_17 || userRaw.allowEarlyDeparture15_17);
+      dbAllowLateArrival8_930 = Boolean(empRaw.allowLateArrival8_930 || userRaw.allowLateArrival8_930);
+    } catch (permErr) {
+      console.warn('[repository] Notice vérification dérogations pointage:', permErr);
+    }
 
     // 1b. Sécurité serveur : Vérification du jeton QR Code de porte
     const clockMethod = presence.clockingMethod || presence.method || 'qr_code_door';
@@ -926,6 +966,15 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       }
     }
 
+    // Application des dérogations backend sur l'arrivée et le départ
+    const arrivalTimeStr = presence.arrivalTime ? String(presence.arrivalTime) : '';
+    const departureTimeStr = presence.departureTime ? String(presence.departureTime) : '';
+    const isExemptLateBackend = dbAllowLateArrival8_930 && arrivalTimeStr >= '08:00' && arrivalTimeStr <= '09:30';
+    const isExemptEarlyBackend = dbAllowEarlyDeparture15_17 && departureTimeStr >= '15:00' && departureTimeStr <= '17:00';
+
+    const effectivePresenceStatus = isExemptLateBackend && !departureTimeStr ? 'present' : (presence.status || 'present');
+    const effectiveLateMinutes = isExemptLateBackend ? 0 : Number(presence.lateMinutes || 0);
+
     // 2. Persistance de la Présence
     const presDocId = String(presence.id || presence.docId || `pr-${Date.now()}`);
     const presenceRow: any = {
@@ -935,8 +984,8 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       date: presence.date || new Date().toISOString().split('T')[0],
       arrival_time: presence.arrivalTime || null,
       departure_time: presence.departureTime || null,
-      status: presence.status || 'present',
-      late_minutes: Number(presence.lateMinutes || 0),
+      status: effectivePresenceStatus,
+      late_minutes: effectiveLateMinutes,
       pause_minutes: Number(presence.pauseMinutes || 0),
       motif: presence.motif || presence.adminBadgeReason || null,
       signature: presence.signature || null,
@@ -945,6 +994,8 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       method: clockMethod,
       raw_data: { 
         ...presence, 
+        status: effectivePresenceStatus,
+        lateMinutes: effectiveLateMinutes,
         id: presDocId,
         qrCodeToken: presence.qrCodeToken || null,
       },
@@ -965,9 +1016,13 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
     presenceCreatedDbId = savedPresence.id;
     console.log(`✓ [TRANSACTION POINTAGE - ÉTAPE 1/3] Présence enregistrée (DB ID: ${presenceCreatedDbId})`);
 
-    // 3. Persistance de l'Incident de pointage (ex: retard ou départ anticipé)
+    // 3. Persistance de l'Incident de pointage (ignoré si dérogation backend active)
     let savedIncident: any = null;
-    if (incident) {
+    const shouldSkipIncident =
+      (incident?.type === 'retard' && isExemptLateBackend) ||
+      ((incident?.type === 'sortie_prematuree' || incident?.type === 'depart_anticipe') && isExemptEarlyBackend);
+
+    if (incident && !shouldSkipIncident) {
       console.log(`📌 [TRANSACTION POINTAGE - ÉTAPE 2/3] Enregistrement incident (${incident.type})...`);
       const incDocId = String(incident.id || incident.docId || `inc-${Date.now()}`);
       const incEmpId = await resolveEmployeeDbId(supabaseAdmin, incident.employeeId || empIdVal);
@@ -1083,4 +1138,120 @@ function incidentRowDoc(row: any): string {
 function notifRowDoc(row: any): string {
   return row?.doc_id || row?.id || `notif-${Date.now()}`;
 }
+
+export async function checkClockingEligibilityBackend(params: {
+  employeeId?: string;
+  userId?: string;
+  email?: string;
+}) {
+  const empId = params.employeeId ? String(params.employeeId).trim() : '';
+  const userId = params.userId ? String(params.userId).trim() : '';
+  const email = params.email ? String(params.email).trim().toLowerCase() : '';
+
+  let empRow: any = null;
+  let userRow: any = null;
+
+  try {
+    if (empId) {
+      if (/^\d+$/.test(empId)) {
+        const { data } = await supabaseAdmin.from('employees').select('*').eq('id', Number(empId)).maybeSingle();
+        empRow = data;
+      }
+      if (!empRow) {
+        const { data } = await supabaseAdmin.from('employees').select('*').eq('doc_id', empId).maybeSingle();
+        empRow = data;
+      }
+    }
+    if (!empRow && email) {
+      const { data } = await supabaseAdmin.from('employees').select('*').ilike('email', email).maybeSingle();
+      empRow = data;
+    }
+    if (!empRow && userId && /^\d+$/.test(userId)) {
+      const { data } = await supabaseAdmin.from('employees').select('*').eq('user_id', Number(userId)).maybeSingle();
+      empRow = data;
+    }
+
+    if (userId) {
+      if (/^\d+$/.test(userId)) {
+        const { data } = await supabaseAdmin.from('users').select('*').eq('id', Number(userId)).maybeSingle();
+        userRow = data;
+      }
+      if (!userRow) {
+        const { data } = await supabaseAdmin.from('users').select('*').eq('doc_id', userId).maybeSingle();
+        userRow = data;
+      }
+    } else if (empRow?.user_id) {
+      const { data } = await supabaseAdmin.from('users').select('*').eq('id', empRow.user_id).maybeSingle();
+      userRow = data;
+    }
+    if (!userRow && email) {
+      const { data } = await supabaseAdmin.from('users').select('*').ilike('email', email).maybeSingle();
+      userRow = data;
+    } else if (!userRow && empRow?.email) {
+      const { data } = await supabaseAdmin.from('users').select('*').ilike('email', String(empRow.email).trim()).maybeSingle();
+      userRow = data;
+    }
+    if (!empRow && userRow?.raw_data?.employeeId) {
+      const linkedEmpId = String(userRow.raw_data.employeeId).trim();
+      if (/^\d+$/.test(linkedEmpId)) {
+        const { data } = await supabaseAdmin.from('employees').select('*').eq('id', Number(linkedEmpId)).maybeSingle();
+        empRow = data;
+      } else if (linkedEmpId) {
+        const { data } = await supabaseAdmin.from('employees').select('*').eq('doc_id', linkedEmpId).maybeSingle();
+        empRow = data;
+      }
+    }
+  } catch (e) {
+    console.warn('[checkClockingEligibilityBackend] Lookup notice:', e);
+  }
+
+  const empRaw = (empRow?.raw_data && typeof empRow.raw_data === 'object') ? empRow.raw_data : {};
+  const userRaw = (userRow?.raw_data && typeof userRow.raw_data === 'object') ? userRow.raw_data : {};
+
+  const allowEarlyDeparture15_17 = Boolean(empRaw.allowEarlyDeparture15_17 || userRaw.allowEarlyDeparture15_17);
+  const allowLateArrival8_930 = Boolean(empRaw.allowLateArrival8_930 || userRaw.allowLateArrival8_930);
+
+  let departureActiveStartTime = '16:00';
+  try {
+    const { data: settingsData } = await supabaseAdmin.from('company_settings').select('*');
+    if (settingsData && settingsData.length > 0) {
+      const cfg = settingsData.find((s: any) => s.id === 'main_config' || s.doc_id === 'main_config') || settingsData[0];
+      const rawCfg = (cfg.raw_data && typeof cfg.raw_data === 'object')
+        ? cfg.raw_data
+        : (cfg.setting_value && typeof cfg.setting_value === 'object' ? cfg.setting_value : cfg);
+      departureActiveStartTime = rawCfg.departureActiveStartTime || rawCfg.plannedDepartureTime || '16:00';
+    }
+  } catch {}
+
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Douala',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const hh = parts.find((p) => p.type === 'hour')?.value || String(now.getHours()).padStart(2, '0');
+  const mm = parts.find((p) => p.type === 'minute')?.value || String(now.getMinutes()).padStart(2, '0');
+  const serverTimeHHMM = `${hh === '24' ? '00' : hh}:${mm}`;
+
+  const effectiveDepartureStartTime = allowEarlyDeparture15_17 && '15:00' < departureActiveStartTime
+    ? '15:00'
+    : departureActiveStartTime;
+
+  const canActivateDepartureButton =
+    serverTimeHHMM >= departureActiveStartTime ||
+    (allowEarlyDeparture15_17 && serverTimeHHMM >= '15:00');
+
+  return {
+    success: true,
+    allowEarlyDeparture15_17,
+    allowLateArrival8_930,
+    canActivateDepartureButton,
+    isEarlyWindow15_17: serverTimeHHMM >= '15:00' && serverTimeHHMM <= '17:00',
+    serverTimeHHMM,
+    departureActiveStartTime,
+    effectiveDepartureStartTime,
+  };
+}
+
 
