@@ -11,12 +11,9 @@ import {
   buildThreadedPlainText,
   normalizeSenderAndDomain,
 } from './mailHtmlTemplates';
+import { RESPONSIVE_EMAIL_STYLE_TAG } from './responsiveEmailCss';
+import { buildOutlookHtmlDocument } from './outlookEmailShell';
 
-/**
- * Envoie un email transactionnel groupé dans le fil du collaborateur.
- * RÈGLE STRICTE CITRINE : Seules les adresses e-mails configurées dans HR_NOTIFICATION_EMAIL
- * reçoivent les messages (ou overrideRecipients lors d'un test direct).
- */
 export async function sendThreadedEmployeeEmail(
   options: EmailThreadingOptions,
   customConfig?: Partial<SmtpConfig>
@@ -52,15 +49,16 @@ export async function sendThreadedEmployeeEmail(
 
   const { cleanFrom, fromAddress, senderDomain } = normalizeSenderAndDomain(config, options.fromName);
 
-  const isTimesheet =
+  const isTaskSheet =
+    options.threadCategory === 'tasksheet' ||
     options.threadCategory === 'timesheet' ||
-    /feuille|timesheet|fiche de temps|plan du jour/i.test(options.eventTitle);
-  const themeKey = isTimesheet ? 'timesheet' : (options.threadCategory || 'rh');
+    /tasksheet|feuille|timesheet|fiche de temps|plan du jour/i.test(options.eventTitle);
+  const themeKey = isTaskSheet ? 'tasksheet' : (options.threadCategory || 'rh');
 
   const threadSubject =
     options.threadSubject ||
-    (isTimesheet
-      ? `Feuille de tâches - ${cleanCollabName}`
+    (isTaskSheet
+      ? `TaskSheet - Feuille d'avancement des tâches - ${cleanCollabName}`
       : options.eventTitle
       ? `${options.eventTitle} - ${cleanCollabName}`
       : `Dossier RH - ${cleanCollabName}`);
@@ -68,29 +66,32 @@ export async function sendThreadedEmployeeEmail(
   const threadRootId = `<citrine-thread-${themeKey}-${threadKey}@${senderDomain}>`;
   const cleanMessageId = `<citrine-msg-${themeKey}-${threadKey}-${Date.now()}.${Math.random().toString(36).substring(2, 7)}@${senderDomain}>`;
 
+  const hasDocShell = /<!DOCTYPE|<html/i.test(options.htmlContent);
   const isAlreadyFullHtml =
     options.htmlContent.includes('CITRINE') ||
     options.htmlContent.includes('<table') ||
-    options.htmlContent.includes('<!DOCTYPE');
+    hasDocShell;
 
-  const htmlBody = isAlreadyFullHtml
-    ? `<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>${threadSubject}</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  ${options.htmlContent}
-</body>
-</html>`
-    : buildThreadedEmailHtml({
-        employeeName: cleanCollabName,
-        eventTitle: options.eventTitle,
-        bodyHtml: options.htmlContent,
-      });
+  let htmlBody: string;
+  if (hasDocShell) {
+    htmlBody = options.htmlContent.includes('.email-scroll-x')
+      ? options.htmlContent
+      : options.htmlContent.replace(/<\/head>/i, `${RESPONSIVE_EMAIL_STYLE_TAG}\n</head>`);
+  } else if (isAlreadyFullHtml) {
+    htmlBody = buildOutlookHtmlDocument({
+      title: threadSubject,
+      maxWidth: 700,
+      bodyBg: '#f8fafc',
+      cardBg: '#ffffff',
+      innerHtml: `<tr><td class="email-pad" style="padding: 18px 22px;">${options.htmlContent}</td></tr>`,
+    });
+  } else {
+    htmlBody = buildThreadedEmailHtml({
+      employeeName: cleanCollabName,
+      eventTitle: options.eventTitle,
+      bodyHtml: options.htmlContent,
+    });
+  }
 
   const plainText = buildThreadedPlainText(cleanCollabName, threadSubject);
 
@@ -156,7 +157,6 @@ export async function sendThreadedEmployeeEmail(
     }
 
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ [SMTP ENVOYÉ THREADÉ] ID: ${info.messageId} | Fil: "${threadSubject}" -> To: [${recipients.join(', ')}]${ccList.length > 0 ? ` | CC: [${ccList.join(', ')}]` : ''}`);
     return {
       success: true,
       messageId: info.messageId,

@@ -214,7 +214,6 @@ export function useUserManagementActions({
           read: false,
         };
         onAddNotification(userNotif);
-        console.log('🔔 [NOTIFICATION CRÉÉE] Utilisateur:', userNotif);
       }
 
       if (showToast) {

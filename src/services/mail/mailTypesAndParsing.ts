@@ -11,7 +11,7 @@ export interface EmailThreadingOptions {
   eventTitle: string;
   /** Contenu HTML du message */
   htmlContent: string;
-  /** Catégorie de fil pour regrouper tous les mails du même thème (ex: "timesheet", "conges", "missions") */
+  /** Catégorie de fil pour regrouper tous les mails du même thème (ex: "tasksheet", "conges", "missions") */
   threadCategory?: string;
   /** Sujet optionnel forcé pour le fil (sinon canonique automatique) */
   threadSubject?: string;
@@ -24,7 +24,7 @@ export interface EmailThreadingOptions {
   recipientEmails?: string[];
   /** Destinataires en copie (CC) - par exemple tous les collaborateurs pour le récapitulatif hebdo */
   cc?: string[] | string;
-  /** Pièces jointes éventuelles (ex: feuille de temps Excel .xlsx) */
+  /** Pièces jointes éventuelles (ex: TaskSheet Excel .xlsx) */
   attachments?: Array<{
     filename: string;
     content: any;

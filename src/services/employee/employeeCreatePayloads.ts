@@ -122,27 +122,21 @@ export async function rollbackCreatedEntities(
 ) {
   if (createdNotifDbId) {
     try {
-      console.log(`⏪ [ROLLBACK] Suppression de la notification orpheline (ID: ${createdNotifDbId})...`);
       await client.from('notifications').delete().eq('id', createdNotifDbId);
-      console.log(`✓ [ROLLBACK] Notification (ID: ${createdNotifDbId}) supprimée`);
     } catch (rbNotifErr: any) {
       console.error(`❌ [ROLLBACK ERREUR] Échec suppression notification ${createdNotifDbId}:`, rbNotifErr?.message);
     }
   }
   if (createdUserId) {
     try {
-      console.log(`⏪ [ROLLBACK] Suppression de l'utilisateur orphelin (ID: ${createdUserId})...`);
       await client.from('users').delete().eq('id', createdUserId);
-      console.log(`✓ [ROLLBACK] Utilisateur (ID: ${createdUserId}) supprimé`);
     } catch (rbUserErr: any) {
       console.error(`❌ [ROLLBACK ERREUR] Échec suppression user ${createdUserId}:`, rbUserErr?.message);
     }
   }
   if (createdEmployeeDbId) {
     try {
-      console.log(`⏪ [ROLLBACK] Suppression du collaborateur orphelin (ID: ${createdEmployeeDbId})...`);
       await client.from('employees').delete().eq('id', createdEmployeeDbId);
-      console.log(`✓ [ROLLBACK] Collaborateur (ID: ${createdEmployeeDbId}) supprimé`);
     } catch (rbEmpErr: any) {
       console.error(`❌ [ROLLBACK ERREUR] Échec suppression employé ${createdEmployeeDbId}:`, rbEmpErr?.message);
     }

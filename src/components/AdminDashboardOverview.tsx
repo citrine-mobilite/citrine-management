@@ -127,6 +127,8 @@ export default function AdminDashboardOverview({
           onUpdateProjects={onUpdateStrategicProjects}
           currentUser={currentUser}
           employees={employees}
+          compactOnHome={true}
+          onOpenProjectsTab={() => onSelectTab('projects')}
           showToast={showToast ? (msg, type) => showToast(msg, type === 'error' ? 'error' : 'success') : undefined}
         />
       )}

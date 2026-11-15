@@ -14,8 +14,6 @@ export default async function handler(req: any, res: any) {
   const urlPath = rawUrl.split('?')[0].replace(/^\/api/, '') || '/';
   const method = req.method?.toUpperCase() || 'GET';
 
-  console.log(`🌐 [CITRINE API DISPATCHER] ${method} ${rawUrl} (Route: ${urlPath})`);
-
   let body = req.body;
   if (typeof body === 'string') {
     try {

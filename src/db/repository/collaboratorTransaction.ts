@@ -34,10 +34,7 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
   let createdUserId: number | null = null;
   let createdNotifDbId: number | null = null;
 
-  console.log(`🚀 [TRANSACTION INITIALISÉE] Création collaborateur "${empName}" (${userEmail})`);
-
   try {
-    console.log('📌 [TRANSACTION - ÉTAPE 1/4] Création du collaborateur initial dans la table employees...');
     const rawEmpData = {
       doc_id: empDocId,
       name: empName,
@@ -81,9 +78,6 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
     }
 
     createdEmployeeDbId = empInserted.id;
-    console.log(`✅ [TRANSACTION - ÉTAPE 1/4 VALIDÉE] Collaborateur créé avec succès. ID: ${createdEmployeeDbId}, DocID: ${empDocId}`);
-
-    console.log('📌 [TRANSACTION - ÉTAPE 2/4] Création automatique du compte utilisateur associé...');
     try {
       await supabaseAdmin.auth.admin.createUser({
         email: userEmail,
@@ -130,9 +124,6 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
     }
 
     createdUserId = userInserted.id;
-    console.log(`✅ [TRANSACTION - ÉTAPE 2/4 VALIDÉE] Utilisateur créé avec succès. ID: ${createdUserId}, Email: ${userEmail}`);
-
-    console.log(`📌 [TRANSACTION - ÉTAPE 3/4] Modification du collaborateur avec user_id: ${createdUserId} et role_id: ${computedRoleId}...`);
     const { data: empUpdated, error: empUpdateErr } = await supabaseAdmin
       .from('employees')
       .update({
@@ -153,9 +144,6 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
       throw new Error(`Étape 3 échouée (Mise à jour collaborateur avec user_id/role_id): ${empUpdateErr?.message || 'Mise à jour nulle'}`);
     }
 
-    console.log(`✅ [TRANSACTION - ÉTAPE 3/4 VALIDÉE] Collaborateur mis à jour avec succès avec user_id: ${createdUserId} et role_id: ${computedRoleId}`);
-
-    console.log('📌 [TRANSACTION - ÉTAPE 4/4] Création et enregistrement de la notification...');
     const notifResult = await createCollaboratorOfficialNotification({
       empDocId,
       createdEmployeeDbId: createdEmployeeDbId!,
@@ -166,8 +154,6 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
       resolvedRole,
     });
     createdNotifDbId = notifResult.createdNotifDbId;
-
-    console.log(`🎉 [TRANSACTION TERMINÉE & COMMITTÉE] Collaborateur, Utilisateur et Notification validés à 100%!`);
 
     return {
       success: true,

@@ -30,8 +30,6 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
   let incidentCreatedDbId: number | null = null;
   let notificationCreatedDbId: number | null = null;
 
-  console.log(`🚀 [TRANSACTION POINTAGE INITIALISÉE] Collaborateur: ${presence.employeeName || presence.employeeId} - Date: ${presence.date}`);
-
   try {
     const empIdVal = presence.employeeId || presence.employee_id;
     const resolvedEmpDbId = await resolveEmployeeDbId(supabaseAdmin, empIdVal);
@@ -76,7 +74,6 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       updated_at: new Date().toISOString(),
     };
 
-    console.log(`📌 [TRANSACTION POINTAGE - ÉTAPE 1/3] Enregistrement présence (${presenceRow.doc_id})...`);
     const { data: savedPresence, error: presErr } = await supabaseAdmin
       .from('presences')
       .upsert(presenceRow, { onConflict: 'doc_id' })
@@ -88,7 +85,6 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       throw new Error(`Échec de sauvegarde de la présence: ${presErr.message}`);
     }
     presenceCreatedDbId = savedPresence.id;
-    console.log(`✓ [TRANSACTION POINTAGE - ÉTAPE 1/3] Présence enregistrée (DB ID: ${presenceCreatedDbId})`);
 
     let savedIncident: any = null;
     const shouldSkipIncident =
@@ -96,7 +92,6 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       ((incident?.type === 'sortie_prematuree' || incident?.type === 'depart_anticipe') && isExemptEarlyBackend);
 
     if (incident && !shouldSkipIncident) {
-      console.log(`📌 [TRANSACTION POINTAGE - ÉTAPE 2/3] Enregistrement incident (${incident.type})...`);
       const incDocId = String(incident.id || incident.docId || `inc-${Date.now()}`);
       const incEmpId = await resolveEmployeeDbId(supabaseAdmin, incident.employeeId || empIdVal);
       const incidentRow: any = {
@@ -122,12 +117,10 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       }
       savedIncident = incData;
       incidentCreatedDbId = incData.id;
-      console.log(`✓ [TRANSACTION POINTAGE - ÉTAPE 2/3] Incident consigné (DB ID: ${incidentCreatedDbId})`);
     }
 
     let savedNotification: any = null;
     if (notification) {
-      console.log(`📌 [TRANSACTION POINTAGE - ÉTAPE 3/3] Enregistrement notification système...`);
       const notifDocId = String(notification.id || notification.docId || `notif-clock-${Date.now()}`);
       const resolvedUserId = await resolveUserDbId(
         supabaseAdmin,
@@ -160,10 +153,8 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       }
       savedNotification = notifData;
       notificationCreatedDbId = notifData.id;
-      console.log(`✓ [TRANSACTION POINTAGE - ÉTAPE 3/3] Notification émise (DB ID: ${notificationCreatedDbId})`);
     }
 
-    console.log(`🎉 [TRANSACTION POINTAGE RÉUSSIE] Présence, incident et notification validés atomiquement !`);
     return {
       success: true,
       presence: { ...presence, id: presDocId, _dbId: presenceCreatedDbId },

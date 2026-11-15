@@ -1,6 +1,6 @@
 import { getCollectionData } from '../db/repository';
 import { sendThreadedEmployeeEmail } from './serverMailService';
-import { getDoualaDateInfo } from './timesheetReportService';
+import { getDoualaDateInfo } from './taskSheetReportService';
 import {
   resolveClockingAppearance,
   resolveClockingRecipients,
@@ -80,10 +80,6 @@ export async function sendClockingNotificationEmail(input: ClockingEmailNotifica
       incident: input.incident,
     });
 
-    console.log(
-      `📨 [MAIL POINTAGE] Envoi notification "${appearance.actionLabel}" pour ${employeeName} vers ${recipientList.length} destinataire(s)...`
-    );
-
     const result = await sendThreadedEmployeeEmail({
       employeeName,
       employeeId: empId,
@@ -95,11 +91,7 @@ export async function sendClockingNotificationEmail(input: ClockingEmailNotifica
       recipientEmails: recipientList,
     });
 
-    if (result.success) {
-      console.log(
-        `✅ [MAIL POINTAGE SUCCÈS] Notification de pointage envoyée pour ${employeeName} (${appearance.actionLabel}).`
-      );
-    } else {
+    if (!result.success) {
       console.warn(`⚠️ [MAIL POINTAGE AVERTISSEMENT] Résultat :`, result.error);
     }
 

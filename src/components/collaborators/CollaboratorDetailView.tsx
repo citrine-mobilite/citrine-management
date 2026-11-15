@@ -99,7 +99,9 @@ export const CollaboratorDetailView: React.FC<CollaboratorDetailViewProps> = ({
       <CollaboratorDetailProfileCard
         emp={emp}
         employees={employees}
-        presencesCount={empPresences.length}
+        presences={empPresences}
+        payslips={empPayslips}
+        tasks={tasks}
       />
 
       <div className="space-y-4">

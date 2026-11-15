@@ -89,7 +89,6 @@ export async function rollbackAtomicClocking(
 ): Promise<void> {
   if (notificationCreatedDbId) {
     try {
-      console.log(`⏪ [ROLLBACK POINTAGE] Annulation notification (ID: ${notificationCreatedDbId})...`);
       await supabaseAdmin.from('notifications').delete().eq('id', notificationCreatedDbId);
     } catch (rbErr: any) {
       console.error(`❌ [ROLLBACK ERREUR] Suppression notification:`, rbErr?.message);
@@ -97,7 +96,6 @@ export async function rollbackAtomicClocking(
   }
   if (incidentCreatedDbId) {
     try {
-      console.log(`⏪ [ROLLBACK POINTAGE] Annulation incident (ID: ${incidentCreatedDbId})...`);
       await supabaseAdmin.from('attendance_incidents').delete().eq('id', incidentCreatedDbId);
     } catch (rbErr: any) {
       console.error(`❌ [ROLLBACK ERREUR] Suppression incident:`, rbErr?.message);
@@ -105,7 +103,6 @@ export async function rollbackAtomicClocking(
   }
   if (presenceCreatedDbId) {
     try {
-      console.log(`⏪ [ROLLBACK POINTAGE] Annulation présence (ID: ${presenceCreatedDbId})...`);
       await supabaseAdmin.from('presences').delete().eq('id', presenceCreatedDbId);
     } catch (rbErr: any) {
       console.error(`❌ [ROLLBACK ERREUR] Suppression présence:`, rbErr?.message);

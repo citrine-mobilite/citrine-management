@@ -5,12 +5,8 @@ import {
 } from './mailTypesAndParsing';
 import { getEffectiveSmtpConfig, getTransporter } from './smtpConfigAndTransporter';
 import { normalizeSenderAndDomain } from './mailHtmlTemplates';
+import { buildOutlookHtmlDocument } from './outlookEmailShell';
 
-/**
- * Envoie un email global consolidé (ex: Récapitulatif Hebdomadaire des Présences)
- * Destinataire(s) principal(aux) : Responsables / RH
- * En copie (CC) : Tous les collaborateurs actifs
- */
 export async function sendConsolidatedReportEmail(
   options: ConsolidatedEmailOptions,
   customConfig?: Partial<SmtpConfig>
@@ -47,17 +43,13 @@ export async function sendConsolidatedReportEmail(
 
   const htmlBody = options.htmlContent.includes('<!DOCTYPE') || options.htmlContent.includes('<html')
     ? options.htmlContent
-    : `<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${options.subject}</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f5f5f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1c1917;">
-  ${options.htmlContent}
-</body>
-</html>`;
+    : buildOutlookHtmlDocument({
+        title: options.subject,
+        maxWidth: 820,
+        bodyBg: '#f4f4f5',
+        cardBg: '#ffffff',
+        innerHtml: `<tr><td class="email-pad" style="padding: 18px 22px;">${options.htmlContent}</td></tr>`,
+      });
 
   const textBody = options.plainText || [
     `CITRINE MOBILITÉ — RAPPORT CONSOLIDÉ DES PRÉSENCES`,
@@ -100,7 +92,6 @@ export async function sendConsolidatedReportEmail(
     }
 
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ [SMTP RAPPORT CONSOLIDÉ ENVOYÉ] ID: ${info.messageId} | "${options.subject}" -> To: [${recipients.join(', ')}] | CC: [${ccRecipients.length} collaborateurs]`);
     return {
       success: true,
       messageId: info.messageId,

@@ -1,6 +1,6 @@
 import { getCollectionData } from '../db/repository';
 import { sendThreadedEmployeeEmail, parseEmailList } from './serverMailService';
-import { getDoualaDateInfo } from './timesheetReportService';
+import { getDoualaDateInfo } from './taskSheetReportService';
 import {
   MondayGreetingOptions,
   MondayGreetingResult,
@@ -39,7 +39,6 @@ export async function sendMondayGreetingToAllEmployees(
 
   if (!isMonday && !options?.forceMonday) {
     const skipMsg = `⏸️ [GREETING LUNDI] Envoi ignoré : nous sommes ${weekdayName} et le message de bon début de semaine est programmé chaque lundi à 08h00.`;
-    console.log(skipMsg);
     return {
       success: true,
       message: skipMsg,
@@ -49,8 +48,6 @@ export async function sendMondayGreetingToAllEmployees(
       timestamp: doualaTime.fullDateStr,
     };
   }
-
-  console.log(`🌅 [GREETING LUNDI 08:00] Démarrage de l'envoi du message de bon début de semaine (${doualaTime.fullDateStr})...`);
 
   try {
     const humaansAttachment = getHumaansImageAttachment();
@@ -80,8 +77,6 @@ export async function sendMondayGreetingToAllEmployees(
         quote: coolQuote.quote,
         appUrl,
       });
-
-      console.log(`✉️ [GREETING LUNDI TEST] Envoi du mail de bonjour vers : ${targetEmails.join(', ')}...`);
 
       const result = await sendThreadedEmployeeEmail({
         employeeName: testEmployeeName,
@@ -137,8 +132,6 @@ export async function sendMondayGreetingToAllEmployees(
       };
     }
 
-    console.log(`🚀 [GREETING LUNDI] Envoi personnalisé à ${activeEmployees.length} collaborateur(s)...`);
-
     for (const emp of activeEmployees) {
       const empName = emp.name || 'Collaborateur';
       const empEmail = emp.email?.trim();
@@ -171,7 +164,6 @@ export async function sendMondayGreetingToAllEmployees(
 
         sentCount++;
         recipientEmails.push(empEmail);
-        console.log(`✓ [GREETING LUNDI] E-mail transmis à ${empName} (Prénom: ${empFirstName}, Email: ${empEmail})`);
       } catch (err: any) {
         const msg = `Erreur pour ${empName} (${empEmail}) : ${err?.message || err}`;
         console.error('❌ [GREETING LUNDI Error]:', msg);
@@ -180,7 +172,6 @@ export async function sendMondayGreetingToAllEmployees(
     }
 
     const summaryMsg = `Message de bon début de semaine envoyé avec succès à ${sentCount}/${activeEmployees.length} collaborateurs.`;
-    console.log(`✅ [GREETING LUNDI 08:00 TERMINÉ] ${summaryMsg}`);
 
     return {
       success: errors.length === 0 || sentCount > 0,

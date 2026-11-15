@@ -20,6 +20,7 @@ import { DatabaseRebuildSection } from './settings/DatabaseRebuildSection';
 import { HumaanSettings } from './illustrations/HumaanIllustrations';
 import ErrorBoundary from './ErrorBoundary';
 import { Mail } from 'lucide-react';
+import { logSystemAudit } from '../services/adminAuditService';
 
 interface CompanySettingsPanelProps {
   moduleConfig: CompanyModuleConfig;
@@ -119,6 +120,15 @@ export default function CompanySettingsPanel({
   const handleUpdate = (updated: CompanyModuleConfig) => {
     if (typeof onUpdateModuleConfig === 'function') {
       onUpdateModuleConfig(updated);
+      logSystemAudit({
+        authorName: 'Administrateur',
+        authorRole: 'administrateur',
+        targetName: updated.companyName || 'Configuration Citrine',
+        operationType: 'parametres_systeme',
+        operationLabel: `Mise à jour Paramètres (${activeTab})`,
+        details: `Paramètres entreprise actualisés depuis l'onglet « ${activeTab} » (${updated.companyName || 'Citrine'}).`,
+        level: 'info',
+      });
     }
   };
 

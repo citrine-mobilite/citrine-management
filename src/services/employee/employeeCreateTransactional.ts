@@ -27,7 +27,6 @@ export async function createCollaboratorWithUserTransactional(
 
   if (typeof window !== 'undefined' && typeof fetch === 'function') {
     try {
-      console.log(`🌐 [TRANSACTION SERVEUR] Envoi de la requête transactionnelle pour "${empName}" (${userEmail})...`);
       const response = await fetch('/api/collaborators/transactional', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -37,17 +36,12 @@ export async function createCollaboratorWithUserTransactional(
       if (response.ok) {
         const result = await response.json();
         if (result && result.success && result.employee && result.user) {
-          console.log('✅ [TRANSACTION SERVEUR VALIDÉE] Collaborateur, utilisateur et notification persistés via le serveur:', result);
           try {
             await offlineService.cacheLocally(EMPLOYEES_COLLECTION, result.employee);
             await offlineService.cacheLocally('users', result.user);
             if (result.notification) await offlineService.cacheLocally('notifications', result.notification);
           } catch (cacheErr) {
             console.warn('[TRANSACTION] Notice cache local:', cacheErr);
-          }
-          if (result.notification) {
-            console.log('🔔 [NOTIFICATION CRÉÉE ET ENREGISTRÉE AVEC SUCCÈS] :', result.notification);
-            console.log('📋 [NOTIFICATION DÉTAILS] Titre:', result.notification.title, '| Message:', result.notification.message || result.notification.content, '| User ID:', result.user.id);
           }
           return result as TransactionalCollaboratorResult;
         }
@@ -83,10 +77,7 @@ export async function createCollaboratorWithUserTransactional(
   let createdUserId: number | null = null;
   let createdNotifDbId: number | null = null;
 
-  console.log(`🚀 [TRANSACTION INITIALISÉE] Création collaborateur "${empName}" (${userEmail})`);
-
   try {
-    console.log('📌 [TRANSACTION - ÉTAPE 1/4] Création du collaborateur initial dans la table employees...');
     const rawEmpData = buildCreateEmployeePayload(input, empDocId, empName, userEmail, empDepartment);
     const { data: empInserted, error: empInsertErr } = await client.from('employees').insert(rawEmpData).select().single();
     if (empInsertErr || !empInserted) {
@@ -94,9 +85,7 @@ export async function createCollaboratorWithUserTransactional(
     }
 
     createdEmployeeDbId = empInserted.id;
-    console.log(`✅ [TRANSACTION - ÉTAPE 1/4 VALIDÉE] Collaborateur créé avec succès. ID: ${createdEmployeeDbId}, DocID: ${empDocId}`);
 
-    console.log('📌 [TRANSACTION - ÉTAPE 2/4] Création automatique du compte utilisateur associé...');
     if (supabaseAdmin) {
       try {
         await supabaseAdmin.auth.admin.createUser({ email: userEmail, password: initialPassword, email_confirm: true });
@@ -131,9 +120,7 @@ export async function createCollaboratorWithUserTransactional(
     }
 
     createdUserId = userInserted.id;
-    console.log(`✅ [TRANSACTION - ÉTAPE 2/4 VALIDÉE] Utilisateur créé avec succès. ID: ${createdUserId}, Email: ${userEmail}`);
 
-    console.log(`📌 [TRANSACTION - ÉTAPE 3/4] Modification du collaborateur avec user_id: ${createdUserId} et role_id: ${computedRoleId}...`);
     const { data: empUpdated, error: empUpdateErr } = await client
       .from('employees')
       .update({
@@ -149,9 +136,7 @@ export async function createCollaboratorWithUserTransactional(
     if (empUpdateErr || !empUpdated) {
       throw new Error(`Étape 3 échouée (Mise à jour collaborateur avec user_id/role_id): ${empUpdateErr?.message || 'Mise à jour nulle'}`);
     }
-    console.log(`✅ [TRANSACTION - ÉTAPE 3/4 VALIDÉE] Collaborateur mis à jour avec succès avec user_id: ${createdUserId} et role_id: ${computedRoleId}`);
 
-    console.log('📌 [TRANSACTION - ÉTAPE 4/4] Création et enregistrement de la notification...');
     const notifObj = buildCreateNotifObject(empDocId, createdEmployeeDbId!, createdUserId!, userEmail, empDepartment, resolvedRole, empName);
 
     const { data: notifInserted, error: notifInsertErr } = await client
@@ -172,8 +157,6 @@ export async function createCollaboratorWithUserTransactional(
       console.warn('[TRANSACTION - NOTIFICATION AVERTISSEMENT]:', notifInsertErr?.message);
     } else {
       createdNotifDbId = notifInserted.id;
-      console.log('🔔 [NOTIFICATION CRÉÉE ET ENREGISTRÉE AVEC SUCCÈS] :', notifObj);
-      console.log('📋 [NOTIFICATION DÉTAILS] Titre:', notifObj.title, '| Message:', notifObj.content, '| Destinataire User ID:', createdUserId);
     }
 
     const { finalEmployee, finalUser } = buildFinalCreatedModels({
@@ -190,7 +173,6 @@ export async function createCollaboratorWithUserTransactional(
       await offlineService.cacheLocally('notifications', notifObj);
     } catch {}
 
-    console.log(`🎉 [TRANSACTION VALIDÉE & COMMITTÉE] Collaborateur & Utilisateur synchronisés à 100%!`);
     return { success: true, employee: finalEmployee, user: finalUser, notification: notifObj };
   } catch (error: any) {
     console.error(`🚨 [TRANSACTION ÉCHOUÉE - ROLLBACK DÉCLENCHÉ] : ${error?.message || error}`);

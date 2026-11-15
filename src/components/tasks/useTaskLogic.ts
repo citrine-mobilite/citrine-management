@@ -5,7 +5,8 @@ import { taskService } from '../../services/taskService';
 import { showErrorAlert } from '../../utils/sweetAlert';
 import { isSelfOnlyUser } from '../../utils/roleUtils';
 import { computeTaskVisibilityScope, filterTasksByCriteria } from './logic/taskFilterHelpers';
-import { executeSendManualTimesheet } from './logic/taskManualTimesheetHelper';
+import { executeSendManualTaskSheet } from './logic/taskManualTaskSheetHelper';
+import { logSystemAudit } from '../../services/adminAuditService';
 import {
   confirmDeleteTaskWithPrompt,
   createNewProjectAction,
@@ -84,6 +85,17 @@ export function useTaskLogic({
       if (selectedTaskForDetail && selectedTaskForDetail.id === taskIdToUpdate) {
         setSelectedTaskForDetail(updatedTask);
       }
+      logSystemAudit({
+        authorName: currentUser?.name || currentRole,
+        authorRole: currentUser?.role || currentRole,
+        targetName: subtask.assignedTo || target.assignedTo || target.title,
+        targetEmployeeId: subtask.employeeId || target.employeeId,
+        operationType: 'tache_projet',
+        operationLabel: 'Création Sous-Tâche',
+        details: `Sous-tâche "${subtask.title}" ajoutée sur "${target.title}".`,
+        level: 'success',
+        metadata: { assignedTo: subtask.assignedTo || target.assignedTo, taskId: target.id },
+      });
       if (showToast) showToast(`Sous-tâche "${subtask.title}" créée avec succès !`, 'success');
     } catch (err: any) {
       await showErrorAlert('Erreur', err?.message || "Impossible d'ajouter la sous-tâche.");
@@ -199,7 +211,7 @@ export function useTaskLogic({
     handleDeleteTaskConfirm: async () => {},
     isRestrictedStaff,
     visibleEmployees,
-    handleSendManualTimesheet: () =>
-      executeSendManualTimesheet({ tasks, currentUser, currentEmployee, onAddNotification, showToast }),
+    handleSendManualTaskSheet: () =>
+      executeSendManualTaskSheet({ tasks, currentUser, currentEmployee, onAddNotification, showToast }),
   };
 }

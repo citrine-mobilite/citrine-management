@@ -91,18 +91,21 @@ export const AuditLogsTab: React.FC<AuditLogsTabProps> = ({
               <span className="text-[10px] font-bold text-stone-400">Type :</span>
               <select value={auditFilterType} onChange={(e) => { onChangeFilterType(e.target.value); onChangePage(1); }} className="bg-transparent font-bold text-stone-700 text-xs focus:outline-none cursor-pointer">
                 <option value="all">Tous les types</option>
-                <option value="conge_permission">🌴 Congé & Permission</option>
-                <option value="conseil_discipline">⚖️ Conseil de Discipline</option>
-                <option value="feuille_de_temps">📅 Feuille de Tâches</option>
-                <option value="presence_pointage">⏱️ Pointage & Présence</option>
-                <option value="securite_connexion">🛡️ Sécurité & Connexion</option>
-                <option value="creation">👤 Création de Compte</option>
-                <option value="role_change">🔄 Changement de Rôle</option>
-                <option value="manager_change">👔 Responsable</option>
-                <option value="team_change">🏢 Affectation Équipe</option>
-                <option value="status_change">🛑 Statut & Suspension</option>
-                <option value="salary_update">💰 Salaire</option>
-                <option value="password_reset">🔑 Mot de passe</option>
+                <option value="tache_projet">Tâches &amp; Projets</option>
+                <option value="presence_pointage">Pointage &amp; Présence</option>
+                <option value="feuille_avancement_taches">TaskSheet (Avancement)</option>
+                <option value="conge_permission">Congé &amp; Permission</option>
+                <option value="finance_frais">Notes de Frais</option>
+                <option value="salary_update">Salaire &amp; Paie</option>
+                <option value="conseil_discipline">Conseil de Discipline</option>
+                <option value="creation">Création de Compte</option>
+                <option value="role_change">Changement de Rôle</option>
+                <option value="manager_change">Responsable</option>
+                <option value="team_change">Affectation Équipe</option>
+                <option value="status_change">Statut &amp; Suspension</option>
+                <option value="parametres_systeme">Paramètres Système</option>
+                <option value="password_reset">Mot de passe</option>
+                <option value="securite_connexion">Sécurité &amp; Connexion</option>
               </select>
             </div>
 

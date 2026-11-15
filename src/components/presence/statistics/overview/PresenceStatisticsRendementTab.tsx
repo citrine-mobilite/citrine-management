@@ -15,7 +15,7 @@ interface PresenceStatisticsRendementTabProps {
   totalInProgressTasksPeriod: number;
   totalMilestonesPeriod: number;
   onSelectRendementEmployee: (emp: Employee) => void;
-  onOpenTimesheetModal: (emp: Employee, mode: 'day' | 'month' | 'year') => void;
+  onOpenTaskSheetModal: (emp: Employee, mode: 'day' | 'month' | 'year') => void;
   onSelectEmployee?: (id: string) => void;
 }
 
@@ -29,7 +29,7 @@ export const PresenceStatisticsRendementTab: React.FC<PresenceStatisticsRendemen
   totalInProgressTasksPeriod,
   totalMilestonesPeriod,
   onSelectRendementEmployee,
-  onOpenTimesheetModal,
+  onOpenTaskSheetModal,
   onSelectEmployee,
 }) => {
   return (
@@ -47,7 +47,7 @@ export const PresenceStatisticsRendementTab: React.FC<PresenceStatisticsRendemen
       <EmployeeRendementHistogram
         metricsList={filteredMetricsList}
         onSelectEmployee={onSelectRendementEmployee}
-        onOpenTimesheet={onOpenTimesheetModal}
+        onOpenTaskSheet={onOpenTaskSheetModal}
       />
 
       <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
@@ -57,7 +57,7 @@ export const PresenceStatisticsRendementTab: React.FC<PresenceStatisticsRendemen
             Rendement des Tâches & Assiduité par Collaborateur ({filteredMetricsList.length})
           </h3>
           <span className="text-[11px] text-stone-500 italic">
-            Cliquez sur une ligne pour ouvrir la fiche de détail ou générer la feuille de tâches.
+            Cliquez sur une ligne pour ouvrir la fiche de détail ou générer la TaskSheet.
           </span>
         </div>
 
@@ -158,12 +158,12 @@ export const PresenceStatisticsRendementTab: React.FC<PresenceStatisticsRendemen
                   <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1.5">
                       <button
-                        onClick={() => onOpenTimesheetModal(m.employee, 'month')}
+                        onClick={() => onOpenTaskSheetModal(m.employee, 'month')}
                         className="px-2 py-1 bg-white hover:bg-emerald-600 hover:text-white text-stone-700 border border-stone-200 hover:border-emerald-600 rounded-lg transition inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer shadow-3xs"
-                        title="Générer automatiquement la feuille de tâches de ce collaborateur (Jour/Mois/Année)"
+                        title="Générer automatiquement la TaskSheet de ce collaborateur (Jour/Mois/Année)"
                       >
                         <FileSpreadsheet className="h-3.5 w-3.5 text-[#2A7B76]" />
-                        <span className="hidden lg:inline">Feuille de tâches</span>
+                        <span className="hidden lg:inline">TaskSheet</span>
                       </button>
                       <button
                         onClick={() => onSelectRendementEmployee(m.employee)}

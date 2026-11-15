@@ -146,7 +146,6 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
       setIsTesting(false);
 
       if (res.success) {
-        console.log('✅ [TEST SMTP SUCCÈS] Réponse du serveur :', res);
         setTestResult({
           status: 'success',
           message: 'Connexion SMTP établie avec succès ! Le message réel de test a été transmis à la boîte de réception.',

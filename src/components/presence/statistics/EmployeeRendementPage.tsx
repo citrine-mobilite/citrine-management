@@ -1,7 +1,7 @@
 import React from 'react';
 import { Employee, Task, Presence, AttendanceIncident, AppUser } from '../../../types';
 import { SubtaskCreateModal } from '../../tasks/SubtaskCreateModal';
-import { TimesheetModal } from '../../timesheet/TimesheetModal';
+import { TaskSheetModal } from '../../tasksheet/TaskSheetModal';
 import { TaskTimePyramid } from './TaskTimePyramid';
 import { useEmployeeRendementLogic } from './rendement/useEmployeeRendementLogic';
 import { EmployeeRendementHeader } from './rendement/EmployeeRendementHeader';
@@ -42,7 +42,7 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
         assiduiteRate={assiduiteRate}
         metrics={logic.metrics}
         onBack={onBack}
-        onOpenTimesheet={logic.openTimesheet}
+        onOpenTaskSheet={logic.openTaskSheet}
       />
 
       <div ref={logic.taskDetailSectionRef} className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm space-y-5">
@@ -51,12 +51,26 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
           setLimitToTen={logic.setLimitToTen}
           totalFilteredCount={logic.sortedByRecencyTasks.length}
           displayedCount={logic.displayedTasks.length}
+          filteredSummary={logic.filteredSummary}
           statusFilter={logic.statusFilter}
           setStatusFilter={logic.setStatusFilter}
+          priorityFilter={logic.priorityFilter}
+          setPriorityFilter={logic.setPriorityFilter}
+          projectFilter={logic.projectFilter}
+          setProjectFilter={logic.setProjectFilter}
+          projectOptions={logic.projectOptions}
+          kindFilter={logic.kindFilter}
+          setKindFilter={logic.setKindFilter}
           durationFilter={logic.durationFilter}
           setDurationFilter={logic.setDurationFilter}
           periodFilter={logic.periodFilter}
           setPeriodFilter={logic.setPeriodFilter}
+          customStartDate={logic.customStartDate}
+          setCustomStartDate={logic.setCustomStartDate}
+          customEndDate={logic.customEndDate}
+          setCustomEndDate={logic.setCustomEndDate}
+          sortBy={logic.sortBy}
+          setSortBy={logic.setSortBy}
           searchQuery={logic.searchQuery}
           setSearchQuery={logic.setSearchQuery}
           hasActiveFilters={logic.hasActiveFilters}
@@ -93,7 +107,7 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
         </div>
       </div>
 
-      <TaskTimePyramid tasks={logic.tasksWithDynamicData} onSelectTask={logic.handleSelectFromPyramid} />
+      <TaskTimePyramid tasks={logic.sortedByRecencyTasks} onSelectTask={logic.handleSelectFromPyramid} />
 
       {logic.activeModalTask && (
         <SubtaskCreateModal
@@ -105,15 +119,15 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
         />
       )}
 
-      {logic.isTimesheetOpen && (
-        <TimesheetModal
-          isOpen={logic.isTimesheetOpen}
-          onClose={() => logic.setIsTimesheetOpen(false)}
+      {logic.isTaskSheetOpen && (
+        <TaskSheetModal
+          isOpen={logic.isTaskSheetOpen}
+          onClose={() => logic.setIsTaskSheetOpen(false)}
           employee={employee}
           allTasks={tasks}
           presences={presences}
           incidents={incidents}
-          defaultMode={logic.timesheetMode}
+          defaultMode={logic.taskSheetMode}
           currentUser={currentUser}
           currentRole={currentRole}
         />

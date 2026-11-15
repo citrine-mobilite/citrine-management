@@ -16,6 +16,7 @@ import { ExpenseKpiCards } from './ExpenseKpiCards';
 import { ExpenseDetailModal } from './ExpenseDetailModal';
 import { NewExpenseModal } from './NewExpenseModal';
 import { ExpenseClaimsTable } from './ExpenseClaimsTable';
+import { logSystemAudit } from '../../services/adminAuditService';
 
 interface ExpenseClaimsPanelProps {
   currentUser?: AppUser | null;
@@ -102,6 +103,17 @@ export const ExpenseClaimsPanel: React.FC<ExpenseClaimsPanelProps> = ({
       };
       await saveExpenseClaim(updated);
       setSelectedClaim(updated);
+      logSystemAudit({
+        authorName: currentUser?.name || 'Direction',
+        authorRole: currentUser?.role || 'responsable',
+        targetName: claim.employeeName,
+        targetEmployeeId: claim.employeeId,
+        operationType: 'finance_frais',
+        operationLabel: `Note de Frais : ${newStatus}`,
+        details: `${claim.reference} (${claim.title}, ${formatCFA(claim.amount)}) passée au statut "${newStatus}".`,
+        level: newStatus === 'rejete' ? 'warning' : 'success',
+        metadata: { reference: claim.reference, status: newStatus },
+      });
       showToast?.(`Note de frais mise à jour : ${newStatus}`, 'success');
       onAddNotification?.({
         title: 'Note de Frais actualisée',
@@ -144,6 +156,17 @@ export const ExpenseClaimsPanel: React.FC<ExpenseClaimsPanelProps> = ({
 
       await saveExpenseClaim(claimToSave);
       setIsNewModalOpen(false);
+      logSystemAudit({
+        authorName: currentUser?.name || claimToSave.employeeName,
+        authorRole: currentUser?.role || 'collaborateur',
+        targetName: claimToSave.employeeName,
+        targetEmployeeId: claimToSave.employeeId,
+        operationType: 'finance_frais',
+        operationLabel: 'Soumission Note de Frais',
+        details: `${claimToSave.reference} : ${claimToSave.title} (${formatCFA(claimToSave.amount)}) à ${claimToSave.missionLocation}.`,
+        level: 'info',
+        metadata: { reference: claimToSave.reference, employeeId: claimToSave.employeeId },
+      });
       showToast?.('Note de frais soumise avec succès !', 'success');
       onAddNotification?.({
         title: 'Nouvelle Note de Frais',

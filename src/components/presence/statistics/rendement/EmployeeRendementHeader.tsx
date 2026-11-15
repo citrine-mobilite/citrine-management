@@ -18,7 +18,7 @@ interface EmployeeRendementHeaderProps {
     estimatedHoursTotal: number;
   };
   onBack: () => void;
-  onOpenTimesheet: (mode: 'day' | 'month' | 'year') => void;
+  onOpenTaskSheet: (mode: 'day' | 'month' | 'year') => void;
 }
 
 export const EmployeeRendementHeader: React.FC<EmployeeRendementHeaderProps> = ({
@@ -26,7 +26,7 @@ export const EmployeeRendementHeader: React.FC<EmployeeRendementHeaderProps> = (
   assiduiteRate,
   metrics,
   onBack,
-  onOpenTimesheet,
+  onOpenTaskSheet,
 }) => (
   <>
     <div className="flex items-center justify-between">
@@ -70,12 +70,12 @@ export const EmployeeRendementHeader: React.FC<EmployeeRendementHeaderProps> = (
           <HumaanTeamCelebration className="w-28 h-20" />
         </div>
         <button
-          onClick={() => onOpenTimesheet('month')}
+          onClick={() => onOpenTaskSheet('month')}
           className="px-4 py-2.5 bg-white text-[#2A7B76] hover:bg-emerald-50 rounded-2xl font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer active:scale-98"
-          title="Générer la feuille de tâches synthétique de ce collaborateur (Jour / Mois / Année)"
+          title="Générer la TaskSheet synthétique de ce collaborateur (Jour / Mois / Année)"
         >
           <FileSpreadsheet className="h-4 w-4 text-[#2A7B76]" />
-          <span>Feuilles de Tâches</span>
+          <span>TaskSheets</span>
         </button>
       </div>
     </div>
@@ -87,34 +87,34 @@ export const EmployeeRendementHeader: React.FC<EmployeeRendementHeaderProps> = (
         </div>
         <div>
           <h4 className="font-serif font-bold text-sm text-white flex items-center gap-2">
-            Génération de la Feuille de Tâches &amp; Rendement
+            Génération du TaskSheet (Feuille d&apos;Avancement des Tâches) &amp; Rendement
             <span className="text-[10px] font-sans font-bold bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 px-2 py-0.2 rounded-full">
               Synthèse Citrine
             </span>
           </h4>
           <p className="text-xs text-stone-300">
-            Synthèse complète entre l'assiduité et le rendement des tâches et sous-tâches selon la durée sélectionnée.
+            Synthèse complète entre l&apos;assiduité et le rendement des tâches et sous-tâches selon la durée sélectionnée.
           </p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <button
-          onClick={() => onOpenTimesheet('day')}
+          onClick={() => onOpenTaskSheet('day')}
           className="px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-3xs"
         >
           <Calendar className="h-3.5 w-3.5 text-emerald-300" />
           <span>📅 Jour</span>
         </button>
         <button
-          onClick={() => onOpenTimesheet('month')}
+          onClick={() => onOpenTaskSheet('month')}
           className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
         >
           <Calendar className="h-3.5 w-3.5 text-white" />
           <span>🗓️ Mois</span>
         </button>
         <button
-          onClick={() => onOpenTimesheet('year')}
+          onClick={() => onOpenTaskSheet('year')}
           className="px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-3xs"
         >
           <Trophy className="h-3.5 w-3.5 text-amber-300" />

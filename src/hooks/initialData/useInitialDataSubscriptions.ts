@@ -117,7 +117,6 @@ export function useInitialDataSubscriptions({
     })();
 
     const unsubRealtime = realtimeSyncService.subscribeToPresenceUpdates(async (eventData) => {
-      console.log('⚡ [REALTIME SYNC] Nouveau pointage reçu en direct :', eventData.presence?.employeeName || eventData.presence?.employeeId);
       if (eventData.presence) {
         const newPres = eventData.presence;
         setPresences((prev) => {
@@ -197,6 +196,7 @@ export function useInitialDataSubscriptions({
       unsubRealtime();
       if (bc) bc.close();
       window.removeEventListener('citrine:employee_updated', onEmpUpdated);
+      window.removeEventListener('citrine:user_updated', onUserUpdated);
     };
   }, []);
 

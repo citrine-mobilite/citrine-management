@@ -1,4 +1,5 @@
 import { Employee } from '../../types';
+import { buildOutlookHtmlDocument } from '../mail/outlookEmailShell';
 
 export interface AlertData {
   employee: Employee;
@@ -21,62 +22,102 @@ export interface AlertData {
   };
 }
 
+function wrapAlertHtml(title: string, cardBg: string, innerHtml: string): string {
+  return buildOutlookHtmlDocument({
+    title,
+    maxWidth: 600,
+    bodyBg: '#f8fafc',
+    cardBg,
+    innerHtml: `
+      <tr>
+        <td bgcolor="${cardBg}" class="email-pad" style="background-color: ${cardBg}; padding: 22px;">
+          ${innerHtml}
+        </td>
+      </tr>
+    `,
+  });
+}
+
 export function generateEmailHtml(data: AlertData): string {
   const { employee, type, details } = data;
   const empName = employee.name;
 
   switch (type) {
     case 'lateness':
-      return `
-        <div style="font-family: sans-serif; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #fdfafb;">
-          <div style="text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 40px;">⚠️</span>
-            <h2 style="color: #9f1239; margin-top: 10px; font-family: serif; font-size: 24px;">Retard Enregistré</h2>
-            <p style="color: #6b7280; font-size: 14px; margin: 4px 0 0 0;">Citrine Management - Système de Présence</p>
-          </div>
-          <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #f3f4f6; margin-bottom: 20px;">
-            <p style="color: #1f2937; font-size: 15px; line-height: 1.6; margin-top: 0;">Bonjour <strong>${empName}</strong>,</p>
-            <p style="color: #4b5563; font-size: 14px; line-height: 1.6;">Nous vous informons qu'un retard d'arrivée a été enregistré dans votre dossier individuel aujourd'hui :</p>
-            <table style="width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px;">
-              <tr style="border-bottom: 1px solid #f3f4f6;"><td style="color: #6b7280; padding: 8px 0;">Date :</td><td style="color: #1f2937; font-weight: bold; text-align: right;">${details.date || new Date().toLocaleDateString('fr-FR')}</td></tr>
-              <tr style="border-bottom: 1px solid #f3f4f6;"><td style="color: #6b7280; padding: 8px 0;">Heure de pointage :</td><td style="color: #9f1239; font-weight: bold; text-align: right;">${details.arrivalTime || 'N/A'}</td></tr>
-              <tr><td style="color: #6b7280; padding: 8px 0;">Seuil de ponctualité :</td><td style="color: #1f2937; font-weight: bold; text-align: right;">${details.thresholdTime || 'configuré'}</td></tr>
-            </table>
-          </div>
-        </div>
-      `;
+      return wrapAlertHtml(`Retard Enregistré - ${empName}`, '#fdfafb', `
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; margin-bottom: 16px;">
+          <tr>
+            <td align="center" style="text-align: center;">
+              <h2 class="email-h1" style="color: #9f1239; margin: 0 0 4px 0; font-family: Georgia, serif; font-size: 22px;">Retard Enregistré</h2>
+              <p style="color: #6b7280; font-size: 13px; margin: 0;">Citrine Management - Système de Présence</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width: 100%; background-color: #ffffff; border: 1px solid #e5e7eb;">
+          <tr>
+            <td class="email-pad-sm" style="padding: 18px;">
+              <p style="color: #1f2937; font-size: 15px; line-height: 1.6; margin-top: 0;">Bonjour <strong>${empName}</strong>,</p>
+              <p style="color: #4b5563; font-size: 14px; line-height: 1.6;">Nous vous informons qu&apos;un retard d&apos;arrivée a été enregistré dans votre dossier individuel aujourd&apos;hui :</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; margin: 14px 0 4px 0; font-size: 14px;">
+                <tr>
+                  <td class="email-kv-label" style="color: #6b7280; padding: 8px 0; border-bottom: 1px solid #f3f4f6;">Date :</td>
+                  <td align="right" class="email-kv-val" style="color: #1f2937; font-weight: bold; padding: 8px 0; border-bottom: 1px solid #f3f4f6;">${details.date || new Date().toLocaleDateString('fr-FR')}</td>
+                </tr>
+                <tr>
+                  <td class="email-kv-label" style="color: #6b7280; padding: 8px 0; border-bottom: 1px solid #f3f4f6;">Heure de pointage :</td>
+                  <td align="right" class="email-kv-val" style="color: #9f1239; font-weight: bold; padding: 8px 0; border-bottom: 1px solid #f3f4f6;">${details.arrivalTime || 'N/A'}</td>
+                </tr>
+                <tr>
+                  <td class="email-kv-label" style="color: #6b7280; padding: 8px 0;">Seuil de ponctualité :</td>
+                  <td align="right" class="email-kv-val" style="color: #1f2937; font-weight: bold; padding: 8px 0;">${details.thresholdTime || 'configuré'}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      `);
 
     case 'priority_task':
-      return `
-        <div style="font-family: sans-serif; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #fcfbfe;">
-          <div style="text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 40px;">🚨</span>
-            <h2 style="color: #6b21a8; margin-top: 10px; font-family: serif; font-size: 24px;">Nouvelle Tâche Prioritaire</h2>
-          </div>
-          <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #f3f4f6;">
-            <p style="color: #1f2937; font-size: 15px;">Bonjour <strong>${empName}</strong>,</p>
-            <p>Une tâche prioritaire vous a été assignée :</p>
-            <p style="font-weight: bold; color: #6b21a8;">${details.taskTitle || 'Tâche'}</p>
-            <p>${details.taskDescription || ''}</p>
-            <p>Échéance : <strong>${details.taskDueDate || ''} à ${details.taskDueTime || ''}</strong></p>
-          </div>
-        </div>
-      `;
+      return wrapAlertHtml(`Nouvelle Tâche Prioritaire - ${empName}`, '#fcfbfe', `
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; margin-bottom: 16px;">
+          <tr>
+            <td align="center" style="text-align: center;">
+              <h2 class="email-h1" style="color: #6b21a8; margin: 0; font-family: Georgia, serif; font-size: 22px;">Nouvelle Tâche Prioritaire</h2>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width: 100%; background-color: #ffffff; border: 1px solid #e5e7eb;">
+          <tr>
+            <td class="email-pad-sm" style="padding: 18px; font-size: 14px; line-height: 1.6;">
+              <p style="color: #1f2937; font-size: 15px; margin-top: 0;">Bonjour <strong>${empName}</strong>,</p>
+              <p>Une tâche prioritaire vous a été assignée :</p>
+              <p style="font-weight: bold; color: #6b21a8; margin: 8px 0;">${details.taskTitle || 'Tâche'}</p>
+              ${details.taskDescription ? `<p style="color: #4b5563;">${details.taskDescription}</p>` : ''}
+              <p style="margin-bottom: 0;">Échéance : <strong>${details.taskDueDate || ''} à ${details.taskDueTime || ''}</strong></p>
+            </td>
+          </tr>
+        </table>
+      `);
 
     case 'payslip':
-      return `
-        <div style="font-family: sans-serif; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #f0fdf4;">
-          <div style="text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 40px;">💶</span>
-            <h2 style="color: #15803d; margin-top: 10px; font-family: serif; font-size: 24px;">Fiche de Paie Disponible</h2>
-          </div>
-          <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #f3f4f6;">
-            <p>Bonjour <strong>${empName}</strong>,</p>
-            <p>Votre fiche de paie pour la période <strong>${details.payslipPeriod || ''}</strong> est disponible.</p>
-            <p>Montant net : <strong>${details.payslipNetAmount?.toLocaleString('fr-FR') || '0'} XAF</strong></p>
-          </div>
-        </div>
-      `;
+      return wrapAlertHtml(`Fiche de Paie Disponible - ${empName}`, '#f0fdf4', `
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; margin-bottom: 16px;">
+          <tr>
+            <td align="center" style="text-align: center;">
+              <h2 class="email-h1" style="color: #15803d; margin: 0; font-family: Georgia, serif; font-size: 22px;">Fiche de Paie Disponible</h2>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width: 100%; background-color: #ffffff; border: 1px solid #e5e7eb;">
+          <tr>
+            <td class="email-pad-sm" style="padding: 18px; font-size: 14px; line-height: 1.6;">
+              <p style="margin-top: 0;">Bonjour <strong>${empName}</strong>,</p>
+              <p>Votre fiche de paie pour la période <strong>${details.payslipPeriod || ''}</strong> est disponible.</p>
+              <p style="margin-bottom: 0;">Montant net : <strong>${details.payslipNetAmount?.toLocaleString('fr-FR') || '0'} XAF</strong></p>
+            </td>
+          </tr>
+        </table>
+      `);
   }
 }
 

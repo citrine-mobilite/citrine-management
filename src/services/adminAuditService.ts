@@ -1,4 +1,5 @@
 import { safeStorage } from '../utils/safeStorage';
+import { supabaseAdmin } from '../lib/supabase';
 
 export type AuditOperationType =
   | 'creation'
@@ -11,12 +12,17 @@ export type AuditOperationType =
   | 'salary_update'
   | 'conge_permission'
   | 'conseil_discipline'
+  | 'feuille_avancement_taches'
   | 'feuille_de_temps'
   | 'presence_pointage'
+  | 'tache_projet'
+  | 'finance_frais'
+  | 'parametres_systeme'
   | 'securite_connexion'
   | 'systeme';
 
 export type AuditLevel = 'info' | 'success' | 'warning' | 'error';
+export type LogCategory = 'system_event' | 'audit';
 
 export interface AdminAccountOperation {
   id: string;
@@ -31,111 +37,147 @@ export interface AdminAccountOperation {
   details: string;
   level?: AuditLevel;
   ipAddress?: string;
+  logCategory?: LogCategory;
   metadata?: Record<string, any>;
 }
 
 const AUDIT_STORAGE_KEY = 'citrine_audit_operations';
 
-const SEED_OPERATIONS: AdminAccountOperation[] = [
-  {
-    id: 'op-seed-1',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-    authorName: 'Landry Moutongo (Super Admin)',
-    authorRole: 'super_admin',
-    targetEmployeeId: 'emp-1',
-    targetName: 'Landry Moutongo',
-    operationType: 'creation',
-    operationLabel: 'Initialisation du Super-Administrateur',
-    details: 'Création du compte administrateur racine avec permissions globales',
-    level: 'success',
-    ipAddress: '197.234.221.14 (Douala, CM)',
-  },
-  {
-    id: 'op-seed-2',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    authorName: 'Système Citrine',
-    authorRole: 'system',
-    targetName: 'Plateforme Globale',
-    operationType: 'securite_connexion',
-    operationLabel: 'Sauvegarde automatique & chiffrement',
-    details: 'Vérification de l\'intégrité des tables et rotation des jetons de session',
-    level: 'info',
-    ipAddress: '127.0.0.1 (Localhost)',
-  },
-  {
-    id: 'op-seed-3',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-    authorName: 'Responsable RH',
-    authorRole: 'rh',
-    targetName: 'Kouam Marc',
-    operationType: 'conge_permission',
-    operationLabel: 'Validation Congé Annuel',
-    details: 'Validation de la demande de congé du 20 au 25 du mois (5 jours accordés)',
-    level: 'success',
-    ipAddress: '197.234.221.14 (Douala, CM)',
-  },
-  {
-    id: 'op-seed-4',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    authorName: 'Direction Générale',
-    authorRole: 'admin',
-    targetName: 'Nguegno Paul',
-    operationType: 'conseil_discipline',
-    operationLabel: 'Ouverture Dossier Disciplinaire',
-    details: 'Convocation au Conseil de discipline suite à retard injustifié répété',
-    level: 'warning',
-    ipAddress: '197.234.221.18 (Yaoundé, CM)',
-  },
-];
+const SYSTEM_EVENT_TYPES = new Set<AuditOperationType>([
+  'securite_connexion',
+  'systeme',
+  'access_key_regenerated',
+  'password_reset',
+]);
+
+function inferLogCategory(type: AuditOperationType, explicit?: LogCategory): LogCategory {
+  if (explicit) return explicit;
+  return SYSTEM_EVENT_TYPES.has(type) ? 'system_event' : 'audit';
+}
 
 function loadStoredOperations(): AdminAccountOperation[] {
   try {
     const raw = safeStorage.getItem(AUDIT_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((op) => typeof op?.id !== 'string' || !op.id.startsWith('op-seed-'));
       }
     }
   } catch (err) {
     console.warn('[adminAuditService] Failed to load stored audit logs:', err);
   }
-  return [...SEED_OPERATIONS];
+  return [];
 }
 
 function persistOperations(ops: AdminAccountOperation[]): void {
   try {
-    // Keep up to 500 recent entries to avoid storage bloat
-    const capped = ops.slice(0, 500);
+    const capped = ops.slice(0, 600);
     safeStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(capped));
   } catch (err) {
     console.warn('[adminAuditService] Failed to persist audit logs:', err);
   }
 }
 
+async function persistOperationToDb(op: AdminAccountOperation): Promise<void> {
+  try {
+    if (typeof window === 'undefined') return;
+    await Promise.resolve(
+      supabaseAdmin.from('admin_audit_logs').insert({
+        doc_id: op.id,
+        timestamp: op.timestamp,
+        author_name: op.authorName,
+        author_role: op.authorRole || 'utilisateur',
+        target_user_id: op.targetUserId || null,
+        target_employee_id: op.targetEmployeeId || null,
+        target_name: op.targetName,
+        operation_type: op.operationType,
+        operation_label: op.operationLabel,
+        details: op.details,
+        ip_address: op.ipAddress || 'Douala, CM',
+        raw_data: op,
+      })
+    );
+  } catch {
+    // Non-blocking remote audit sync
+  }
+}
+
 let inMemoryAuditOperations: AdminAccountOperation[] = loadStoredOperations();
 
 export function getAdminAuditOperations(): AdminAccountOperation[] {
-  // Always refresh from safeStorage to stay in sync
   inMemoryAuditOperations = loadStoredOperations();
   return inMemoryAuditOperations;
+}
+
+export async function hydrateAuditOperationsFromDb(): Promise<AdminAccountOperation[]> {
+  const localOps = loadStoredOperations();
+  try {
+    const { data }: any = await Promise.resolve(
+      supabaseAdmin.from('admin_audit_logs').select('*').order('id', { ascending: false }).limit(250)
+    );
+    if (data && Array.isArray(data) && data.length > 0) {
+      const dbOps: AdminAccountOperation[] = data
+        .map((row: any) => {
+          const base = row?.raw_data && typeof row.raw_data === 'object' ? row.raw_data : null;
+          if (base?.id) return base as AdminAccountOperation;
+          return {
+            id: row.doc_id || `audit-db-${row.id}`,
+            timestamp: row.timestamp || row.created_at || new Date().toISOString(),
+            authorName: row.author_name || 'Système Citrine',
+            authorRole: row.author_role || 'system',
+            targetUserId: row.target_user_id || undefined,
+            targetEmployeeId: row.target_employee_id || undefined,
+            targetName: row.target_name || 'Système',
+            operationType: (row.operation_type as AuditOperationType) || 'systeme',
+            operationLabel: row.operation_label || 'Opération enregistrée',
+            details: row.details || '',
+            ipAddress: row.ip_address || 'Douala, CM',
+            logCategory: inferLogCategory((row.operation_type as AuditOperationType) || 'systeme'),
+          };
+        })
+        .filter((op) => !String(op.id).startsWith('op-seed-'));
+
+      const seen = new Set<string>();
+      const merged = [...localOps, ...dbOps]
+        .filter((op) => {
+          if (seen.has(op.id)) return false;
+          seen.add(op.id);
+          return true;
+        })
+        .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+
+      inMemoryAuditOperations = merged;
+      persistOperations(merged);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('citrine:audit_updated'));
+      }
+      return merged;
+    }
+  } catch {
+    // Fallback on local audit cache
+  }
+  return localOps;
 }
 
 export function logAdminOperation(
   op: Omit<AdminAccountOperation, 'id' | 'timestamp'>
 ): AdminAccountOperation {
+  const category = inferLogCategory(op.operationType, op.logCategory);
   const newOp: AdminAccountOperation = {
     ...op,
+    logCategory: category,
     id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     timestamp: new Date().toISOString(),
     level: op.level || 'info',
-    ipAddress: op.ipAddress || '197.234.221.14 (Douala, CM)',
+    ipAddress: op.ipAddress || 'Douala, CM',
   };
 
   const current = loadStoredOperations();
   const updated = [newOp, ...current];
   inMemoryAuditOperations = updated;
   persistOperations(updated);
+  void persistOperationToDb(newOp);
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('citrine:audit_updated', { detail: newOp }));
@@ -144,9 +186,6 @@ export function logAdminOperation(
   return newOp;
 }
 
-/**
- * Helper to log any system or business audit event easily from any component/service
- */
 export function logSystemAudit(op: {
   authorName?: string;
   authorRole?: string;
@@ -158,6 +197,7 @@ export function logSystemAudit(op: {
   details: string;
   level?: AuditLevel;
   ipAddress?: string;
+  logCategory?: LogCategory;
   metadata?: Record<string, any>;
 }): AdminAccountOperation {
   return logAdminOperation({
@@ -170,7 +210,37 @@ export function logSystemAudit(op: {
     operationLabel: op.operationLabel,
     details: op.details,
     level: op.level || 'info',
-    ipAddress: op.ipAddress || '197.234.221.14 (Douala, CM)',
+    ipAddress: op.ipAddress || 'Douala, CM',
+    logCategory: inferLogCategory(op.operationType, op.logCategory || 'audit'),
+    metadata: op.metadata,
+  });
+}
+
+export function logSystemEvent(op: {
+  authorName?: string;
+  authorRole?: string;
+  targetName?: string;
+  targetEmployeeId?: string;
+  targetUserId?: string;
+  operationType?: 'securite_connexion' | 'systeme' | 'access_key_regenerated' | 'password_reset';
+  operationLabel: string;
+  details: string;
+  level?: AuditLevel;
+  ipAddress?: string;
+  metadata?: Record<string, any>;
+}): AdminAccountOperation {
+  return logAdminOperation({
+    authorName: op.authorName || 'Système Citrine',
+    authorRole: op.authorRole || 'system',
+    targetName: op.targetName || 'Système',
+    targetEmployeeId: op.targetEmployeeId,
+    targetUserId: op.targetUserId,
+    operationType: op.operationType || 'systeme',
+    operationLabel: op.operationLabel,
+    details: op.details,
+    level: op.level || 'info',
+    ipAddress: op.ipAddress || 'Douala, CM',
+    logCategory: 'system_event',
     metadata: op.metadata,
   });
 }

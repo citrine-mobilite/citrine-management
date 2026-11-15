@@ -1,10 +1,27 @@
 import { useState, useEffect, useMemo } from 'react';
-import { AppUser, Employee, NotificationLog } from '../../types';
-import { getAdminAuditOperations, AdminAccountOperation } from '../../services/adminAuditService';
+import { AppUser, ConnectionLog, Employee, NotificationLog } from '../../types';
+import {
+  getAdminAuditOperations,
+  hydrateAuditOperationsFromDb,
+  AdminAccountOperation,
+} from '../../services/adminAuditService';
+import { subscribeToConnectionLogs } from '../../services/connectionLogService';
 import { exportElementToPdf } from '../../services/pdfExportService';
-import { canSeeAllNotifications, findMatchingEmployee } from '../../utils/roleUtils';
-import { INITIAL_SESSION_LOGS, LogSubTab, SessionLogItem } from './sessionLogsConstants';
+import { LogSubTab, SessionLogItem } from './sessionLogsConstants';
 import { exportSystemLogsToExcel } from './logBadgesAndExport';
+import {
+  buildUserIdentityTokens,
+  isAuditOperationVisibleToUser,
+  isNotificationVisibleToUser,
+  isSessionLogVisibleToUser,
+} from './logVisibilityFilter';
+
+const SYSTEM_EVENT_TYPES = new Set([
+  'securite_connexion',
+  'systeme',
+  'access_key_regenerated',
+  'password_reset',
+]);
 
 export function useSystemLogsLogic(
   notifications: NotificationLog[],
@@ -19,17 +36,42 @@ export function useSystemLogsLogic(
   const [auditFilterPeriod, setAuditFilterPeriod] = useState<string>('all');
   const [auditStartDate, setAuditStartDate] = useState<string>('');
   const [auditEndDate, setAuditEndDate] = useState<string>('');
-  const [auditList, setAuditList] = useState<AdminAccountOperation[]>(() => getAdminAuditOperations());
+  const [rawAuditList, setRawAuditList] = useState<AdminAccountOperation[]>(() => getAdminAuditOperations());
+  const [connectionLogs, setConnectionLogs] = useState<ConnectionLog[]>([]);
   const [auditPage, setAuditPage] = useState(1);
   const AUDIT_PER_PAGE = 25;
 
   useEffect(() => {
-    const handleAuditUpdate = () => setAuditList(getAdminAuditOperations());
+    const handleAuditUpdate = () => setRawAuditList(getAdminAuditOperations());
     window.addEventListener('citrine:audit_updated', handleAuditUpdate);
-    return () => window.removeEventListener('citrine:audit_updated', handleAuditUpdate);
+    void hydrateAuditOperationsFromDb().then((ops) => setRawAuditList(ops));
+    const unsubConn = subscribeToConnectionLogs(setConnectionLogs);
+
+    return () => {
+      window.removeEventListener('citrine:audit_updated', handleAuditUpdate);
+      unsubConn();
+    };
   }, []);
 
-  const handleRefresh = () => setAuditList(getAdminAuditOperations());
+  const handleRefresh = () => {
+    setRawAuditList(getAdminAuditOperations());
+    void hydrateAuditOperationsFromDb().then((ops) => setRawAuditList(ops));
+  };
+
+  const identityTokens = useMemo(
+    () => buildUserIdentityTokens(currentUser, employees),
+    [currentUser, employees]
+  );
+
+  // RBAC: hors Admins & Responsables, l'utilisateur ne voit que les logs qui le concernent
+  const auditList = useMemo(
+    () =>
+      rawAuditList.filter((op) => {
+        if (!isAuditOperationVisibleToUser(op, identityTokens)) return false;
+        return op.logCategory !== 'system_event' || op.operationType === 'creation' || op.operationType === 'password_reset' || op.operationType === 'access_key_regenerated';
+      }),
+    [rawAuditList, identityTokens]
+  );
 
   const filteredAuditOps = useMemo(() => {
     return auditList.filter((op) => {
@@ -40,7 +82,10 @@ export function useSystemLogsLogic(
         op.authorName.toLowerCase().includes(q) ||
         op.details.toLowerCase().includes(q) ||
         op.operationLabel.toLowerCase().includes(q);
-      const matchType = auditFilterType === 'all' || op.operationType === auditFilterType;
+      const matchType =
+        auditFilterType === 'all' ||
+        op.operationType === auditFilterType ||
+        (auditFilterType === 'feuille_avancement_taches' && op.operationType === 'feuille_de_temps');
       const matchStatus = auditFilterStatus === 'all' || (op.level || 'info') === auditFilterStatus;
 
       let matchPeriod = true;
@@ -69,7 +114,47 @@ export function useSystemLogsLogic(
     return filteredAuditOps.slice(start, start + AUDIT_PER_PAGE);
   }, [filteredAuditOps, auditPage]);
 
-  const [sessionLogs] = useState<SessionLogItem[]>(INITIAL_SESSION_LOGS);
+  // 1. Notifs Systèmes (sécurité, connexions, synchronisations, envois cron) filtrées par RBAC
+  const sessionLogs = useMemo<SessionLogItem[]>(() => {
+    const fromAudit: SessionLogItem[] = rawAuditList
+      .filter((op) => op.logCategory === 'system_event' || SYSTEM_EVENT_TYPES.has(op.operationType))
+      .map((op) => ({
+        id: op.id,
+        title: op.operationLabel,
+        timestamp: op.timestamp,
+        dateKey: op.timestamp.split('T')[0],
+        author: op.authorName,
+        level: op.level || 'info',
+        details: op.details,
+        ipAddress: op.ipAddress,
+        targetName: op.targetName,
+        targetUserId: op.targetUserId,
+        targetEmployeeId: op.targetEmployeeId,
+      }));
+
+    const fromConn: SessionLogItem[] = connectionLogs.map((c) => ({
+      id: `conn-${c.id}`,
+      title: c.status === 'failed' ? 'Tentative de connexion échouée' : `Connexion (${c.authMethod || 'password'})`,
+      timestamp: c.timestamp,
+      dateKey: (c.timestamp || '').split('T')[0],
+      author: c.userName || c.userEmail,
+      level: c.status === 'failed' ? 'error' : 'success',
+      details: `${c.details} • ${c.userEmail}`,
+      ipAddress: c.ipAddress || c.location,
+      targetName: c.userName,
+      targetUserId: c.userId,
+    }));
+
+    const seen = new Set<string>();
+    return [...fromAudit, ...fromConn]
+      .filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return isSessionLogVisibleToUser(item, identityTokens);
+      })
+      .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  }, [rawAuditList, connectionLogs, identityTokens]);
+
   const [sessionDateFilter, setSessionDateFilter] = useState<string>('');
   const [sessionLevelFilter, setSessionLevelFilter] = useState<string>('all');
   const [sessionPage, setSessionPage] = useState<number>(1);
@@ -103,30 +188,20 @@ export function useSystemLogsLogic(
   const [selectedDetailNotif, setSelectedDetailNotif] = useState<NotificationLog | null>(null);
   const NOTIFS_PER_PAGE = 25;
 
-  const canSeeAll = canSeeAllNotifications(currentUser);
-  const matchedEmp = useMemo(() => findMatchingEmployee(employees || [], currentUser), [employees, currentUser]);
-  const myName = (matchedEmp?.name || currentUser?.name || '').toLowerCase();
-  const myId = matchedEmp?.id || currentUser?.id;
-  const myEmail = (matchedEmp?.email || currentUser?.email || '').toLowerCase();
+  const scopedNotifs = useMemo(
+    () => notifications.filter((n) => isNotificationVisibleToUser(n, identityTokens)),
+    [notifications, identityTokens]
+  );
 
   const filteredNotifs = useMemo(() => {
-    return notifications.filter((n) => {
-      if (!canSeeAll) {
-        const recip = (n.recipient || '').toLowerCase();
-        const title = (n.title || '').toLowerCase();
-        const content = (n.content || '').toLowerCase();
-        const isForMe =
-          recip === 'tous' || recip === 'équipe' || recip === 'equipe' || recip === 'all' ||
-          (myName && (recip.includes(myName) || title.includes(myName) || content.includes(myName))) ||
-          (myId && recip === myId.toLowerCase()) ||
-          (myEmail && recip.includes(myEmail));
-        if (!isForMe) return false;
-      }
-      const matchesSearch = n.title.toLowerCase().includes(searchTerm.toLowerCase()) || n.content.toLowerCase().includes(searchTerm.toLowerCase());
+    return scopedNotifs.filter((n) => {
+      const matchesSearch =
+        n.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        n.content.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesFilter = notifFilter === 'all' ? true : notifFilter === 'read' ? n.read : !n.read;
       return matchesSearch && matchesFilter;
     });
-  }, [notifications, canSeeAll, myName, myId, myEmail, searchTerm, notifFilter]);
+  }, [scopedNotifs, searchTerm, notifFilter]);
 
   const totalNotifPages = Math.max(1, Math.ceil(filteredNotifs.length / NOTIFS_PER_PAGE));
   const paginatedNotifs = useMemo(() => {
@@ -134,10 +209,11 @@ export function useSystemLogsLogic(
     return filteredNotifs.slice(start, start + NOTIFS_PER_PAGE);
   }, [filteredNotifs, notifPage]);
 
-  const handleExportExcel = () => exportSystemLogsToExcel(activeSubTab, sessionLogs, auditList, notifications);
+  const handleExportExcel = () => exportSystemLogsToExcel(activeSubTab, sessionLogs, auditList, scopedNotifs);
   const handleExportPdf = () => exportElementToPdf('system-logs-container', `journaux_audit_${activeSubTab}.pdf`);
 
   return {
+    canViewAll: identityTokens.canSeeAll,
     activeSubTab, setActiveSubTab, searchTerm, setSearchTerm,
     auditFilterType, setAuditFilterType, auditFilterStatus, setAuditFilterStatus,
     auditFilterPeriod, setAuditFilterPeriod, auditStartDate, setAuditStartDate,
@@ -146,7 +222,7 @@ export function useSystemLogsLogic(
     sessionLogs, sessionDateFilter, setSessionDateFilter, sessionLevelFilter, setSessionLevelFilter,
     sessionPage, setSessionPage, SESSIONS_PER_PAGE, filteredSessionLogs, totalSessionPages, paginatedSessionLogs,
     notifFilter, setNotifFilter, notifPage, setNotifPage, selectedDetailNotif, setSelectedDetailNotif,
-    NOTIFS_PER_PAGE, filteredNotifs, totalNotifPages, paginatedNotifs,
+    NOTIFS_PER_PAGE, scopedNotifs, filteredNotifs, totalNotifPages, paginatedNotifs,
     handleRefresh, handleExportExcel, handleExportPdf,
   };
 }

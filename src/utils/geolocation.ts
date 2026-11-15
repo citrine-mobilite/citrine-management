@@ -147,10 +147,6 @@ export async function getCurrentUserLocation(): Promise<GeolocationResult> {
       async (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
-        const accuracy = position.coords.accuracy;
-
-        // Aucune restriction de précision GPS : position acceptée directement
-        console.log(`Position GPS acquise : ${lat}, ${lon} (Précision: ${accuracy || 'inconnue'}m)`);
 
         try {
           // Attempt reverse geocoding via OpenStreetMap Nominatim API with 3.5s timeout

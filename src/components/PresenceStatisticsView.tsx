@@ -4,7 +4,7 @@ import { StatisticsKPIRibbon } from './presence/statistics/StatisticsKPIRibbon';
 import { StatisticsChartsSection } from './presence/statistics/StatisticsChartsSection';
 import { StatisticsEmployeeRankTable } from './presence/statistics/StatisticsEmployeeRankTable';
 import EmployeeRendementPage from './presence/statistics/EmployeeRendementPage';
-import { TimesheetModal } from './timesheet/TimesheetModal';
+import { TaskSheetModal } from './tasksheet/TaskSheetModal';
 import { usePresenceStatisticsLogic } from './presence/statistics/overview/usePresenceStatisticsLogic';
 import { PresenceStatisticsHeader } from './presence/statistics/overview/PresenceStatisticsHeader';
 import { PresenceStatisticsRendementTab } from './presence/statistics/overview/PresenceStatisticsRendementTab';
@@ -103,20 +103,20 @@ export function PresenceStatisticsView({
           totalInProgressTasksPeriod={logic.totalInProgressTasksPeriod}
           totalMilestonesPeriod={logic.totalMilestonesPeriod}
           onSelectRendementEmployee={(emp) => logic.setSelectedRendementEmployee(emp)}
-          onOpenTimesheetModal={logic.handleOpenTimesheetModal}
+          onOpenTaskSheetModal={logic.handleOpenTaskSheetModal}
           onSelectEmployee={onSelectEmployee}
         />
       )}
 
-      {logic.timesheetEmployee && (
-        <TimesheetModal
-          isOpen={Boolean(logic.timesheetEmployee)}
-          onClose={() => logic.setTimesheetEmployee(null)}
-          employee={logic.timesheetEmployee}
+      {logic.taskSheetEmployee && (
+        <TaskSheetModal
+          isOpen={Boolean(logic.taskSheetEmployee)}
+          onClose={() => logic.setTaskSheetEmployee(null)}
+          employee={logic.taskSheetEmployee}
           allTasks={tasks}
           presences={presences}
           incidents={incidents}
-          defaultMode={logic.timesheetMode}
+          defaultMode={logic.taskSheetMode}
           currentUser={currentUser}
           currentRole={currentRole}
         />

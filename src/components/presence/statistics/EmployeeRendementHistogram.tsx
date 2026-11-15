@@ -8,13 +8,13 @@ import { RendementHorizontalList } from './histogram/RendementHorizontalList';
 interface EmployeeRendementHistogramProps {
   metricsList: EmployeeRendementMetrics[];
   onSelectEmployee: (employee: Employee) => void;
-  onOpenTimesheet?: (employee: Employee, mode?: 'day' | 'month' | 'year') => void;
+  onOpenTaskSheet?: (employee: Employee, mode?: 'day' | 'month' | 'year') => void;
 }
 
 export const EmployeeRendementHistogram: React.FC<EmployeeRendementHistogramProps> = ({
   metricsList = [],
   onSelectEmployee,
-  onOpenTimesheet,
+  onOpenTaskSheet,
 }) => {
   const [viewMode, setViewMode] = useState<'vertical' | 'horizontal'>('vertical');
   const [sortBy, setSortBy] = useState<'rate' | 'hours' | 'score' | 'name'>('rate');
@@ -158,7 +158,7 @@ export const EmployeeRendementHistogram: React.FC<EmployeeRendementHistogramProp
           processedList={processedList}
           maxHours={maxHours}
           onSelectEmployee={onSelectEmployee}
-          onOpenTimesheet={onOpenTimesheet}
+          onOpenTaskSheet={onOpenTaskSheet}
           getBarColor={getBarColor}
           getBarBg={getBarBg}
         />

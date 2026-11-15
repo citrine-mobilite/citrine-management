@@ -8,33 +8,37 @@ export function buildMissionAssignedHtml(params: {
   return `
       <p>Bonjour <strong>${params.employeeName}</strong>,</p>
       <p>Nous vous confirmons votre ordre et affectation en <strong>Mission Professionnelle</strong>.</p>
-      
-      <div style="background-color: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 12px; padding: 16px; margin: 18px 0;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-          <tr>
-            <td style="padding: 6px 0; color: #6b21a8; font-weight: bold; width: 40%;">Objet / Motif :</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #1e1b4b;">${params.destinationOrReason}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #6b21a8; font-weight: bold;">Période :</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #1e1b4b;">Du ${params.startDate} au ${params.endDate}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #6b21a8; font-weight: bold;">Durée totale :</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #1e1b4b;">${params.durationDays} jour(s)</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #6b21a8; font-weight: bold;">Pointage :</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #15803d;">Dispense automatique de badge physique accordée</td>
-          </tr>
-        </table>
-      </div>
+
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f5f3ff" style="width: 100%; background-color: #f5f3ff; border: 1px solid #ddd6fe; margin: 16px 0;">
+        <tr>
+          <td class="email-pad-sm" style="padding: 16px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; font-size: 13px;">
+              <tr>
+                <td class="email-kv-label" style="padding: 6px 0; color: #6b21a8; font-weight: bold; width: 38%;">Objet / Motif :</td>
+                <td class="email-kv-val" style="padding: 6px 0; font-weight: bold; color: #1e1b4b;">${params.destinationOrReason}</td>
+              </tr>
+              <tr>
+                <td class="email-kv-label" style="padding: 6px 0; color: #6b21a8; font-weight: bold;">Période :</td>
+                <td class="email-kv-val" style="padding: 6px 0; font-weight: bold; color: #1e1b4b;">Du ${params.startDate} au ${params.endDate}</td>
+              </tr>
+              <tr>
+                <td class="email-kv-label" style="padding: 6px 0; color: #6b21a8; font-weight: bold;">Durée totale :</td>
+                <td class="email-kv-val" style="padding: 6px 0; font-weight: bold; color: #1e1b4b;">${params.durationDays} jour(s)</td>
+              </tr>
+              <tr>
+                <td class="email-kv-label" style="padding: 6px 0; color: #6b21a8; font-weight: bold;">Pointage :</td>
+                <td class="email-kv-val" style="padding: 6px 0; font-weight: bold; color: #15803d;">Dispense automatique de badge physique accordée</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
 
       <p style="font-size: 13px; color: #44403c;">
-        Pendant cette période, votre statut RH est officiellement <strong>En mission</strong>. Aucun pointage au bureau n'est requis et aucune absence ne sera constatée.
+        Pendant cette période, votre statut RH est officiellement <strong>En mission</strong>. Aucun pointage au bureau n&apos;est requis et aucune absence ne sera constatée.
       </p>
       <p style="margin-top: 20px; font-weight: 600;">
-        Bien cordialement,<br>
+        Bien cordialement,<br />
         La Direction des Ressources Humaines
       </p>
     `;
@@ -56,33 +60,37 @@ export function buildLeaveDecisionHtml(params: {
 
   const html = `
       <p>Bonjour <strong>${params.employeeName}</strong>,</p>
-      <p>Votre demande d'absence / congé a fait l'objet d'un arbitrage par la direction.</p>
+      <p>Votre demande d&apos;absence / congé a fait l&apos;objet d&apos;un arbitrage par la direction.</p>
 
-      <div style="background-color: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 12px; padding: 16px; margin: 18px 0;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-          <tr>
-            <td style="padding: 6px 0; color: #57534e; font-weight: bold; width: 40%;">Type :</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #1c1917;">${params.leaveType}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #57534e; font-weight: bold;">Période :</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #1c1917;">Du ${params.startDate} au ${params.endDate}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #57534e; font-weight: bold;">Décision RH :</td>
-            <td style="padding: 6px 0; font-weight: bold; color: ${statusColor};">${statusLabel}</td>
-          </tr>
-          ${params.reason ? `
-          <tr>
-            <td style="padding: 6px 0; color: #57534e; font-weight: bold;">Observation :</td>
-            <td style="padding: 6px 0; color: #1c1917;">${params.reason}</td>
-          </tr>
-          ` : ''}
-        </table>
-      </div>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${bgColor}" style="width: 100%; background-color: ${bgColor}; border: 1px solid ${borderColor}; margin: 16px 0;">
+        <tr>
+          <td class="email-pad-sm" style="padding: 16px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; font-size: 13px;">
+              <tr>
+                <td class="email-kv-label" style="padding: 6px 0; color: #57534e; font-weight: bold; width: 38%;">Type :</td>
+                <td class="email-kv-val" style="padding: 6px 0; font-weight: bold; color: #1c1917;">${params.leaveType}</td>
+              </tr>
+              <tr>
+                <td class="email-kv-label" style="padding: 6px 0; color: #57534e; font-weight: bold;">Période :</td>
+                <td class="email-kv-val" style="padding: 6px 0; font-weight: bold; color: #1c1917;">Du ${params.startDate} au ${params.endDate}</td>
+              </tr>
+              <tr>
+                <td class="email-kv-label" style="padding: 6px 0; color: #57534e; font-weight: bold;">Décision RH :</td>
+                <td class="email-kv-val" style="padding: 6px 0; font-weight: bold; color: ${statusColor};">${statusLabel}</td>
+              </tr>
+              ${params.reason ? `
+              <tr>
+                <td class="email-kv-label" style="padding: 6px 0; color: #57534e; font-weight: bold;">Observation :</td>
+                <td class="email-kv-val" style="padding: 6px 0; color: #1c1917;">${params.reason}</td>
+              </tr>
+              ` : ''}
+            </table>
+          </td>
+        </tr>
+      </table>
 
       <p style="margin-top: 20px; font-weight: 600;">
-        Bien cordialement,<br>
+        Bien cordialement,<br />
         La Direction des Ressources Humaines
       </p>
     `;

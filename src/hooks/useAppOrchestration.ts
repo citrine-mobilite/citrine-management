@@ -13,6 +13,7 @@ import { asyncActionTrackerService } from '../services/asyncActionTrackerService
 import { resolveToastPayload } from '../utils/toastTitleUtils';
 import { computeUnreadNotificationsCount, computeNonBadgedEmployeesCount } from '../utils/appBadgeCounters';
 import { registerGlobalErrorHandlers, clearSupabaseAuthStorage, hasUserProfileChanged } from '../utils/appLifecycleHelpers';
+import { logSystemEvent } from '../services/adminAuditService';
 
 interface UseAppOrchestrationParams {
   employees: Employee[];
@@ -159,10 +160,23 @@ export function useAppOrchestration({
     setCurrentUser(user);
     await storeSecureSession(user);
     setActiveTab(getDefaultPortalForUser(user) as TabType);
+    logSystemEvent({
+      authorName: user.name,
+      authorRole: user.role,
+      targetName: user.name,
+      targetUserId: user.id,
+      targetEmployeeId: user.employeeId,
+      operationType: 'securite_connexion',
+      operationLabel: 'Connexion Utilisateur',
+      details: `Ouverture de session réussie (${user.email} — Rôle : ${user.role})`,
+      level: 'success',
+      metadata: { userEmail: user.email, userId: user.id },
+    });
     showToast(`Bienvenue, ${user.name} !`);
   };
 
   const handleLogout = async () => {
+    const loggedOutUser = currentUser;
     clearSecureSession();
     safeStorage.removeItem('citrine_active_tab');
     try {
@@ -173,6 +187,20 @@ export function useAppOrchestration({
       } catch {}
     }
     clearSupabaseAuthStorage();
+    if (loggedOutUser) {
+      logSystemEvent({
+        authorName: loggedOutUser.name,
+        authorRole: loggedOutUser.role,
+        targetName: loggedOutUser.name,
+        targetUserId: loggedOutUser.id,
+        targetEmployeeId: loggedOutUser.employeeId,
+        operationType: 'securite_connexion',
+        operationLabel: 'Déconnexion Session',
+        details: `Fermeture manuelle de session pour ${loggedOutUser.email}`,
+        level: 'info',
+        metadata: { userEmail: loggedOutUser.email, userId: loggedOutUser.id },
+      });
+    }
     setCurrentUser(null);
     setProfileModalOpen(false);
     showToast('Vous avez été déconnecté.');

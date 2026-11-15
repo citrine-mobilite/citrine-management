@@ -158,7 +158,6 @@ export async function syncLinkedUserForEmployee({
   }
 
   if (userEmail) {
-    console.log(`✨ [AUTO-CRÉATION UTILISATEUR] Création automatique pour "${empName}" (${userEmail})`);
     const initialPassword = userPassword?.trim() || 'Collab@2026';
     const initialHash = await hashPassword(initialPassword);
     let authUid = generateUuidV4();

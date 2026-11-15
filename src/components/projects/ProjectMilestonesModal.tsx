@@ -8,6 +8,7 @@ import {
   sortMilestones,
 } from '../../services/projectService';
 import { ProjectMilestoneRow, ProjectQuickAddMilestoneForm } from './ProjectMilestoneItems';
+import { ModalPortal } from '../common/ModalPortal';
 
 interface ProjectMilestonesModalProps {
   project: StrategicProject | null;
@@ -111,9 +112,10 @@ export const ProjectMilestonesModal: React.FC<ProjectMilestonesModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/45 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="px-6 py-4 bg-gradient-to-r from-[#2A7B76] to-[#1d5854] text-white flex items-start justify-between gap-4">
+    <ModalPortal>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-stone-950/55 backdrop-blur-xs">
+        <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="px-6 py-4 bg-gradient-to-r from-[#2A7B76] to-[#1d5854] text-white flex items-start justify-between gap-4 shrink-0">
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-2">
               <Flag className="h-4 w-4 text-[#F3D079] shrink-0" />
@@ -224,5 +226,6 @@ export const ProjectMilestonesModal: React.FC<ProjectMilestonesModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };

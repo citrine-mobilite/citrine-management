@@ -4,6 +4,7 @@ import { cloudSqlService } from './cloudSqlService';
 import { supabase } from '../lib/supabase';
 import { asyncActionTrackerService } from './asyncActionTrackerService';
 import { COLLECTIONS, removeUndefined } from './dataNormalizationAndHealth';
+import { logSystemAudit } from './adminAuditService';
 
 async function rollbackDocument(collectionName: string, id: string): Promise<void> {
   try {
@@ -142,6 +143,27 @@ export async function savePresenceAtomic(
       }
       if (cleanedNotification) {
         await offlineService.cacheLocally(COLLECTIONS.NOTIFICATIONS, cleanedNotification);
+      }
+
+      if (typeof window !== 'undefined') {
+        const actionMap: Record<string, string> = {
+          arrival: 'Pointage Arrivée',
+          pause_start: 'Début de Pause',
+          pause_end: 'Fin de Pause',
+          departure: 'Pointage Départ',
+        };
+        const act = action || cleanedPresence?.lastAction || 'pointage';
+        const label = actionMap[act] || 'Pointage & Présence';
+        logSystemAudit({
+          authorName: cleanedPresence.employeeName || 'Collaborateur',
+          targetName: cleanedPresence.employeeName || cleanedPresence.employeeId || 'Collaborateur',
+          targetEmployeeId: cleanedPresence.employeeId,
+          operationType: 'presence_pointage',
+          operationLabel: label,
+          details: `${label} enregistré (${cleanedPresence.date}) • Statut : ${cleanedPresence.status || 'present'}${cleanedPresence.location ? ` • ${cleanedPresence.location}` : ''}`,
+          level: cleanedPresence.status === 'late' ? 'warning' : 'success',
+          metadata: { date: cleanedPresence.date, employeeEmail: cleanedPresence.employeeEmail },
+        });
       }
 
       return { success: true, data: serverResult };

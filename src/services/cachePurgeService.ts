@@ -131,12 +131,7 @@ class CachePurgeService {
       // 4.1 Supprimer tous les caches de CacheStorage (HTML, CSS, JS, images mis en cache)
       if (typeof window !== 'undefined' && 'caches' in window) {
         const cacheKeys = await window.caches.keys();
-        await Promise.all(
-          cacheKeys.map((key) => {
-            console.log(`[CachePurgeService] Suppression du cache CacheStorage: ${key}`);
-            return window.caches.delete(key);
-          })
-        );
+        await Promise.all(cacheKeys.map((key) => window.caches.delete(key)));
       }
 
       // 4.2 Désenregistrer ou mettre à jour les Service Workers
@@ -145,7 +140,6 @@ class CachePurgeService {
         for (const registration of registrations) {
           try {
             await registration.unregister();
-            console.log('[CachePurgeService] Service Worker désenregistré avec succès');
           } catch {}
         }
       }

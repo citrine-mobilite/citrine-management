@@ -1,27 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import React from 'react';
 import {
   Flag,
   Plus,
+  Search,
+  ChevronLeft,
   ChevronRight,
-  CheckCircle2,
-  Clock,
-  AlertOctagon,
-  Circle,
-  PauseCircle,
+  LayoutGrid,
+  List,
+  ArrowUpRight,
 } from 'lucide-react';
 import { AppUser, Employee, StrategicProject } from '../../types';
-import {
-  canManageStrategicProjects,
-  computeProjectProgress,
-  deleteStrategicProject,
-  formatShortFrenchDate,
-  getNextMilestone,
-  MILESTONE_STATUS_META,
-  PROJECT_STATUS_META,
-  saveStrategicProject,
-} from '../../services/projectService';
+import { canManageStrategicProjects } from '../../services/projectService';
+import { ProjectCard } from './ProjectCard';
+import { ProjectCompactTable } from './ProjectCompactTable';
 import { ProjectFormModal } from './ProjectFormModal';
 import { ProjectMilestonesModal } from './ProjectMilestonesModal';
+import {
+  ProjectFilterStatus,
+  ProjectSortBy,
+  useProjectDirectory,
+} from './useProjectDirectory';
 
 interface ProjectMilestonesWidgetProps {
   projects: StrategicProject[];
@@ -29,7 +27,9 @@ interface ProjectMilestonesWidgetProps {
   currentUser: AppUser | null;
   employees: Employee[];
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
-  defaultFilter?: 'active' | 'all' | 'completed';
+  defaultFilter?: ProjectFilterStatus;
+  compactOnHome?: boolean;
+  onOpenProjectsTab?: () => void;
 }
 
 export const ProjectMilestonesWidget: React.FC<ProjectMilestonesWidgetProps> = ({
@@ -38,94 +38,80 @@ export const ProjectMilestonesWidget: React.FC<ProjectMilestonesWidgetProps> = (
   currentUser,
   employees = [],
   showToast,
-  defaultFilter = 'active',
+  defaultFilter = 'active' as ProjectFilterStatus,
+  compactOnHome = false,
+  onOpenProjectsTab,
 }) => {
-  const [filter, setFilter] = useState<'active' | 'all' | 'completed'>(defaultFilter);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingProject, setEditingProject] = useState<StrategicProject | null>(null);
-
   const canManage = canManageStrategicProjects(currentUser);
+  const directory = useProjectDirectory({
+    projects,
+    onUpdateProjects,
+    showToast,
+    defaultFilter,
+    compactOnHome,
+  });
 
-  const filteredProjects = useMemo(() => {
-    const sorted = [...projects].sort(
-      (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
-    );
-    if (filter === 'active') return sorted.filter((p) => p.status !== 'completed');
-    if (filter === 'completed') return sorted.filter((p) => p.status === 'completed');
-    return sorted;
-  }, [projects, filter]);
-
-  const selectedProject = useMemo(
-    () => projects.find((p) => p.id === selectedProjectId) || null,
-    [projects, selectedProjectId]
+  const startItem = (directory.currentPage - 1) * directory.pageSize + 1;
+  const endItem = Math.min(
+    directory.filteredCount,
+    directory.currentPage * directory.pageSize
   );
 
-  const handleSaveProject = async (project: StrategicProject) => {
-    const saved = await saveStrategicProject(project);
-    if (onUpdateProjects) {
-      const exists = projects.some((p) => p.id === saved.id);
-      const nextList = exists
-        ? projects.map((p) => (p.id === saved.id ? saved : p))
-        : [saved, ...projects];
-      onUpdateProjects(nextList);
-    }
-    showToast?.(`Projet « ${saved.name} » enregistré.`, 'success');
-  };
-
-  const handleDeleteProject = async (projectId: string) => {
-    await deleteStrategicProject(projectId);
-    if (onUpdateProjects) {
-      onUpdateProjects(projects.filter((p) => p.id !== projectId));
-    }
-    showToast?.('Projet supprimé.', 'info');
-  };
-
-  const renderProjectStatusIcon = (status: StrategicProject['status']) => {
-    if (status === 'completed') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />;
-    if (status === 'on_hold') return <PauseCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />;
-    return <Clock className="h-3.5 w-3.5 text-[#2A7B76] shrink-0" />;
-  };
-
-  const renderMilestoneIcon = (status: string) => {
-    if (status === 'done') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />;
-    if (status === 'in_progress') return <Clock className="h-3.5 w-3.5 text-[#2A7B76] shrink-0" />;
-    if (status === 'blocked') return <AlertOctagon className="h-3.5 w-3.5 text-rose-600 shrink-0" />;
-    return <Circle className="h-3.5 w-3.5 text-stone-400 shrink-0" />;
-  };
-
   return (
-    <section className="glass-card rounded-3xl p-5 sm:p-6 space-y-5">
-      {/* Header Row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-200/70 pb-4">
-        <div className="min-w-0">
-          <h3 className="font-serif font-bold text-base text-stone-900 flex items-center gap-2">
-            <Flag className="h-4.5 w-4.5 text-[#2A7B76] shrink-0" />
-            <span>Évolution des Projets &amp; Prochains Jalons</span>
-          </h3>
-          <p className="text-xs text-stone-500 mt-0.5">
-            Suivi stratégique des grands chantiers et de la prochaine étape clé à franchir
-          </p>
+    <section className="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3.5">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-stone-200/80 pb-3">
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0">
+            <h3 className="font-serif font-bold text-base text-stone-900 flex items-center gap-2">
+              <Flag className="h-4 w-4 text-[#2A7B76] shrink-0" />
+              <span className="truncate">Projets Stratégiques &amp; Jalons</span>
+              <span className="font-mono tabular-nums text-xs font-semibold text-stone-500">
+                {directory.filteredCount}
+              </span>
+            </h3>
+          </div>
+
+          {compactOnHome && onOpenProjectsTab && projects.length > 0 && (
+            <button
+              type="button"
+              onClick={onOpenProjectsTab}
+              className="xl:hidden text-xs font-semibold text-[#2A7B76] hover:underline inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <span>Tout voir</span>
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
-          {/* Segmented filter */}
-          <div className="flex items-center gap-1 p-1 bg-stone-100 rounded-xl border border-stone-200/70">
+        <div className="flex flex-wrap items-center gap-2">
+          {projects.length > 0 && (
+            <div className="relative flex-1 sm:flex-initial min-w-[165px]">
+              <Search className="h-3.5 w-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={directory.searchQuery}
+                onChange={(e) => directory.setSearchQuery(e.target.value)}
+                placeholder="Filtrer..."
+                className="w-full sm:w-44 pl-8 pr-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#2A7B76]"
+              />
+            </div>
+          )}
+
+          <div className="flex items-center gap-0.5 p-0.5 bg-stone-100 rounded-lg border border-stone-200/80">
             {[
               { id: 'active', label: 'Actifs' },
-              { id: 'all', label: 'Tous' },
+              { id: 'on_hold', label: 'Pause' },
               { id: 'completed', label: 'Terminés' },
+              { id: 'all', label: 'Tous' },
             ].map((tab) => {
-              const active = filter === tab.id;
+              const active = directory.filter === tab.id;
               return (
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setFilter(tab.id as any)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                    active
-                      ? 'bg-white text-stone-900 shadow-2xs'
-                      : 'text-stone-600 hover:text-stone-900'
+                  onClick={() => directory.setFilter(tab.id as ProjectFilterStatus)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap shrink-0 ${
+                    active ? 'bg-white text-stone-900 shadow-2xs font-semibold' : 'text-stone-600 hover:text-stone-900'
                   }`}
                 >
                   {tab.label}
@@ -134,14 +120,49 @@ export const ProjectMilestonesWidget: React.FC<ProjectMilestonesWidgetProps> = (
             })}
           </div>
 
+          {!compactOnHome && projects.length > 1 && (
+            <select
+              value={directory.sortBy}
+              onChange={(e) => directory.setSortBy(e.target.value as ProjectSortBy)}
+              className="bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-stone-700 outline-none cursor-pointer focus:border-[#2A7B76]"
+              aria-label="Trier les projets"
+            >
+              <option value="recent">Récents</option>
+              <option value="progress">Avancement</option>
+              <option value="name">Nom (A–Z)</option>
+            </select>
+          )}
+
+          <div className="flex items-center gap-0.5 p-0.5 bg-stone-100 rounded-lg border border-stone-200/80">
+            <button
+              type="button"
+              onClick={() => directory.setViewMode('list')}
+              className={`p-1.5 rounded-md transition cursor-pointer ${
+                directory.viewMode === 'list' ? 'bg-white text-[#2A7B76] shadow-2xs' : 'text-stone-500 hover:text-stone-900'
+              }`}
+              title="Vue liste compacte"
+              aria-label="Vue liste compacte"
+            >
+              <List className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => directory.setViewMode('grid')}
+              className={`p-1.5 rounded-md transition cursor-pointer ${
+                directory.viewMode === 'grid' ? 'bg-white text-[#2A7B76] shadow-2xs' : 'text-stone-500 hover:text-stone-900'
+              }`}
+              title="Vue cartes compactes"
+              aria-label="Vue cartes compactes"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
           {canManage && (
             <button
               type="button"
-              onClick={() => {
-                setEditingProject(null);
-                setIsFormOpen(true);
-              }}
-              className="px-4 py-2 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              onClick={directory.openCreateForm}
+              className="px-3 py-1.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-semibold rounded-lg transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Nouveau projet</span>
@@ -150,165 +171,115 @@ export const ProjectMilestonesWidget: React.FC<ProjectMilestonesWidgetProps> = (
         </div>
       </div>
 
-      {/* Projects Grid or Empty State */}
-      {filteredProjects.length === 0 ? (
-        <div className="py-8 px-4 text-center space-y-3 border border-dashed border-stone-200 rounded-2xl bg-stone-50/50">
-          <p className="text-sm font-semibold text-stone-700">
-            {filter === 'completed'
-              ? 'Aucun projet terminé pour le moment.'
-              : 'Aucun projet stratégique suivi pour le moment.'}
+      {directory.paginatedProjects.length === 0 ? (
+        <div className="py-6 px-4 text-center space-y-2 border border-dashed border-stone-200 rounded-xl bg-stone-50/50">
+          <p className="text-xs sm:text-sm font-medium text-stone-600">
+            {directory.searchQuery
+              ? 'Aucun projet ne correspond à votre recherche.'
+              : directory.filter === 'completed'
+                ? 'Aucun projet terminé.'
+                : directory.filter === 'on_hold'
+                  ? 'Aucun projet en pause.'
+                  : 'Aucun projet stratégique suivi pour le moment.'}
           </p>
-          <p className="text-xs text-stone-500 max-w-md mx-auto">
-            Ajoutez vos projets phares (ex. Hero) avec leurs jalons clés pour offrir à toute l’équipe une lecture directe de la progression et du prochain cap.
-          </p>
-          {canManage && filter !== 'completed' && (
+          {canManage && !directory.searchQuery && directory.filter !== 'completed' && (
             <button
               type="button"
-              onClick={() => {
-                setEditingProject(null);
-                setIsFormOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition cursor-pointer"
+              onClick={directory.openCreateForm}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-semibold rounded-lg transition cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Créer un premier projet</span>
             </button>
           )}
         </div>
+      ) : directory.viewMode === 'list' ? (
+        <ProjectCompactTable
+          projects={directory.paginatedProjects}
+          canManage={canManage}
+          onSelect={directory.setSelectedProjectId}
+          onEdit={directory.openEditForm}
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredProjects.map((project) => {
-            const { doneCount, totalCount, percent } = computeProjectProgress(project);
-            const nextMilestone = getNextMilestone(project);
-            const projStatusMeta = PROJECT_STATUS_META[project.status || 'active'];
-
-            return (
-              <div
-                key={project.id}
-                onClick={() => setSelectedProjectId(project.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setSelectedProjectId(project.id);
-                  }
-                }}
-                className="p-4 sm:p-5 rounded-2xl border border-stone-200/90 bg-white hover:border-[#2A7B76]/50 transition cursor-pointer flex flex-col justify-between space-y-4 text-left focus-visible:outline-2 focus-visible:outline-[#2A7B76]"
-              >
-                {/* Project title + progress */}
-                <div className="space-y-2.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h4 className="font-serif font-bold text-base text-stone-900 truncate">
-                        {project.name}
-                      </h4>
-                      {project.description && (
-                        <p className="text-xs text-stone-500 truncate mt-0.5">
-                          {project.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-semibold shrink-0">
-                      {renderProjectStatusIcon(project.status)}
-                      <span className={projStatusMeta.textClass}>{projStatusMeta.label}</span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar & tabular count */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-stone-500">Avancement global</span>
-                      <span className="font-mono tabular-nums font-bold text-stone-800">
-                        {percent}% <span className="text-stone-400 font-normal">·</span> {doneCount}/{totalCount} jalons
-                      </span>
-                    </div>
-                    <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          percent === 100 ? 'bg-emerald-600' : 'bg-[#2A7B76]'
-                        }`}
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Next Milestone Divider Section */}
-                <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-3">
-                  <div className="min-w-0 space-y-0.5">
-                    <span className="text-[11px] font-bold text-stone-400 block">
-                      Prochain jalon
-                    </span>
-                    {nextMilestone ? (
-                      <>
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-stone-900">
-                          {renderMilestoneIcon(nextMilestone.status)}
-                          <span className="truncate">{nextMilestone.title}</span>
-                        </div>
-                        <div className="text-xs text-stone-500 flex flex-wrap items-center gap-1.5">
-                          <span className={MILESTONE_STATUS_META[nextMilestone.status].textClass}>
-                            {MILESTONE_STATUS_META[nextMilestone.status].label}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span className="font-mono tabular-nums">
-                            {formatShortFrenchDate(nextMilestone.targetDate)}
-                          </span>
-                          {nextMilestone.ownerName && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="truncate max-w-[160px]">
-                                {nextMilestone.ownerName}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                        <span>Tous les jalons sont terminés</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <span className="text-xs font-semibold text-[#2A7B76] inline-flex items-center gap-0.5 shrink-0">
-                    <span>Jalons</span>
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {directory.paginatedProjects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              canManage={canManage}
+              onSelect={directory.setSelectedProjectId}
+              onEdit={directory.openEditForm}
+            />
+          ))}
         </div>
       )}
 
-      {/* Detail & Milestones Management Modal */}
+      {(directory.totalPages > 1 || (compactOnHome && onOpenProjectsTab && directory.filteredCount > 0)) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs text-stone-500">
+          <span className="font-mono tabular-nums">
+            {directory.filteredCount > 0
+              ? `${startItem}–${endItem} sur ${directory.filteredCount} projet(s)`
+              : '0 projet'}
+          </span>
+
+          <div className="flex items-center gap-3">
+            {compactOnHome && onOpenProjectsTab && (
+              <button
+                type="button"
+                onClick={onOpenProjectsTab}
+                className="text-xs font-semibold text-[#2A7B76] hover:underline inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              >
+                <span>Gérer tous les projets ({projects.length})</span>
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            {directory.totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={directory.currentPage <= 1}
+                  onClick={() => directory.setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="p-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                  aria-label="Page précédente"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <span className="font-mono tabular-nums px-1.5 text-stone-700 font-semibold">
+                  {directory.currentPage}/{directory.totalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={directory.currentPage >= directory.totalPages}
+                  onClick={() => directory.setCurrentPage((p) => Math.min(directory.totalPages, p + 1))}
+                  className="p-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                  aria-label="Page suivante"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <ProjectMilestonesModal
-        project={selectedProject}
-        onClose={() => setSelectedProjectId(null)}
+        project={directory.selectedProject}
+        onClose={() => directory.setSelectedProjectId(null)}
         canManage={canManage}
         employees={employees}
-        onSaveProject={handleSaveProject}
-        onEditProject={(proj) => {
-          setSelectedProjectId(null);
-          setEditingProject(proj);
-          setIsFormOpen(true);
-        }}
-        onDeleteProject={handleDeleteProject}
+        onSaveProject={directory.handleSaveProject}
+        onEditProject={directory.openEditForm}
+        onDeleteProject={directory.handleDeleteProject}
       />
 
-      {/* Create / Edit Project Form Modal */}
       <ProjectFormModal
-        isOpen={isFormOpen}
-        onClose={() => {
-          setIsFormOpen(false);
-          setEditingProject(null);
-        }}
-        editingProject={editingProject}
+        isOpen={directory.isFormOpen}
+        onClose={directory.closeForm}
+        editingProject={directory.editingProject}
         employees={employees}
         currentUser={currentUser}
-        onSave={handleSaveProject}
+        onSave={directory.handleSaveProject}
       />
     </section>
   );

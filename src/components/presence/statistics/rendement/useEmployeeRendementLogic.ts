@@ -3,11 +3,19 @@ import { Employee, Task, Subtask, TaskStatus } from '../../../../types';
 import { haptic } from '../../../../services/hapticService';
 import { computeEmployeeRendement, getTaskDynamicProgress } from '../../../../utils/rendementCalculator';
 import { notifyExceptionalTaskCompletion } from '../../../../services/exceptionalTaskCompletionService';
-import { computeRendementPeriodRange, filterRendementTasks } from './employeeRendementHelpers';
+import {
+  StatusFilter,
+  DurationFilter,
+  PeriodFilter,
+  PriorityFilter,
+  KindFilter,
+  SortByFilter,
+  computeRendementPeriodRange,
+  extractRendementProjectOptions,
+  filterAndSortRendementTasks,
+} from './employeeRendementHelpers';
 
-export type StatusFilter = 'all' | 'todo' | 'in_progress' | 'pending_validation' | 'blocked' | 'completed';
-export type DurationFilter = 'all' | 'short' | 'medium' | 'long';
-export type PeriodFilter = 'all' | 'today' | 'week' | 'month' | 'quarter';
+export type { StatusFilter, DurationFilter, PeriodFilter, PriorityFilter, KindFilter, SortByFilter };
 
 interface UseEmployeeRendementLogicParams {
   employee: Employee;
@@ -25,8 +33,14 @@ export function useEmployeeRendementLogic({
   showToast,
 }: UseEmployeeRendementLogicParams) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
+  const [projectFilter, setProjectFilter] = useState<string>('all');
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all');
   const [durationFilter, setDurationFilter] = useState<DurationFilter>('all');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [sortBy, setSortBy] = useState<SortByFilter>('recent');
   const [searchQuery, setSearchQuery] = useState('');
   const [limitToTen, setLimitToTen] = useState(true);
 
@@ -35,8 +49,8 @@ export function useEmployeeRendementLogic({
   const [newSubtaskDueDates, setNewSubtaskDueDates] = useState<{ [taskId: string]: string }>({});
   const [activeModalTask, setActiveModalTask] = useState<Task | null>(null);
 
-  const [isTimesheetOpen, setIsTimesheetOpen] = useState(false);
-  const [timesheetMode, setTimesheetMode] = useState<'day' | 'month' | 'year'>('month');
+  const [isTaskSheetOpen, setIsTaskSheetOpen] = useState(false);
+  const [taskSheetMode, setTaskSheetMode] = useState<'day' | 'month' | 'year'>('month');
 
   const taskDetailSectionRef = useRef<HTMLDivElement>(null);
 
@@ -48,8 +62,8 @@ export function useEmployeeRendementLogic({
   const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   const periodRange = useMemo(
-    () => computeRendementPeriodRange(periodFilter, todayStr, now),
-    [periodFilter, todayStr]
+    () => computeRendementPeriodRange(periodFilter, todayStr, now, customStartDate, customEndDate),
+    [periodFilter, todayStr, customStartDate, customEndDate]
   );
 
   const metrics = useMemo(() => {
@@ -58,62 +72,90 @@ export function useEmployeeRendementLogic({
 
   const tasksWithDynamicData = useMemo(() => {
     return metrics.assignedTasks.map((t) => {
-      let estimatedHours = 4;
-      if (t.priority === 'urgent') estimatedHours = 10;
-      else if (t.priority === 'high' || t.priority === 'haut') estimatedHours = 7;
-      else if (t.priority === 'low') estimatedHours = 2;
-
+      let estimatedHours = Number(t.estimatedHours) || 4;
+      if (!t.estimatedHours) {
+        if (t.priority === 'urgent') estimatedHours = 10;
+        else if (t.priority === 'high' || t.priority === 'haut') estimatedHours = 7;
+        else if (t.priority === 'low') estimatedHours = 2;
+      }
       if (t.subtasks && t.subtasks.length > 0) {
         const subHours = t.subtasks.reduce((sum, s) => sum + (s.estimatedHours || 2), 0);
         estimatedHours = Math.max(estimatedHours, subHours);
       }
-
       return { ...t, estimatedHours, dynamicProgress: getTaskDynamicProgress(t) };
     });
   }, [metrics.assignedTasks]);
 
-  const filteredTasks = useMemo(
+  const projectOptions = useMemo(() => extractRendementProjectOptions(tasksWithDynamicData), [tasksWithDynamicData]);
+
+  const sortedByRecencyTasks = useMemo(
     () =>
-      filterRendementTasks({
+      filterAndSortRendementTasks({
         tasks: tasksWithDynamicData,
         statusFilter,
+        priorityFilter,
+        projectFilter,
+        kindFilter,
         durationFilter,
         periodFilter,
+        customStartDate,
+        customEndDate,
+        sortBy,
         searchQuery,
         todayStr,
         sevenDaysAgo,
         thirtyDaysAgo,
         ninetyDaysAgo,
       }),
-    [tasksWithDynamicData, statusFilter, durationFilter, periodFilter, searchQuery, todayStr, sevenDaysAgo, thirtyDaysAgo, ninetyDaysAgo]
+    [
+      tasksWithDynamicData, statusFilter, priorityFilter, projectFilter, kindFilter, durationFilter,
+      periodFilter, customStartDate, customEndDate, sortBy, searchQuery,
+      todayStr, sevenDaysAgo, thirtyDaysAgo, ninetyDaysAgo,
+    ]
   );
 
-  const sortedByRecencyTasks = useMemo(() => {
-    return [...filteredTasks].sort((a, b) => {
-      const dateA = a.date || a.createdAt || a.dueDate || '';
-      const dateB = b.date || b.createdAt || b.dueDate || '';
-      return dateB.localeCompare(dateA);
-    });
-  }, [filteredTasks]);
+  const filteredSummary = useMemo(() => {
+    const count = sortedByRecencyTasks.length;
+    const totalHours = sortedByRecencyTasks.reduce((acc, t) => acc + t.estimatedHours, 0);
+    const completedCount = sortedByRecencyTasks.filter((t) => t.status === 'completed').length;
+    const avgProgress = count > 0
+      ? Math.round(sortedByRecencyTasks.reduce((acc, t) => acc + t.dynamicProgress, 0) / count)
+      : 0;
+    return { count, totalHours, completedCount, avgProgress };
+  }, [sortedByRecencyTasks]);
 
   const displayedTasks = useMemo(() => {
     return limitToTen ? sortedByRecencyTasks.slice(0, 10) : sortedByRecencyTasks;
   }, [sortedByRecencyTasks, limitToTen]);
 
-  const hasActiveFilters = statusFilter !== 'all' || durationFilter !== 'all' || periodFilter !== 'all' || searchQuery.trim() !== '';
+  const hasActiveFilters =
+    statusFilter !== 'all' ||
+    priorityFilter !== 'all' ||
+    projectFilter !== 'all' ||
+    kindFilter !== 'all' ||
+    durationFilter !== 'all' ||
+    periodFilter !== 'all' ||
+    sortBy !== 'recent' ||
+    searchQuery.trim() !== '';
 
   const resetFilters = () => {
     haptic.light();
     setStatusFilter('all');
+    setPriorityFilter('all');
+    setProjectFilter('all');
+    setKindFilter('all');
     setDurationFilter('all');
     setPeriodFilter('all');
+    setCustomStartDate('');
+    setCustomEndDate('');
+    setSortBy('recent');
     setSearchQuery('');
   };
 
-  const openTimesheet = (mode: 'day' | 'month' | 'year') => {
+  const openTaskSheet = (mode: 'day' | 'month' | 'year') => {
     haptic.light();
-    setTimesheetMode(mode);
-    setIsTimesheetOpen(true);
+    setTaskSheetMode(mode);
+    setIsTaskSheetOpen(true);
   };
 
   const handleSelectFromPyramid = (taskId: string) => {
@@ -149,7 +191,7 @@ export function useEmployeeRendementLogic({
     onUpdateTask?.(updatedTask);
     if (becameCompleted) {
       notifyExceptionalTaskCompletion(updatedTask, employee.name);
-      showToast?.(`🏆 ACCOMPLISSEMENT EXCEPTIONNEL ! ${employee.name} a terminé la tâche complète "${task.title}". Les responsables et l'IT sont notifiés par push.`, 'success');
+      showToast?.(`ACCOMPLISSEMENT : ${employee.name} a terminé "${task.title}".`, 'success');
     } else {
       showToast?.('Rendement recalculé et sous-tâche mise à jour.', 'success');
     }
@@ -193,7 +235,7 @@ export function useEmployeeRendementLogic({
     onUpdateTask?.(updatedTask);
     if (isNowCompleted && !wasCompleted) {
       notifyExceptionalTaskCompletion(updatedTask, employee.name);
-      showToast?.(`🏆 ACCOMPLISSEMENT EXCEPTIONNEL ! ${employee.name} a validé la tâche complète "${task.title}". Les responsables et l'IT sont notifiés par push.`, 'success');
+      showToast?.(`ACCOMPLISSEMENT : ${employee.name} a validé "${task.title}".`, 'success');
     } else {
       showToast?.(`Statut mis à jour : ${newStatus} (Rendement actualisé).`, 'success');
     }
@@ -211,13 +253,18 @@ export function useEmployeeRendementLogic({
   };
 
   return {
-    statusFilter, setStatusFilter, durationFilter, setDurationFilter, periodFilter, setPeriodFilter,
-    searchQuery, setSearchQuery, limitToTen, setLimitToTen, expandedTaskId, setExpandedTaskId,
+    statusFilter, setStatusFilter, priorityFilter, setPriorityFilter,
+    projectFilter, setProjectFilter, kindFilter, setKindFilter,
+    durationFilter, setDurationFilter, periodFilter, setPeriodFilter,
+    customStartDate, setCustomStartDate, customEndDate, setCustomEndDate,
+    sortBy, setSortBy, searchQuery, setSearchQuery,
+    limitToTen, setLimitToTen, expandedTaskId, setExpandedTaskId,
     newSubtaskTitles, setNewSubtaskTitles, newSubtaskDueDates, setNewSubtaskDueDates,
-    activeModalTask, setActiveModalTask, isTimesheetOpen, setIsTimesheetOpen, timesheetMode,
-    taskDetailSectionRef, todayStr, metrics, tasksWithDynamicData, sortedByRecencyTasks, displayedTasks,
-    hasActiveFilters, resetFilters, openTimesheet, handleSelectFromPyramid, handleCreateSubtaskFromModal,
-    handleToggleSubtask, handleAddSubtask, handleUpdateSubtaskDueDate, handleDeleteSubtask,
-    handleStatusChange, handleMilestoneProgressChange,
+    activeModalTask, setActiveModalTask, isTaskSheetOpen, setIsTaskSheetOpen, taskSheetMode,
+    taskDetailSectionRef, todayStr, metrics, tasksWithDynamicData, projectOptions,
+    sortedByRecencyTasks, filteredSummary, displayedTasks,
+    hasActiveFilters, resetFilters, openTaskSheet, handleSelectFromPyramid,
+    handleCreateSubtaskFromModal, handleToggleSubtask, handleAddSubtask,
+    handleUpdateSubtaskDueDate, handleDeleteSubtask, handleStatusChange, handleMilestoneProgressChange,
   };
 }

@@ -3,6 +3,7 @@ import { taskService } from '../../../services/taskService';
 import { pushNotificationBridgeService } from '../../../services/pushNotificationBridgeService';
 import { executeOperationWithLoading } from '../../../utils/sweetAlert';
 import { notifyExceptionalTaskCompletion } from '../../../services/exceptionalTaskCompletionService';
+import { logSystemAudit } from '../../../services/adminAuditService';
 
 export async function changeTaskStatusAction(params: {
   taskId: string;
@@ -89,6 +90,18 @@ export async function changeTaskStatusAction(params: {
     notifyExceptionalTaskCompletion(updatedTask, targetTask.assignedTo, onAddNotification as any);
   }
 
+  logSystemAudit({
+    authorName: currentRole || 'Collaborateur',
+    authorRole: currentRole || 'Collaborateur',
+    targetName: targetRecipient,
+    targetEmployeeId: targetTask.employeeId,
+    operationType: 'tache_projet',
+    operationLabel: `Changement Statut Tâche (${label})`,
+    details: `La tâche "${targetTask.title}" est passée de "${targetTask.status}" à "${label}".`,
+    level: newStatus === 'completed' ? 'success' : newStatus === 'blocked' ? 'warning' : 'info',
+    metadata: { assignedTo: targetRecipient, taskId: targetTask.id },
+  });
+
   if (showToast) showToast('Statut mis à jour et enregistré.', 'success');
 }
 
@@ -137,6 +150,15 @@ export async function saveUpdatedTaskAction(params: {
           }
         }
       }
+      logSystemAudit({
+        targetName: finalizedTask.assignedTo || finalizedTask.title,
+        targetEmployeeId: finalizedTask.employeeId,
+        operationType: 'tache_projet',
+        operationLabel: 'Mise à jour de Tâche',
+        details: `Tâche "${finalizedTask.title}" modifiée (Statut: ${finalizedTask.status}, Priorité: ${finalizedTask.priority})`,
+        level: 'info',
+        metadata: { assignedTo: finalizedTask.assignedTo, taskId: finalizedTask.id },
+      });
     },
     successTitle: 'Tâche mise à jour !',
     successMessage: `La tâche "${finalizedTask.title}" a été enregistrée avec succès.`,

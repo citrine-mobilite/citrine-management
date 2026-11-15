@@ -21,7 +21,6 @@ export default function StrategicProjectsPanel({
 }: StrategicProjectsPanelProps) {
   const stats = useMemo(() => {
     const total = projects.length;
-    const completed = projects.filter((p) => p.status === 'completed').length;
     const active = projects.filter((p) => p.status === 'active').length;
 
     let doneMilestones = 0;
@@ -38,92 +37,68 @@ export default function StrategicProjectsPanel({
     });
 
     const avgProgress = total > 0 ? Math.round(progressSum / total) : 0;
-
-    return {
-      total,
-      active,
-      completed,
-      avgProgress,
-      doneMilestones,
-      totalMilestones,
-      blockedMilestones,
-    };
+    return { total, active, avgProgress, doneMilestones, totalMilestones, blockedMilestones };
   }, [projects]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-[#2A7B76] via-[#216762] to-[#164844] rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
+      <div className="bg-white border border-stone-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-white/10 rounded-xl border border-white/15">
-              <Flag className="h-5 w-5 text-[#F3D079]" />
-            </div>
-            <h2 className="font-serif font-bold text-xl sm:text-2xl text-white">
-              Gestion de Projets &amp; Jalons Stratégiques
-            </h2>
-          </div>
-          <p className="text-xs text-emerald-100/90">
-            Suivez l'avancement global de chaque projet et les prochains jalons clés indépendamment des tâches quotidiennes.
+          <h2 className="font-serif font-bold text-xl text-stone-900 flex items-center gap-2">
+            <Flag className="h-5 w-5 text-[#2A7B76] shrink-0" />
+            <span>Portefeuille Projets &amp; Jalons Stratégiques</span>
+          </h2>
+          <p className="text-xs text-stone-500">
+            Pilotage synthétique de chaque projet et de ses jalons clés. Basculez librement entre vue liste dense et grille compacte.
           </p>
         </div>
 
-        <div className="text-right shrink-0">
-          <span className="text-[11px] text-emerald-200 block">Avancement moyen</span>
-          <span className="font-mono tabular-nums font-bold text-2xl text-white">
+        <div className="sm:text-right shrink-0 border-t sm:border-t-0 sm:border-l border-stone-200 pt-3 sm:pt-0 sm:pl-5">
+          <span className="text-[11px] font-medium text-stone-500 block">Avancement moyen global</span>
+          <span className="font-mono tabular-nums font-bold text-2xl text-[#2A7B76]">
             {stats.avgProgress}%
           </span>
         </div>
       </div>
 
-      {/* Summary KPI Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass-card rounded-2xl p-4 flex items-center justify-between gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="bg-white border border-stone-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
           <div>
-            <span className="text-[11px] font-bold text-stone-500 block">Projets suivis</span>
-            <span className="font-mono tabular-nums text-xl font-bold text-stone-900">{stats.total}</span>
+            <span className="text-[11px] font-medium text-stone-500 block">Projets suivis</span>
+            <span className="font-mono tabular-nums text-lg font-bold text-stone-900">{stats.total}</span>
           </div>
-          <div className="p-2.5 rounded-xl bg-stone-100 text-stone-700">
-            <Layers className="h-4 w-4" />
-          </div>
+          <Layers className="h-4 w-4 text-stone-400 shrink-0" />
         </div>
 
-        <div className="glass-card rounded-2xl p-4 flex items-center justify-between gap-3">
+        <div className="bg-white border border-stone-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
           <div>
-            <span className="text-[11px] font-bold text-stone-500 block">En cours</span>
-            <span className="font-mono tabular-nums text-xl font-bold text-[#2A7B76]">{stats.active}</span>
+            <span className="text-[11px] font-medium text-stone-500 block">Projets actifs</span>
+            <span className="font-mono tabular-nums text-lg font-bold text-[#2A7B76]">{stats.active}</span>
           </div>
-          <div className="p-2.5 rounded-xl bg-teal-50 text-[#2A7B76]">
-            <Clock className="h-4 w-4" />
-          </div>
+          <Clock className="h-4 w-4 text-[#2A7B76] shrink-0" />
         </div>
 
-        <div className="glass-card rounded-2xl p-4 flex items-center justify-between gap-3">
+        <div className="bg-white border border-stone-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
           <div>
-            <span className="text-[11px] font-bold text-stone-500 block">Jalons franchis</span>
-            <span className="font-mono tabular-nums text-xl font-bold text-emerald-700">
+            <span className="text-[11px] font-medium text-stone-500 block">Jalons franchis</span>
+            <span className="font-mono tabular-nums text-lg font-bold text-emerald-700">
               {stats.doneMilestones}/{stats.totalMilestones}
             </span>
           </div>
-          <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700">
-            <CheckCircle2 className="h-4 w-4" />
-          </div>
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
         </div>
 
-        <div className="glass-card rounded-2xl p-4 flex items-center justify-between gap-3">
+        <div className="bg-white border border-stone-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
           <div>
-            <span className="text-[11px] font-bold text-stone-500 block">Jalons bloqués</span>
-            <span className={`font-mono tabular-nums text-xl font-bold ${stats.blockedMilestones > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
+            <span className="text-[11px] font-medium text-stone-500 block">Jalons bloqués</span>
+            <span className={`font-mono tabular-nums text-lg font-bold ${stats.blockedMilestones > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
               {stats.blockedMilestones}
             </span>
           </div>
-          <div className={`p-2.5 rounded-xl ${stats.blockedMilestones > 0 ? 'bg-rose-50 text-rose-700' : 'bg-stone-100 text-stone-500'}`}>
-            <AlertOctagon className="h-4 w-4" />
-          </div>
+          <AlertOctagon className={`h-4 w-4 shrink-0 ${stats.blockedMilestones > 0 ? 'text-rose-600' : 'text-stone-400'}`} />
         </div>
       </div>
 
-      {/* Main Projects & Milestones Directory */}
       <ProjectMilestonesWidget
         projects={projects}
         onUpdateProjects={onUpdateProjects}

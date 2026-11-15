@@ -8,6 +8,7 @@ import { savePresenceAtomic } from '../../services/dataService';
 import { showErrorAlert, executeOperationWithLoading } from '../../utils/sweetAlert';
 import { isActualBadgePunch, getNextPresenceStep, executePresenceClockingStep } from './presenceClockStepHelper';
 import { buildFilteredPresencesList, splitClockingEmployeesByRole } from './presenceFiltersHelper';
+import { logSystemAudit } from '../../services/adminAuditService';
 
 interface UsePresencePanelLogicParams {
   employees: Employee[];
@@ -194,7 +195,21 @@ export function usePresencePanelLogic({
       action: async () => {
         onUpdatePresences(updated);
         const targetPresence = updated.find((p) => p.id === editingPresence.id);
-        if (targetPresence) await savePresenceAtomic(targetPresence);
+        if (targetPresence) {
+          await savePresenceAtomic(targetPresence);
+          const emp = employees.find((item) => String(item.id) === String(targetPresence.employeeId));
+          logSystemAudit({
+            authorName: currentUser?.name || currentRole,
+            authorRole: currentUser?.role || currentRole,
+            targetName: emp?.name || targetPresence.employeeId,
+            targetEmployeeId: emp?.id || targetPresence.employeeId,
+            operationType: 'presence_pointage',
+            operationLabel: 'Correction Manuelle de Pointage',
+            details: `Pointage du ${targetPresence.date} modifié (Arrivée: ${editForm.arrivalTime || '—'}, Départ: ${editForm.departureTime || '—'}). Motif: ${editForm.correctionReason || 'Ajustement RH'}`,
+            level: 'info',
+            metadata: { employeeEmail: emp?.email, date: targetPresence.date },
+          });
+        }
       },
       successTitle: 'Pointage mis à jour !',
       successMessage: 'Les modifications de pointage ont été enregistrées avec succès en base de données.',

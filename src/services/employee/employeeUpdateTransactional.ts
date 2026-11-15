@@ -40,8 +40,6 @@ export async function updateCollaboratorWithUserTransactional(
   }
   const resolvedRole: AppUser['role'] = resolvedRoleId === 1 ? 'administrateur' : resolvedRoleId === 2 ? 'responsable' : 'employé';
 
-  console.log(`🔄 [SYNC COLLABORATEUR ➔ UTILISATEUR] Modification de "${empName}" (${userEmail})`);
-
   let matchedEmpRow: any = null;
   const isNumEmpId = isIntegerId(emp.id) || (emp._dbId && isIntegerId(emp._dbId));
 
@@ -153,6 +151,5 @@ export async function updateCollaboratorWithUserTransactional(
     window.dispatchEvent(new CustomEvent('citrine:user_updated', { detail: finalUser }));
   }
 
-  console.log(`✅ [SYNCHRONISATION TERMINÉE AVEC SUCCÈS] Collaborateur "${empName}" et Utilisateur synchronisés.`);
   return { success: true, employee: finalEmployee, user: finalUser };
 }

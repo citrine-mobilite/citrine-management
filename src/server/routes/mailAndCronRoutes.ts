@@ -9,7 +9,7 @@ import {
   sendWeeklyConsolidatedReport,
   compileWeeklyAttendanceData,
 } from '../../services/weeklyAttendanceReportService';
-import { executeDailyTimesheetDispatch } from '../../services/dailyTimesheetCronService';
+import { executeDailyTaskSheetDispatch } from '../../services/dailyTaskSheetCronService';
 import { sendMondayGreetingToAllEmployees } from '../../services/mondayGreetingMailService';
 
 export async function handleMailAndCronRoutes(
@@ -174,13 +174,17 @@ export async function handleMailAndCronRoutes(
     return true;
   }
 
-  if (urlPath === '/cron/daily-timesheet' || urlPath === '/api/cron/daily-timesheet') {
+  if (
+    urlPath === '/cron/daily-tasksheet' ||
+    urlPath === '/api/cron/daily-tasksheet' ||
+    urlPath === '/cron/daily-timesheet' ||
+    urlPath === '/api/cron/daily-timesheet'
+  ) {
     try {
-      console.log(`⏰ [SERVERLESS CRON] Déclenchement de l'envoi automatique des feuilles de temps quotidiennes...`);
-      const result = await executeDailyTimesheetDispatch();
+      const result = await executeDailyTaskSheetDispatch();
       res.status(result.success ? 200 : 500).json(result);
     } catch (error: any) {
-      console.error('[API /cron/daily-timesheet Error]:', error);
+      console.error('[API /cron/daily-tasksheet Error]:', error);
       res.status(500).json({ success: false, error: error.message || String(error) });
     }
     return true;
@@ -188,7 +192,6 @@ export async function handleMailAndCronRoutes(
 
   if (urlPath === '/cron/weekly-recap' || urlPath === '/api/cron/weekly-recap') {
     try {
-      console.log(`⏰ [SERVERLESS CRON] Déclenchement de l'envoi du récapitulatif hebdomadaire consolidé...`);
       const result = await sendWeeklyConsolidatedReport({ forceFriday: true });
       res.status(result.success ? 200 : 500).json(result);
     } catch (error: any) {
@@ -200,7 +203,6 @@ export async function handleMailAndCronRoutes(
 
   if (urlPath === '/cron/monday-greeting' || urlPath === '/api/cron/monday-greeting') {
     try {
-      console.log(`⏰ [SERVERLESS CRON] Déclenchement message bon début de semaine du lundi 08h00...`);
       const forceMonday = req.query?.force === 'true' || body?.force === true;
       const testRecipient = (req.query?.testRecipient as string) || body?.testRecipient;
       const result = await sendMondayGreetingToAllEmployees({ forceMonday, testRecipient });

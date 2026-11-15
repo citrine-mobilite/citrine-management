@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Download, Plus, X, Save, FileText } from 'lucide-react';
+import { Download, Plus, FileText } from 'lucide-react';
 import { SalaryPayment, Employee, EmployeeSalaryDebt } from '../../types';
 import { downloadPayslipPdf, exportElementToPdf } from '../../services/pdfExportService';
 import { exportToExcel } from '../../services/excelExportService';
+import { SalaryPaymentFormModal } from './SalaryPaymentFormModal';
+import { logSystemAudit } from '../../services/adminAuditService';
 
 interface SalaryPaymentsTableProps {
   salaryPayments: SalaryPayment[];
@@ -67,19 +69,29 @@ export const SalaryPaymentsTable: React.FC<SalaryPaymentsTableProps> = ({
     const newPayment: SalaryPayment = {
       id: `pay-${Date.now()}`,
       employeeId: selectedEmployee.id,
-      period: period,
+      period,
       baseAmount: currentBaseSalary,
-      bonusAmount: bonusAmount,
+      bonusAmount,
       advanceAmount: activeLoanDeduction,
       deductions: activeLoanDeduction,
       netAmount: calculatedNetSalary,
       status: 'paid',
-      paymentMethod: paymentMethod,
+      paymentMethod,
       paidAt: new Date().toISOString().split('T')[0],
       notes: notes.trim(),
     };
 
     onUpdatePayments([newPayment, ...salaryPayments]);
+    logSystemAudit({
+      targetName: selectedEmployee.name,
+      targetEmployeeId: selectedEmployee.id,
+      targetUserId: selectedEmployee.userId ? String(selectedEmployee.userId) : undefined,
+      operationType: 'salary_update',
+      operationLabel: 'Enregistrement Bulletin de Paie',
+      details: `Salaire net de ${formatXAF(calculatedNetSalary)} enregistré pour ${selectedEmployee.name} (${period})`,
+      level: 'success',
+      metadata: { period, netAmount: calculatedNetSalary, employeeEmail: selectedEmployee.email },
+    });
     if (showToast) showToast(`Fiche de paie enregistrée avec succès pour ${selectedEmployee.name}.`, 'success');
     setIsModalOpen(false);
     setBonusAmount(0);
@@ -181,13 +193,10 @@ export const SalaryPaymentsTable: React.FC<SalaryPaymentsTableProps> = ({
                     <td className="p-3 text-right">
                       <button
                         onClick={() => {
-                          // Create temporary modified payslip payload for correct PDF generation
-                          const adjustedPayment = {
-                            ...p,
-                            advanceAmount: loanDeduction,
-                            netAmount: netAmountPaid,
-                          };
-                          downloadPayslipPdf(adjustedPayment, getEmpObj(p.employeeId));
+                          downloadPayslipPdf(
+                            { ...p, advanceAmount: loanDeduction, netAmount: netAmountPaid },
+                            getEmpObj(p.employeeId)
+                          );
                         }}
                         className="p-1.5 rounded-lg bg-emerald-50 text-[#2A7B76] hover:bg-[#2A7B76] hover:text-white transition cursor-pointer"
                         title="Télécharger le bulletin PDF"
@@ -203,128 +212,27 @@ export const SalaryPaymentsTable: React.FC<SalaryPaymentsTableProps> = ({
         </table>
       </div>
 
-      {/* Register Payment Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-stone-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-              <h3 className="font-serif font-bold text-base text-stone-900">Enregistrer un Salaire Net</h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-xl text-stone-400 hover:bg-stone-100 cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePayment} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">Collaborateur *</label>
-                <select
-                  value={selectedEmployeeId}
-                  onChange={(e) => setSelectedEmployeeId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none font-medium"
-                >
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} (Base: {formatXAF(emp.salary || 250000)})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">Mois / Période de paie *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Octobre 2026"
-                  value={period}
-                  onChange={(e) => setPeriod(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">Primes ou Bonus (XAF)</label>
-                  <input
-                    type="number"
-                    value={bonusAmount}
-                    onChange={(e) => setBonusAmount(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">Méthode de paiement</label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none"
-                  >
-                    <option value="transfer">Virement Bancaire</option>
-                    <option value="cash">Espèces / Cash</option>
-                    <option value="check">Chèque</option>
-                    <option value="other">Autre</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Automatic Deduction Live Calculation Display */}
-              <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 space-y-2">
-                <div className="flex justify-between font-medium text-stone-600">
-                  <span>Salaire Brut de Base:</span>
-                  <span className="font-mono">{formatXAF(currentBaseSalary)}</span>
-                </div>
-                {bonusAmount > 0 && (
-                  <div className="flex justify-between font-medium text-emerald-600">
-                    <span>Primes / Bonus:</span>
-                    <span className="font-mono">+{formatXAF(bonusAmount)}</span>
-                  </div>
-                )}
-                {activeLoanDeduction > 0 && (
-                  <div className="flex justify-between font-bold text-rose-600">
-                    <span>Retenue Prêt ({activeLoanForForm?.reason}):</span>
-                    <span className="font-mono">-{formatXAF(activeLoanDeduction)}</span>
-                  </div>
-                )}
-                <div className="pt-2 border-t border-stone-200 flex justify-between font-bold text-sm text-emerald-850">
-                  <span>Salaire Net Perçu:</span>
-                  <span className="font-mono">{formatXAF(calculatedNetSalary)}</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">Notes internes</label>
-                <textarea
-                  rows={2}
-                  placeholder="Informations complémentaires..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-[#2A7B76] outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 font-bold cursor-pointer"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#2A7B76] text-white hover:bg-[#236864] font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <Save className="h-4 w-4" />
-                  Valider la paie
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <SalaryPaymentFormModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleSavePayment}
+        employees={employees}
+        selectedEmployeeId={selectedEmployeeId}
+        onSelectEmployee={setSelectedEmployeeId}
+        period={period}
+        onChangePeriod={setPeriod}
+        bonusAmount={bonusAmount}
+        onChangeBonusAmount={setBonusAmount}
+        paymentMethod={paymentMethod}
+        onChangePaymentMethod={setPaymentMethod}
+        notes={notes}
+        onChangeNotes={setNotes}
+        currentBaseSalary={currentBaseSalary}
+        activeLoanForForm={activeLoanForForm}
+        activeLoanDeduction={activeLoanDeduction}
+        calculatedNetSalary={calculatedNetSalary}
+        formatXAF={formatXAF}
+      />
     </div>
   );
 };

@@ -31,45 +31,23 @@ export const clientMailService = {
     input: SendThreadedEmailInput,
     moduleConfig?: CompanyModuleConfig
   ): Promise<{ success: boolean; messageId?: string; simulated?: boolean; error?: string; details?: any; status?: number }> {
-    console.log("================================================================");
-    console.log("🚀 [CLIENT MAIL SERVICE] Démarrage de l'envoi de mail...", {
-      employeeName: input.employeeName,
-      employeeId: input.employeeId,
-      eventTitle: input.eventTitle,
-      threadCategory: input.threadCategory,
-      threadSubject: input.threadSubject,
-      attachmentsCount: input.attachments?.length || 0,
-      timestamp: new Date().toISOString(),
-    });
-
     if (moduleConfig?.enableEmailNotifications === false) {
       console.warn("⚠️ [CLIENT MAIL SERVICE] Envoi désactivé dans la configuration de l'entreprise (enableEmailNotifications=false).");
-      console.log("================================================================");
       return { success: true, simulated: true };
     }
 
     try {
-      console.log("📤 [CLIENT MAIL SERVICE] Exécution requête POST /api/mail/send-threaded...");
       const res = await fetch('/api/mail/send-threaded', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       });
 
-      console.log(`📥 [CLIENT MAIL SERVICE] Réponse HTTP reçue : Status = ${res.status} (${res.statusText})`);
-
       const rawText = await res.text();
       let resJson: any = null;
       try {
         resJson = JSON.parse(rawText);
       } catch {}
-
-      console.log("🔍 [CLIENT MAIL SERVICE] Corps de la réponse brute :", {
-        status: res.status,
-        statusText: res.statusText,
-        isJson: resJson !== null,
-        body: resJson || rawText,
-      });
 
       if (!res.ok) {
         const rawException =
@@ -84,7 +62,6 @@ export const clientMailService = {
           details: resJson?.details,
           stack: resJson?.stack,
         });
-        console.log("================================================================");
 
         return {
           success: false,
@@ -97,7 +74,6 @@ export const clientMailService = {
       if (resJson && resJson.success === false) {
         const rawException = resJson.error || "Échec signalé par le serveur";
         console.error("❌ [CLIENT MAIL SERVICE ÉCHEC INTERNE] Erreur retournée :", rawException);
-        console.log("================================================================");
         return {
           success: false,
           error: rawException,
@@ -105,8 +81,6 @@ export const clientMailService = {
         };
       }
 
-      console.log("✅ [CLIENT MAIL SERVICE SUCCÈS] E-mail envoyé avec succès !", resJson);
-      console.log("================================================================");
       return resJson || { success: true };
     } catch (err: any) {
       const rawException = err?.message || String(err);
@@ -115,7 +89,6 @@ export const clientMailService = {
         stack: err?.stack,
         errorObj: err,
       });
-      console.log("================================================================");
       return {
         success: false,
         error: `Exception réseau client : ${rawException}`,

@@ -7,7 +7,7 @@ interface RendementHorizontalListProps {
   processedList: EmployeeRendementMetrics[];
   maxHours: number;
   onSelectEmployee: (employee: Employee) => void;
-  onOpenTimesheet?: (employee: Employee, mode?: 'day' | 'month' | 'year') => void;
+  onOpenTaskSheet?: (employee: Employee, mode?: 'day' | 'month' | 'year') => void;
   getBarColor: (rate: number) => string;
   getBarBg: (rate: number) => string;
 }
@@ -16,7 +16,7 @@ export const RendementHorizontalList: React.FC<RendementHorizontalListProps> = (
   processedList,
   maxHours,
   onSelectEmployee,
-  onOpenTimesheet,
+  onOpenTaskSheet,
   getBarColor,
   getBarBg,
 }) => {
@@ -95,17 +95,17 @@ export const RendementHorizontalList: React.FC<RendementHorizontalListProps> = (
                     </span>
                   </div>
 
-                  {onOpenTimesheet && (
+                  {onOpenTaskSheet && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOpenTimesheet(m.employee, 'month');
+                        onOpenTaskSheet(m.employee, 'month');
                       }}
                       className="px-2.5 py-1.5 bg-white hover:bg-emerald-600 hover:text-white text-stone-700 border border-stone-200 hover:border-emerald-600 font-bold text-[11px] rounded-xl flex items-center gap-1 shadow-3xs transition cursor-pointer"
-                      title="Générer automatiquement la feuille de tâches de ce collaborateur"
+                      title="Générer automatiquement la TaskSheet de ce collaborateur"
                     >
                       <FileSpreadsheet className="h-3.5 w-3.5 text-[#2A7B76] group-hover:text-white" />
-                      <span className="hidden md:inline">Feuille de Tâches</span>
+                      <span className="hidden md:inline">TaskSheet</span>
                     </button>
                   )}
                 </div>

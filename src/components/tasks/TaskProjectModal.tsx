@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Save, FolderPlus, Users, ShieldAlert } from 'lucide-react';
+import { X, Save, FolderPlus, Users } from 'lucide-react';
 import { TaskProject, Employee } from '../../types';
+import { ModalPortal } from '../common/ModalPortal';
 
 interface TaskProjectModalProps {
   isOpen: boolean;
@@ -49,26 +50,28 @@ export const TaskProjectModal: React.FC<TaskProjectModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border border-stone-200 space-y-4">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-          <div className="flex items-center gap-2">
-            <FolderPlus className="h-5 w-5 text-[#2A7B76]" />
-            <h3 className="font-serif font-bold text-base text-stone-900">
-              Créer un Nouveau Projet
-            </h3>
+    <ModalPortal>
+      <div className="fixed inset-0 z-[9999] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+        <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-stone-200">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 shrink-0">
+            <div className="flex items-center gap-2">
+              <FolderPlus className="h-5 w-5 text-[#2A7B76]" />
+              <h3 className="font-serif font-bold text-base text-stone-900">
+                Créer un Nouveau Projet
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1 rounded-xl text-stone-400 hover:bg-stone-100 cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-xl text-stone-400 hover:bg-stone-100 cursor-pointer"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 text-xs">
+            <div className="p-6 overflow-y-auto flex-1 min-h-0 space-y-4">
           <div>
             <label className="block font-bold text-stone-700 mb-1">
               Nom du projet *
@@ -171,24 +174,27 @@ export const TaskProjectModal: React.FC<TaskProjectModalProps> = ({
             )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 font-bold cursor-pointer"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-xl bg-[#2A7B76] text-white hover:bg-[#236864] font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-            >
-              <Save className="h-4 w-4" />
-              Créer le Projet
-            </button>
-          </div>
-        </form>
+            </div>
+
+            <div className="flex justify-end gap-2 px-6 py-3.5 bg-stone-50 border-t border-stone-100 shrink-0">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-100 font-bold cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-[#2A7B76] text-white hover:bg-[#236864] font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <Save className="h-4 w-4" />
+                Créer le Projet
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 };

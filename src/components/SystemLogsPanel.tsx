@@ -66,6 +66,14 @@ export default function SystemLogsPanel({
         </div>
       </div>
 
+      {!logic.canViewAll && (
+        <div className="bg-stone-50 border border-stone-200/90 px-4 py-2.5 rounded-2xl text-xs text-stone-600 flex items-center justify-between gap-2">
+          <span>
+            Périmètre personnel actif : seuls les événements système, opérations d&apos;audit et notifications vous concernant sont affichés.
+          </span>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 border-b border-stone-200/80 pb-1 overflow-x-auto">
         <button
           type="button"
@@ -76,7 +84,7 @@ export default function SystemLogsPanel({
         >
           <Terminal className="h-4 w-4" />
           <span>1. Notifs Systèmes</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${logic.activeSubTab === 'system_events' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'}`}>
+          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${logic.activeSubTab === 'system_events' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'}`}>
             {logic.sessionLogs.length}
           </span>
         </button>
@@ -90,7 +98,7 @@ export default function SystemLogsPanel({
         >
           <ShieldCheck className="h-4 w-4" />
           <span>2. Logs d'Audit</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${logic.activeSubTab === 'audit_logs' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'}`}>
+          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${logic.activeSubTab === 'audit_logs' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'}`}>
             {logic.auditList.length}
           </span>
         </button>
@@ -104,8 +112,8 @@ export default function SystemLogsPanel({
         >
           <Bell className="h-4 w-4" />
           <span>3. Notifications</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${logic.activeSubTab === 'notifications' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'}`}>
-            {notifications.length}
+          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${logic.activeSubTab === 'notifications' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'}`}>
+            {logic.scopedNotifs.length}
           </span>
         </button>
       </div>
@@ -154,7 +162,7 @@ export default function SystemLogsPanel({
 
       {logic.activeSubTab === 'notifications' && (
         <NotificationsLogsTab
-          notifications={notifications}
+          notifications={logic.scopedNotifs}
           filteredNotifs={logic.filteredNotifs}
           paginatedNotifs={logic.paginatedNotifs}
           searchTerm={logic.searchTerm}

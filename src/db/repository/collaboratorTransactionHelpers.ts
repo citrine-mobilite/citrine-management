@@ -32,9 +32,7 @@ export async function rollbackCollaboratorCreation(
 ): Promise<void> {
   if (createdNotifDbId) {
     try {
-      console.log(`⏪ [ROLLBACK] Suppression de la notification (ID: ${createdNotifDbId})...`);
       await supabaseAdmin.from('notifications').delete().eq('id', createdNotifDbId);
-      console.log(`✓ [ROLLBACK] Notification supprimée`);
     } catch (rbNotifErr: any) {
       console.error(`❌ [ROLLBACK ERREUR] Suppression notification:`, rbNotifErr?.message);
     }
@@ -42,9 +40,7 @@ export async function rollbackCollaboratorCreation(
 
   if (createdUserId) {
     try {
-      console.log(`⏪ [ROLLBACK] Suppression de l'utilisateur (ID: ${createdUserId})...`);
       await supabaseAdmin.from('users').delete().eq('id', createdUserId);
-      console.log(`✓ [ROLLBACK] Utilisateur (ID: ${createdUserId}) supprimé`);
     } catch (rbUserErr: any) {
       console.error(`❌ [ROLLBACK ERREUR] Suppression utilisateur:`, rbUserErr?.message);
     }
@@ -52,9 +48,7 @@ export async function rollbackCollaboratorCreation(
 
   if (createdEmployeeDbId) {
     try {
-      console.log(`⏪ [ROLLBACK] Suppression du collaborateur (ID: ${createdEmployeeDbId})...`);
       await supabaseAdmin.from('employees').delete().eq('id', createdEmployeeDbId);
-      console.log(`✓ [ROLLBACK] Collaborateur (ID: ${createdEmployeeDbId}) supprimé`);
     } catch (rbEmpErr: any) {
       console.error(`❌ [ROLLBACK ERREUR] Suppression collaborateur:`, rbEmpErr?.message);
     }
@@ -116,8 +110,6 @@ export async function createCollaboratorOfficialNotification(params: {
     console.warn('[TRANSACTION - NOTIFICATION AVERTISSEMENT]:', notifInsertErr?.message);
   } else {
     createdNotifDbId = notifInserted.id;
-    console.log('🔔 [NOTIFICATION CRÉÉE ET ENREGISTRÉE AVEC SUCCÈS] :', notifObj);
-    console.log('📋 [NOTIFICATION DÉTAILS] Titre:', notifObj.title, '| Message:', notifObj.message, '| User ID:', createdUserId);
   }
 
   return { notifObj, createdNotifDbId };

@@ -30,8 +30,8 @@ export function usePresenceStatisticsLogic({
   const [customEnd, setCustomEnd] = useState<string>(todayStr);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRendementEmployee, setSelectedRendementEmployee] = useState<Employee | null>(null);
-  const [timesheetEmployee, setTimesheetEmployee] = useState<Employee | null>(null);
-  const [timesheetMode, setTimesheetMode] = useState<'day' | 'month' | 'year'>('month');
+  const [taskSheetEmployee, setTaskSheetEmployee] = useState<Employee | null>(null);
+  const [taskSheetMode, setTaskSheetMode] = useState<'day' | 'month' | 'year'>('month');
 
   const trackedEmployees = useMemo(() => {
     const base = employees.filter((e) => {
@@ -125,9 +125,9 @@ export function usePresenceStatisticsLogic({
     [employeeRendementMetricsList]
   );
 
-  const handleOpenTimesheetModal = (employee: Employee, mode: 'day' | 'month' | 'year' = 'month') => {
-    setTimesheetEmployee(employee);
-    setTimesheetMode(mode);
+  const handleOpenTaskSheetModal = (employee: Employee, mode: 'day' | 'month' | 'year' = 'month') => {
+    setTaskSheetEmployee(employee);
+    setTaskSheetMode(mode);
   };
 
   return {
@@ -143,9 +143,9 @@ export function usePresenceStatisticsLogic({
     setSearchQuery,
     selectedRendementEmployee,
     setSelectedRendementEmployee,
-    timesheetEmployee,
-    setTimesheetEmployee,
-    timesheetMode,
+    taskSheetEmployee,
+    setTaskSheetEmployee,
+    taskSheetMode,
     stats,
     statsByEmployeeList,
     filteredStatsByEmployee,
@@ -157,6 +157,6 @@ export function usePresenceStatisticsLogic({
     totalCompletedTasksPeriod,
     totalInProgressTasksPeriod,
     totalMilestonesPeriod,
-    handleOpenTimesheetModal,
+    handleOpenTaskSheetModal,
   };
 }

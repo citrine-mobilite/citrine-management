@@ -16,7 +16,7 @@
       "schedule": "0 7 * * 1"
     },
     {
-      "path": "/api/cron/daily-timesheet",
+      "path": "/api/cron/daily-tasksheet",
       "schedule": "30 18 * * 1-5"
     },
     {

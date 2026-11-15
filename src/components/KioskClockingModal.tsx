@@ -1,15 +1,12 @@
-import { savePresenceAtomic } from '../services/dataService';
-import { realtimeSyncService } from '../services/realtimeSyncService';
 import React, { useState } from 'react';
 import { X, Search, Tablet, CheckCircle2 } from 'lucide-react';
 import { Employee, Presence, NotificationLog, CompanyModuleConfig, AttendanceIncident } from '../types';
-import { getActiveKioskPinCode, COMPANY_HQ_LOCATION } from '../utils/geolocation';
-import { isLate } from '../utils/dateUtils';
+import { getActiveKioskPinCode } from '../utils/geolocation';
 import { KioskPinBanner } from './kiosk/KioskPinBanner';
 import { KioskEmployeeCard } from './kiosk/KioskEmployeeCard';
-import { incidentService } from '../services/incidentService';
-import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
+import { executeKioskClockAction } from './kiosk/kioskClockingAction';
 import { shouldEmployeeClock } from '../utils/roleUtils';
+import { ModalPortal } from './common/ModalPortal';
 
 interface KioskClockingModalProps {
   isOpen: boolean;
@@ -47,256 +44,82 @@ export default function KioskClockingModal({
     (emp) =>
       shouldEmployeeClock(emp) &&
       (emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-       emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-       (emp.department && emp.department.toLowerCase().includes(searchQuery.toLowerCase())))
+        emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (emp.department && emp.department.toLowerCase().includes(searchQuery.toLowerCase())))
   );
 
-  const handleClockAction = async (
-    emp: Employee,
-    action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure'
-  ) => {
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const scheduleStart = moduleConfig?.lateThresholdTime || '08:30';
-    const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
-    const exemptLate = emp.allowLateArrival8_930 === true && timeStr >= '08:00' && timeStr <= '09:30';
-    const late = action === 'arrival' && !exemptLate && isLate(timeStr, scheduleStart);
-
-    let targetIncident: AttendanceIncident | null = null;
-    if (action === 'arrival' && late) {
-      targetIncident = {
-        id: `inc-${Date.now()}`,
-        employeeId: emp.id,
-        employeeName: emp.name,
-        date: todayStr,
-        timeString: timeStr,
-        type: 'retard',
-        origin: 'automatique_pointage',
-        reason: `Retard automatique constaté sur la borne à ${timeStr} (seuil: ${scheduleStart})`,
-        isDeclaredInAdvance: false,
-        isJustified: false,
-        status: 'automatique',
-        createdAt: new Date().toISOString(),
-      };
-    } else if (action === 'departure') {
-      const exemptEarly = emp.allowEarlyDeparture15_17 === true && timeStr >= '15:00' && timeStr <= '17:00';
-      if (!exemptEarly && timeStr < plannedDeparture) {
-        targetIncident = {
-          id: `inc-${Date.now()}`,
-          employeeId: emp.id,
-          employeeName: emp.name,
-          date: todayStr,
-          timeString: timeStr,
-          type: 'sortie_prematuree',
-          origin: 'automatique_pointage',
-          reason: `Sortie prématurée constatée sur la borne à ${timeStr} avant 16h30 (horaire de référence: ${plannedDeparture})`,
-          isDeclaredInAdvance: false,
-          isJustified: false,
-          status: 'automatique',
-          createdAt: new Date().toISOString(),
-        };
-      }
-    }
-
-    const kioskLat = COMPANY_HQ_LOCATION.latitude;
-    const kioskLng = COMPANY_HQ_LOCATION.longitude;
-    const kioskLocation = `${moduleConfig?.hqName || 'Siège Citrine'} (Borne d'accueil - Japoma HQ)`;
-
-    const updatedPresences = [...presences];
-    const existingIdx = updatedPresences.findIndex((p) => p.employeeId === emp.id && p.date === todayStr);
-    let targetPresence: Presence;
-    if (existingIdx >= 0) {
-      const existing = { ...updatedPresences[existingIdx] };
-      existing.employeeId = emp.id;
-      existing.employeeName = emp.name;
-
-      const updatedClockLocations = { ...(existing.clockLocations || {}) };
-      updatedClockLocations[action] = {
-        time: timeStr,
-        latitude: kioskLat,
-        longitude: kioskLng,
-        zoneName: kioskLocation,
-        siteName: moduleConfig?.hqName || 'Siège Citrine',
-        method: 'kiosk_pin',
-      };
-      existing.clockLocations = updatedClockLocations;
-
-      if (action === 'arrival') {
-        existing.arrivalTime = timeStr;
-        existing.status = late ? 'late' : 'present';
-      } else if (action === 'pauseStart') {
-        existing.pauseStart = timeStr;
-      } else if (action === 'pauseEnd') {
-        existing.pauseEnd = timeStr;
-      } else if (action === 'departure') {
-        existing.departureTime = timeStr;
-      }
-      existing.location = kioskLocation;
-      existing.latitude = kioskLat;
-      existing.longitude = kioskLng;
-      existing.clockingMethod = 'kiosk_pin';
-      targetPresence = existing;
-      updatedPresences[existingIdx] = existing;
-    } else {
-      const clockLocations: any = {};
-      clockLocations[action] = {
-        time: timeStr,
-        latitude: kioskLat,
-        longitude: kioskLng,
-        zoneName: kioskLocation,
-        siteName: moduleConfig?.hqName || 'Siège Citrine',
-        method: 'kiosk_pin',
-      };
-      targetPresence = {
-        id: `pr-${Date.now()}`,
-        employeeId: emp.id,
-        employeeName: emp.name,
-        date: todayStr,
-        status: late ? 'late' : 'present',
-        arrivalTime: action === 'arrival' ? timeStr : null,
-        pauseStart: action === 'pauseStart' ? timeStr : null,
-        pauseEnd: action === 'pauseEnd' ? timeStr : null,
-        departureTime: action === 'departure' ? timeStr : null,
-        location: kioskLocation,
-        latitude: kioskLat,
-        longitude: kioskLng,
-        clockingMethod: 'kiosk_pin',
-        clockLocations,
-      };
-      updatedPresences.push(targetPresence);
-    }
-
-    const actionLabels: Record<string, string> = {
-      arrival: 'Arrivée (Pointage)',
-      pauseStart: 'Début Pause',
-      pauseEnd: 'Fin Pause',
-      departure: 'Départ (Pointage)',
-    };
-
-    let targetNotification: NotificationLog | null = null;
-    if (onAddNotification) {
-      targetNotification = {
-        id: `notif-kiosk-${Date.now()}-${emp.id}`,
-        type: 'system',
-        recipient: emp.id,
-        targetUserId: emp.id,
-        title: `Pointage sur Borne : ${actionLabels[action] || action}`,
-        content: `Pointage (${actionLabels[action] || action}) validé sur la borne daccueil à ${timeStr}.`,
-        message: `Pointage (${actionLabels[action] || action}) validé sur la borne daccueil à ${timeStr}.`,
-        payload: JSON.stringify({
-          source: 'kiosk',
-          employeeId: emp.id,
-          employeeName: emp.name,
-          action,
-          time: timeStr,
-          date: todayStr,
-        }),
-        timestamp: new Date().toISOString(),
-        read: false,
-      };
-    }
-
-    const res = await savePresenceAtomic(targetPresence, targetIncident, targetNotification, action);
-    if (!res.success) {
-      console.error("Kiosk atomic save failed:", res.error);
-      setToastMessage(`Erreur denregistrement atomique: ${res.error}`);
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-
-    onUpdatePresences(updatedPresences);
-    if (targetIncident && onAddAttendanceIncident) {
-      onAddAttendanceIncident(targetIncident);
-    }
-    if (targetNotification && onAddNotification) {
-      onAddNotification(targetNotification);
-      if (typeof window !== undefined) {
-        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-      }
-    }
-
-    // Diffusion temps réel immédiate multi-appareils (Responsable, Admin, etc.)
-    realtimeSyncService.broadcastPresencePunch({
-      presence: targetPresence,
-      incident: targetIncident,
-      notification: targetNotification,
+  const handleClockAction = (emp: Employee, action: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure') =>
+    executeKioskClockAction({
+      emp,
+      action,
+      presences,
+      moduleConfig,
+      onUpdatePresences,
+      onAddNotification,
+      onAddAttendanceIncident,
+      setToastMessage,
     });
-
-    pushNotificationBridgeService.sendPush({
-      title: 'Pointage Enregistré ⏱️',
-      message: `${emp.name} a pointé : ${actionLabels[action] || action} à ${timeStr}.`,
-      senderName: emp.name,
-      type: 'attendance',
-      link: 'presences',
-    });
-    setToastMessage(`Pointage de ${emp.name} validé (${action}) à ${timeStr}`);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 p-4 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Tablet className="h-5 w-5 text-emerald-200" />
-            <div>
-              <h3 className="font-serif font-bold text-sm">Borne Tablette Accueil - {companyName}</h3>
-              <p className="text-[10px] text-emerald-100">Pointage tactile rapide pour collaborateurs</p>
+    <ModalPortal>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 p-4 text-white flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <Tablet className="h-5 w-5 text-emerald-200" />
+              <div>
+                <h3 className="font-serif font-bold text-sm">Borne Tablette Accueil - {companyName}</h3>
+                <p className="text-[10px] text-emerald-100">Pointage tactile rapide pour collaborateurs</p>
+              </div>
             </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-white/20 rounded-full transition cursor-pointer text-white/80 hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Pin Banner & Search Toolbar */}
-        <div className="p-4 bg-stone-50 border-b border-stone-200 space-y-3">
-          <KioskPinBanner kioskPin={kioskPin} setKioskPin={setKioskPin} moduleConfig={moduleConfig} />
-
-          <div className="relative">
-            <Search className="h-4 w-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher un collaborateur par nom ou département..."
-              className="w-full pl-9 pr-4 py-2 bg-white border border-stone-200 rounded-xl text-xs font-medium text-stone-900 focus:outline-none focus:border-[#2A7B76] shadow-3xs"
-            />
+            <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition cursor-pointer text-white/80 hover:text-white">
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
-          {toastMessage && (
-            <div className="p-2.5 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs rounded-xl font-bold flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-              <span>{toastMessage}</span>
-            </div>
-          )}
-        </div>
+          <div className="p-4 bg-stone-50 border-b border-stone-200 space-y-3 shrink-0">
+            <KioskPinBanner kioskPin={kioskPin} setKioskPin={setKioskPin} moduleConfig={moduleConfig} />
 
-        {/* Employee List */}
-        <div className="p-4 overflow-y-auto flex-1 space-y-2.5">
-          {filteredEmployees.length === 0 ? (
-            <div className="p-8 text-center text-stone-400 text-xs italic">
-              Aucun collaborateur trouvé pour cette recherche.
+            <div className="relative">
+              <Search className="h-4 w-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Rechercher un collaborateur par nom ou département..."
+                className="w-full pl-9 pr-4 py-2 bg-white border border-stone-200 rounded-xl text-xs font-medium text-stone-900 focus:outline-none focus:border-[#2A7B76] shadow-3xs"
+              />
             </div>
-          ) : (
-            filteredEmployees.map((emp) => {
-              const todayPresence = presences.find((p) => p.employeeId === emp.id && p.date === todayStr);
-              return (
-                <KioskEmployeeCard
-                  key={emp.id}
-                  emp={emp}
-                  todayPresence={todayPresence}
-                  onClockAction={handleClockAction}
-                />
-              );
-            })
-          )}
+
+            {toastMessage && (
+              <div className="p-2.5 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs rounded-xl font-bold flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                <span>{toastMessage}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 overflow-y-auto flex-1 space-y-2.5">
+            {filteredEmployees.length === 0 ? (
+              <div className="p-8 text-center text-stone-400 text-xs italic">
+                Aucun collaborateur trouvé pour cette recherche.
+              </div>
+            ) : (
+              filteredEmployees.map((emp) => {
+                const todayPresence = presences.find((p) => p.employeeId === emp.id && p.date === todayStr);
+                return (
+                  <KioskEmployeeCard
+                    key={emp.id}
+                    emp={emp}
+                    todayPresence={todayPresence}
+                    onClockAction={handleClockAction}
+                  />
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

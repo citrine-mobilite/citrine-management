@@ -142,7 +142,6 @@ export async function syncUserToEmployeeTable(
     } catch {}
 
     window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
-    console.log(`✅ [SYNC USER ➔ COLLABORATEUR] Employé "${cleanUser.name}" (${cleanUser.email}) synchronisé (départ 15-17h: ${resolvedEmpAllowEarly}).`);
   } catch (syncErr) {
     console.warn('[userService] Notice synchronisation collaborateur associé:', syncErr);
   }

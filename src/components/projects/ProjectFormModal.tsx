@@ -8,6 +8,7 @@ import {
   StrategicProject,
 } from '../../types';
 import { deriveProjectStatus } from '../../services/projectService';
+import { ModalPortal } from '../common/ModalPortal';
 import {
   createEmptyMilestone,
   ProjectFormHeader,
@@ -65,13 +66,8 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     return st === 'en_poste' || st === 'en_mission' || st === ('true' as any);
   });
 
-  const handleMilestoneChange = (
-    index: number,
-    patch: Partial<ProjectMilestone>
-  ) => {
-    setMilestones((prev) =>
-      prev.map((m, idx) => (idx === index ? { ...m, ...patch } : m))
-    );
+  const handleMilestoneChange = (index: number, patch: Partial<ProjectMilestone>) => {
+    setMilestones((prev) => prev.map((m, idx) => (idx === index ? { ...m, ...patch } : m)));
   };
 
   const handleOwnerSelect = (index: number, ownerId: string) => {
@@ -143,89 +139,99 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/45 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-        <ProjectFormHeader editingProject={editingProject} onClose={onClose} />
+    <ModalPortal>
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-stone-950/55 backdrop-blur-xs"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="shrink-0">
+            <ProjectFormHeader editingProject={editingProject} onClose={onClose} />
+          </div>
 
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-5">
-          {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold">
-              {error}
-            </div>
-          )}
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="p-5 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-5">
+              {error && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold">
+                  {error}
+                </div>
+              )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-stone-700 mb-1.5">
-                Nom du projet *
-              </label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Hero, Déploiement Partenaires..."
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#2A7B76]"
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                    Nom du projet *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Ex: Hero, Déploiement Partenaires..."
+                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#2A7B76]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                    État général
+                  </label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as ProjectStatus)}
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#2A7B76]"
+                  >
+                    <option value="active">En cours</option>
+                    <option value="on_hold">En pause</option>
+                    <option value="completed">Terminé</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                  Objectif court (optionnel)
+                </label>
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Ex: Lancement commercial, conformité réglementaire et paiements"
+                  className="w-full px-3.5 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#2A7B76]"
+                />
+              </div>
+
+              <ProjectMilestonesFormList
+                milestones={milestones}
+                activeEmployees={activeEmployees}
+                onAddRow={handleAddMilestoneRow}
+                onRemoveRow={handleRemoveMilestoneRow}
+                onMilestoneChange={handleMilestoneChange}
+                onOwnerSelect={handleOwnerSelect}
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1.5">
-                État général
-              </label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-                className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#2A7B76]"
+            <div className="shrink-0 px-5 sm:px-6 py-3.5 bg-stone-50 border-t border-stone-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-stone-600 hover:bg-stone-200/70 transition cursor-pointer"
               >
-                <option value="active">En cours</option>
-                <option value="on_hold">En pause</option>
-                <option value="completed">Terminé</option>
-              </select>
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-5 py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-sm"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>{isSaving ? 'Enregistrement...' : editingProject ? 'Enregistrer les modifications' : 'Créer le projet'}</span>
+              </button>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1.5">
-              Objectif court (optionnel)
-            </label>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ex: Lancement commercial, conformité réglementaire et paiements"
-              className="w-full px-3.5 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#2A7B76]"
-            />
-          </div>
-
-          <ProjectMilestonesFormList
-            milestones={milestones}
-            activeEmployees={activeEmployees}
-            onAddRow={handleAddMilestoneRow}
-            onRemoveRow={handleRemoveMilestoneRow}
-            onMilestoneChange={handleMilestoneChange}
-            onOwnerSelect={handleOwnerSelect}
-          />
-
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-stone-600 hover:bg-stone-100 transition cursor-pointer"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-5 py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>{isSaving ? 'Enregistrement...' : editingProject ? 'Enregistrer les modifications' : 'Créer le projet'}</span>
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 };

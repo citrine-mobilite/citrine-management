@@ -25,9 +25,7 @@ try {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       try {
-        navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((reg) => {
-          console.log('✅ Service Worker Citrine actif (PWA & Push):', reg.scope);
-        }).catch((err) => {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
           console.warn('SW registration warning:', err);
         });
       } catch (e) {

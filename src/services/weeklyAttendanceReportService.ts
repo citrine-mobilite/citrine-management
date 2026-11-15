@@ -1,4 +1,4 @@
-import { getCollectionData } from '../db/repository';
+import { getCollectionData, saveDocumentData } from '../db/repository';
 import {
   sendConsolidatedReportEmail,
   parseEmailList,
@@ -72,10 +72,6 @@ export async function sendWeeklyConsolidatedReport(options?: {
       .map((e: any) => (e.email || '').trim())
       .filter((mail: string) => mail && mail.includes('@'));
 
-    console.log(
-      `📧 [RAPPORT HEBDO PRÉSENCES] Préparation envoi : To: ${recipients.join(', ')} | CC: ${ccEmails.length} collaborateurs.`
-    );
-
     const sendRes = await sendConsolidatedReportEmail({
       subject: reportData.title,
       title: reportData.title,
@@ -92,6 +88,20 @@ export async function sendWeeklyConsolidatedReport(options?: {
         details: sendRes.details,
       };
     }
+
+    const auditId = `audit-weekly-${Date.now()}`;
+    void saveDocumentData('admin_audit_logs', {
+      id: auditId,
+      timestamp: new Date().toISOString(),
+      authorName: 'Automate RH Citrine',
+      authorRole: 'system',
+      targetName: `Équipe (${reportData.totalCollaborators} collaborateurs)`,
+      operationType: 'systeme',
+      logCategory: 'system_event',
+      operationLabel: options?.manual ? 'Envoi manuel rapport hebdomadaire' : 'Envoi hebdomadaire des présences',
+      details: `${reportData.title} — ${recipients.length} destinataire(s), ${ccEmails.length} copie(s).`,
+      level: 'success',
+    }).catch(() => undefined);
 
     return {
       success: true,

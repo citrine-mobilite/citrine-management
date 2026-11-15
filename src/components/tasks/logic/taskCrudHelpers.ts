@@ -7,6 +7,7 @@ import {
   executeOperationWithLoading,
   executeDeleteWithSweetAlert,
 } from '../../../utils/sweetAlert';
+import { logSystemAudit } from '../../../services/adminAuditService';
 
 export async function confirmDeleteTaskWithPrompt(params: {
   task: Task;
@@ -43,6 +44,15 @@ export async function confirmDeleteTaskWithPrompt(params: {
     });
 
     onUpdateTasks(updated);
+    logSystemAudit({
+      targetName: task.assignedTo || task.title,
+      targetEmployeeId: task.employeeId,
+      operationType: 'tache_projet',
+      operationLabel: 'Suppression de Tâche',
+      details: `Tâche supprimée : "${task.title}"`,
+      level: 'warning',
+      metadata: { assignedTo: task.assignedTo, taskId: task.id },
+    });
 
     if (
       selectedTaskForDetail &&
@@ -73,6 +83,13 @@ export async function createNewProjectAction(params: {
     action: async () => {
       setProjects([...projects, newProject]);
       setActiveProjectId(newProject.id);
+      logSystemAudit({
+        targetName: newProject.name,
+        operationType: 'tache_projet',
+        operationLabel: 'Création Dossier Projet',
+        details: `Nouveau dossier projet créé : "${newProject.name}"`,
+        level: 'success',
+      });
     },
     successTitle: 'Projet créé !',
     successMessage: `Le projet "${newProject.name}" a été créé avec succès.`,
@@ -120,6 +137,17 @@ export async function createNewTaskAction(params: {
         type: 'task_assigned',
         link: 'tasks',
       });
+      logSystemAudit({
+        authorName: currentRole || 'Responsable',
+        authorRole: currentRole || 'Responsable',
+        targetName: taskItem.assignedTo || taskItem.title,
+        targetEmployeeId: taskItem.employeeId,
+        operationType: 'tache_projet',
+        operationLabel: taskItem.isMilestone ? 'Création de Jalon' : 'Création de Tâche',
+        details: `Tâche "${taskItem.title}" créée et assignée à ${taskItem.assignedTo || 'Équipe'} (Priorité: ${taskItem.priority})`,
+        level: 'success',
+        metadata: { assignedTo: taskItem.assignedTo, taskId: taskItem.id },
+      });
     },
     successTitle: 'Tâche créée !',
     successMessage: `La tâche "${taskItem.title}" a été enregistrée avec succès.`,
@@ -142,6 +170,17 @@ export async function deleteTaskWithSweetAlert(params: {
       await taskService.deleteTask(id);
       onUpdateTasks(tasks.filter((t) => t.id !== id));
       setSelectedTaskForDetail(null);
+      if (taskToDelete) {
+        logSystemAudit({
+          targetName: taskToDelete.assignedTo || taskToDelete.title,
+          targetEmployeeId: taskToDelete.employeeId,
+          operationType: 'tache_projet',
+          operationLabel: 'Suppression de Tâche',
+          details: `Suppression définitive de la tâche "${taskToDelete.title}"`,
+          level: 'warning',
+          metadata: { assignedTo: taskToDelete.assignedTo, taskId: taskToDelete.id },
+        });
+      }
     },
     successTitle: 'Tâche supprimée !',
     successMessage: 'La tâche a été retirée avec succès.',
