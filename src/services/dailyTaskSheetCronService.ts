@@ -8,6 +8,7 @@ import {
 import { isStrictSuperAdminAccount } from './weeklyAttendanceReportService';
 import { buildEmployeeTasksSummary } from './taskSheet/dailyTaskSheetTasksBuilder';
 import { buildEmployeeDailyAttendanceSummary } from './taskSheet/dailyTaskSheetAttendanceBuilder';
+import { publishDailyTaskSheetBeamsNotification } from '../server/services/pusherBeamsService';
 
 export interface DailyTaskSheetDispatchResult {
   success: boolean;
@@ -173,6 +174,17 @@ export async function executeDailyTaskSheetDispatch(options?: {
         console.error(`[CRON TaskSheet Error]:`, msg);
         errors.push(msg);
       }
+    }
+
+    if (sentEmployees.length > 0) {
+      publishDailyTaskSheetBeamsNotification({
+        sentCount: sentEmployees.length,
+        dateStr: doualaTime.dateOnly,
+        timeStr: doualaTime.timeOnly,
+        dayIso: doualaTime.dayIso,
+      }).catch((beamsErr) => {
+        console.warn('[CRON TaskSheet] Beams publish notice:', beamsErr?.message || beamsErr);
+      });
     }
 
     return {

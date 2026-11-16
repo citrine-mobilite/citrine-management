@@ -1,22 +1,30 @@
-import { LeaveRequest, LeaveStatus, Employee, AppUser, NotificationLog, LEAVE_TYPE_LABELS } from '../types';
-import {
-  COLLECTIONS,
-  saveDocument,
-  getCollection,
-} from './dataService';
+import { LeaveRequest, LeaveStatus, Employee, NotificationLog, LEAVE_TYPE_LABELS } from '../types';
+import { COLLECTIONS, saveDocument } from './dataService';
 import { pushNotificationBridgeService } from './pushNotificationBridgeService';
 import { soundService } from './soundService';
 import { logSystemAudit } from './adminAuditService';
 
 export async function notifyNewLeaveCreated(newLeave: LeaveRequest, days: number, now: string): Promise<void> {
   const typeLabel = LEAVE_TYPE_LABELS[newLeave.type]?.label || 'Congé / Permission';
+  const operationKey = `leave-created:${newLeave.id}`;
+
+  const title = `Nouvelle demande : ${newLeave.employeeName}`;
+  const message = `${typeLabel} du ${newLeave.startDate} au ${newLeave.endDate} (${days} jour${days > 1 ? 's' : ''}). Motif : ${newLeave.reason}`;
+
   pushNotificationBridgeService.sendPush({
-    title: `Nouvelle demande : ${newLeave.employeeName}`,
-    message: `${typeLabel} du ${newLeave.startDate} au ${newLeave.endDate} (${days} jour${days > 1 ? 's' : ''}). Motif : ${newLeave.reason}`,
+    operationKey,
+    actionKey: operationKey,
+    title,
+    message,
     senderName: newLeave.employeeName,
     senderAvatar: newLeave.employeeAvatar,
     type: 'alert',
+    link: 'leaves',
     excludeUserId: newLeave.employeeId,
+    suppressLocalNative: true,
+    remoteBeams: {
+      targetRoles: ['administrateur', 'responsable'],
+    },
   });
 
   const notif: NotificationLog = {
@@ -27,6 +35,7 @@ export async function notifyNewLeaveCreated(newLeave: LeaveRequest, days: number
     content: `${newLeave.employeeName} (${newLeave.department || 'Opérations'}) sollicite ${days} jour(s) du ${newLeave.startDate} au ${newLeave.endDate}. Motif : ${newLeave.reason}`,
     payload: JSON.stringify({
       source: 'leave_request',
+      operationKey,
       leaveId: newLeave.id,
       employeeId: newLeave.employeeId,
       employeeName: newLeave.employeeName,
@@ -79,22 +88,6 @@ export async function syncEmployeeMissionOnApproval(
 
   try {
     await saveDocument(COLLECTIONS.EMPLOYEES, updatedEmp);
-
-    if (isOngoingToday && (employee.userId || employee.email)) {
-      const users = await getCollection<AppUser>(COLLECTIONS.USERS);
-      const targetUser = users.find(
-        (u) =>
-          (employee.userId && String(u.id) === String(employee.userId)) ||
-          (employee.email && u.email && u.email.toLowerCase() === employee.email.toLowerCase()) ||
-          (u.employeeId && String(u.employeeId) === String(employee.id))
-      );
-      if (targetUser && targetUser.employmentStatus !== 'en_mission') {
-        await saveDocument(COLLECTIONS.USERS, {
-          ...targetUser,
-          employmentStatus: 'en_mission',
-        });
-      }
-    }
   } catch (e) {
     console.warn('Error updating employee/user mission status:', e);
   }
@@ -121,30 +114,43 @@ export async function notifyLeaveDecisionOutcome(params: {
   const isMission = existingLeave.type === 'mission_professionnelle';
 
   if (decision.status === 'approved') {
-    decisionTitle = isMission ? 'Mission professionnelle validée ✓' : 'Demande de congé validée ✓';
+    decisionTitle = isMission ? 'Mission professionnelle validée' : 'Demande de congé / permission validée';
     decisionMsg = isMission
       ? `Votre mission professionnelle a été approuvée pour ${effectiveDays} jour(s) du ${effectiveStart} au ${effectiveEnd}. ${decision.managerComment ? `Note : ${decision.managerComment}` : ''}`
       : `Votre demande a été approuvée pour ${effectiveDays} jour(s) du ${effectiveStart} au ${effectiveEnd}. ${decision.managerComment ? `Note : ${decision.managerComment}` : ''}`;
   } else if (decision.status === 'rejected') {
-    decisionTitle = isMission ? 'Mission professionnelle refusée ✕' : 'Demande de congé refusée ✕';
+    decisionTitle = isMission ? 'Mission professionnelle refusée' : 'Demande de congé / permission refusée';
     decisionMsg = `Votre demande du ${updated.startDate} au ${updated.endDate} a été refusée. ${decision.managerComment ? `Motif du refus : ${decision.managerComment}` : ''}`;
   } else if (decision.status === 'modified') {
-    decisionTitle = isMission ? 'Période de mission réajustée ⚠️' : 'Durée de congé ajustée par le responsable ⚠️';
-    decisionMsg = `La durée de votre mission a été réajustée à ${effectiveDays} jour(s) (du ${effectiveStart} au ${effectiveEnd}). Note : ${decision.managerComment || 'Ajustement de planning'}`;
+    decisionTitle = isMission ? 'Période de mission réajustée' : 'Durée de permission ajustée';
+    decisionMsg = `La durée accordée a été réajustée à ${effectiveDays} jour(s) (du ${effectiveStart} au ${effectiveEnd}). Note : ${decision.managerComment || 'Ajustement de planning'}`;
   }
 
+  const operationKey = `leave-decision:${updated.id}:${updated.status}`;
+  const targetEmail = employee?.email || updated.employeeEmail;
+  const targetEmployeeId = employee?.id || updated.employeeId;
+
   pushNotificationBridgeService.sendPush({
+    operationKey,
+    actionKey: operationKey,
     title: decisionTitle,
     message: decisionMsg,
     senderName: decision.decidedBy,
     type: 'alert',
+    link: 'leaves',
+    suppressLocalNative: true,
+    remoteBeams: {
+      targetUserIds: employee?.userId ? [String(employee.userId)] : undefined,
+      targetEmployeeIds: targetEmployeeId ? [String(targetEmployeeId)] : undefined,
+      targetEmails: targetEmail ? [targetEmail] : undefined,
+    },
   });
 
   try {
     soundService.playAlertNotification(0.65);
   } catch {}
 
-  const recipientTarget = employee?.email || employee?.name || updated.employeeEmail || updated.employeeName;
+  const recipientTarget = targetEmail || employee?.name || updated.employeeName;
   const notif: NotificationLog = {
     id: `notif-leave-decision-${updated.id}-${Date.now()}`,
     type: 'system',
@@ -153,6 +159,7 @@ export async function notifyLeaveDecisionOutcome(params: {
     content: decisionMsg,
     payload: JSON.stringify({
       source: 'leave_decision',
+      operationKey,
       leaveId: updated.id,
       status: updated.status,
       employeeId: updated.employeeId,
@@ -197,20 +204,32 @@ export async function notifyAdminLeaveCreated(
   onAddNotification?: (n: NotificationLog) => void
 ): Promise<void> {
   const typeLabel = LEAVE_TYPE_LABELS[newLeave.type]?.label || 'Congé / Permission';
+  const operationKey = `leave-admin-created:${newLeave.id}`;
+  const title = status === 'approved' ? `Congé / Permission accordé(e) : ${newLeave.employeeName}` : `Nouvelle permission enregistrée : ${newLeave.employeeName}`;
+  const message = `${typeLabel} accordé(e) du ${newLeave.startDate} au ${newLeave.endDate} (${days} jour(s)). ${newLeave.reason ? `Motif : ${newLeave.reason}` : ''}`;
+
   pushNotificationBridgeService.sendPush({
-    title: status === 'approved' ? `Congé / Permission accordé(e) : ${newLeave.employeeName}` : `Nouvelle permission enregistrée : ${newLeave.employeeName}`,
-    message: `${typeLabel} accordé(e) du ${newLeave.startDate} au ${newLeave.endDate} (${days} jour(s)). ${newLeave.reason ? `Motif : ${newLeave.reason}` : ''}`,
+    operationKey,
+    actionKey: operationKey,
+    title,
+    message,
     senderName: authorUser?.name || 'Direction RH',
     type: 'alert',
+    link: 'leaves',
+    suppressLocalNative: true,
+    remoteBeams: {
+      targetEmployeeIds: newLeave.employeeId ? [newLeave.employeeId] : undefined,
+      targetEmails: newLeave.employeeEmail ? [newLeave.employeeEmail] : undefined,
+    },
   });
 
   const notif: NotificationLog = {
     id: `notif-leave-${newLeave.id}`,
     type: 'system',
-    recipient: newLeave.employeeName,
+    recipient: newLeave.employeeEmail || newLeave.employeeName,
     title: `${typeLabel} attribué(e) : ${newLeave.employeeName}`,
     content: `${authorUser?.name || 'La Direction RH'} a accordé un(e) ${typeLabel} de ${days} jour(s) du ${newLeave.startDate} au ${newLeave.endDate}.`,
-    payload: JSON.stringify(newLeave),
+    payload: JSON.stringify({ ...newLeave, operationKey }),
     timestamp: now,
     read: false,
   };

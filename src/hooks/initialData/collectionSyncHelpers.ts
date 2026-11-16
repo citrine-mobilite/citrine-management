@@ -12,6 +12,7 @@ import {
 } from '../../types';
 import { saveDocument, deleteDocument, getCollection, COLLECTIONS } from '../../services/dataService';
 import { persistStoredModuleConfig } from './moduleConfigStorage';
+import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 
 export async function syncCollectionDiff<T extends { id: string }>(
   collectionName: string,
@@ -64,6 +65,25 @@ export async function addAttendanceIncidentWithNotification(params: {
     };
     const label = typeLabels[incident.type] || 'Signalement RH';
     const notifId = `notif-inc-${incident.id}`;
+    const operationKey = `incident-declared:${incident.id}`;
+
+    if (incident.origin === 'signale_par_employe') {
+      pushNotificationBridgeService.sendPush({
+        operationKey,
+        actionKey: operationKey,
+        title: `Déclaration RH : ${label}`,
+        message: `${incident.employeeName || 'Un collaborateur'} — ${incident.reason || `Déclaration pour le ${incident.date}`}`,
+        senderName: incident.employeeName || 'Collaborateur',
+        type: 'incident',
+        link: 'presences',
+        suppressLocalNative: true,
+        remoteBeams: {
+          targetRoles: ['administrateur', 'responsable'],
+        },
+      });
+    } else {
+      pushNotificationBridgeService.markOperationDispatched(operationKey);
+    }
 
     const notif: NotificationLog = {
       id: notifId,
@@ -74,6 +94,7 @@ export async function addAttendanceIncidentWithNotification(params: {
       content: incident.reason || `Incident enregistré pour la date du ${incident.date}.`,
       payload: JSON.stringify({
         source: 'attendance_incident',
+        operationKey,
         incidentId: incident.id,
         employeeId: incident.employeeId,
         type: incident.type,

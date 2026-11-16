@@ -1,5 +1,6 @@
 import { savePresenceAtomic } from '../../services/dataService';
 import { realtimeSyncService } from '../../services/realtimeSyncService';
+import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { Employee, Presence, AppUser, NotificationLog, AttendanceIncident, CompanyModuleConfig } from '../../types';
 
 export type AdminClockAction = 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure';
@@ -134,6 +135,7 @@ export async function executeAdminOnBehalfClocking(
     }
   }
 
+  const clockOpKey = `clock:${targetPresence.id}:${clockAction}:${nowTime}`;
   let targetNotification: NotificationLog | null = null;
   if (onAddNotification) {
     const actionLabels: Record<string, string> = {
@@ -151,6 +153,7 @@ export async function executeAdminOnBehalfClocking(
       recipient: targetEmployee.id,
       payload: JSON.stringify({
         source: 'admin_on_behalf',
+        operationKey: clockOpKey,
         employeeId: targetEmployee.id,
         employeeName: targetEmployee.name,
         action: clockAction,
@@ -167,6 +170,8 @@ export async function executeAdminOnBehalfClocking(
   if (!atomicRes.success) {
     return { success: false, error: `Erreur denregistrement atomique: ${atomicRes.error}` };
   }
+
+  pushNotificationBridgeService.markOperationDispatched(clockOpKey);
 
   onUpdatePresences(updatedPresences);
   if (targetIncident && onAddAttendanceIncident) {

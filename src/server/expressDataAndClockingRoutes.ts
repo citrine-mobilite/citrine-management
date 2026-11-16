@@ -10,6 +10,11 @@ import {
   checkClockingEligibilityBackend,
 } from '../db/repository';
 import { broadcastRealtimeEvent } from './expressRealtimeHub';
+import {
+  getBeamsCredentials,
+  publishBeamsNotification,
+  publishClockingBeamsNotification,
+} from './services/pusherBeamsService';
 
 export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.get('/api/health', (_req, res) => {
@@ -105,11 +110,76 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
           notification: result.notification,
           timestamp: new Date().toISOString(),
         });
+
+        const reqOrigin =
+          (typeof req.headers.origin === 'string' && req.headers.origin) ||
+          (req.headers.host ? `${req.protocol || 'https'}://${req.headers.host}` : undefined);
+
+        publishClockingBeamsNotification({
+          presence: result.presence || input.presence,
+          action: input.action,
+          origin: reqOrigin,
+        }).catch((beamsErr) => {
+          console.warn('[API /api/clocking/atomic] Beams publish notice:', beamsErr?.message || beamsErr);
+        });
       }
       res.json(result);
     } catch (error: any) {
       console.error('[API Atomic Clocking Error]:', error);
       res.status(500).json({ success: false, error: error.message || 'Échec du pointage atomique.' });
+    }
+  });
+
+  app.get('/api/push/beams/config', (_req: express.Request, res: express.Response) => {
+    const { instanceId, secretKey } = getBeamsCredentials();
+    res.json({
+      success: true,
+      configured: Boolean(instanceId && secretKey),
+      instanceId,
+    });
+  });
+
+  app.post('/api/push/beams/publish', async (req: express.Request, res: express.Response) => {
+    try {
+      const {
+        title,
+        body,
+        interests,
+        targetRoles,
+        targetUserIds,
+        targetEmployeeIds,
+        targetEmails,
+        link,
+        operationKey,
+        data,
+      } = req.body || {};
+
+      if (!title || !body) {
+        return res.status(400).json({ success: false, error: 'Titre et message requis.' });
+      }
+
+      const reqOrigin =
+        (typeof req.headers.origin === 'string' && req.headers.origin) ||
+        (req.headers.host ? `${req.protocol || 'https'}://${req.headers.host}` : undefined);
+
+      const result = await publishBeamsNotification({
+        title,
+        body,
+        interests,
+        targetRoles,
+        targetUserIds,
+        targetEmployeeIds,
+        targetEmails,
+        link,
+        origin: reqOrigin,
+        operationKey,
+        data,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('[API /api/push/beams/publish Error]:', error);
+      res.status(500).json({ success: false, error: error?.message || 'Erreur publication Pusher Beams.' });
     }
   });
 

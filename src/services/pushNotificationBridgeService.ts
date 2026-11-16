@@ -1,5 +1,6 @@
 import { soundService } from './soundService';
 import { pushNotificationService } from './pushNotificationService';
+import { pusherBeamsClientService, RemoteBeamsPublishParams } from './pusherBeamsClientService';
 
 export interface PushNotificationPayload {
   id?: string;
@@ -13,15 +14,21 @@ export interface PushNotificationPayload {
   exactReceivedTime?: string;
   excludeUserId?: string;
   actionKey?: string;
+  operationKey?: string;
+  suppressLocalNative?: boolean;
+  remoteBeams?: Omit<RemoteBeamsPublishParams, 'title' | 'body' | 'link' | 'operationKey'>;
 }
 
 type PushListener = (payload: PushNotificationPayload) => void;
+
+export const CITRINE_TAB_SESSION_ID = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 class PushNotificationBridgeService {
   private listeners: PushListener[] = [];
   private history: PushNotificationPayload[] = [];
   private bc: BroadcastChannel | null = null;
   private recentPushKeys: Map<string, number> = new Map();
+  private recentContentKeys: Map<string, number> = new Map();
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -53,6 +60,28 @@ class PushNotificationBridgeService {
     this.history = [];
   }
 
+  private pruneExpired(map: Map<string, number>, maxAgeMs = 30000): void {
+    const now = Date.now();
+    for (const [key, timestamp] of map.entries()) {
+      if (now - timestamp > maxAgeMs) {
+        map.delete(key);
+      }
+    }
+  }
+
+  public markOperationDispatched(operationKey?: string): void {
+    if (!operationKey) return;
+    this.pruneExpired(this.recentPushKeys);
+    this.recentPushKeys.set(operationKey, Date.now());
+  }
+
+  public wasOperationRecentlyDispatched(operationKey?: string, windowMs = 15000): boolean {
+    if (!operationKey) return false;
+    this.pruneExpired(this.recentPushKeys);
+    const ts = this.recentPushKeys.get(operationKey);
+    return Boolean(ts && Date.now() - ts < windowMs);
+  }
+
   private handleIncomingPush(fullPayload: PushNotificationPayload, broadcast = true): void {
     this.history = [fullPayload, ...this.history].slice(0, 50);
 
@@ -66,31 +95,19 @@ class PushNotificationBridgeService {
       } catch {}
     }
 
-    // Déclenchement automatique de la notification push native du navigateur / OS
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !fullPayload.suppressLocalNative) {
       try {
-        if ('Notification' in window) {
-          if (Notification.permission === 'granted') {
-            pushNotificationService.sendNotification(fullPayload.title, {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          const tagKey = fullPayload.operationKey || fullPayload.actionKey || fullPayload.id || `citrine-${Date.now()}`;
+          pushNotificationService
+            .sendNotification(fullPayload.title, {
               body: fullPayload.message,
-              tag: fullPayload.id || `citrine-${Date.now()}`,
+              tag: tagKey,
               icon: '/pwa-192x192.png',
               badge: '/pwa-192x192.png',
               data: { link: fullPayload.link },
-            }).catch(() => {});
-          } else if (Notification.permission === 'default') {
-            Notification.requestPermission().then((perm) => {
-              if (perm === 'granted') {
-                pushNotificationService.sendNotification(fullPayload.title, {
-                  body: fullPayload.message,
-                  tag: fullPayload.id || `citrine-${Date.now()}`,
-                  icon: '/pwa-192x192.png',
-                  badge: '/pwa-192x192.png',
-                  data: { link: fullPayload.link },
-                }).catch(() => {});
-              }
-            }).catch(() => {});
-          }
+            })
+            .catch(() => {});
         }
       } catch (nativeErr) {
         console.warn('Native notification dispatch notice:', nativeErr);
@@ -112,27 +129,45 @@ class PushNotificationBridgeService {
 
   public sendPush(payload: PushNotificationPayload): void {
     const now = Date.now();
-    const dedupKey = payload.actionKey || `${payload.title}:${payload.message}`;
+    this.pruneExpired(this.recentPushKeys);
+    this.pruneExpired(this.recentContentKeys);
 
-    // Nettoyage des anciennes clés (> 10s)
-    for (const [key, timestamp] of this.recentPushKeys.entries()) {
-      if (now - timestamp > 10000) {
-        this.recentPushKeys.delete(key);
+    const opKey = (payload.operationKey || payload.actionKey || '').trim();
+    const contentKey = `${payload.type || 'general'}:${payload.title}:${payload.message}`.trim();
+
+    if (opKey) {
+      const lastOp = this.recentPushKeys.get(opKey);
+      if (lastOp && now - lastOp < 12000) {
+        return;
       }
+      this.recentPushKeys.set(opKey, now);
     }
 
-    // Déduplication stricte : si un push identique ou lié à la même action a eu lieu il y a < 3000ms, on ignore
-    const lastSent = this.recentPushKeys.get(dedupKey);
-    if (lastSent && now - lastSent < 3000) {
+    const lastContent = this.recentContentKeys.get(contentKey);
+    if (lastContent && now - lastContent < 8000) {
       return;
     }
-    this.recentPushKeys.set(dedupKey, now);
+    this.recentContentKeys.set(contentKey, now);
 
     const fullPayload: PushNotificationPayload = {
       id: `push-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: new Date().toISOString(),
       ...payload,
+      operationKey: opKey || undefined,
     };
+
+    if (payload.remoteBeams) {
+      pusherBeamsClientService
+        .publishBeamsPush({
+          title: payload.title,
+          body: payload.message,
+          link: payload.link,
+          operationKey: opKey || contentKey,
+          ...payload.remoteBeams,
+        })
+        .catch(() => {});
+    }
+
     this.handleIncomingPush(fullPayload, true);
   }
 }

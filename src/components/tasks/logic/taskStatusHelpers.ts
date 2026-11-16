@@ -77,38 +77,47 @@ export async function changeTaskStatusAction(params: {
       }
 
       const targetRecipient = targetTask.assignedTo || targetTask.employeeId || 'Collaborateur';
+      const isCompletion = newStatus === 'completed' && targetTask.status !== 'completed';
 
-      onAddNotification({
-        id: `notif-task-move-${Date.now()}-${taskId}`,
-        recipient: targetRecipient,
-        type: 'system',
-        title: `Mouvement de Tâche : ${targetTask.title}`,
-        content: `La tâche est passée au statut « ${label} ».`,
-        payload: JSON.stringify({
-          source: 'task_movement',
-          taskId: targetTask.id,
-          employeeId: targetRecipient,
-          newStatus,
-          previousStatus: targetTask.status,
-        }),
-        timestamp: new Date().toISOString(),
-        read: false,
-      });
-
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-      }
-
-      pushNotificationBridgeService.sendPush({
-        title: 'Mise à jour de Tâche 🔄',
-        message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
-        senderName: currentRole || 'Collaborateur',
-        type: 'task_assigned',
-        link: 'tasks',
-      });
-
-      if (newStatus === 'completed' && targetTask.status !== 'completed') {
+      if (isCompletion) {
         notifyExceptionalTaskCompletion(updatedTask, targetTask.assignedTo, onAddNotification as any);
+      } else {
+        const operationKey = `task-status:${targetTask.id}:${newStatus}`;
+        pushNotificationBridgeService.sendPush({
+          operationKey,
+          actionKey: operationKey,
+          title: 'Mise à jour de Tâche',
+          message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
+          senderName: currentRole || 'Collaborateur',
+          type: 'task_assigned',
+          link: 'tasks',
+          suppressLocalNative: true,
+          remoteBeams: {
+            targetRoles: ['administrateur', 'responsable'],
+          },
+        });
+
+        onAddNotification({
+          id: `notif-task-move-${Date.now()}-${taskId}`,
+          recipient: targetRecipient,
+          type: 'system',
+          title: `Mouvement de Tâche : ${targetTask.title}`,
+          content: `La tâche est passée au statut « ${label} ».`,
+          payload: JSON.stringify({
+            source: 'task_movement',
+            operationKey,
+            taskId: targetTask.id,
+            employeeId: targetRecipient,
+            newStatus,
+            previousStatus: targetTask.status,
+          }),
+          timestamp: new Date().toISOString(),
+          read: false,
+        });
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+        }
       }
 
       logSystemAudit({

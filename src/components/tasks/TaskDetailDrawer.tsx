@@ -33,6 +33,7 @@ import {
 } from '../../types';
 import { canManageTaskAssignment, isSelfOnlyUser } from '../../utils/roleUtils';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
+import { notifyExceptionalTaskCompletion } from '../../services/exceptionalTaskCompletionService';
 import {
   buildAsanaBreadcrumb,
   collectAllDependencyCandidates,
@@ -222,11 +223,18 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
               completedAt: s.completedAt || new Date().toISOString(),
             }))
           : task.subtasks;
+      const completedAt = nextStatus === 'completed' ? new Date().toISOString() : undefined;
       commitNodePatch({
         status: nextStatus,
         subtasks: updatedSubtasks,
-        completedAt: nextStatus === 'completed' ? new Date().toISOString() : undefined,
+        completedAt,
       });
+      if (nextStatus === 'completed') {
+        notifyExceptionalTaskCompletion(
+          { ...task, status: 'completed', subtasks: updatedSubtasks, completedAt },
+          currentUserName || task.assignedTo
+        ).catch(() => {});
+      }
     }
   };
 
@@ -302,11 +310,19 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
     const nextComments = [...(activeNode.comments || []), newCom];
     commitNodePatch({ comments: nextComments });
     setNewCommentText('');
+    const opKey = `task-comment:${activeNode.id}:${newCom.id}`;
     pushNotificationBridgeService.sendPush({
+      operationKey: opKey,
+      actionKey: opKey,
       title: 'Nouveau commentaire sur tâche',
       message: `${newCom.author} sur « ${activeNode.title} » : ${newCom.text}`,
       type: 'task_comment',
-      link: '#tasks',
+      link: 'tasks',
+      suppressLocalNative: true,
+      remoteBeams: {
+        targetRoles: ['administrateur', 'responsable'],
+        targetEmployeeIds: task.employeeId ? [String(task.employeeId)] : undefined,
+      },
     });
   };
 

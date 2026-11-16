@@ -41,7 +41,14 @@ export const EmployeeAssignedTasksSection: React.FC<EmployeeAssignedTasksSection
     const label = statusLabels[newStatus] || newStatus;
     const recipient = employeeProfile?.id || task.assignedTo || 'Collaborateur';
 
-    if (onAddNotification) {
+    if (newStatus === 'completed' && task.status !== 'completed') {
+      notifyExceptionalTaskCompletion(
+        { ...task, status: 'completed' },
+        employeeProfile?.name || task.assignedTo,
+        onAddNotification as any
+      );
+    } else if (onAddNotification) {
+      const operationKey = `task-status:${task.id}:${newStatus}`;
       onAddNotification({
         id: `notif-task-move-${Date.now()}-${task.id}`,
         recipient,
@@ -50,6 +57,7 @@ export const EmployeeAssignedTasksSection: React.FC<EmployeeAssignedTasksSection
         content: `La tâche est passée au statut « ${label} ».`,
         payload: JSON.stringify({
           source: 'task_movement',
+          operationKey,
           taskId: task.id,
           employeeId: recipient,
           newStatus,
@@ -62,14 +70,6 @@ export const EmployeeAssignedTasksSection: React.FC<EmployeeAssignedTasksSection
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
       }
-    }
-
-    if (newStatus === 'completed' && task.status !== 'completed') {
-      notifyExceptionalTaskCompletion(
-        { ...task, status: 'completed' },
-        employeeProfile?.name || task.assignedTo,
-        onAddNotification as any
-      );
     }
   };
 

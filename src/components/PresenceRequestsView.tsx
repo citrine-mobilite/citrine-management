@@ -7,6 +7,8 @@ import { PresenceRequestItemCard } from './presence/requests/PresenceRequestItem
 import { SearchableSelect } from './common/SearchableSelect';
 import { incidentService } from '../services/incidentService';
 import { executeOperationWithLoading } from '../utils/sweetAlert';
+import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
+import { COLLECTIONS, saveDocument } from '../services/dataService';
 
 interface PresenceRequestsViewProps {
   presences: Presence[];
@@ -107,6 +109,48 @@ export default function PresenceRequestsView({
 
             updatedPresences[pIdx] = presence;
             await onUpdatePresences(updatedPresences);
+
+            const targetEmp = decisionModalItem.employee || employees.find((e) => String(e.id) === String(decisionModalItem.employeeId));
+            const operationKey = `presence-request-decision:${decisionModalItem.presenceId}:${decisionModalItem.id}:${decisionAction}`;
+            const actionLabel = decisionAction === 'approved' ? 'validée et justifiée' : 'rejetée';
+            const decisionTitle =
+              decisionAction === 'approved'
+                ? 'Demande / Signalement justifié'
+                : 'Demande / Signalement rejeté';
+            const decisionBody = `Votre demande du ${decisionModalItem.date} (${decisionModalItem.reason}) a été ${actionLabel} par la direction.`;
+
+            pushNotificationBridgeService.sendPush({
+              operationKey,
+              actionKey: operationKey,
+              title: decisionTitle,
+              message: decisionBody,
+              senderName: 'Direction RH',
+              type: 'incident',
+              link: 'presences',
+              suppressLocalNative: true,
+              remoteBeams: {
+                targetUserIds: targetEmp?.userId ? [targetEmp.userId] : undefined,
+                targetEmployeeIds: decisionModalItem.employeeId ? [String(decisionModalItem.employeeId)] : undefined,
+                targetEmails: targetEmp?.email ? [targetEmp.email] : undefined,
+              },
+            });
+
+            await saveDocument(COLLECTIONS.NOTIFICATIONS, {
+              id: `notif-pres-req-${decisionModalItem.id}-${Date.now()}`,
+              type: 'system',
+              recipient: targetEmp?.email || targetEmp?.name || String(decisionModalItem.employeeId),
+              title: decisionTitle,
+              content: decisionBody,
+              payload: JSON.stringify({
+                source: 'presence_request_decision',
+                operationKey,
+                presenceId: decisionModalItem.presenceId,
+                employeeId: decisionModalItem.employeeId,
+                status: decisionAction,
+              }),
+              timestamp: new Date().toISOString(),
+              read: false,
+            });
           }
         },
         successTitle: decisionAction === 'approved' ? 'Demande validée !' : 'Demande rejetée',

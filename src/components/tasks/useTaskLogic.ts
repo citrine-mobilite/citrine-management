@@ -30,6 +30,7 @@ import {
   deleteTaskWithSweetAlert,
 } from './logic/taskCrudHelpers';
 import { changeTaskStatusAction, saveUpdatedTaskAction } from './logic/taskStatusHelpers';
+import { notifyExceptionalTaskCompletion } from '../../services/exceptionalTaskCompletionService';
 import {
   addSubtaskToTaskAtPath,
   computeNextRecurrenceDate,
@@ -319,21 +320,27 @@ export function useTaskLogic({
       }
 
       if (nextStatus !== currentTask.status) {
-        onAddNotification({
-          id: `notif-task-move-${Date.now()}-${taskId}`,
-          recipient: updatedTask.assignedTo || updatedTask.employeeId || 'Collaborateur',
-          type: 'system',
-          title: `Mouvement de Tâche : ${updatedTask.title}`,
-          content: `Passée au statut « ${nextStatus} ».`,
-          payload: JSON.stringify({
-            source: 'task_movement',
-            taskId: updatedTask.id,
-            newStatus: nextStatus,
-            previousStatus: currentTask.status,
-          }),
-          timestamp: new Date().toISOString(),
-          read: false,
-        });
+        if (nextStatus === 'completed') {
+          notifyExceptionalTaskCompletion(updatedTask, updatedTask.assignedTo, onAddNotification as any).catch(() => {});
+        } else {
+          const operationKey = `task-status:${taskId}:${nextStatus}`;
+          onAddNotification({
+            id: `notif-task-move-${Date.now()}-${taskId}`,
+            recipient: updatedTask.assignedTo || updatedTask.employeeId || 'Collaborateur',
+            type: 'system',
+            title: `Mouvement de Tâche : ${updatedTask.title}`,
+            content: `Passée au statut « ${nextStatus} ».`,
+            payload: JSON.stringify({
+              source: 'task_movement',
+              operationKey,
+              taskId: updatedTask.id,
+              newStatus: nextStatus,
+              previousStatus: currentTask.status,
+            }),
+            timestamp: new Date().toISOString(),
+            read: false,
+          });
+        }
       }
     },
     [tasks, projects, handleSilentSaveTask, onUpdateTasks, onAddNotification, showToast]
@@ -455,7 +462,7 @@ export function useTaskLogic({
           ? 'in_progress'
           : targetTask.status;
 
-      await handleSilentSaveTask({
+      const savedParentTask: Task = {
         ...targetTask,
         status: nextTaskStatus,
         completedAt:
@@ -463,9 +470,19 @@ export function useTaskLogic({
             ? targetTask.completedAt || new Date().toISOString()
             : undefined,
         subtasks: updatedSubtasks,
-      });
+      };
+
+      await handleSilentSaveTask(savedParentTask);
+
+      if (nextTaskStatus === 'completed' && targetTask.status !== 'completed') {
+        notifyExceptionalTaskCompletion(
+          savedParentTask,
+          currentUser?.name || targetTask.assignedTo,
+          onAddNotification as any
+        ).catch(() => {});
+      }
     },
-    [tasks, projects, handleSilentSaveTask, showToast]
+    [tasks, projects, handleSilentSaveTask, showToast, currentUser?.name, onAddNotification]
   );
 
   const handleUpdateSubtaskAtPath = useCallback(

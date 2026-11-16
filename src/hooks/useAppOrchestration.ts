@@ -12,6 +12,7 @@ import { resolveToastPayload } from '../utils/toastTitleUtils';
 import { computeUnreadNotificationsCount, computeNonBadgedEmployeesCount } from '../utils/appBadgeCounters';
 import { registerGlobalErrorHandlers, clearSupabaseAuthStorage, hasUserProfileChanged } from '../utils/appLifecycleHelpers';
 import { logSystemEvent } from '../services/adminAuditService';
+import { pusherBeamsClientService } from '../services/pusherBeamsClientService';
 
 interface UseAppOrchestrationParams {
   employees: Employee[];
@@ -148,6 +149,19 @@ export function useAppOrchestration({
     return () => unsub();
   }, [currentUser?.email, currentUser?.id]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    pusherBeamsClientService.syncUserSubscriptions(currentUser).catch(() => {});
+
+    const onPermissionGranted = () => {
+      pusherBeamsClientService.syncUserSubscriptions(currentUser).catch(() => {});
+    };
+    window.addEventListener('citrine:push_permission_granted', onPermissionGranted);
+    return () => {
+      window.removeEventListener('citrine:push_permission_granted', onPermissionGranted);
+    };
+  }, [currentUser]);
+
   const handleLoginSuccess = async (user: AppUser) => {
     setCurrentUser(user);
     await storeSecureSession(user);
@@ -171,6 +185,7 @@ export function useAppOrchestration({
     const loggedOutUser = currentUser;
     clearSecureSession();
     safeStorage.removeItem('citrine_active_tab');
+    pusherBeamsClientService.unsubscribeAll().catch(() => {});
     try {
       await authService.logout();
     } catch {

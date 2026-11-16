@@ -4,7 +4,18 @@ import { usePwaInstall } from './usePwaInstall';
 import { UniversalInstallModal } from './UniversalInstallModal';
 
 export const PwaInstallBanner: React.FC = () => {
-  const { isInstalled, isIos, isAndroid, hasNativePrompt, showInstallModal, setShowInstallModal, triggerInstall } = usePwaInstall();
+  const {
+    isInstalled,
+    platform,
+    isIos,
+    isAndroid,
+    isSafari,
+    hasNativePrompt,
+    showInstallModal,
+    setShowInstallModal,
+    triggerInstall,
+  } = usePwaInstall();
+
   const [isDismissed, setIsDismissed] = useState<boolean>(() => {
     return sessionStorage.getItem('pwa_banner_dismissed') === 'true';
   });
@@ -28,13 +39,14 @@ export const PwaInstallBanner: React.FC = () => {
           <div className="min-w-0">
             <h4 className="font-bold text-xs leading-tight truncate">Installer Citrine App</h4>
             <p className="text-[10px] text-emerald-100 truncate">
-              Accès rapide, hors-ligne & notifications push
+              Accès rapide, hors-ligne &amp; alertes push Pusher Beams
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
           <button
+            type="button"
             onClick={triggerInstall}
             className="bg-[#D4A82F] hover:bg-[#B8860B] text-stone-900 font-bold text-[11px] px-3 py-1.5 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
           >
@@ -42,6 +54,7 @@ export const PwaInstallBanner: React.FC = () => {
             <span>Installer</span>
           </button>
           <button
+            type="button"
             onClick={() => setShowInstallModal(true)}
             className="p-1.5 hover:bg-white/20 rounded-lg text-white/80 hover:text-white transition cursor-pointer"
             title="Guide d'installation"
@@ -49,6 +62,7 @@ export const PwaInstallBanner: React.FC = () => {
             <HelpCircle className="h-4 w-4" />
           </button>
           <button
+            type="button"
             onClick={handleDismiss}
             className="p-1 hover:bg-white/20 rounded-lg text-white/70 hover:text-white transition cursor-pointer"
             aria-label="Fermer"
@@ -61,8 +75,10 @@ export const PwaInstallBanner: React.FC = () => {
       <UniversalInstallModal
         isOpen={showInstallModal}
         onClose={() => setShowInstallModal(false)}
+        platform={platform}
         isIos={isIos}
         isAndroid={isAndroid}
+        isSafari={isSafari}
         hasNativePrompt={hasNativePrompt}
         onTriggerNativePrompt={triggerInstall}
       />

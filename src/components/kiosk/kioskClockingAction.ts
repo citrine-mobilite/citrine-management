@@ -165,10 +165,24 @@ export async function executeKioskClockAction(params: {
         throw new Error(res.error || 'Erreur lors de la transaction atomique sur borne.');
       }
 
+      const clockOpKey = `clock:${targetPresence.id}:${action}:${timeStr}`;
+      pushNotificationBridgeService.markOperationDispatched(clockOpKey);
+
       onUpdatePresences(updatedPresences);
       if (targetIncident && onAddAttendanceIncident) onAddAttendanceIncident(targetIncident);
       if (targetNotification && onAddNotification) {
-        onAddNotification(targetNotification);
+        onAddNotification({
+          ...targetNotification,
+          payload: JSON.stringify({
+            source: 'kiosk',
+            operationKey: clockOpKey,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            action,
+            time: timeStr,
+            date: todayStr,
+          }),
+        });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
         }
@@ -178,14 +192,6 @@ export async function executeKioskClockAction(params: {
         presence: targetPresence,
         incident: targetIncident,
         notification: targetNotification,
-      });
-
-      pushNotificationBridgeService.sendPush({
-        title: 'Pointage Enregistré ⏱️',
-        message: `${emp.name} a pointé : ${actionLabels[action] || action} à ${timeStr}.`,
-        senderName: emp.name,
-        type: 'attendance',
-        link: 'presences',
       });
       setToastMessage(null);
     },

@@ -103,6 +103,48 @@ export function usePresenceIncidentsLogic({
         if (onUpdateAttendanceIncidents) {
           await onUpdateAttendanceIncidents(attendanceIncidents.map((i) => (i.id === incident.id ? updated : i)));
         }
+
+        const targetEmp = employees.find((e) => String(e.id) === String(incident.employeeId));
+        const operationKey = `incident-justify:${incident.id}:${justifie ? 'justifie' : 'injustifie'}`;
+        const decisionTitle = justifie
+          ? 'Signalement justifié par la direction'
+          : 'Signalement maintenu non justifié';
+        const decisionBody = justifie
+          ? `Votre signalement du ${incident.date} (${getIncidentTypeLabel(incident.type)}) a été validé et justifié.`
+          : `Votre signalement du ${incident.date} (${getIncidentTypeLabel(incident.type)}) n'a pas été retenu comme justifié.`;
+
+        pushNotificationBridgeService.sendPush({
+          operationKey,
+          actionKey: operationKey,
+          title: decisionTitle,
+          message: decisionBody,
+          senderName: 'Direction RH',
+          type: 'incident',
+          link: 'presences',
+          suppressLocalNative: true,
+          remoteBeams: {
+            targetUserIds: targetEmp?.userId ? [String(targetEmp.userId)] : undefined,
+            targetEmployeeIds: incident.employeeId ? [String(incident.employeeId)] : undefined,
+            targetEmails: targetEmp?.email ? [targetEmp.email] : undefined,
+          },
+        });
+
+        await saveDocument(COLLECTIONS.NOTIFICATIONS, {
+          id: `notif-inc-justif-${incident.id}-${Date.now()}`,
+          type: 'system',
+          recipient: targetEmp?.email || incident.employeeName || String(incident.employeeId),
+          title: decisionTitle,
+          content: decisionBody,
+          payload: JSON.stringify({
+            source: 'incident_justification',
+            operationKey,
+            incidentId: incident.id,
+            employeeId: incident.employeeId,
+            isJustified: justifie,
+          }),
+          timestamp: new Date().toISOString(),
+          read: false,
+        });
       },
       successTitle: 'Décision enregistrée !',
       successMessage: `Incident ${justifie ? 'validé et justifié' : 'marqué non justifié'}.`,
@@ -155,21 +197,32 @@ export function usePresenceIncidentsLogic({
             await onUpdateAttendanceIncidents([newInc, ...attendanceIncidents]);
           }
 
+          const operationKey = `incident-manual:${newInc.id}`;
           pushNotificationBridgeService.sendPush({
-            title: `🚨 Signalement RH : ${emp.name}`,
+            operationKey,
+            actionKey: operationKey,
+            title: `Signalement RH : ${emp.name}`,
             message: `Signalement d'absence/manquement consigné pour le ${newDate}. Motif : ${newReason.trim()}`,
             senderName: 'Direction RH',
             type: 'alert',
+            link: 'presences',
+            suppressLocalNative: true,
+            remoteBeams: {
+              targetUserIds: emp.userId ? [String(emp.userId)] : undefined,
+              targetEmployeeIds: emp.id ? [String(emp.id)] : undefined,
+              targetEmails: emp.email ? [emp.email] : undefined,
+            },
           });
 
           const notif: NotificationLog = {
             id: `notif-inc-${newInc.id}`,
             type: 'system',
             recipient: emp.email || emp.name,
-            title: '🚨 Signalement RH d’Absence Non Autorisée',
+            title: 'Signalement RH d’Absence Non Autorisée',
             content: `Un signalement d'absence non validée a été consigné pour le ${newDate}. Motif : ${newReason.trim()}`,
             payload: JSON.stringify({
               source: 'incident_manual',
+              operationKey,
               incidentId: newInc.id,
               employeeId: emp.id,
               employeeName: emp.name,

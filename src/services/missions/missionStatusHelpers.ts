@@ -67,14 +67,27 @@ export async function restoreEmployeeAndUserToPost(params: {
     await saveDocument(COLLECTIONS.USERS, updatedU);
   }
 
+  const operationKey = `mission-restore:${leave.id}`;
+  const pushTitle = isManual ? `Mission Clôturée : ${emp.name}` : `Mission Terminée : ${emp.name}`;
+  const pushMsg = isManual
+    ? `La mission professionnelle de ${emp.name} a été marquée comme terminée par ${actorName}. Statut remis à « En poste ».`
+    : `La mission professionnelle de ${emp.name} est officiellement terminée. Le collaborateur et son compte utilisateur ont été automatiquement replacés en statut « En poste ».`;
+
   pushNotificationBridgeService.sendPush({
-    title: isManual ? `Mission Clôturée : ${emp.name}` : `Mission Terminée : ${emp.name}`,
-    message: isManual
-      ? `La mission professionnelle de ${emp.name} a été marquée comme terminée par ${actorName}. Statut remis à « En poste ».`
-      : `La mission professionnelle de ${emp.name} est officiellement terminée. Le collaborateur et son compte utilisateur ont été automatiquement replacés en statut « En poste ».`,
+    operationKey,
+    actionKey: operationKey,
+    title: pushTitle,
+    message: pushMsg,
     senderName: isManual ? actorName : 'Système RH Citrine',
     type: 'attendance',
     link: 'collaborators',
+    suppressLocalNative: true,
+    remoteBeams: {
+      targetRoles: ['administrateur', 'responsable'],
+      targetEmployeeIds: emp.id ? [String(emp.id)] : undefined,
+      targetEmails: emp.email ? [emp.email] : undefined,
+      targetUserIds: emp.userId ? [String(emp.userId)] : undefined,
+    },
   });
 
   const notif: NotificationLog = {
@@ -87,6 +100,7 @@ export async function restoreEmployeeAndUserToPost(params: {
       : `La mission de ${emp.name} (${start} au ${end}) a pris fin. Statut collaborateur et compte utilisateur basculés automatiquement à « En poste ».`,
     payload: JSON.stringify({
       source: 'mission_lifecycle',
+      operationKey,
       employeeId: emp.id,
       leaveId: leave.id,
       action: 'returned_to_post',

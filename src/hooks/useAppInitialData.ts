@@ -8,7 +8,10 @@ import {
 import { saveDocument, deleteDocument, COLLECTIONS } from '../services/dataService';
 import { cloudSqlService } from '../services/cloudSqlService';
 import { safeStorage } from '../utils/safeStorage';
-import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
+import {
+  pushNotificationBridgeService,
+  CITRINE_TAB_SESSION_ID,
+} from '../services/pushNotificationBridgeService';
 import { MODULE_CACHE_KEY, getStoredModuleConfig, persistStoredModuleConfig } from './initialData/moduleConfigStorage';
 import { syncCollectionDiff, addAttendanceIncidentWithNotification, refreshInitialCollectionsData } from './initialData/collectionSyncHelpers';
 import { useInitialDataSubscriptions } from './initialData/useInitialDataSubscriptions';
@@ -59,6 +62,20 @@ export function useAppInitialData() {
     for (const notif of newNotifs) {
       if (!seenNotificationIdsRef.current.has(notif.id)) {
         seenNotificationIdsRef.current.add(notif.id);
+
+        let parsedPayload: any = null;
+        try {
+          if (typeof (notif as any).payload === 'string' && (notif as any).payload.startsWith('{')) {
+            parsedPayload = JSON.parse((notif as any).payload);
+          }
+        } catch {}
+
+        const opKey = (notif as any).operationKey || parsedPayload?.operationKey || notif.id;
+        const fromCurrentSession = parsedPayload?.originSessionId === CITRINE_TAB_SESSION_ID;
+        if (fromCurrentSession || pushNotificationBridgeService.wasOperationRecentlyDispatched(opKey)) {
+          continue;
+        }
+
         const notifTime = new Date(notif.timestamp).getTime();
         if (notifTime > appStartTimeRef.current - 5000) {
           const isTarget =
@@ -68,6 +85,7 @@ export function useAppInitialData() {
               notif.recipient === currentUser.email ||
               notif.recipient === currentUser.id ||
               notif.recipient === 'Direction & RH' ||
+              notif.recipient === 'Direction RH & Responsables' ||
               notif.recipient === 'Équipe' ||
               notif.recipient === 'Tous'
             ));
@@ -75,8 +93,10 @@ export function useAppInitialData() {
           if (isTarget) {
             pushNotificationBridgeService.sendPush({
               id: notif.id,
+              actionKey: opKey,
+              operationKey: opKey,
               title: notif.title || 'Notification RH Citrine',
-              message: notif.content || '',
+              message: notif.content || (notif as any).message || '',
               senderName: (notif as any).senderName || 'Portail RH',
               type: (notif.type as any) || 'alert',
               timestamp: notif.timestamp || new Date().toISOString(),
@@ -93,25 +113,44 @@ export function useAppInitialData() {
     const text = notif.content || notif.message || notif.title || 'Notification';
     const recipient = notif.recipient || 'Général';
     const title = notif.title || 'Notification';
-    const dedupKey = `${recipient}:${title}:${text}`;
+
+    let payloadObj: any = {};
+    try {
+      if (typeof notif.payload === 'string' && notif.payload.startsWith('{')) {
+        payloadObj = JSON.parse(notif.payload);
+      } else if (notif.payload && typeof notif.payload === 'object') {
+        payloadObj = { ...notif.payload };
+      }
+    } catch {}
+
+    const opKey = notif.operationKey || payloadObj.operationKey || `${recipient}:${title}:${text}`;
     const now = Date.now();
 
-    const last = recentNotifKeysRef.current.get(dedupKey);
-    if (last && now - last < 3000) return;
-    recentNotifKeysRef.current.set(dedupKey, now);
+    const last = recentNotifKeysRef.current.get(opKey);
+    if (last && now - last < 8000) return;
+    recentNotifKeysRef.current.set(opKey, now);
 
     for (const [key, timestamp] of recentNotifKeysRef.current.entries()) {
-      if (now - timestamp > 10000) recentNotifKeysRef.current.delete(key);
+      if (now - timestamp > 15000) recentNotifKeysRef.current.delete(key);
     }
 
+    const enrichedPayload = JSON.stringify({
+      ...payloadObj,
+      operationKey: opKey,
+      originSessionId: CITRINE_TAB_SESSION_ID,
+    });
+
+    const notifId = notif.id || `notif-${Date.now()}`;
+    seenNotificationIdsRef.current.add(notifId);
+
     const n: NotificationLog = {
-      id: notif.id || `notif-${Date.now()}`,
+      id: notifId,
       type: notif.type || 'system',
       recipient,
       title,
       content: text,
       message: text,
-      payload: notif.payload || '',
+      payload: enrichedPayload,
       timestamp: notif.timestamp || new Date().toISOString(),
     };
     await saveDocument(COLLECTIONS.NOTIFICATIONS, n);

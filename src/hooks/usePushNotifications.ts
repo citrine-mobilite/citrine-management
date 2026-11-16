@@ -77,7 +77,6 @@ export function usePushNotifications() {
       setPermission(res);
 
       if (res === 'granted') {
-        // Register SW
         if ('serviceWorker' in navigator) {
           try {
             await navigator.serviceWorker.register('/sw.js');
@@ -86,7 +85,10 @@ export function usePushNotifications() {
           }
         }
 
-        // Send welcoming push notification
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('citrine:push_permission_granted'));
+        }
+
         sendPushNotification({
           title: 'Citrine Push Activé',
           body: 'Vous recevrez désormais les alertes urgentes et rappels de pointage.',
@@ -107,10 +109,8 @@ export function usePushNotifications() {
   const sendPushNotification = (payload: PushNotificationPayload): boolean => {
     if (typeof window === 'undefined') return false;
 
-    // 1. If native Notification API is granted
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
-        // Try Service Worker registration first
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.ready.then((reg) => {
             reg.showNotification(payload.title, {
@@ -124,7 +124,6 @@ export function usePushNotifications() {
               }
             } as any);
           }).catch(() => {
-            // Direct Notification fallback
             new Notification(payload.title, {
               body: payload.body,
               icon: payload.icon || '/pwa-192x192.png',
@@ -132,21 +131,6 @@ export function usePushNotifications() {
               tag: payload.tag
             });
           });
-
-          // Also postMessage to service worker controller if available
-          if (navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({
-              type: 'SHOW_NOTIFICATION',
-              payload: {
-                title: payload.title,
-                options: {
-                  body: payload.body,
-                  icon: payload.icon || '/pwa-192x192.png',
-                  tag: payload.tag
-                }
-              }
-            });
-          }
 
           return true;
         } else {

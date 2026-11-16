@@ -8,6 +8,7 @@ import {
   toggleSubtaskInTree,
   updateSubtaskDetailInTree,
 } from './taskDetailTreeHelpers';
+import { notifyExceptionalTaskCompletion } from '../../../services/exceptionalTaskCompletionService';
 
 interface UseTaskDetailLogicParams {
   task: Task;
@@ -158,12 +159,17 @@ export function useTaskDetailLogic({
     const newStatus: TaskStatus = allSubsCompleted ? 'completed' : task.status === 'completed' ? 'in_progress' : task.status;
 
     setDraftStatus(newStatus);
-    onSaveTask({
+    const updatedTaskObj: Task = {
       ...task,
       status: newStatus,
       subtasks: updated,
       completedAt: newStatus === 'completed' ? task.completedAt || new Date().toISOString() : undefined,
-    });
+    };
+    onSaveTask(updatedTaskObj);
+
+    if (newStatus === 'completed' && task.status !== 'completed') {
+      notifyExceptionalTaskCompletion(updatedTaskObj, currentUser?.name || task.assignedTo).catch(() => {});
+    }
   };
 
   const handleDeleteSubtask = (subId: string) => {
@@ -192,11 +198,19 @@ export function useTaskDetailLogic({
     setNewCommentText('');
     onSaveTask({ ...task, comments: updated });
 
+    const opKey = `task-comment:${task.id}:${newCom.id}`;
     pushNotificationBridgeService.sendPush({
-      title: `Nouveau Commentaire 💬`,
+      operationKey: opKey,
+      actionKey: opKey,
+      title: `Nouveau Commentaire`,
       message: `${newCom.author} a commenté sur la tâche "${task.title}": "${newCom.text}"`,
       type: 'task_comment',
-      link: '#tasks',
+      link: 'tasks',
+      suppressLocalNative: true,
+      remoteBeams: {
+        targetRoles: ['administrateur', 'responsable'],
+        targetEmployeeIds: task.employeeId ? [String(task.employeeId)] : undefined,
+      },
     });
   };
 

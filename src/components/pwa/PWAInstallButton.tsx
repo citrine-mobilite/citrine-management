@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Download } from 'lucide-react';
 import { usePwaInstall } from './usePwaInstall';
 import { UniversalInstallModal } from './UniversalInstallModal';
@@ -9,32 +9,37 @@ interface PWAInstallButtonProps {
   compact?: boolean;
 }
 
-export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ 
-  className = '', 
-  compact = false 
+export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
+  className = '',
+  compact = false,
 }) => {
-  const { 
-    isInstalled, 
-    hasNativePrompt, 
-    isIos, 
-    isAndroid, 
-    triggerInstall 
+  const {
+    isInstalled,
+    hasNativePrompt,
+    platform,
+    isIos,
+    isAndroid,
+    isSafari,
+    showInstallModal,
+    setShowInstallModal,
+    triggerInstall,
   } = usePwaInstall();
-  
-  const [modalOpen, setModalOpen] = useState(false);
 
-  // Si l'application est déjà exécutée en mode standalone installé
+  // Masquer automatiquement lorsque l'app est déjà exécutée en PWA installée
   if (isInstalled) return null;
 
   const handleClick = async () => {
     haptic.medium();
-    if (hasNativePrompt) {
-      await triggerInstall();
-    } else {
-      // Si pas de prompt direct (ex: iOS Safari, iFrame, ou prompt déjà différé), ouvrir le guide d'installation
-      setModalOpen(true);
-    }
+    await triggerInstall();
   };
+
+  const buttonLabel = compact
+    ? 'Installer'
+    : hasNativePrompt
+      ? "Installer l'application"
+      : isIos
+        ? 'Installer sur iPhone'
+        : "Installer l'App";
 
   return (
     <>
@@ -42,18 +47,23 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         type="button"
         onClick={handleClick}
         className={`px-3 py-2 bg-gradient-to-r from-[#D4A82F] to-amber-500 hover:from-[#c29624] hover:to-amber-600 text-stone-950 font-bold text-xs rounded-2xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0 active:scale-95 border border-amber-300/40 select-none ${className}`}
-        title="Installer l'application sur votre écran d'accueil"
+        title={
+          hasNativePrompt
+            ? "Installer Citrine Management directement sur cet appareil"
+            : "Installer Citrine Management sur Android, iPhone, Windows, Mac ou Linux"
+        }
       >
-        <Download className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">{compact ? "Installer" : "Installer l'App"}</span>
+        <Download className={`h-3.5 w-3.5 shrink-0 ${hasNativePrompt ? 'animate-bounce' : ''}`} />
+        <span className="truncate">{buttonLabel}</span>
       </button>
 
-      {/* Modal d'installation universel & guide */}
       <UniversalInstallModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        platform={platform}
         isIos={isIos}
         isAndroid={isAndroid}
+        isSafari={isSafari}
         hasNativePrompt={hasNativePrompt}
         onTriggerNativePrompt={triggerInstall}
       />

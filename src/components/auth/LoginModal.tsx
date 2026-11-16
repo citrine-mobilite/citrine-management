@@ -3,6 +3,7 @@ import { Mail, Lock, AlertCircle, ArrowRight, UserCheck, Eye, EyeOff, Shield } f
 import { AppUser } from '../../types';
 import { authService } from '../../services/auth/authService';
 import { HeroCabLogo } from '../CMLogo';
+import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 export interface LoginModalProps {
   users?: AppUser[];
@@ -145,10 +146,13 @@ export function LoginModal({
             </button>
           </form>
 
-          {/* Mentions de sécurité */}
-          <div className="pt-3 border-t border-stone-100 flex items-center justify-center gap-2 text-[10px] text-stone-600">
-            <Shield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span>Accès sécurisé réservé aux collaborateurs Citrine SARL</span>
+          {/* Mentions de sécurité & Installation PWA */}
+          <div className="pt-3 border-t border-stone-100 flex flex-col items-center gap-2.5">
+            <div className="flex items-center justify-center gap-2 text-[10px] text-stone-600">
+              <Shield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Accès sécurisé réservé aux collaborateurs Citrine SARL</span>
+            </div>
+            <PWAInstallButton className="w-full py-2.5" />
           </div>
         </div>
 

@@ -127,22 +127,29 @@ export async function createNewTaskAction(params: {
       await taskService.saveTask(taskItem);
       onUpdateTasks([taskItem, ...tasks]);
 
+      const operationKey = `task-created:${taskItem.id}`;
+      pushNotificationBridgeService.sendPush({
+        operationKey,
+        actionKey: operationKey,
+        title: 'Nouvelle Tâche Assignée',
+        message: `${taskItem.title} vous a été assignée pour le ${taskItem.date}.`,
+        senderName: currentRole || 'Responsable',
+        type: 'task_assigned',
+        link: 'tasks',
+        suppressLocalNative: true,
+        remoteBeams: taskItem.employeeId
+          ? { targetEmployeeIds: [String(taskItem.employeeId)] }
+          : { interests: ['all-collaborators'] },
+      });
+
       onAddNotification({
         id: `notif-${Date.now()}`,
         recipient: taskItem.assignedTo || 'Équipe',
         type: 'system',
         title: 'Nouvelle Tâche Assignée',
         content: `${taskItem.title} (${taskItem.date})`,
-        payload: '{}',
+        payload: JSON.stringify({ source: 'task_created', operationKey, taskId: taskItem.id }),
         timestamp: new Date().toISOString(),
-      });
-
-      pushNotificationBridgeService.sendPush({
-        title: 'Nouvelle Tâche Assignée 📋',
-        message: `${taskItem.title} vous a été assignée pour le ${taskItem.date}.`,
-        senderName: currentRole || 'Responsable',
-        type: 'task_assigned',
-        link: 'tasks',
       });
       logSystemAudit({
         authorName: currentRole || 'Responsable',

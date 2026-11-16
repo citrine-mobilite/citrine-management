@@ -7,6 +7,11 @@ import {
   executeAtomicClockingTransaction,
   checkClockingEligibilityBackend,
 } from '../../db/repository';
+import {
+  getBeamsCredentials,
+  publishBeamsNotification,
+  publishClockingBeamsNotification,
+} from '../services/pusherBeamsService';
 
 export async function handleCoreDataAndClockingRoutes(
   urlPath: string,
@@ -120,6 +125,14 @@ export async function handleCoreDataAndClockingRoutes(
         return true;
       }
       const result = await executeAtomicClockingTransaction(body);
+      if (result?.success) {
+        publishClockingBeamsNotification({
+          presence: result.presence || body.presence,
+          action: body.action,
+        }).catch((beamsErr) => {
+          console.warn('[API /clocking/atomic] Beams publish notice:', beamsErr?.message || beamsErr);
+        });
+      }
       res.status(200).json(result);
     } catch (error: any) {
       console.error('[API /clocking/atomic Error]:', error);
@@ -141,6 +154,57 @@ export async function handleCoreDataAndClockingRoutes(
     } catch (error: any) {
       console.error('[API /clocking/eligibility Error]:', error);
       res.status(500).json({ success: false, error: error.message || 'Erreur vérification éligibilité.' });
+    }
+    return true;
+  }
+
+  if (urlPath === '/push/beams/config' && method === 'GET') {
+    const { instanceId, secretKey } = getBeamsCredentials();
+    res.status(200).json({
+      success: true,
+      configured: Boolean(instanceId && secretKey),
+      instanceId,
+    });
+    return true;
+  }
+
+  if (urlPath === '/push/beams/publish' && method === 'POST') {
+    try {
+      const {
+        title,
+        body: msgBody,
+        interests,
+        targetRoles,
+        targetUserIds,
+        targetEmployeeIds,
+        targetEmails,
+        link,
+        operationKey,
+        data,
+      } = body || {};
+
+      if (!title || !msgBody) {
+        res.status(400).json({ success: false, error: 'Titre et message requis.' });
+        return true;
+      }
+
+      const result = await publishBeamsNotification({
+        title,
+        body: msgBody,
+        interests,
+        targetRoles,
+        targetUserIds,
+        targetEmployeeIds,
+        targetEmails,
+        link,
+        operationKey,
+        data,
+      });
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('[API /push/beams/publish Error]:', error);
+      res.status(500).json({ success: false, error: error?.message || 'Erreur publication Pusher Beams.' });
     }
     return true;
   }

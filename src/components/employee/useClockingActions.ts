@@ -147,12 +147,27 @@ export function useClockingActions({
           throw new Error(atomicResult.error || 'Erreur lors de la transaction atomique de pointage.');
         }
 
+        const clockOpKey = `clock:${targetPresence.id}:${action}:${timeStr}`;
+        pushNotificationBridgeService.markOperationDispatched(clockOpKey);
+
         await onUpdatePresences(updatedPresences);
         if (targetIncident && onAddAttendanceIncident) {
           onAddAttendanceIncident(targetIncident);
         }
         if (targetNotification && onAddNotification) {
-          onAddNotification(targetNotification);
+          const notifWithKey: NotificationLog = {
+            ...targetNotification,
+            payload: JSON.stringify({
+              source: 'clocking',
+              operationKey: clockOpKey,
+              presenceId: targetPresence.id,
+              employeeId: employeeProfile.id,
+              action,
+              time: timeStr,
+              date: todayStr,
+            }),
+          };
+          onAddNotification(notifWithKey);
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
           }
@@ -163,18 +178,6 @@ export function useClockingActions({
           incident: targetIncident,
           notification: targetNotification,
         });
-
-        try {
-          pushNotificationBridgeService.sendPush({
-            title: `Pointage de ${employeeProfile.name}`,
-            message: `${employeeProfile.name} a effectué un pointage (${action}) à ${timeStr} sur le site ${gps.locationName}.`,
-            senderName: employeeProfile.name,
-            type: 'attendance',
-            link: 'presences',
-          });
-        } catch (e) {
-          console.warn('Failed to send push notification:', e);
-        }
 
         onSuccess();
       },
