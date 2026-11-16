@@ -4,8 +4,6 @@ import { COLLECTIONS, saveDocument } from '../../../services/dataService';
 import { DEFAULT_PROJECT_RULES, DEFAULT_PROJECT_SECTIONS } from '../taskConstants';
 import { pushNotificationBridgeService } from '../../../services/pushNotificationBridgeService';
 import {
-  showErrorAlert,
-  confirmDeleteAlert,
   executeOperationWithLoading,
   executeDeleteWithSweetAlert,
 } from '../../../utils/sweetAlert';
@@ -15,61 +13,55 @@ export async function confirmDeleteTaskWithPrompt(params: {
   task: Task;
   tasks: Task[];
   selectedTaskForDetail: Task | null;
-  onUpdateTasks: (updated: Task[]) => void;
+  onUpdateTasks: (updated: Task[]) => Promise<void> | void;
   setSelectedTaskForDetail: (t: Task | null) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }) {
-  const { task, tasks, selectedTaskForDetail, onUpdateTasks, setSelectedTaskForDetail, showToast } = params;
-  const isConfirmed = await confirmDeleteAlert({
-    title: 'Supprimer la tâche',
-    text: 'Voulez-vous vraiment supprimer cette tâche ? Cette action est irréversible.',
-    itemName: task.title,
-    confirmButtonText: 'Oui, supprimer la tâche',
-  });
-  if (!isConfirmed) return;
-
+  const { task, tasks, selectedTaskForDetail, onUpdateTasks, setSelectedTaskForDetail } = params;
   const targetId = String(task.id);
   const targetDocId = task.docId ? String(task.docId) : '';
 
-  try {
-    await taskService.deleteTask(targetId);
-    if (targetDocId && targetDocId !== targetId) {
-      await taskService.deleteTask(targetDocId);
-    }
+  await executeDeleteWithSweetAlert({
+    title: 'Supprimer la tâche ?',
+    text: 'Voulez-vous vraiment supprimer cette tâche ? Cette action est irréversible.',
+    itemName: task.title,
+    action: async () => {
+      await taskService.deleteTask(targetId);
+      if (targetDocId && targetDocId !== targetId) {
+        await taskService.deleteTask(targetDocId);
+      }
 
-    const updated = tasks.filter((t) => {
-      const tId = String(t.id);
-      const tDocId = t.docId ? String(t.docId) : '';
-      if (tId === targetId || (targetDocId && tId === targetDocId)) return false;
-      if (tDocId && (tDocId === targetId || (targetDocId && tDocId === targetDocId))) return false;
-      return true;
-    });
+      const updated = tasks.filter((t) => {
+        const tId = String(t.id);
+        const tDocId = t.docId ? String(t.docId) : '';
+        if (tId === targetId || (targetDocId && tId === targetDocId)) return false;
+        if (tDocId && (tDocId === targetId || (targetDocId && tDocId === targetDocId))) return false;
+        return true;
+      });
 
-    onUpdateTasks(updated);
-    logSystemAudit({
-      targetName: task.assignedTo || task.title,
-      targetEmployeeId: task.employeeId,
-      operationType: 'tache_projet',
-      operationLabel: 'Suppression de Tâche',
-      details: `Tâche supprimée : "${task.title}"`,
-      level: 'warning',
-      metadata: { assignedTo: task.assignedTo, taskId: task.id },
-    });
+      await onUpdateTasks(updated);
+      logSystemAudit({
+        targetName: task.assignedTo || task.title,
+        targetEmployeeId: task.employeeId,
+        operationType: 'tache_projet',
+        operationLabel: 'Suppression de Tâche',
+        details: `Tâche supprimée : "${task.title}"`,
+        level: 'warning',
+        metadata: { assignedTo: task.assignedTo, taskId: task.id },
+      });
 
-    if (
-      selectedTaskForDetail &&
-      (String(selectedTaskForDetail.id) === targetId ||
-        (targetDocId && String(selectedTaskForDetail.id) === targetDocId))
-    ) {
-      setSelectedTaskForDetail(null);
-    }
-
-    if (showToast) {
-      showToast('Tâche supprimée avec succès.', 'success');
-    }
-  } catch (err: any) {
-    await showErrorAlert('Erreur de suppression', err?.message || 'Impossible de supprimer la tâche.');
-  }
+      if (
+        selectedTaskForDetail &&
+        (String(selectedTaskForDetail.id) === targetId ||
+          (targetDocId && String(selectedTaskForDetail.id) === targetDocId))
+      ) {
+        setSelectedTaskForDetail(null);
+      }
+    },
+    successTitle: 'Tâche supprimée !',
+    successMessage: `La tâche "${task.title}" a été supprimée avec succès.`,
+    errorMessage: 'Impossible de supprimer la tâche.',
+  });
 }
 
 export async function createNewProjectAction(params: {

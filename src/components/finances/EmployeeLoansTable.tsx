@@ -3,10 +3,11 @@ import { EmployeeSalaryDebt, Employee } from '../../types';
 import { Plus, X, Save, Coins, Download, FileText } from 'lucide-react';
 import { exportToExcel } from '../../services/excelExportService';
 import { exportElementToPdf } from '../../services/pdfExportService';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface EmployeeLoansTableProps {
   salaryDebts: EmployeeSalaryDebt[];
-  onUpdateDebts: (updated: EmployeeSalaryDebt[]) => void;
+  onUpdateDebts: (updated: EmployeeSalaryDebt[]) => Promise<void> | void;
   employees: Employee[];
   showToast?: (msg: string, type?: 'success' | 'error') => void;
 }
@@ -25,7 +26,7 @@ export const EmployeeLoansTable: React.FC<EmployeeLoansTableProps> = ({
 
   const monthlyInstallment = Math.round(loanAmount / durationMonths);
 
-  const handleCreateLoan = (e: React.FormEvent) => {
+  const handleCreateLoan = async (e: React.FormEvent) => {
     e.preventDefault();
     const emp = employees.find((e) => e.id === selectedEmployeeId);
     if (!emp) {
@@ -47,10 +48,21 @@ export const EmployeeLoansTable: React.FC<EmployeeLoansTableProps> = ({
       createdAt: new Date().toISOString(),
     };
 
-    onUpdateDebts([newLoan, ...salaryDebts]);
-    if (showToast) showToast(`Prêt enregistré avec succès pour ${emp.name}.`, 'success');
-    setIsModalOpen(false);
-    setReason("Avance exceptionnelle");
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement du prêt...',
+      loadingText: `Création du dossier d'avance pour ${emp.name}, veuillez patienter...`,
+      action: async () => {
+        await onUpdateDebts([newLoan, ...salaryDebts]);
+        return { status: 'pending' as const };
+      },
+      pendingTitle: 'Prêt enregistré (En cours de débit)',
+      pendingMessage: `Le prêt / avance pour ${emp.name} a été enregistré avec retenue mensuelle de ${monthlyInstallment.toLocaleString('fr-FR')} XAF.`,
+    });
+
+    if (res.success) {
+      setIsModalOpen(false);
+      setReason('Avance exceptionnelle');
+    }
   };
 
   const handleExportExcel = () => {

@@ -83,7 +83,7 @@ export interface AppTabRouterProps {
   onUpdateInventoryItems: (i: InventoryItem[]) => void;
   onUpdatePartners: (p: Partner[]) => void;
   onUpdateUsers: (u: AppUser[]) => void;
-  onUpdateModuleConfig: (c: CompanyModuleConfig) => void;
+  onUpdateModuleConfig: (c: CompanyModuleConfig) => Promise<void> | void;
   onOpenProfileModal: () => void;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   handleSetCurrentUser: (u: AppUser | null) => void;

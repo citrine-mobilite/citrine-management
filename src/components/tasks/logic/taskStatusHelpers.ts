@@ -13,7 +13,7 @@ export async function changeTaskStatusAction(params: {
   tasks: Task[];
   currentRole: string;
   selectedTaskForDetail: Task | null;
-  onUpdateTasks: (updated: Task[]) => void;
+  onUpdateTasks: (updated: Task[]) => Promise<void> | void;
   setSelectedTaskForDetail: (t: Task | null) => void;
   onAddNotification: (log: NotificationLog) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
@@ -57,13 +57,6 @@ export async function changeTaskStatusAction(params: {
     completedAt: newStatus === 'completed' ? targetTask.completedAt || new Date().toISOString() : undefined,
     lastUpdatedTime: new Date().toISOString(),
   };
-  await taskService.saveTask(updatedTask);
-
-  onUpdateTasks(tasks.map((t) => (t.id === taskId ? updatedTask : t)));
-  if (selectedTaskForDetail && selectedTaskForDetail.id === taskId) {
-    setSelectedTaskForDetail(updatedTask);
-  }
-
   const statusLabels: Record<string, string> = {
     todo: 'À faire',
     in_progress: 'En cours',
@@ -71,60 +64,74 @@ export async function changeTaskStatusAction(params: {
     completed: 'Terminée',
   };
   const label = statusLabels[newStatus] || newStatus;
-  const targetRecipient = targetTask.assignedTo || targetTask.employeeId || 'Collaborateur';
 
-  onAddNotification({
-    id: `notif-task-move-${Date.now()}-${taskId}`,
-    recipient: targetRecipient,
-    type: 'system',
-    title: `Mouvement de Tâche : ${targetTask.title}`,
-    content: `La tâche est passée au statut « ${label} ».`,
-    payload: JSON.stringify({
-      source: 'task_movement',
-      taskId: targetTask.id,
-      employeeId: targetRecipient,
-      newStatus,
-      previousStatus: targetTask.status,
-    }),
-    timestamp: new Date().toISOString(),
-    read: false,
+  await executeOperationWithLoading({
+    loadingTitle: 'Mise à jour du statut...',
+    loadingText: `Passage de "${targetTask.title}" au statut « ${label} », veuillez patienter...`,
+    action: async () => {
+      await taskService.saveTask(updatedTask);
+
+      await onUpdateTasks(tasks.map((t) => (t.id === taskId ? updatedTask : t)));
+      if (selectedTaskForDetail && selectedTaskForDetail.id === taskId) {
+        setSelectedTaskForDetail(updatedTask);
+      }
+
+      const targetRecipient = targetTask.assignedTo || targetTask.employeeId || 'Collaborateur';
+
+      onAddNotification({
+        id: `notif-task-move-${Date.now()}-${taskId}`,
+        recipient: targetRecipient,
+        type: 'system',
+        title: `Mouvement de Tâche : ${targetTask.title}`,
+        content: `La tâche est passée au statut « ${label} ».`,
+        payload: JSON.stringify({
+          source: 'task_movement',
+          taskId: targetTask.id,
+          employeeId: targetRecipient,
+          newStatus,
+          previousStatus: targetTask.status,
+        }),
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+      }
+
+      pushNotificationBridgeService.sendPush({
+        title: 'Mise à jour de Tâche 🔄',
+        message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
+        senderName: currentRole || 'Collaborateur',
+        type: 'task_assigned',
+        link: 'tasks',
+      });
+
+      if (newStatus === 'completed' && targetTask.status !== 'completed') {
+        notifyExceptionalTaskCompletion(updatedTask, targetTask.assignedTo, onAddNotification as any);
+      }
+
+      logSystemAudit({
+        authorName: currentRole || 'Collaborateur',
+        authorRole: currentRole || 'Collaborateur',
+        targetName: targetRecipient,
+        targetEmployeeId: targetTask.employeeId,
+        operationType: 'tache_projet',
+        operationLabel: `Changement Statut Tâche (${label})`,
+        details: `La tâche "${targetTask.title}" est passée de "${targetTask.status}" à "${label}".`,
+        level: newStatus === 'completed' ? 'success' : newStatus === 'blocked' ? 'warning' : 'info',
+        metadata: { assignedTo: targetRecipient, taskId: targetTask.id },
+      });
+    },
+    successTitle: 'Statut mis à jour !',
+    successMessage: `La tâche "${targetTask.title}" est passée au statut « ${label} ».`,
   });
-
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-  }
-
-  pushNotificationBridgeService.sendPush({
-    title: 'Mise à jour de Tâche 🔄',
-    message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
-    senderName: currentRole || 'Collaborateur',
-    type: 'task_assigned',
-    link: 'tasks',
-  });
-
-  if (newStatus === 'completed' && targetTask.status !== 'completed') {
-    notifyExceptionalTaskCompletion(updatedTask, targetTask.assignedTo, onAddNotification as any);
-  }
-
-  logSystemAudit({
-    authorName: currentRole || 'Collaborateur',
-    authorRole: currentRole || 'Collaborateur',
-    targetName: targetRecipient,
-    targetEmployeeId: targetTask.employeeId,
-    operationType: 'tache_projet',
-    operationLabel: `Changement Statut Tâche (${label})`,
-    details: `La tâche "${targetTask.title}" est passée de "${targetTask.status}" à "${label}".`,
-    level: newStatus === 'completed' ? 'success' : newStatus === 'blocked' ? 'warning' : 'info',
-    metadata: { assignedTo: targetRecipient, taskId: targetTask.id },
-  });
-
-  if (showToast) showToast('Statut mis à jour et enregistré.', 'success');
 }
 
 export async function saveUpdatedTaskAction(params: {
   updatedTask: Task;
   tasks: Task[];
-  onUpdateTasks: (updated: Task[]) => void;
+  onUpdateTasks: (updated: Task[]) => Promise<void> | void;
   setSelectedTaskForDetail: (t: Task | null) => void;
   onAddNotification: (log: NotificationLog) => void;
 }) {
@@ -137,7 +144,7 @@ export async function saveUpdatedTaskAction(params: {
     loadingText: 'Mise à jour et synchronisation sur le serveur...',
     action: async () => {
       await taskService.saveTask(finalizedTask);
-      onUpdateTasks(tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t)));
+      await onUpdateTasks(tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t)));
       setSelectedTaskForDetail(finalizedTask);
 
       if (finalizedTask.assignedTo) {

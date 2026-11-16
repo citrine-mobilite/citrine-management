@@ -5,7 +5,7 @@ import { DOC_TEMPLATES, DocTemplate } from '../../DocTemplates';
 interface UseCreateDocumentLogicProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaveDocument: (doc: GeneratedDocument) => void;
+  onSaveDocument: (doc: GeneratedDocument) => Promise<void> | void;
   employees: Employee[];
   initialTemplate?: DocTemplate;
   templates?: DocTemplate[];
@@ -159,7 +159,7 @@ export function useCreateDocumentLogic({
     setSentences(parsed.length > 0 ? parsed : [value]);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       setError('Veuillez renseigner le titre ou objet du document.');
@@ -205,10 +205,7 @@ export function useCreateDocumentLogic({
       signatureType: includeSignature ? 'direction_only' : 'none',
     };
 
-    onSaveDocument(newDoc);
-    if (showToast) {
-      showToast('Document RH officiel enregistré et synchronisé en base de données Supabase.');
-    }
+    await onSaveDocument(newDoc);
     onClose();
   };
 

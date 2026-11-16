@@ -21,6 +21,7 @@ import { NewIdeaModal } from './NewIdeaModal';
 import { NewSurveyModal } from './NewSurveyModal';
 import { IdeasTabsNav } from './IdeasTabsNav';
 import { IdeasFilterBar } from './IdeasFilterBar';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface IdeasSurveysPanelProps {
   currentUser?: AppUser | null;
@@ -94,46 +95,57 @@ export const IdeasSurveysPanel: React.FC<IdeasSurveysPanelProps> = ({
   };
 
   const handleUpdateIdeaStatus = async (idea: IdeaSuggestion, nextStatus: IdeaStatus, response?: string) => {
-    try {
-      const updated: IdeaSuggestion = {
-        ...idea,
-        status: nextStatus,
-        ...(response !== undefined ? { managementResponse: response } : {})
-      };
-      await saveIdea(updated);
-      setSelectedIdea(updated);
-      showToast?.(`Statut mis à jour : ${nextStatus}`, 'success');
-      onAddNotification?.({
-        title: 'Mise à jour Boîte à Idées',
-        message: `L'idée "${idea.title}" est maintenant "${nextStatus}".`,
-        type: 'info',
-      });
-    } catch {
-      showToast?.('Erreur lors de la mise à jour.', 'error');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: "Mise à jour de l'idée...",
+      loadingText: `Enregistrement du statut "${nextStatus}", veuillez patienter...`,
+      action: async () => {
+        const updated: IdeaSuggestion = {
+          ...idea,
+          status: nextStatus,
+          ...(response !== undefined ? { managementResponse: response } : {}),
+        };
+        await saveIdea(updated);
+        setSelectedIdea(updated);
+        onAddNotification?.({
+          title: 'Mise à jour Boîte à Idées',
+          message: `L'idée "${idea.title}" est maintenant "${nextStatus}".`,
+          type: 'info',
+        });
+      },
+      successTitle: 'Statut mis à jour !',
+      successMessage: `L'idée "${idea.title}" est désormais au statut : ${nextStatus}.`,
+      errorMessage: 'Erreur lors de la mise à jour.',
+    });
   };
 
   const handleCreateIdea = async (ideaData: Partial<IdeaSuggestion>) => {
     if (!ideaData.title || !ideaData.description) return;
-    try {
-      const ideaToSave: IdeaSuggestion = {
-        id: `idea-${Date.now()}`,
-        title: ideaData.title,
-        description: ideaData.description,
-        category: ideaData.category || 'innovation_logistique',
-        isAnonymous: !!ideaData.isAnonymous,
-        authorName: ideaData.isAnonymous ? undefined : (currentUser?.name || 'Collaborateur Citrine'),
-        authorId: ideaData.isAnonymous ? undefined : currentUserId,
-        status: 'soumise',
-        likesCount: 1,
-        likedUserIds: [currentUserId],
-        createdAt: new Date().toISOString(),
-      };
-      await saveIdea(ideaToSave);
+    const res = await executeOperationWithLoading({
+      loadingTitle: "Dépôt de l'idée...",
+      loadingText: `Enregistrement de "${ideaData.title}", veuillez patienter...`,
+      action: async () => {
+        const ideaToSave: IdeaSuggestion = {
+          id: `idea-${Date.now()}`,
+          title: ideaData.title!,
+          description: ideaData.description!,
+          category: ideaData.category || 'innovation_logistique',
+          isAnonymous: !!ideaData.isAnonymous,
+          authorName: ideaData.isAnonymous ? undefined : (currentUser?.name || 'Collaborateur Citrine'),
+          authorId: ideaData.isAnonymous ? undefined : currentUserId,
+          status: 'soumise',
+          likesCount: 1,
+          likedUserIds: [currentUserId],
+          createdAt: new Date().toISOString(),
+        };
+        await saveIdea(ideaToSave);
+        return { status: 'pending' as const };
+      },
+      pendingTitle: 'Idée soumise (En attente de revue)',
+      pendingMessage: `Votre suggestion "${ideaData.title}" a été déposée et sera examinée par la direction.`,
+      errorMessage: 'Erreur lors de la soumission.',
+    });
+    if (res.success) {
       setIsNewIdeaModalOpen(false);
-      showToast?.('Votre idée a été déposée avec succès !', 'success');
-    } catch {
-      showToast?.('Erreur lors de la soumission.', 'error');
     }
   };
 
@@ -169,27 +181,33 @@ export const IdeasSurveysPanel: React.FC<IdeasSurveysPanelProps> = ({
   }) => {
     const validOptions = surveyData.options.filter((o) => o.trim() !== '');
     if (!surveyData.title || validOptions.length < 2) return;
-    try {
-      const surveyToSave: EnterpriseSurvey = {
-        id: `surv-${Date.now()}`,
-        title: surveyData.title,
-        description: surveyData.description,
-        category: surveyData.category,
-        status: 'actif',
-        createdBy: currentUser?.name || 'Direction Citrine',
-        options: validOptions.map((text, idx) => ({
-          id: `opt-${idx + 1}-${Date.now()}`,
-          text,
-          votesCount: 0,
-        })),
-        votedUserIds: [],
-        createdAt: new Date().toISOString(),
-      };
-      await saveSurvey(surveyToSave);
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Lancement du sondage...',
+      loadingText: `Création du sondage "${surveyData.title}", veuillez patienter...`,
+      action: async () => {
+        const surveyToSave: EnterpriseSurvey = {
+          id: `surv-${Date.now()}`,
+          title: surveyData.title,
+          description: surveyData.description,
+          category: surveyData.category,
+          status: 'actif',
+          createdBy: currentUser?.name || 'Direction Citrine',
+          options: validOptions.map((text, idx) => ({
+            id: `opt-${idx + 1}-${Date.now()}`,
+            text,
+            votesCount: 0,
+          })),
+          votedUserIds: [],
+          createdAt: new Date().toISOString(),
+        };
+        await saveSurvey(surveyToSave);
+      },
+      successTitle: 'Sondage lancé !',
+      successMessage: `Le sondage "${surveyData.title}" a été publié avec succès.`,
+      errorMessage: 'Erreur lors du lancement du sondage.',
+    });
+    if (res.success) {
       setIsNewSurveyModalOpen(false);
-      showToast?.('Sondage d\'entreprise lancé avec succès !', 'success');
-    } catch {
-      showToast?.('Erreur lors du lancement.', 'error');
     }
   };
 

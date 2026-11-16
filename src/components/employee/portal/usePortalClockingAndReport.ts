@@ -25,14 +25,14 @@ interface UsePortalClockingAndReportParams {
     method: ClockingMethod,
     onDone: () => void,
     customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
-  ) => void;
+  ) => Promise<boolean>;
   triggerConfirmCustomClock: (
     hour: string,
     minute: string,
     reason: string,
     setError: (v: string | null) => void,
     onDone: () => void
-  ) => void;
+  ) => Promise<void> | void;
   triggerConfirmEmergency: (type: EmergencyType, reason: string, onDone: () => void) => Promise<void>;
   showToast: (title: string, desc: string, type?: 'success' | 'warning' | 'info') => void;
 }
@@ -113,14 +113,14 @@ export function usePortalClockingAndReport(params: UsePortalClockingAndReportPar
     }
   };
 
-  const handleConfirmClocking = (
+  const handleConfirmClocking = async (
     method: ClockingMethod,
     customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
-  ) => {
+  ): Promise<boolean> => {
     const effectiveAction =
       params.pendingClockAction ||
       (!params.todayPresence?.arrivalTime ? 'arrival' : !params.todayPresence?.departureTime ? 'departure' : 'arrival');
-    params.triggerConfirmClocking(
+    return params.triggerConfirmClocking(
       effectiveAction,
       method,
       () => {
@@ -132,8 +132,8 @@ export function usePortalClockingAndReport(params: UsePortalClockingAndReportPar
     );
   };
 
-  const handleConfirmCustomClock = () => {
-    params.triggerConfirmCustomClock(
+  const handleConfirmCustomClock = async () => {
+    await params.triggerConfirmCustomClock(
       params.customClockHour,
       params.customClockMinute,
       params.customClockReason,

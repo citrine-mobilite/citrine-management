@@ -13,7 +13,7 @@ import { DisciplinaryFilterToolbar } from './disciplinary/DisciplinaryFilterTool
 
 interface DisciplinaryPanelProps {
   incidents: DisciplinaryIncident[];
-  onUpdateIncidents: (incidents: DisciplinaryIncident[]) => void;
+  onUpdateIncidents: (incidents: DisciplinaryIncident[]) => Promise<void> | void;
   employees: Employee[];
   currentUser: AppUser | null;
   currentRole?: string;
@@ -42,7 +42,7 @@ export default function DisciplinaryPanel({
       loadingTitle: 'Enregistrement du dossier...',
       loadingText: 'Consignation du fait disciplinaire en base de données...',
       action: async () => {
-        onUpdateIncidents([newIncident, ...incidents]);
+        await onUpdateIncidents([newIncident, ...incidents]);
         logSystemAudit({
           authorName: currentUser?.name || 'Responsable RH',
           authorRole: currentUser?.role || 'admin',
@@ -64,7 +64,7 @@ export default function DisciplinaryPanel({
       loadingTitle: 'Mise à jour du dossier...',
       loadingText: 'Enregistrement des délibérations sur le serveur...',
       action: async () => {
-        onUpdateIncidents(incidents.map((i) => (i.id === updated.id ? updated : i)));
+        await onUpdateIncidents(incidents.map((i) => (i.id === updated.id ? updated : i)));
         setSelectedIncident(updated);
         logSystemAudit({
           authorName: currentUser?.name || 'Responsable RH',

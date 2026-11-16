@@ -7,14 +7,13 @@ import {
 } from '../../services/disciplinaryReasonsService';
 import { DisciplinaryMotifsTable, CATEGORY_MAP } from './DisciplinaryMotifsTable';
 import { DisciplinaryMotifEditModal } from './DisciplinaryMotifEditModal';
+import { executeDeleteWithSweetAlert, executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface DisciplinaryMotifsManagementSectionProps {
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
-export const DisciplinaryMotifsManagementSection: React.FC<DisciplinaryMotifsManagementSectionProps> = ({
-  showToast,
-}) => {
+export const DisciplinaryMotifsManagementSection: React.FC<DisciplinaryMotifsManagementSectionProps> = () => {
   const [reasons, setReasons] = useState<DisciplinaryReason[]>([]);
   const [newLabel, setNewLabel] = useState('');
   const [newCategory, setNewCategory] = useState<DisciplinaryCategory>('renvoi');
@@ -35,20 +34,37 @@ export const DisciplinaryMotifsManagementSection: React.FC<DisciplinaryMotifsMan
     setReasons(list);
   };
 
-  const handleAddReason = (e: React.FormEvent) => {
+  const handleAddReason = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLabel.trim()) return;
 
-    disciplinaryReasonsService.addCustomReason(newLabel.trim(), newCategory);
-    setNewLabel('');
-    loadReasons();
-    if (showToast) showToast('Nouveau motif RH enregistré avec succès dans la table.', 'success');
+    const label = newLabel.trim();
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Ajout du motif RH...',
+      loadingText: 'Veuillez patienter pendant la création du motif...',
+      action: () => {
+        disciplinaryReasonsService.addCustomReason(label, newCategory);
+        loadReasons();
+      },
+      successTitle: 'Motif ajouté !',
+      successMessage: 'Nouveau motif RH enregistré avec succès dans la table.',
+    });
+    if (res.success) {
+      setNewLabel('');
+    }
   };
 
-  const handleToggle = (id: string) => {
-    const updated = disciplinaryReasonsService.toggleReasonActive(id);
-    setReasons(updated);
-    if (showToast) showToast('Statut du motif mis à jour.', 'success');
+  const handleToggle = async (id: string) => {
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour du motif...',
+      loadingText: 'Veuillez patienter pendant la modification du statut...',
+      action: () => {
+        const updated = disciplinaryReasonsService.toggleReasonActive(id);
+        setReasons(updated);
+      },
+      successTitle: 'Statut mis à jour !',
+      successMessage: 'Le statut du motif RH a été modifié avec succès.',
+    });
   };
 
   const handleOpenEdit = (reason: DisciplinaryReason) => {
@@ -57,23 +73,41 @@ export const DisciplinaryMotifsManagementSection: React.FC<DisciplinaryMotifsMan
     setEditCategory(reason.category);
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingReason || !editLabel.trim()) return;
 
-    const updated = disciplinaryReasonsService.updateReason(editingReason.id, {
-      label: editLabel.trim(),
-      category: editCategory,
+    const reasonId = editingReason.id;
+    const label = editLabel.trim();
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Modification du motif...',
+      loadingText: 'Veuillez patienter pendant la mise à jour du motif RH...',
+      action: () => {
+        const updated = disciplinaryReasonsService.updateReason(reasonId, {
+          label,
+          category: editCategory,
+        });
+        setReasons(updated);
+      },
+      successTitle: 'Motif modifié !',
+      successMessage: 'Motif RH modifié avec succès.',
     });
-    setReasons(updated);
-    setEditingReason(null);
-    if (showToast) showToast('Motif RH modifié avec succès.', 'success');
+    if (res.success) {
+      setEditingReason(null);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    const updated = disciplinaryReasonsService.deleteReason(id);
-    setReasons(updated);
-    if (showToast) showToast('Motif personnalisé supprimé de la table.', 'success');
+  const handleDelete = async (id: string) => {
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer ce motif ?',
+      text: 'Voulez-vous vraiment supprimer ce motif personnalisé ?',
+      action: () => {
+        const updated = disciplinaryReasonsService.deleteReason(id);
+        setReasons(updated);
+      },
+      successTitle: 'Motif supprimé !',
+      successMessage: 'Motif personnalisé supprimé de la table.',
+    });
   };
 
   // Filter and limit to 15 latest created entries as requested

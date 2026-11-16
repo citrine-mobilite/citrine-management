@@ -21,9 +21,10 @@ export function useAsyncAction() {
     async <T>(
       label: string,
       promiseOrFn: Promise<T> | (() => Promise<T>),
-      details?: string
+      details?: string,
+      immediate: boolean = true
     ): Promise<T> => {
-      return asyncActionTrackerService.track(label, promiseOrFn, details);
+      return asyncActionTrackerService.track(label, promiseOrFn, details, immediate);
     },
     []
   );
@@ -34,7 +35,7 @@ export function useAsyncAction() {
     actionDetails: loadingState.currentActionDetails,
     elapsedSeconds: loadingState.elapsedSeconds,
     runWithLoader,
-    startAction: (label: string, details?: string) =>
-      asyncActionTrackerService.startAction(label, details),
+    startAction: (label: string, details?: string, immediate: boolean = true) =>
+      asyncActionTrackerService.startAction(label, details, immediate),
   };
 }

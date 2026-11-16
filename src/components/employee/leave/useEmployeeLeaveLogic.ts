@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Employee, AppUser, LeaveRequest, LeaveType, NotificationLog, LEAVE_TYPE_LABELS } from '../../../types';
 import { createLeaveRequest, deleteLeaveRequest, calculateDaysBetween } from '../../../services/leaveService';
 import { terminateMission } from '../../../services/missionLifecycleService';
-import { showSuccessAlert, showErrorAlert, confirmActionAlert, executeDeleteWithSweetAlert } from '../../../utils/sweetAlert';
+import { confirmActionAlert, executeDeleteWithSweetAlert, executeOperationWithLoading } from '../../../utils/sweetAlert';
 
 interface UseEmployeeLeaveLogicParams {
   employeeProfile: Employee;
@@ -116,28 +116,32 @@ export function useEmployeeLeaveLogic({
 
     setIsTerminating(true);
     try {
-      const res = await terminateMission(
-        leaveId,
-        leaveRequests,
-        employees.length > 0 ? employees : [employeeProfile],
-        users.length > 0 ? users : currentUser ? [currentUser] : [],
-        employeeProfile.name || 'Collaborateur',
-        onUpdateLeaveRequests,
-        onUpdateEmployees,
-        onUpdateUsers,
-        onAddNotification
-      );
-      if (res.success) {
-        showToast?.('Mission Terminée ✓', 'La mission a été clôturée. Vous et votre compte utilisateur êtes de nouveau en statut « En poste ».', 'success');
-        await showSuccessAlert('Mission clôturée !', 'Votre mission est marquée comme terminée. Votre statut et compte utilisateur sont de nouveau « En poste ».');
-        if (selectedLeaveModal?.id === leaveId) setSelectedLeaveModal(null);
-      } else {
-        showToast?.('Erreur', res.error || 'Impossible de clôturer la mission.', 'error');
-        await showErrorAlert('Erreur', res.error || 'Impossible de clôturer la mission.');
+      const result = await executeOperationWithLoading({
+        loadingTitle: 'Clôture de votre mission...',
+        loadingText: 'Mise à jour de votre statut et de votre dossier, veuillez patienter...',
+        action: async () => {
+          const res = await terminateMission(
+            leaveId,
+            leaveRequests,
+            employees.length > 0 ? employees : [employeeProfile],
+            users.length > 0 ? users : currentUser ? [currentUser] : [],
+            employeeProfile.name || 'Collaborateur',
+            onUpdateLeaveRequests,
+            onUpdateEmployees,
+            onUpdateUsers,
+            onAddNotification
+          );
+          if (!res.success) {
+            throw new Error(res.error || 'Impossible de clôturer la mission.');
+          }
+        },
+        successTitle: 'Mission clôturée !',
+        successMessage: 'Votre mission est marquée comme terminée. Votre statut et compte utilisateur sont de nouveau « En poste ».',
+        errorMessage: 'Impossible de clôturer la mission pour le moment.',
+      });
+      if (result.success && selectedLeaveModal?.id === leaveId) {
+        setSelectedLeaveModal(null);
       }
-    } catch {
-      showToast?.('Erreur', 'Impossible de clôturer la mission pour le moment.', 'error');
-      await showErrorAlert('Erreur', 'Impossible de clôturer la mission pour le moment.');
     } finally {
       setIsTerminating(false);
     }
@@ -150,12 +154,10 @@ export function useEmployeeLeaveLogic({
     if (!reason.trim()) {
       const msg = modalMode === 'mission' ? "Veuillez préciser l'objectif ou le client pour cette mission." : 'Veuillez renseigner le motif explicatif.';
       showToast?.('Motif requis', msg, 'warning');
-      await showErrorAlert('Motif obligatoire', msg);
       return;
     }
     if (startDate > endDate) {
       showToast?.('Dates incohérentes', 'La date de fin ne peut pas précéder la date de début.', 'warning');
-      await showErrorAlert('Dates invalides', 'La date de fin ne peut pas précéder la date de début.');
       return;
     }
 
@@ -165,36 +167,38 @@ export function useEmployeeLeaveLogic({
       const typeLabel = isMission ? 'Mission Professionnelle' : LEAVE_TYPE_LABELS[leaveType]?.label || 'Congé';
       const finalReason = isMission && missionLocation.trim() ? `[Mission: ${missionLocation.trim()}] ${reason.trim()}` : reason.trim();
 
-      await createLeaveRequest({
-        employeeId: employeeProfile.id,
-        employeeName: employeeProfile.name,
-        employeeEmail: employeeProfile.email,
-        employeeAvatar: employeeProfile.avatarUrl,
-        department: employeeProfile.department || 'Opérations',
-        type: isMission ? 'mission_professionnelle' : leaveType,
-        startDate,
-        endDate,
-        daysCount: currentDurationDays,
-        reason: finalReason,
-        attachmentName: attachmentName.trim() || undefined,
-      }, onAddNotification);
+      const res = await executeOperationWithLoading({
+        loadingTitle: isMission ? "Transmission de l'ordre de mission..." : 'Transmission de la demande...',
+        loadingText: 'Enregistrement et notification de la Direction RH, veuillez patienter...',
+        action: async () => {
+          await createLeaveRequest({
+            employeeId: employeeProfile.id,
+            employeeName: employeeProfile.name,
+            employeeEmail: employeeProfile.email,
+            employeeAvatar: employeeProfile.avatarUrl,
+            department: employeeProfile.department || 'Opérations',
+            type: isMission ? 'mission_professionnelle' : leaveType,
+            startDate,
+            endDate,
+            daysCount: currentDurationDays,
+            reason: finalReason,
+            attachmentName: attachmentName.trim() || undefined,
+          }, onAddNotification);
+          return { status: 'pending' as const };
+        },
+        pendingTitle: isMission ? 'Mission en attente de validation' : 'Demande en attente de validation',
+        pendingMessage: isMission
+          ? `Votre demande de mission (${currentDurationDays} j) du ${startDate} au ${endDate} a été transmise à la Direction RH.`
+          : `Votre demande de ${typeLabel} (${currentDurationDays} j) du ${startDate} au ${endDate} est en attente de validation RH.`,
+        errorMessage: 'Impossible de transmettre la demande.',
+      });
 
-      setIsSubmitting(false);
-      if (isMission) {
-        showToast?.('Ordre de mission transmis 🚀', `Votre demande de mission (${currentDurationDays} j) du ${startDate} au ${endDate} a bien été enregistrée et transmise à la Direction RH.`, 'success');
-        await showSuccessAlert('Demande de mission transmise !', `Votre ordre de mission (${currentDurationDays} j) du ${startDate} au ${endDate} a été transmis à la Direction RH.`);
-      } else {
-        showToast?.('Demande transmise', `Votre demande de ${typeLabel} (${currentDurationDays} j) du ${startDate} au ${endDate} a bien été enregistrée.`, 'success');
-        await showSuccessAlert('Demande transmise !', `Votre demande de ${typeLabel} (${currentDurationDays} j) du ${startDate} au ${endDate} a été enregistrée.`);
+      if (res.success) {
+        setShowModal(false);
+        setReason('');
+        setMissionLocation('');
+        setAttachmentName('');
       }
-      setShowModal(false);
-      setReason('');
-      setMissionLocation('');
-      setAttachmentName('');
-    } catch (err: any) {
-      setIsSubmitting(false);
-      showToast?.('Échec de transmission', 'Impossible de transmettre la demande pour le moment. Veuillez vérifier votre connexion.', 'error');
-      await showErrorAlert('Échec de transmission', err?.message || 'Impossible de transmettre la demande.');
     } finally {
       setIsSubmitting(false);
     }

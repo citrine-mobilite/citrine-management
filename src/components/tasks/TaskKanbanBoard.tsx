@@ -23,6 +23,7 @@ import {
   resolveTaskSectionId,
   sortSubtasksByOrder,
 } from './logic/asanaTreeEngine';
+import { executeDeleteWithSweetAlert } from '../../utils/sweetAlert';
 
 interface TaskKanbanBoardProps {
   tasks: Task[];
@@ -231,19 +232,22 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Supprimer la colonne "${col.title}" ? Les tâches de cette colonne seront replacées dans "À faire".`
-                            )
-                          ) {
-                            col.tasks.forEach((t) => onStatusChange(t.id, 'todo'));
-                            const updated = customColumns.filter((c) => c.id !== col.id);
-                            setCustomColumns(updated);
-                            try {
-                              localStorage.setItem('citrine_kanban_custom_columns', JSON.stringify(updated));
-                            } catch {}
-                          }
+                        onClick={async () => {
+                          await executeDeleteWithSweetAlert({
+                            title: 'Supprimer cette colonne ?',
+                            text: `Supprimer la colonne "${col.title}" ? Les tâches de cette colonne seront replacées dans "À faire".`,
+                            itemName: col.title,
+                            action: () => {
+                              col.tasks.forEach((t) => onStatusChange(t.id, 'todo'));
+                              const updated = customColumns.filter((c) => c.id !== col.id);
+                              setCustomColumns(updated);
+                              try {
+                                localStorage.setItem('citrine_kanban_custom_columns', JSON.stringify(updated));
+                              } catch {}
+                            },
+                            successTitle: 'Colonne supprimée !',
+                            successMessage: `La colonne "${col.title}" a été supprimée.`,
+                          });
                         }}
                         className="p-1 hover:bg-white rounded-lg text-stone-400 hover:text-rose-600 transition cursor-pointer"
                         title="Supprimer la colonne"

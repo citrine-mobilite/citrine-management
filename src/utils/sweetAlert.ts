@@ -1,4 +1,5 @@
 import Swal, { SweetAlertOptions } from 'sweetalert2';
+import { asyncActionTrackerService } from '../services/asyncActionTrackerService';
 
 // Base styling configuration to match Citrine Glassmorphism Design System
 const baseSwalConfig: SweetAlertOptions = {
@@ -12,6 +13,17 @@ const baseSwalConfig: SweetAlertOptions = {
   },
   buttonsStyling: false,
 };
+
+let activeManualLoaderStopper: (() => void) | null = null;
+
+function stopManualLoaderIfAny() {
+  if (activeManualLoaderStopper) {
+    try {
+      activeManualLoaderStopper();
+    } catch {}
+    activeManualLoaderStopper = null;
+  }
+}
 
 /**
  * Boîte de dialogue de confirmation de suppression standardisée
@@ -103,14 +115,13 @@ export async function confirmActionAlert(options: {
 }
 
 /**
- * Affichage d'un loader SweetAlert immédiat et synchrone pendant une opération serveur.
- * Tourne jusqu'à ce que la réponse du serveur soit reçue.
+ * Affichage immédiat du modal loader centré pendant une opération de création, modification ou suppression.
  */
 export function showLoadingAlert(
-  titleOrOptions: string | { title?: string; text?: string } = 'Traitement en cours...',
-  text: string = 'Communication avec le serveur en cours...'
+  titleOrOptions: string | { title?: string; text?: string } = 'Opération en cours...',
+  text: string = 'Veuillez patienter...'
 ) {
-  let title = 'Traitement en cours...';
+  let title = 'Opération en cours...';
   let message = text;
 
   if (typeof titleOrOptions === 'object' && titleOrOptions !== null) {
@@ -120,30 +131,28 @@ export function showLoadingAlert(
     title = titleOrOptions;
   }
 
-  Swal.fire({
-    ...baseSwalConfig,
-    title,
-    text: message,
-    allowOutsideClick: false,
-    allowEscapeKey: false,
-    showConfirmButton: false,
-    didOpen: () => {
-      Swal.showLoading();
-    },
-  });
+  stopManualLoaderIfAny();
+  if (Swal.isVisible()) {
+    Swal.close();
+  }
+  activeManualLoaderStopper = asyncActionTrackerService.startAction(title, message, true);
 }
 
 /**
- * Ferme toute alerte ou loader actif.
+ * Ferme tout loader ou SweetAlert actif.
  */
 export function closeAlert() {
-  Swal.close();
+  stopManualLoaderIfAny();
+  if (Swal.isVisible()) {
+    Swal.close();
+  }
 }
 
 /**
- * Affichage d'un SweetAlert de succès (uniquement APRÈS réception de la réponse du serveur).
+ * 1/3 - SweetAlert de succès (uniquement pour Création, Modification, Suppression)
  */
 export async function showSuccessAlert(title: string = 'Succès !', text: string = 'Opération effectuée avec succès.') {
+  stopManualLoaderIfAny();
   return Swal.fire({
     ...baseSwalConfig,
     icon: 'success',
@@ -160,10 +169,11 @@ export async function showSuccessAlert(title: string = 'Succès !', text: string
 }
 
 /**
- * Affichage d'un SweetAlert d'échec affichant la véritable exception du serveur.
+ * 2/3 - SweetAlert d'échec affichant la véritable exception (Création, Modification, Suppression)
  */
 export async function showErrorAlert(title: string = 'Échec de l\'opération', text: string = 'Une erreur est survenue.') {
-  console.error("❌ [SWEETALERT ERROR POPUP]:", { title, text });
+  stopManualLoaderIfAny();
+  console.error('❌ [SWEETALERT ERROR POPUP]:', { title, text });
   return Swal.fire({
     ...baseSwalConfig,
     icon: 'error',
@@ -179,23 +189,24 @@ export async function showErrorAlert(title: string = 'Échec de l\'opération', 
 }
 
 /**
- * Affichage d'un SweetAlert pour un statut en attente / différé / validation requise.
+ * 3/3 - SweetAlert pour un statut en attente / différé / validation requise
  */
 export async function showPendingAlert(
-  title: string = 'En attente de traitement',
-  text: string = 'Votre demande a été transmise et est en attente de validation.'
+  title: string = 'En attente de validation',
+  text: string = 'Votre demande a été enregistrée et est en attente de traitement.'
 ) {
+  stopManualLoaderIfAny();
   return Swal.fire({
     ...baseSwalConfig,
     icon: 'info',
-    iconColor: '#3B82F6',
+    iconColor: '#D97706',
     title,
     text,
     confirmButtonText: 'Compris',
-    confirmButtonColor: '#2563EB',
+    confirmButtonColor: '#D97706',
     customClass: {
       ...baseSwalConfig.customClass,
-      confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-blue-600 hover:bg-blue-700 shadow-sm cursor-pointer transition mx-1.5',
+      confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-amber-600 hover:bg-amber-700 shadow-sm cursor-pointer transition mx-1.5',
     },
   });
 }

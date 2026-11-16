@@ -66,13 +66,13 @@ interface ExecuteClockingStepParams {
   presences: Presence[];
   attendanceIncidents: AttendanceIncident[];
   moduleConfig?: CompanyModuleConfig;
-  onUpdatePresences: (updated: Presence[]) => void;
+  onUpdatePresences: (updated: Presence[]) => Promise<void> | void;
   onAddAttendanceIncident?: (incident: AttendanceIncident) => void;
-  onUpdateAttendanceIncidents?: (incidents: AttendanceIncident[]) => void;
+  onUpdateAttendanceIncidents?: (incidents: AttendanceIncident[]) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
-export function executePresenceClockingStep({
+export async function executePresenceClockingStep({
   nextStep,
   activeEmployee,
   selectedDate,
@@ -82,28 +82,29 @@ export function executePresenceClockingStep({
   onUpdatePresences,
   onAddAttendanceIncident,
   onUpdateAttendanceIncidents,
-  showToast,
-}: ExecuteClockingStepParams): void {
-  if (nextStep.action === 'done' || !activeEmployee) return;
+}: ExecuteClockingStepParams): Promise<{ timeNow: string; isLateNow: boolean }> {
+  const timeNow = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  if (nextStep.action === 'done' || !activeEmployee) return { timeNow, isLateNow: false };
 
   const updatedPresences = [...presences];
-  const timeNow = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const lateThreshold = moduleConfig?.lateThresholdTime || '08:30';
   const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
+  let isLateNow = false;
+  let generatedIncident: AttendanceIncident | null = null;
 
-  const persistIncident = (autoIncident: AttendanceIncident) => {
+  const persistIncident = async (autoIncident: AttendanceIncident) => {
     if (onAddAttendanceIncident) {
-      onAddAttendanceIncident(autoIncident);
+      await onAddAttendanceIncident(autoIncident);
     } else if (onUpdateAttendanceIncidents) {
-      onUpdateAttendanceIncidents([autoIncident, ...attendanceIncidents]);
+      await onUpdateAttendanceIncidents([autoIncident, ...attendanceIncidents]);
     } else {
-      incidentService.saveIncident(autoIncident);
+      await incidentService.saveIncident(autoIncident);
     }
   };
 
   if (nextStep.action === 'arrival') {
     const exemptLate = activeEmployee?.allowLateArrival8_930 === true && timeNow >= '08:00' && timeNow <= '09:30';
-    const isLateNow = !exemptLate && timeNow > lateThreshold;
+    isLateNow = !exemptLate && timeNow > lateThreshold;
     const newPresence: Presence = {
       id: `pres-${Date.now()}`,
       employeeId: activeEmployee.id,
@@ -126,7 +127,7 @@ export function executePresenceClockingStep({
         (i) => String(i.employeeId) === empIdStr && i.date === selectedDate && i.type === 'retard'
       );
       if (!alreadyHasIncident) {
-        persistIncident({
+        generatedIncident = {
           id: `inc-${Date.now()}`,
           employeeId: empIdStr,
           employeeName: activeEmployee.name,
@@ -139,11 +140,9 @@ export function executePresenceClockingStep({
           isJustified: false,
           status: 'automatique',
           createdAt: new Date().toISOString(),
-        });
+        };
       }
     }
-
-    if (showToast) showToast(`Arrivée pointée à ${timeNow} pour ${activeEmployee.name}.`, isLateNow ? 'error' : 'success');
   } else {
     const existingIndex = presences.findIndex((p) => p.employeeId === activeEmployee.id && p.date === selectedDate);
     if (existingIndex >= 0) {
@@ -170,7 +169,7 @@ export function executePresenceClockingStep({
             (i) => String(i.employeeId) === empIdStr && i.date === selectedDate && (i.type === 'sortie_prematuree' || i.type === 'depart_anticipe')
           );
           if (!alreadyHasEarly) {
-            persistIncident({
+            generatedIncident = {
               id: `inc-${Date.now()}`,
               employeeId: empIdStr,
               employeeName: activeEmployee.name,
@@ -183,25 +182,32 @@ export function executePresenceClockingStep({
               isJustified: false,
               status: 'automatique',
               createdAt: new Date().toISOString(),
-            });
+            };
           }
         }
       }
       updatedPresences[existingIndex] = updatedObj;
-      if (showToast) showToast(`Pointage ${nextStep.action} enregistré pour ${activeEmployee.name}.`, 'success');
     }
   }
 
-  onUpdatePresences(updatedPresences);
-
   const targetedPres = updatedPresences.find((p) => p.employeeId === activeEmployee.id && p.date === selectedDate);
   if (targetedPres) {
-    realtimeSyncService.broadcastPresencePunch({ presence: targetedPres });
-    savePresenceAtomic(
+    const res = await savePresenceAtomic(
       { ...targetedPres, employeeName: activeEmployee.name, employeeEmail: activeEmployee.email },
-      null,
+      generatedIncident,
       null,
       nextStep.action
-    ).catch((err) => console.warn('[PresencePanel] savePresenceAtomic notice:', err));
+    );
+    if (!res.success) {
+      throw new Error(res.error || 'Échec de sauvegarde du pointage.');
+    }
+    realtimeSyncService.broadcastPresencePunch({ presence: targetedPres, incident: generatedIncident });
   }
+
+  if (generatedIncident) {
+    await persistIncident(generatedIncident);
+  }
+  await onUpdatePresences(updatedPresences);
+
+  return { timeNow, isLateNow };
 }

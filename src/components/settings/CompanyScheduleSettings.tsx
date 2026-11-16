@@ -5,10 +5,11 @@ import { CompanyBreaksToggleCard } from './CompanyBreaksToggleCard';
 import { CompanyWorkHoursFields } from './CompanyWorkHoursFields';
 import { CompanyGpsLocationCard } from './CompanyGpsLocationCard';
 import { CompanyDoorQrSettingsCard } from './CompanyDoorQrSettingsCard';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface CompanyScheduleSettingsProps {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -35,20 +36,25 @@ export const CompanyScheduleSettings: React.FC<CompanyScheduleSettingsProps> = (
 
   const isBreakTrackingEnabled = formData.enableBreakTracking !== false;
 
-  const handleToggleBreaks = () => {
+  const handleToggleBreaks = async () => {
     setIsSaved(false);
+    const nextState = !isBreakTrackingEnabled;
     const updated = {
       ...formData,
-      enableBreakTracking: !isBreakTrackingEnabled,
+      enableBreakTracking: nextState,
     };
-    setFormData(updated);
-    onUpdateModuleConfig(updated);
-    setIsSaved(true);
-    if (showToast) {
-      showToast(
-        `Pointage des pauses ${!isBreakTrackingEnabled ? 'activé (4 étapes)' : 'désactivé (2 étapes directes)'}`,
-        'success'
-      );
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour des pauses...',
+      loadingText: 'Veuillez patienter pendant la mise à jour du mode de pointage...',
+      action: async () => {
+        await onUpdateModuleConfig(updated);
+      },
+      successTitle: 'Mode de pointage mis à jour !',
+      successMessage: `Pointage des pauses ${nextState ? 'activé (4 étapes)' : 'désactivé (2 étapes directes)'}.`,
+    });
+    if (res.success) {
+      setFormData(updated);
+      setIsSaved(true);
     }
   };
 
@@ -60,7 +66,7 @@ export const CompanyScheduleSettings: React.FC<CompanyScheduleSettingsProps> = (
     }));
   };
 
-  const handleDetectGpsDone = (lat: number, lng: number) => {
+  const handleDetectGpsDone = async (lat: number, lng: number) => {
     const updated = {
       ...formData,
       companyLatitude: lat,
@@ -68,20 +74,39 @@ export const CompanyScheduleSettings: React.FC<CompanyScheduleSettingsProps> = (
       hqLatitude: lat,
       hqLongitude: lng,
     };
-    setFormData(updated);
-    onUpdateModuleConfig(updated);
-    setIsSaved(true);
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement GPS du siège...',
+      loadingText: 'Veuillez patienter pendant la sauvegarde des coordonnées GPS...',
+      action: async () => {
+        await onUpdateModuleConfig(updated);
+      },
+      successTitle: 'Coordonnées GPS enregistrées !',
+      successMessage: `Position GPS captée et sauvegardée (${lat}°, ${lng}°).`,
+    });
+    if (res.success) {
+      setFormData(updated);
+      setIsSaved(true);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const updated: CompanyModuleConfig = {
       ...formData,
       plannedDepartureTime: formData.departureActiveStartTime || formData.plannedDepartureTime || '16:30',
     };
-    onUpdateModuleConfig(updated);
-    setIsSaved(true);
-    if (showToast) showToast('Horaires de travail et coordonnées GPS enregistrés avec succès.', 'success');
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement des horaires...',
+      loadingText: 'Veuillez patienter pendant la mise à jour des horaires et coordonnées GPS...',
+      action: async () => {
+        await onUpdateModuleConfig(updated);
+      },
+      successTitle: 'Horaires enregistrés !',
+      successMessage: 'Horaires de travail et coordonnées GPS enregistrés avec succès.',
+    });
+    if (res.success) {
+      setIsSaved(true);
+    }
   };
 
   return (

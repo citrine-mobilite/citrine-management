@@ -4,14 +4,14 @@ import { BadgeSecurityCode16, AppUser } from '../types';
 import { badgeCodeService } from '../services/badgeCodeService';
 import { BadgeCodeGeneratorForm } from './presence/badge/BadgeCodeGeneratorForm';
 import { BadgeCodeItemCard } from './presence/badge/BadgeCodeItemCard';
-import { showSuccessAlert, showErrorAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
+import { executeOperationWithLoading, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface Badge16CodeManagerProps {
   currentUser?: AppUser | null;
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export default function Badge16CodeManager({ currentUser, showToast }: Badge16CodeManagerProps) {
+export default function Badge16CodeManager({ currentUser }: Badge16CodeManagerProps) {
   const [codes, setCodes] = useState<BadgeSecurityCode16[]>([]);
   const [filter, setFilter] = useState<'all' | 'active' | 'used'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -31,17 +31,25 @@ export default function Badge16CodeManager({ currentUser, showToast }: Badge16Co
     setIsGenerating(true);
     try {
       const responsableName = currentUser?.name || 'Responsable';
-      const created = await badgeCodeService.createBadgeCode(
-        responsableName,
-        notesInput.trim() || `Code de badgeage généré le ${new Date().toLocaleDateString('fr-FR')}`
-      );
-      setNewlyCreatedCode(created);
-      setNotesInput('');
-      showToast?.(`Code généré avec succès: ${created.formattedCode}`, 'success');
-      await showSuccessAlert('Code généré !', `Nouveau code 16 caractères généré : ${created.formattedCode}`);
-    } catch (err: any) {
-      showToast?.('Erreur lors de la génération du code', 'error');
-      await showErrorAlert('Erreur', err?.message || 'Erreur lors de la génération du code.');
+      let generatedFormatted = '';
+      await executeOperationWithLoading({
+        loadingTitle: 'Génération du code badge...',
+        loadingText: 'Création du code de sécurité à 16 caractères, veuillez patienter...',
+        action: async () => {
+          const created = await badgeCodeService.createBadgeCode(
+            responsableName,
+            notesInput.trim() || `Code de badgeage généré le ${new Date().toLocaleDateString('fr-FR')}`
+          );
+          generatedFormatted = created.formattedCode;
+          setNewlyCreatedCode(created);
+          setNotesInput('');
+        },
+        successTitle: 'Code généré !',
+        successMessage: generatedFormatted
+          ? `Nouveau code 16 caractères généré : ${generatedFormatted}`
+          : 'Nouveau code 16 caractères généré avec succès.',
+        errorMessage: 'Erreur lors de la génération du code.',
+      });
     } finally {
       setIsGenerating(false);
     }

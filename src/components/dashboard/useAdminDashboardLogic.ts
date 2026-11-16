@@ -6,13 +6,14 @@ import {
   getHomeUrgentReminders,
   sortRemindersByUrgency,
 } from '../../services/reminderService';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface UseAdminDashboardLogicProps {
   employees: Employee[];
   presences: Presence[];
   tasks: Task[];
   reminders: Reminder[];
-  onUpdateReminders?: (updated: Reminder[]) => void;
+  onUpdateReminders?: (updated: Reminder[]) => Promise<void> | void;
   showToast?: (msg: string, type?: 'success' | 'error') => void;
 }
 
@@ -22,7 +23,6 @@ export function useAdminDashboardLogic({
   tasks,
   reminders,
   onUpdateReminders,
-  showToast,
 }: UseAdminDashboardLogicProps) {
   const [realTime, setRealTime] = useState(() =>
     new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -63,18 +63,20 @@ export function useAdminDashboardLogic({
   const sortedReminders = useMemo(() => sortRemindersByUrgency(reminders), [reminders]);
   const activeRemindersCount = urgentReminders.length;
 
-  const handleRenewOrResolveFromHome = (renewedReminder: Reminder) => {
+  const handleRenewOrResolveFromHome = async (renewedReminder: Reminder) => {
     if (!onUpdateReminders) return;
-    onUpdateReminders(reminders.map((r) => (r.id === renewedReminder.id ? renewedReminder : r)));
-    if (showToast) {
-      const nextDate = renewedReminder.expirationDate || renewedReminder.date;
-      showToast(
-        renewedReminder.isResolved
-          ? `"${renewedReminder.title}" validé avec succès.`
-          : `"${renewedReminder.title}" renouvelé jusqu'au ${formatDeadlineFrenchDate(nextDate)}.`,
-        'success'
-      );
-    }
+    const nextDate = renewedReminder.expirationDate || renewedReminder.date;
+    await executeOperationWithLoading({
+      loadingTitle: renewedReminder.isResolved ? 'Validation du document...' : 'Renouvellement en cours...',
+      loadingText: `Mise à jour de "${renewedReminder.title}", veuillez patienter...`,
+      action: async () => {
+        await onUpdateReminders(reminders.map((r) => (r.id === renewedReminder.id ? renewedReminder : r)));
+      },
+      successTitle: renewedReminder.isResolved ? 'Document validé !' : 'Échéance renouvelée !',
+      successMessage: renewedReminder.isResolved
+        ? `"${renewedReminder.title}" validé avec succès.`
+        : `"${renewedReminder.title}" renouvelé jusqu'au ${formatDeadlineFrenchDate(nextDate)}.`,
+    });
   };
 
   const attendanceRate =

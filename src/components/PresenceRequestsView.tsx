@@ -6,21 +6,21 @@ import { PresenceDecisionModal } from './presence/requests/PresenceDecisionModal
 import { PresenceRequestItemCard } from './presence/requests/PresenceRequestItemCard';
 import { SearchableSelect } from './common/SearchableSelect';
 import { incidentService } from '../services/incidentService';
+import { executeOperationWithLoading } from '../utils/sweetAlert';
 
 interface PresenceRequestsViewProps {
   presences: Presence[];
   employees: Employee[];
-  onUpdatePresences: (updated: Presence[]) => void;
+  onUpdatePresences: (updated: Presence[]) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
   attendanceIncidents?: AttendanceIncident[];
-  onUpdateAttendanceIncidents?: (incidents: AttendanceIncident[]) => void;
+  onUpdateAttendanceIncidents?: (incidents: AttendanceIncident[]) => Promise<void> | void;
 }
 
 export default function PresenceRequestsView({
   presences,
   employees,
   onUpdatePresences,
-  showToast,
   attendanceIncidents = [],
   onUpdateAttendanceIncidents,
 }: PresenceRequestsViewProps) {
@@ -61,54 +61,61 @@ export default function PresenceRequestsView({
 
     setIsProcessingDecision(true);
     try {
-      const updatedPresences = [...presences];
-      const pIdx = updatedPresences.findIndex((p) => p.id === decisionModalItem.presenceId);
+      await executeOperationWithLoading({
+        loadingTitle: 'Traitement de la demande...',
+        loadingText: 'Enregistrement de la décision de pointage, veuillez patienter...',
+        action: async () => {
+          const updatedPresences = [...presences];
+          const pIdx = updatedPresences.findIndex((p) => p.id === decisionModalItem.presenceId);
 
-      if (pIdx >= 0) {
-        const presence = { ...updatedPresences[pIdx] };
+          if (pIdx >= 0) {
+            const presence = { ...updatedPresences[pIdx] };
 
-        if (decisionModalItem.type === 'emergency' && presence.emergencies) {
-          presence.emergencies = presence.emergencies.map((emg) =>
-            emg.id === decisionModalItem.rawEmergency?.id
-              ? { ...emg, status: decisionAction }
-              : emg
-          );
-
-          // Mettre à jour le signalement officiel dans attendanceIncidents
-          if (attendanceIncidents && attendanceIncidents.length > 0) {
-            const matchingIdx = attendanceIncidents.findIndex(
-              (inc) =>
-                inc.employeeId === decisionModalItem.employeeId &&
-                inc.date === decisionModalItem.date &&
-                (inc.type === decisionModalItem.subType || inc.reason === decisionModalItem.reason)
-            );
-
-            if (matchingIdx >= 0) {
-              const updatedInc: AttendanceIncident = {
-                ...attendanceIncidents[matchingIdx],
-                status: decisionAction === 'approved' ? 'justifie' : 'injustifie',
-                isJustified: decisionAction === 'approved',
-                adminComment: decisionComment.trim() || (decisionAction === 'approved' ? 'Validé par la direction.' : 'Signalement rejeté par la direction.'),
-              };
-              await incidentService.saveIncident(updatedInc);
-              onUpdateAttendanceIncidents?.(
-                attendanceIncidents.map((item, idx) => (idx === matchingIdx ? updatedInc : item))
+            if (decisionModalItem.type === 'emergency' && presence.emergencies) {
+              presence.emergencies = presence.emergencies.map((emg) =>
+                emg.id === decisionModalItem.rawEmergency?.id
+                  ? { ...emg, status: decisionAction }
+                  : emg
               );
-            }
-          }
-        } else if (decisionModalItem.type === 'correction') {
-          presence.correctionReasonStatus = decisionAction;
-        } else if (decisionModalItem.type === 'departure') {
-          presence.departureReasonStatus = decisionAction;
-        }
 
-        updatedPresences[pIdx] = presence;
-        onUpdatePresences(updatedPresences);
-        showToast?.(
-          decisionAction === 'approved' ? 'Demande validée avec succès' : 'Demande rejetée avec mise à jour du statut',
-          decisionAction === 'approved' ? 'success' : 'info'
-        );
-      }
+              if (attendanceIncidents && attendanceIncidents.length > 0) {
+                const matchingIdx = attendanceIncidents.findIndex(
+                  (inc) =>
+                    inc.employeeId === decisionModalItem.employeeId &&
+                    inc.date === decisionModalItem.date &&
+                    (inc.type === decisionModalItem.subType || inc.reason === decisionModalItem.reason)
+                );
+
+                if (matchingIdx >= 0) {
+                  const updatedInc: AttendanceIncident = {
+                    ...attendanceIncidents[matchingIdx],
+                    status: decisionAction === 'approved' ? 'justifie' : 'injustifie',
+                    isJustified: decisionAction === 'approved',
+                    adminComment: decisionComment.trim() || (decisionAction === 'approved' ? 'Validé par la direction.' : 'Signalement rejeté par la direction.'),
+                  };
+                  await incidentService.saveIncident(updatedInc);
+                  await onUpdateAttendanceIncidents?.(
+                    attendanceIncidents.map((item, idx) => (idx === matchingIdx ? updatedInc : item))
+                  );
+                }
+              }
+            } else if (decisionModalItem.type === 'correction') {
+              presence.correctionReasonStatus = decisionAction;
+            } else if (decisionModalItem.type === 'departure') {
+              presence.departureReasonStatus = decisionAction;
+            }
+
+            updatedPresences[pIdx] = presence;
+            await onUpdatePresences(updatedPresences);
+          }
+        },
+        successTitle: decisionAction === 'approved' ? 'Demande validée !' : 'Demande rejetée',
+        successMessage:
+          decisionAction === 'approved'
+            ? 'Demande de pointage validée avec succès.'
+            : 'Demande rejetée avec mise à jour du statut.',
+        errorMessage: 'Erreur lors du traitement de la demande.',
+      });
     } finally {
       setIsProcessingDecision(false);
       setDecisionModalItem(null);

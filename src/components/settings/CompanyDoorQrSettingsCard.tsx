@@ -6,7 +6,7 @@ import { DoorQrPreviewColumn } from './doorQr/DoorQrPreviewColumn';
 
 interface CompanyDoorQrSettingsCardProps {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }
 

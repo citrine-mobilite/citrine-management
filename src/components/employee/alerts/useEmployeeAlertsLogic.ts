@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Employee, AppUser, NotificationLog, Reminder } from '../../../types';
 import { soundService } from '../../../services/soundService';
 import { saveDocument, deleteDocument, COLLECTIONS } from '../../../services/dataService';
-import { showSuccessAlert, executeDeleteWithSweetAlert } from '../../../utils/sweetAlert';
+import { executeDeleteWithSweetAlert, executeOperationWithLoading } from '../../../utils/sweetAlert';
 import {
   PersonalAlert,
   matchesEmployeeIdentifier,
@@ -170,24 +170,33 @@ export function useEmployeeAlertsLogic({
       createdAt: nowIso,
     };
 
-    await saveDocument(COLLECTIONS.REMINDERS, newReminderItem);
-    onUpdateReminders?.([newReminderItem, ...reminders]);
+    const res = await executeOperationWithLoading({
+      loadingTitle: "Création de l'alerte...",
+      loadingText: `Programmation de "${newReminderItem.title}", veuillez patienter...`,
+      action: async () => {
+        await saveDocument(COLLECTIONS.REMINDERS, newReminderItem);
+        onUpdateReminders?.([newReminderItem, ...reminders]);
 
-    const notifLog: NotificationLog = {
-      id: `notif-rem-${Date.now()}`,
-      type: 'system',
-      recipient: employeeProfile.name || currentUser?.name || 'Moi',
-      title: `Alerte programmée : ${newReminderItem.title}`,
-      content: `${newReminderItem.note} (Date: ${newReminderItem.date} à ${newReminderItem.time})`,
-      timestamp: nowIso,
-      read: false,
-      payload: JSON.stringify({ source: 'personal_alert', reminderId: newReminderItem.id }),
-    };
-    await saveDocument(COLLECTIONS.NOTIFICATIONS, notifLog);
-    onAddNotification?.(notifLog);
+        const notifLog: NotificationLog = {
+          id: `notif-rem-${Date.now()}`,
+          type: 'system',
+          recipient: employeeProfile.name || currentUser?.name || 'Moi',
+          title: `Alerte programmée : ${newReminderItem.title}`,
+          content: `${newReminderItem.note} (Date: ${newReminderItem.date} à ${newReminderItem.time})`,
+          timestamp: nowIso,
+          read: false,
+          payload: JSON.stringify({ source: 'personal_alert', reminderId: newReminderItem.id }),
+        };
+        await saveDocument(COLLECTIONS.NOTIFICATIONS, notifLog);
+        onAddNotification?.(notifLog);
+      },
+      successTitle: 'Alerte créée !',
+      successMessage: `L'alerte "${newReminderItem.title}" a été programmée avec succès.`,
+    });
 
-    setShowCreateModal(false);
-    await showSuccessAlert('Alerte créée !', `L'alerte "${newReminderItem.title}" a été programmée.`);
+    if (res.success) {
+      setShowCreateModal(false);
+    }
   };
 
   const toggleRingtone = () => {

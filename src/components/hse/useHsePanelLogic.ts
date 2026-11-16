@@ -56,41 +56,49 @@ export function useHsePanelLogic(params: {
   });
 
   const handleToggleAction = async (incident: HseIncident, actionId: string) => {
-    try {
-      const updatedActions = (incident.correctiveActions || []).map((a) => {
-        if (a.id === actionId) {
-          const nextState = !a.isCompleted;
-          return { ...a, isCompleted: nextState, completedAt: nextState ? new Date().toISOString() : undefined };
-        }
-        return a;
-      });
-      const allDone = updatedActions.length > 0 && updatedActions.every((a) => a.isCompleted);
-      const updatedIncident: HseIncident = {
-        ...incident,
-        correctiveActions: updatedActions,
-        status: allDone ? 'cloture' : 'actions_lancees',
-      };
-      await saveHseIncident(updatedIncident);
-      setSelectedIncident(updatedIncident);
-      showToast?.('Action corrective mise à jour.', 'success');
-    } catch {
-      showToast?.('Erreur lors de la mise à jour.', 'error');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: "Mise à jour de l'action corrective...",
+      loadingText: `Actualisation de "${incident.reference}", veuillez patienter...`,
+      action: async () => {
+        const updatedActions = (incident.correctiveActions || []).map((a) => {
+          if (a.id === actionId) {
+            const nextState = !a.isCompleted;
+            return { ...a, isCompleted: nextState, completedAt: nextState ? new Date().toISOString() : undefined };
+          }
+          return a;
+        });
+        const allDone = updatedActions.length > 0 && updatedActions.every((a) => a.isCompleted);
+        const updatedIncident: HseIncident = {
+          ...incident,
+          correctiveActions: updatedActions,
+          status: allDone ? 'cloture' : 'actions_lancees',
+        };
+        await saveHseIncident(updatedIncident);
+        setSelectedIncident(updatedIncident);
+      },
+      successTitle: 'Action mise à jour !',
+      successMessage: "L'action corrective HSE a été mise à jour avec succès.",
+      errorMessage: 'Erreur lors de la mise à jour.',
+    });
   };
 
   const handleAddAction = async (incident: HseIncident, action: HseCorrectiveAction) => {
-    try {
-      const updatedIncident: HseIncident = {
-        ...incident,
-        status: 'actions_lancees',
-        correctiveActions: [...(incident.correctiveActions || []), action],
-      };
-      await saveHseIncident(updatedIncident);
-      setSelectedIncident(updatedIncident);
-      showToast?.('Action corrective ajoutée au plan.', 'success');
-    } catch {
-      showToast?.("Erreur lors de l'ajout de l'action.", 'error');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: "Ajout de l'action corrective...",
+      loadingText: `Enregistrement sur le dossier "${incident.reference}", veuillez patienter...`,
+      action: async () => {
+        const updatedIncident: HseIncident = {
+          ...incident,
+          status: 'actions_lancees',
+          correctiveActions: [...(incident.correctiveActions || []), action],
+        };
+        await saveHseIncident(updatedIncident);
+        setSelectedIncident(updatedIncident);
+      },
+      successTitle: 'Action corrective ajoutée !',
+      successMessage: 'L’action corrective a été ajoutée au plan HSE.',
+      errorMessage: "Erreur lors de l'ajout de l'action.",
+    });
   };
 
   const handleSaveIncident = async (incidentData: Partial<HseIncident>) => {

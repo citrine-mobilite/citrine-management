@@ -4,6 +4,7 @@ import { saveUser } from '../../services/userService';
 import { saveDocument, COLLECTIONS } from '../../services/dataService';
 import { storeSecureSession } from '../../services/sessionService';
 import { CollaboratorAvatarPickerModal } from '../collaborators/CollaboratorAvatarPickerModal';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 import {
   calculateAge,
   fetchResolvedEmployeeDetails,
@@ -83,33 +84,36 @@ export const ProfileInfoSubTab: React.FC<ProfileInfoSubTabProps> = ({
 
   const handleAvatarChange = async (newUrl: string) => {
     setAvatarUrl(newUrl);
-    try {
-      const updated: AppUser = {
-        ...currentUser,
-        name: name.trim(),
-        department: department.trim(),
-        phone: phone.trim(),
-        birthDate: birthDate.trim() || undefined,
-        avatarUrl: newUrl.trim(),
-      };
-      await saveUser(updated);
-      await syncEmployeeToDb(newUrl);
+    await executeOperationWithLoading({
+      loadingTitle: "Mise à jour de l'avatar...",
+      loadingText: 'Enregistrement de votre photo de profil, veuillez patienter...',
+      action: async () => {
+        const updated: AppUser = {
+          ...currentUser,
+          name: name.trim(),
+          department: department.trim(),
+          phone: phone.trim(),
+          birthDate: birthDate.trim() || undefined,
+          avatarUrl: newUrl.trim(),
+        };
+        await saveUser(updated);
+        await syncEmployeeToDb(newUrl);
 
-      showToast?.('Photo de profil mise à jour avec succès', 'success');
-      onAddNotification({
-        id: 'notif-avatar-' + Date.now(),
-        type: 'system',
-        recipient: currentUser.email,
-        title: "Modification de l'avatar",
-        content: `La photo de profil de ${name} a été modifiée avec succès.`,
-        timestamp: new Date().toISOString(),
-      });
-      await storeSecureSession(updated).catch(() => {});
-      onUpdateUser?.(updated);
-    } catch (err) {
-      console.error('Error saving avatar:', err);
-      showToast?.("Erreur lors de la mise à jour de l'avatar", 'error');
-    }
+        onAddNotification({
+          id: 'notif-avatar-' + Date.now(),
+          type: 'system',
+          recipient: currentUser.email,
+          title: "Modification de l'avatar",
+          content: `La photo de profil de ${name} a été modifiée avec succès.`,
+          timestamp: new Date().toISOString(),
+        });
+        await storeSecureSession(updated).catch(() => {});
+        onUpdateUser?.(updated);
+      },
+      successTitle: 'Photo de profil mise à jour !',
+      successMessage: 'Votre avatar a été enregistré avec succès.',
+      errorMessage: "Erreur lors de la mise à jour de l'avatar.",
+    });
   };
 
   const handleSaveInfo = async (e: React.FormEvent) => {
@@ -117,39 +121,45 @@ export const ProfileInfoSubTab: React.FC<ProfileInfoSubTabProps> = ({
     setSuccessInfo(null);
     setError(null);
     setLoading(true);
-    try {
-      const updated: AppUser = {
-        ...currentUser,
-        name: name.trim(),
-        department: department.trim(),
-        phone: phone.trim(),
-        birthDate: birthDate.trim() || undefined,
-        avatarUrl: avatarUrl.trim(),
-        team: assignedTeams.join(', '),
-        teams: assignedTeams,
-        managerName,
-      };
-      await saveUser(updated);
-      await syncEmployeeToDb(avatarUrl);
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement du profil...',
+      loadingText: 'Mise à jour de vos informations personnelles, veuillez patienter...',
+      action: async () => {
+        const updated: AppUser = {
+          ...currentUser,
+          name: name.trim(),
+          department: department.trim(),
+          phone: phone.trim(),
+          birthDate: birthDate.trim() || undefined,
+          avatarUrl: avatarUrl.trim(),
+          team: assignedTeams.join(', '),
+          teams: assignedTeams,
+          managerName,
+        };
+        await saveUser(updated);
+        await syncEmployeeToDb(avatarUrl);
 
+        onAddNotification({
+          id: 'notif-prof-' + Date.now(),
+          type: 'system',
+          recipient: currentUser.email,
+          title: 'Mise à jour du profil',
+          content: `Le profil et la date de naissance de ${name} ont été mis à jour.`,
+          timestamp: new Date().toISOString(),
+        });
+        await storeSecureSession(updated).catch(() => {});
+        onUpdateUser?.(updated);
+      },
+      successTitle: 'Profil mis à jour !',
+      successMessage: 'Vos informations personnelles ont été enregistrées avec succès.',
+      errorMessage: 'Erreur lors de l’enregistrement des modifications.',
+    });
+    if (res.success) {
       setSuccessInfo('Informations personnelles et date de naissance mises à jour avec succès.');
-      showToast?.('Profil mis à jour avec succès', 'success');
-      onAddNotification({
-        id: 'notif-prof-' + Date.now(),
-        type: 'system',
-        recipient: currentUser.email,
-        title: 'Mise à jour du profil',
-        content: `Le profil et la date de naissance de ${name} ont été mis à jour.`,
-        timestamp: new Date().toISOString(),
-      });
-      await storeSecureSession(updated).catch(() => {});
-      onUpdateUser?.(updated);
-    } catch {
+    } else {
       setError('Erreur lors de l’enregistrement des modifications.');
-      showToast?.('Erreur lors de la mise à jour du profil', 'error');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   const ageText = calculateAge(birthDate);

@@ -8,8 +8,6 @@ import { authService } from '../services/auth/authService';
 import { supabase } from '../lib/supabase';
 import { getDefaultPortalForUser } from '../utils/roleUtils';
 import { TabType } from '../components/Sidebar';
-import { showSuccessAlert, showErrorAlert, showPendingAlert } from '../utils/sweetAlert';
-import { asyncActionTrackerService } from '../services/asyncActionTrackerService';
 import { resolveToastPayload } from '../utils/toastTitleUtils';
 import { computeUnreadNotificationsCount, computeNonBadgedEmployeesCount } from '../utils/appBadgeCounters';
 import { registerGlobalErrorHandlers, clearSupabaseAuthStorage, hasUserProfileChanged } from '../utils/appLifecycleHelpers';
@@ -59,9 +57,13 @@ export function useAppOrchestration({
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [kioskModalOpen, setKioskModalOpen] = useState(false);
   const [officeQrModalOpen, setOfficeQrModalOpen] = useState(false);
-  const [toasts] = useState<ToastMessage[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const lastToastRef = useRef<{ message: string; time: number }>({ message: '', time: 0 });
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   const showToast = (
     titleOrMessage: string,
@@ -75,30 +77,20 @@ export function useAppOrchestration({
     );
 
     const now = Date.now();
-    if (lastToastRef.current.message === resolvedMessage && now - lastToastRef.current.time < 3500) {
+    if (lastToastRef.current.message === resolvedMessage && now - lastToastRef.current.time < 2500) {
       return;
     }
     lastToastRef.current = { message: resolvedMessage, time: now };
 
-    (async () => {
-      try {
-        await asyncActionTrackerService.waitForIdle();
-        await new Promise((r) => setTimeout(r, 60));
+    const newToast: ToastMessage = {
+      id: `toast-${now}-${Math.random().toString(36).slice(2, 6)}`,
+      title: resolvedTitle || undefined,
+      message: resolvedMessage,
+      type: resolvedType,
+    };
 
-        if (resolvedType === 'error') {
-          await showErrorAlert(resolvedTitle || "Échec de l'opération", resolvedMessage);
-        } else if (resolvedType === 'warning' || resolvedType === 'info') {
-          await showPendingAlert(resolvedTitle || 'Information Citrine', resolvedMessage);
-        } else {
-          await showSuccessAlert(resolvedTitle || 'Opération confirmée', resolvedMessage);
-        }
-      } catch (err) {
-        console.warn("[App] Erreur lors de l'affichage de SweetAlert:", err);
-      }
-    })();
+    setToasts((prev) => [...prev.slice(-3), newToast]);
   };
-
-  const dismissToast = (_id: string) => {};
 
   const [currentTime, setCurrentTime] = useState<string>(() => {
     const d = new Date();

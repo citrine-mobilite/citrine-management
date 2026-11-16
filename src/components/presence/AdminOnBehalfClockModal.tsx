@@ -7,6 +7,7 @@ import {
   QUICK_ADMIN_CLOCK_REASONS,
   executeAdminOnBehalfClocking,
 } from './adminOnBehalfClockHelper';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface AdminOnBehalfClockModalProps {
   isOpen: boolean;
@@ -14,7 +15,7 @@ interface AdminOnBehalfClockModalProps {
   employees: Employee[];
   presences: Presence[];
   currentUser?: AppUser | null;
-  onUpdatePresences: (updated: Presence[]) => void;
+  onUpdatePresences: (updated: Presence[]) => Promise<void> | void;
   onAddNotification?: (log: NotificationLog) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
   defaultEmployeeId?: string;
@@ -30,7 +31,6 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
   currentUser,
   onUpdatePresences,
   onAddNotification,
-  showToast,
   defaultEmployeeId,
   onAddAttendanceIncident,
   moduleConfig,
@@ -61,28 +61,39 @@ export const AdminOnBehalfClockModal: React.FC<AdminOnBehalfClockModalProps> = (
       return;
     }
 
-    const result = await executeAdminOnBehalfClocking({
-      targetEmployee,
-      clockAction,
-      timeInput,
-      reasonInput,
-      todayStr,
-      presences,
-      currentUser,
-      moduleConfig,
-      onUpdatePresences,
-      onAddNotification,
-      onAddAttendanceIncident,
+    let adminName = currentUser?.name || 'Responsable';
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement du pointage...',
+      loadingText: `Validation administrative pour ${targetEmployee.name}, veuillez patienter...`,
+      action: async () => {
+        const result = await executeAdminOnBehalfClocking({
+          targetEmployee,
+          clockAction,
+          timeInput,
+          reasonInput,
+          todayStr,
+          presences,
+          currentUser,
+          moduleConfig,
+          onUpdatePresences,
+          onAddNotification,
+          onAddAttendanceIncident,
+        });
+        if (!result.success) {
+          throw new Error(result.error || 'Erreur lors du pointage.');
+        }
+        adminName = result.adminName || adminName;
+      },
+      successTitle: 'Pointage validé !',
+      successMessage: `Pointage enregistré avec succès pour ${targetEmployee.name} par ${adminName}.`,
+      errorMessage: 'Erreur lors du pointage.',
     });
 
-    if (!result.success) {
-      setErrorMessage(result.error || 'Erreur lors du pointage.');
+    if (!res.success) {
+      setErrorMessage(res.error?.message || 'Erreur lors du pointage.');
       return;
     }
 
-    if (showToast) {
-      showToast(`Pointage validé avec succès pour ${targetEmployee.name} par ${result.adminName}.`, 'success');
-    }
     onClose();
   };
 

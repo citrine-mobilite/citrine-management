@@ -1,12 +1,10 @@
 import { AppUser } from '../types';
-import { showErrorAlert } from './sweetAlert';
 
 export function registerGlobalErrorHandlers(): () => void {
   const handleGlobalError = (event: ErrorEvent) => {
     const msg = event.message || '';
     if (!msg.includes('WebSocket') && !msg.includes('vite/client')) {
       console.error('Global uncaught error caught:', event.error || event.message);
-      showErrorAlert('Erreur Inattendue', msg || "Une erreur critique est survenue dans l'application.");
     }
   };
 
@@ -14,7 +12,6 @@ export function registerGlobalErrorHandlers(): () => void {
     const reasonStr = String(event.reason?.message || event.reason || '');
     if (!reasonStr.includes('WebSocket') && !reasonStr.includes('vite/client')) {
       console.error('Global unhandled promise rejection caught:', event.reason);
-      showErrorAlert('Erreur Asynchrone', reasonStr || 'Une opération en arrière-plan a échoué.');
     }
   };
 

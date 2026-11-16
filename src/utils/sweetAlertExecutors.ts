@@ -1,10 +1,19 @@
 import {
   confirmDeleteAlert,
   showErrorAlert,
-  showLoadingAlert,
   showPendingAlert,
   showSuccessAlert,
 } from './sweetAlert';
+import { asyncActionTrackerService } from '../services/asyncActionTrackerService';
+
+const MIN_LOADER_VISIBLE_MS = 220;
+
+async function ensureMinimumLoaderTime(startedAt: number) {
+  const elapsed = Date.now() - startedAt;
+  if (elapsed < MIN_LOADER_VISIBLE_MS) {
+    await new Promise((resolve) => setTimeout(resolve, MIN_LOADER_VISIBLE_MS - elapsed));
+  }
+}
 
 export async function executeOperationWithLoading<T = any>(options: {
   loadingTitle?: string;
@@ -18,21 +27,25 @@ export async function executeOperationWithLoading<T = any>(options: {
   isPendingCheck?: (result: T) => boolean;
 }): Promise<{ success: boolean; data?: T; error?: any; isPending?: boolean }> {
   const {
-    loadingTitle = 'Traitement en cours...',
-    loadingText = 'Communication avec le serveur en cours...',
+    loadingTitle = 'Opération en cours...',
+    loadingText = 'Veuillez patienter pendant le traitement de votre demande...',
     action,
     successTitle = 'Succès !',
     successMessage = 'Opération effectuée avec succès.',
     errorMessage = 'Une erreur est survenue lors de la communication avec le serveur.',
     pendingTitle = 'Demande en attente',
-    pendingMessage = "L'opération a été transmise et est en cours de validation.",
+    pendingMessage = "L'opération a été enregistrée et est en attente de validation.",
     isPendingCheck,
   } = options;
 
-  showLoadingAlert(loadingTitle, loadingText);
+  const startedAt = Date.now();
+  const stopLoader = asyncActionTrackerService.startAction(loadingTitle, loadingText, true);
 
   try {
     const result = await action();
+    await ensureMinimumLoaderTime(startedAt);
+    stopLoader();
+    await asyncActionTrackerService.waitForIdle();
 
     if (result && typeof result === 'object' && ((result as any).success === false || (result as any).error)) {
       const errMsg = (result as any).error || errorMessage;
@@ -42,7 +55,11 @@ export async function executeOperationWithLoading<T = any>(options: {
 
     const isPending = isPendingCheck
       ? isPendingCheck(result)
-      : result && typeof result === 'object' && ((result as any).status === 'pending' || (result as any).isPending === true);
+      : result &&
+        typeof result === 'object' &&
+        ((result as any).status === 'pending' ||
+          (result as any).isPending === true ||
+          (result as any).outcome === 'pending');
 
     if (isPending) {
       await showPendingAlert(pendingTitle, pendingMessage);
@@ -52,6 +69,9 @@ export async function executeOperationWithLoading<T = any>(options: {
     await showSuccessAlert(successTitle, successMessage);
     return { success: true, data: result };
   } catch (error: any) {
+    await ensureMinimumLoaderTime(startedAt);
+    stopLoader();
+    await asyncActionTrackerService.waitForIdle();
     console.error('❌ [OPERATION ERROR]:', error);
     const finalErrorMsg = error?.message || String(error) || errorMessage;
     await showErrorAlert("Échec de l'opération", finalErrorMsg);
@@ -81,13 +101,24 @@ export async function executeDeleteWithSweetAlert(options: {
   const isConfirmed = await confirmDeleteAlert({ title, text, itemName });
   if (!isConfirmed) return false;
 
-  showLoadingAlert('Suppression en cours...', 'Suppression définitive sur le serveur...');
+  const startedAt = Date.now();
+  const stopLoader = asyncActionTrackerService.startAction(
+    'Suppression en cours...',
+    'Veuillez patienter pendant la suppression...',
+    true
+  );
 
   try {
     await action();
+    await ensureMinimumLoaderTime(startedAt);
+    stopLoader();
+    await asyncActionTrackerService.waitForIdle();
     await showSuccessAlert(successTitle, successMessage);
     return true;
   } catch (error: any) {
+    await ensureMinimumLoaderTime(startedAt);
+    stopLoader();
+    await asyncActionTrackerService.waitForIdle();
     console.error('❌ [DELETE ERROR]:', error);
     const finalErrorMsg = error?.message || errorMessage;
     await showErrorAlert('Échec de la suppression', finalErrorMsg);

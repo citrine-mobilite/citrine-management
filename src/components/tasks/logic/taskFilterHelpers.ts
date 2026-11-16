@@ -98,10 +98,23 @@ export function filterTasksByCriteria({
       }
     }
 
+    const q = searchTerm.trim().toLowerCase();
+    const hasMatchingSubtask = (subs?: Task['subtasks']): boolean => {
+      if (!subs || subs.length === 0) return false;
+      return subs.some(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          (s.description && s.description.toLowerCase().includes(q)) ||
+          hasMatchingSubtask(s.subtasks)
+      );
+    };
+
     const matchSearch =
-      t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (t.description && t.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (t.milestoneTarget && t.milestoneTarget.toLowerCase().includes(searchTerm.toLowerCase()));
+      !q ||
+      t.title.toLowerCase().includes(q) ||
+      (t.description && t.description.toLowerCase().includes(q)) ||
+      (t.milestoneTarget && t.milestoneTarget.toLowerCase().includes(q)) ||
+      hasMatchingSubtask(t.subtasks);
 
     const matchProject =
       activeProjectId === 'all'
@@ -120,14 +133,15 @@ export function filterTasksByCriteria({
       filterType === 'all' ? true : filterType === 'milestones' ? !!t.isMilestone : !t.isMilestone;
 
     let matchDate = true;
-    if (filterDatePeriod !== 'all' && t.date) {
+    const rawDate = (t.dueDate || t.date || t.startDate || '').slice(0, 10);
+    if (filterDatePeriod !== 'all' && rawDate) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const taskDate = new Date(`${t.date}T12:00:00`);
+      const taskDate = new Date(`${rawDate}T12:00:00`);
 
       if (filterDatePeriod === 'today') {
         const todayStr = today.toISOString().split('T')[0];
-        matchDate = t.date === todayStr;
+        matchDate = rawDate === todayStr;
       } else if (filterDatePeriod === '3days') {
         const cutoff = new Date(today);
         cutoff.setDate(cutoff.getDate() - 2);

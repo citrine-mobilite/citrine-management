@@ -18,14 +18,13 @@ import {
   DocumentGeneratorBanner,
   DocumentGeneratorArchiveToolbar,
 } from './documents/DocumentGeneratorBannerAndToolbar';
-import { showSuccessAlert, showErrorAlert, confirmActionAlert, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
+import { confirmActionAlert, executeDeleteWithSweetAlert, executeOperationWithLoading } from '../utils/sweetAlert';
 import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
-import { asyncActionTrackerService } from '../services/asyncActionTrackerService';
 
 interface DocumentGeneratorPanelProps {
   documents: GeneratedDocument[];
   setDocuments?: React.Dispatch<React.SetStateAction<GeneratedDocument[]>>;
-  onUpdateDocuments?: (docs: GeneratedDocument[]) => void;
+  onUpdateDocuments?: (docs: GeneratedDocument[]) => Promise<void> | void;
   currentRole?: Role;
   currentUser?: AppUser | null;
   employees?: Employee[];
@@ -78,10 +77,10 @@ export default function DocumentGeneratorPanel({
     return () => unsubscribe();
   }, []);
 
-  const handleUpdate = (updater: GeneratedDocument[] | ((prev: GeneratedDocument[]) => GeneratedDocument[])) => {
+  const handleUpdate = async (updater: GeneratedDocument[] | ((prev: GeneratedDocument[]) => GeneratedDocument[])) => {
     const updated = typeof updater === 'function' ? updater(documents || []) : updater;
     if (setDocuments) setDocuments(updated);
-    if (onUpdateDocuments) onUpdateDocuments(updated);
+    if (onUpdateDocuments) await onUpdateDocuments(updated);
   };
 
   const handleDeleteDoc = async (id: string) => {
@@ -91,7 +90,7 @@ export default function DocumentGeneratorPanel({
       text: 'Voulez-vous vraiment supprimer ce document des archives RH ?',
       itemName: target?.title,
       action: async () => {
-        handleUpdate((prev) => prev.filter((d) => d.id !== id));
+        await handleUpdate((prev) => prev.filter((d) => d.id !== id));
       },
       successTitle: 'Document supprimé !',
       successMessage: target?.title ? `"${target.title}" a été supprimé des archives.` : 'Document supprimé des archives.',
@@ -105,20 +104,36 @@ export default function DocumentGeneratorPanel({
 
   const handleSaveDocument = async (newDoc: GeneratedDocument) => {
     const docToPersist: GeneratedDocument = { ...newDoc, saveToDatabase: true };
-    handleUpdate((prev) => [docToPersist, ...prev]);
-    setPreviewDoc(docToPersist);
-    await showSuccessAlert('Document généré !', `Le document "${newDoc.title}" a été généré et archivé avec succès.`);
+    await executeOperationWithLoading({
+      loadingTitle: 'Génération du document...',
+      loadingText: `Archivage de "${newDoc.title}" en cours, veuillez patienter...`,
+      action: async () => {
+        await handleUpdate((prev) => [docToPersist, ...prev]);
+        setPreviewDoc(docToPersist);
+      },
+      successTitle: 'Document généré !',
+      successMessage: `Le document "${newDoc.title}" a été généré et archivé avec succès.`,
+      errorMessage: "Erreur lors de l'enregistrement du document.",
+    });
   };
 
   const handleSaveEditedDoc = async (updatedDoc: GeneratedDocument) => {
-    handleUpdate((prev) => prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d)));
-    await showSuccessAlert('Modifications enregistrées !', `Le document "${updatedDoc.title}" a été mis à jour.`);
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour du document...',
+      loadingText: `Enregistrement des modifications de "${updatedDoc.title}", veuillez patienter...`,
+      action: async () => {
+        await handleUpdate((prev) => prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d)));
+      },
+      successTitle: 'Modifications enregistrées !',
+      successMessage: `Le document "${updatedDoc.title}" a été mis à jour.`,
+      errorMessage: 'Erreur lors de la mise à jour du document.',
+    });
   };
 
   const handleResetTemplates = async () => {
     const isConfirmed = await confirmActionAlert({
       title: 'Synchroniser les modèles RH ?',
-      text: 'Voulez-vous synchroniser et actualiser l\'ensemble des modèles RH en base de données Supabase ?',
+      text: "Voulez-vous synchroniser et actualiser l'ensemble des modèles RH en base de données Supabase ?",
       confirmButtonText: 'Oui, synchroniser',
       icon: 'question',
     });
@@ -126,14 +141,16 @@ export default function DocumentGeneratorPanel({
 
     setIsResettingTemplates(true);
     try {
-      await asyncActionTrackerService.track('Synchronisation des modèles RH...', async () => {
-        await resetRHDocumentTemplatesToDefaults();
+      await executeOperationWithLoading({
+        loadingTitle: 'Synchronisation des modèles RH...',
+        loadingText: 'Actualisation des modèles officiels en cours, veuillez patienter...',
+        action: async () => {
+          await resetRHDocumentTemplatesToDefaults();
+        },
+        successTitle: 'Modèles synchronisés !',
+        successMessage: "L'ensemble des modèles officiels RH a été actualisé.",
+        errorMessage: 'Erreur lors de la synchronisation des modèles.',
       });
-      if (showToast) showToast('Modèles RH synchronisés avec succès en base de données.');
-      await showSuccessAlert('Modèles synchronisés !', 'L\'ensemble des modèles officiels RH a été actualisé.');
-    } catch (err: any) {
-      if (showToast) showToast('Erreur lors de la synchronisation des modèles.', 'error');
-      await showErrorAlert('Erreur', err?.message || 'Erreur lors de la synchronisation des modèles.');
     } finally {
       setIsResettingTemplates(false);
     }

@@ -4,10 +4,11 @@ import { CompanyModuleConfig, DEFAULT_MODULE_CONFIG } from '../../types';
 import { CompanyLogoCard } from './CompanyLogoCard';
 import { CompanyLegalInfoFields } from './CompanyLegalInfoFields';
 import { CompanyAddressContactFields } from './CompanyAddressContactFields';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface CompanyIdentitySettingsProps {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -39,36 +40,64 @@ export const CompanyIdentitySettings: React.FC<CompanyIdentitySettingsProps> = (
     }));
   };
 
-  const handleSelectLogo = (base64: string) => {
+  const handleSelectLogo = async (base64: string) => {
     const updated = {
       ...formData,
       companyLogoBase64: base64,
     };
-    setFormData(updated);
-    onUpdateModuleConfig(updated);
-    setIsSaved(true);
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour du logo...',
+      loadingText: 'Veuillez patienter pendant la sauvegarde du logo en base de données...',
+      action: async () => {
+        await onUpdateModuleConfig(updated);
+      },
+      successTitle: 'Logo mis à jour !',
+      successMessage: "Le logo officiel de l'entreprise a été enregistré avec succès.",
+    });
+    if (res.success) {
+      setFormData(updated);
+      setIsSaved(true);
+    }
   };
 
-  const handleResetToDefaultLogo = () => {
+  const handleResetToDefaultLogo = async () => {
     const updated = {
       ...formData,
       companyLogoBase64: '/citrine-logo.png',
     };
-    setFormData(updated);
-    onUpdateModuleConfig(updated);
-    setIsSaved(true);
-    if (showToast) showToast('Logo officiel Citrine (/citrine-logo.png) restauré.', 'success');
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Restauration du logo...',
+      loadingText: 'Veuillez patienter pendant la restauration du logo officiel Citrine...',
+      action: async () => {
+        await onUpdateModuleConfig(updated);
+      },
+      successTitle: 'Logo restauré !',
+      successMessage: 'Le logo officiel Citrine a été rétabli avec succès.',
+    });
+    if (res.success) {
+      setFormData(updated);
+      setIsSaved(true);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const updated: CompanyModuleConfig = {
       ...formData,
       hqName: formData.companyName || formData.hqName,
     };
-    onUpdateModuleConfig(updated);
-    setIsSaved(true);
-    if (showToast) showToast('Identité et coordonnées de l’entreprise enregistrées avec succès.', 'success');
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement de l’identité...',
+      loadingText: "Veuillez patienter pendant la mise à jour de l'identité et des coordonnées...",
+      action: async () => {
+        await onUpdateModuleConfig(updated);
+      },
+      successTitle: 'Identité enregistrée !',
+      successMessage: "Identité et coordonnées de l'entreprise enregistrées avec succès.",
+    });
+    if (res.success) {
+      setIsSaved(true);
+    }
   };
 
   return (

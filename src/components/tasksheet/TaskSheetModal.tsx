@@ -58,6 +58,24 @@ export const TaskSheetModal: React.FC<TaskSheetModalProps> = ({
           />
 
           <div className="p-4 sm:p-6 flex-1 min-h-0 overflow-y-auto space-y-6 bg-stone-100/50">
+            {logic.emailFeedback && (
+              <div
+                className={`max-w-4xl mx-auto px-4 py-2.5 rounded-2xl border text-xs font-bold flex items-center justify-between gap-2 ${
+                  logic.emailFeedback.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : 'bg-rose-50 border-rose-200 text-rose-900'
+                }`}
+              >
+                <span>{logic.emailFeedback.message}</span>
+                <button
+                  type="button"
+                  onClick={() => logic.setEmailFeedback(null)}
+                  className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer"
+                >
+                  Fermer
+                </button>
+              </div>
+            )}
             <div id="tasksheet-printable-sheet" className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200 space-y-5 text-xs text-stone-900 max-w-4xl mx-auto">
               <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-[#D4A82F] pb-3">

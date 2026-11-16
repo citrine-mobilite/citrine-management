@@ -12,6 +12,7 @@ import ToastContainer from './components/Toast';
 import { DatabaseHealthBanner } from './components/common/DatabaseHealthBanner';
 import OfflineStatusBanner from './components/OfflineStatusBanner';
 import { AppOverlays } from './components/app/AppOverlays';
+import { GlobalActionLoader } from './components/common/GlobalActionLoader';
 import { getHomeUrgentReminders } from './services/reminderService';
 
 export default function App() {
@@ -50,6 +51,7 @@ export default function App() {
           />
         </div>
         <ToastContainer toasts={app.toasts} onDismiss={app.dismissToast} />
+        <GlobalActionLoader />
       </div>
     );
   }

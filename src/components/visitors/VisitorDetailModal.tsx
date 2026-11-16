@@ -124,14 +124,12 @@ export const VisitorDetailModal: React.FC<VisitorDetailModalProps> = ({ visitor,
               type="button"
               disabled={isDeleting}
               onClick={async () => {
-                if (window.confirm(`Confirmez-vous la suppression définitive de ${visitor.visitorName} de la base de données ?`)) {
-                  setIsDeleting(true);
-                  try {
-                    await onDelete(visitor);
-                    onClose();
-                  } finally {
-                    setIsDeleting(false);
-                  }
+                setIsDeleting(true);
+                try {
+                  await onDelete(visitor);
+                  onClose();
+                } finally {
+                  setIsDeleting(false);
                 }
               }}
               className="px-3 py-2 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl cursor-pointer flex items-center gap-1.5 transition disabled:opacity-50"

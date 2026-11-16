@@ -4,7 +4,7 @@ import { Employee } from '../../types/employeeTypes';
 import { AppUser } from '../../types/userTypes';
 import { NotificationLog } from '../../types/businessTypes';
 import { calculateDaysBetween, createAdminLeaveRequest } from '../../services/leaveService';
-import { showSuccessAlert, showErrorAlert } from '../../utils/sweetAlert';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface UseLeaveAdminCreateParams {
   employees: Employee[];
@@ -48,31 +48,31 @@ export function useLeaveAdminCreate({
     setIsSubmittingCreate(true);
     try {
       const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
-      await createAdminLeaveRequest({
-        employeeId: emp.id, employeeName: empName, employeeAvatar: emp.avatarUrl || '',
-        department: emp.department || 'Opérations', type: createLeaveType,
-        startDate: createStartDate, endDate: createEndDate, daysCount: createDaysCount,
-        reason: createReason.trim() || 'Attribué par la Direction RH', status: createStatus,
-        managerComment: createManagerComment.trim() || undefined,
-      }, currentUser, onAddNotification);
+      const res = await executeOperationWithLoading({
+        loadingTitle: 'Enregistrement du congé...',
+        loadingText: `Création du congé / permission pour ${empName}, veuillez patienter...`,
+        action: async () => {
+          await createAdminLeaveRequest({
+            employeeId: emp.id, employeeName: empName, employeeAvatar: emp.avatarUrl || '',
+            department: emp.department || 'Opérations', type: createLeaveType,
+            startDate: createStartDate, endDate: createEndDate, daysCount: createDaysCount,
+            reason: createReason.trim() || 'Attribué par la Direction RH', status: createStatus,
+            managerComment: createManagerComment.trim() || undefined,
+          }, currentUser, onAddNotification);
+          return { status: createStatus };
+        },
+        successTitle: 'Congé validé !',
+        successMessage: `Congé / Permission validé(e) avec succès pour ${empName}.`,
+        pendingTitle: 'Demande en attente',
+        pendingMessage: `La demande pour ${empName} a été enregistrée en attente de validation.`,
+        errorMessage: 'Impossible de créer la demande de congé.',
+      });
 
-      setIsSubmittingCreate(false);
-      showToast?.(
-        createStatus === 'approved' ? 'Congé accordé et validé' : 'Demande enregistrée',
-        `Congé / Permission créé(e) avec succès pour ${empName}.`,
-        'success'
-      );
-      await showSuccessAlert(
-        createStatus === 'approved' ? 'Congé validé !' : 'Demande enregistrée !',
-        `Congé / Permission enregistré(e) avec succès pour ${empName}.`
-      );
-      setShowCreateModal(false);
-      setCreateReason('');
-      setCreateManagerComment('');
-    } catch (err: any) {
-      setIsSubmittingCreate(false);
-      showToast?.('Erreur', 'Impossible de créer la demande de congé.', 'warning');
-      await showErrorAlert('Erreur', err?.message || 'Impossible de créer la demande de congé.');
+      if (res.success) {
+        setShowCreateModal(false);
+        setCreateReason('');
+        setCreateManagerComment('');
+      }
     } finally {
       setIsSubmittingCreate(false);
     }

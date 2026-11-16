@@ -16,12 +16,15 @@ import {
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
 import { generateAndDownloadQrPoster } from '../../utils/qrPosterGenerator';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface StaticDoorQrModalProps {
   isOpen: boolean;
   onClose: () => void;
   moduleConfig?: CompanyModuleConfig;
-  onUpdateConfig?: (newConfig: CompanyModuleConfig) => void;
+  onUpdateConfig?: (newConfig: CompanyModuleConfig) => Promise<void> | void;
+  onUpdateModuleConfig?: (newConfig: CompanyModuleConfig) => Promise<void> | void;
+  showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
@@ -29,7 +32,9 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
   onClose,
   moduleConfig,
   onUpdateConfig,
+  onUpdateModuleConfig,
 }) => {
+  const persistConfig = onUpdateConfig || onUpdateModuleConfig;
   const [copied, setCopied] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
   const [isInvalidated, setIsInvalidated] = useState(false);
@@ -55,59 +60,93 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const handleRegenerateToken = () => {
+  const handleRegenerateToken = async () => {
     const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
     const newToken = `CITRINE_DOOR_${Date.now().toString(36).toUpperCase()}_${randomSuffix}`;
     const oldToken = currentToken;
     const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
     const updatedRevoked = oldToken && !existingRevoked.includes(oldToken) ? [...existingRevoked, oldToken] : existingRevoked;
 
-    setTokenInput(newToken);
-    setIsInvalidated(false);
-    
-    if (onUpdateConfig && moduleConfig) {
-      onUpdateConfig({
-        ...moduleConfig,
-        doorQrCodeToken: newToken,
-        qrCodeSecret: newToken,
-        doorQrCodeRevoked: false,
-        revokedDoorTokens: updatedRevoked,
-      });
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Génération du nouveau QR Code...',
+      loadingText: 'Veuillez patienter pendant la mise à jour du jeton sécurisé...',
+      action: async () => {
+        if (persistConfig && moduleConfig) {
+          await persistConfig({
+            ...moduleConfig,
+            doorQrCodeToken: newToken,
+            qrCodeSecret: newToken,
+            doorQrCodeRevoked: false,
+            revokedDoorTokens: updatedRevoked,
+          });
+        }
+      },
+      successTitle: 'Nouveau jeton généré !',
+      successMessage: "L'ancien QR code est désormais définitivement invalidé.",
+    });
+
+    if (res.success) {
+      setTokenInput(newToken);
+      setIsInvalidated(false);
+      setSuccessMsg("Nouveau jeton généré avec succès ! L'ancien QR code est désormais définitivement invalidé.");
+      setTimeout(() => setSuccessMsg(null), 3500);
     }
-    setSuccessMsg('Nouveau jeton généré avec succès ! L\'ancien QR code est désormais définitivement invalidé.');
-    setTimeout(() => setSuccessMsg(null), 3500);
   };
 
-  const handleSaveToken = () => {
-    if (onUpdateConfig && moduleConfig) {
-      onUpdateConfig({
-        ...moduleConfig,
-        doorQrCodeToken: tokenInput,
-        qrCodeSecret: tokenInput,
-        doorQrCodeRevoked: isInvalidated,
-      });
+  const handleSaveToken = async () => {
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement du jeton...',
+      loadingText: 'Veuillez patienter pendant la sauvegarde en base...',
+      action: async () => {
+        if (persistConfig && moduleConfig) {
+          await persistConfig({
+            ...moduleConfig,
+            doorQrCodeToken: tokenInput,
+            qrCodeSecret: tokenInput,
+            doorQrCodeRevoked: isInvalidated,
+          });
+        }
+      },
+      successTitle: 'Jeton enregistré !',
+      successMessage: 'Le jeton du QR Code a été enregistré en base.',
+    });
+
+    if (res.success) {
+      setSuccessMsg('Jeton mis à jour et enregistré en base.');
+      setTimeout(() => setSuccessMsg(null), 3500);
     }
-    setSuccessMsg('Jeton mis à jour et enregistré en base.');
-    setTimeout(() => setSuccessMsg(null), 3500);
   };
 
-  const handleToggleInvalidate = () => {
+  const handleToggleInvalidate = async () => {
     const nextState = !isInvalidated;
-    setIsInvalidated(nextState);
     const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
     const updatedRevoked = nextState && currentToken && !existingRevoked.includes(currentToken)
       ? [...existingRevoked, currentToken]
       : existingRevoked;
 
-    if (onUpdateConfig && moduleConfig) {
-      onUpdateConfig({
-        ...moduleConfig,
-        doorQrCodeRevoked: nextState,
-        revokedDoorTokens: updatedRevoked,
-      });
+    const res = await executeOperationWithLoading({
+      loadingTitle: nextState ? 'Invalidation du QR Code...' : 'Réactivation du QR Code...',
+      loadingText: 'Veuillez patienter pendant la mise à jour de sécurité...',
+      action: async () => {
+        if (persistConfig && moduleConfig) {
+          await persistConfig({
+            ...moduleConfig,
+            doorQrCodeRevoked: nextState,
+            revokedDoorTokens: updatedRevoked,
+          });
+        }
+      },
+      successTitle: nextState ? 'QR Code invalidé !' : 'QR Code réactivé !',
+      successMessage: nextState
+        ? "Ce QR Code a été invalidé. Tout ancien ou actuel badge refusera l'accès."
+        : 'Le QR Code a été réactivé.',
+    });
+
+    if (res.success) {
+      setIsInvalidated(nextState);
+      setSuccessMsg(nextState ? "Ce QR Code a été invalidé. Tout ancien ou actuel badge refusera l'accès." : 'QR Code réactivé.');
+      setTimeout(() => setSuccessMsg(null), 3500);
     }
-    setSuccessMsg(nextState ? 'Ce QR Code a été invalidé. Tout ancien ou actuel badge refusera l\'accès.' : 'QR Code réactivé.');
-    setTimeout(() => setSuccessMsg(null), 3500);
   };
 
   const handleDownloadQR = () => {

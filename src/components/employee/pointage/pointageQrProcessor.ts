@@ -3,7 +3,6 @@ import { getCurrentUserLocation } from '../../../utils/geolocation';
 import { dynamicQrService } from '../../../services/dynamicQrService';
 import { badgeCodeService } from '../../../services/badgeCodeService';
 import { haptic } from '../../../services/hapticService';
-import { showErrorAlert } from '../../../utils/sweetAlert';
 import { verifyDoorQrToken } from '../../../services/qrDoorValidationService';
 import { extractCleanTokenFromScan, captureGpsWithTimeout } from './pointageGpsAndTokenHelper';
 
@@ -23,7 +22,7 @@ export interface ProcessQrParams {
   onConfirmClocking: (
     method: ClockingMethod,
     customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
-  ) => void;
+  ) => Promise<boolean> | void;
   setShowClockingModal: (val: boolean) => void;
   showToast?: (title: string, desc: string, type?: 'success' | 'warning' | 'info') => void;
 }
@@ -72,13 +71,12 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
       );
       if (res.success) {
         stopCameraAndInterval();
-        onConfirmClocking('badge_code_16', {
+        setShowClockingModal(false);
+        await onConfirmClocking('badge_code_16', {
           latitude: userLocation?.latitude,
           longitude: userLocation?.longitude,
           locationName: 'Bureau (Validé par Clé 16 Caractères)',
         });
-        if (showToast) showToast('Pointage Réussi !', 'Clé 16 caractères validée avec succès.', 'success');
-        setShowClockingModal(false);
         return;
       }
       setActionError(res.error || 'Code 16 caractères invalide.');
@@ -120,19 +118,12 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
 
       if (result.success) {
         stopCameraAndInterval();
-        onConfirmClocking('qr_code_dynamic', {
+        setShowClockingModal(false);
+        await onConfirmClocking('qr_code_dynamic', {
           latitude: dynGps.latitude,
           longitude: dynGps.longitude,
           locationName: `Validé par Responsable (${result.session?.generatedBy || 'Sur place'}) • ${dynGps.locationLabel}`,
         });
-        if (showToast) {
-          showToast(
-            'Pointage Réussi !',
-            `Présence attestée par ${result.session?.generatedBy || 'le responsable'} avec relevé GPS.`,
-            'success'
-          );
-        }
-        setShowClockingModal(false);
         return;
       } else if (currentStep === 'scan_dynamic') {
         setActionError(result.error || 'QR Code dynamique expiré ou invalide.');
@@ -155,7 +146,6 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
       "Ce QR Code d'entrée a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle mise en place à la porte.";
     setActionError(`QR Code Révoqué : ${revokeMsg}`);
     if (showToast) showToast('QR Code Révoqué', revokeMsg, 'warning');
-    showErrorAlert('QR Code Révoqué 🚫', revokeMsg);
     return;
   }
 
@@ -163,10 +153,8 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
     stopCameraAndInterval();
     setDetectedQrCode(null);
     setIsProcessingDetection(false);
-    const invalidMsg = `Le QR Code scanné n'est pas reconnu par Citrine Mobilité.\n\nJeton détecté : "${cleanToken.length > 32 ? cleanToken.substring(0, 32) + '...' : cleanToken}"\n\nVeuillez cadrer le QR Code officiel affiché à la porte.`;
     setActionError('QR Code non reconnu : jeton invalide ou expiré.');
     if (showToast) showToast('QR Code Invalide', "Ce QR Code n'est pas le QR Code officiel de pointage.", 'warning');
-    showErrorAlert('QR Code Non Reconnu ❌', invalidMsg);
     return;
   }
 
@@ -184,21 +172,11 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
   }
 
   stopCameraAndInterval();
-  onConfirmClocking('qr_code_door', {
+  setShowClockingModal(false);
+  await onConfirmClocking('qr_code_door', {
     latitude: doorGps.latitude,
     longitude: doorGps.longitude,
     locationName: doorGps.locationLabel,
     qrCodeToken: cleanToken,
   });
-
-  if (showToast) {
-    showToast(
-      'Badgeage Validé !',
-      doorGps.latitude
-        ? `Position GPS réelle enregistrée (${doorGps.latitude.toFixed(4)}°, ${doorGps.longitude.toFixed(4)}°).`
-        : `Présence enregistrée à la borne : ${officialSiteName}.`,
-      'success'
-    );
-  }
-  setShowClockingModal(false);
 }

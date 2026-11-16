@@ -17,7 +17,7 @@ interface UseEmployeePointageLogicProps {
   onConfirmClocking: (
     method: ClockingMethod,
     customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
-  ) => void;
+  ) => Promise<boolean> | void;
   showToast?: (title: string, desc: string, type?: 'success' | 'warning' | 'info') => void;
   moduleConfig?: CompanyModuleConfig;
 }

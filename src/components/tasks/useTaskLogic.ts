@@ -18,7 +18,7 @@ import {
 } from './taskConstants';
 import { taskService } from '../../services/taskService';
 import { COLLECTIONS, saveDocument, subscribeToCollection } from '../../services/dataService';
-import { showErrorAlert } from '../../utils/sweetAlert';
+import { executeDeleteWithSweetAlert, executeOperationWithLoading } from '../../utils/sweetAlert';
 import { isSelfOnlyUser } from '../../utils/roleUtils';
 import { computeTaskVisibilityScope, filterTasksByCriteria } from './logic/taskFilterHelpers';
 import { executeSendManualTaskSheet } from './logic/taskManualTaskSheetHelper';
@@ -404,15 +404,19 @@ export function useTaskLogic({
         ...t,
         orderIndex: typeof t.orderIndex === 'number' ? t.orderIndex + 1 : idx + 1,
       }));
-      onUpdateTasks([newTask, ...shifted]);
-      try {
-        await taskService.saveTask(newTask);
-        showToast?.(`Tâche « ${trimmed} » ajoutée.`, 'success');
-      } catch (err: any) {
-        showToast?.(err?.message || 'Erreur lors de la création.', 'error');
-      }
+      await executeOperationWithLoading({
+        loadingTitle: 'Création de la tâche...',
+        loadingText: `Enregistrement de "${trimmed}" en cours, veuillez patienter...`,
+        action: async () => {
+          await taskService.saveTask(newTask);
+          onUpdateTasks([newTask, ...shifted]);
+        },
+        successTitle: 'Tâche créée !',
+        successMessage: `La tâche « ${trimmed} » a été ajoutée avec succès.`,
+        errorMessage: 'Erreur lors de la création de la tâche.',
+      });
     },
-    [activeProjectId, isRestrictedStaff, currentUser, employees, tasks, onUpdateTasks, showToast]
+    [activeProjectId, isRestrictedStaff, currentUser, employees, tasks, onUpdateTasks]
   );
 
   const handleToggleSubtaskAtPath = useCallback(
@@ -523,32 +527,48 @@ export function useTaskLogic({
       };
 
       const updatedTask = addSubtaskToTaskAtPath(targetTask, parentPath, newSub);
-      await handleSilentSaveTask(updatedTask);
-      showToast?.(`Sous-tâche « ${trimmed} » ajoutée.`, 'success');
+      await executeOperationWithLoading({
+        loadingTitle: 'Ajout de la sous-tâche...',
+        loadingText: `Enregistrement de "${trimmed}", veuillez patienter...`,
+        action: async () => {
+          await handleSilentSaveTask(updatedTask);
+        },
+        successTitle: 'Sous-tâche ajoutée !',
+        successMessage: `La sous-tâche « ${trimmed} » a été ajoutée.`,
+        errorMessage: "Impossible d'ajouter la sous-tâche.",
+      });
     },
-    [tasks, handleSilentSaveTask, showToast]
+    [tasks, handleSilentSaveTask]
   );
 
   const handleDeleteSubtaskAtPath = useCallback(
     async (taskId: string, path: string[]) => {
       const targetTask = tasks.find((t) => t.id === taskId);
       if (!targetTask || path.length === 0) return;
+      const targetSub = findSubtaskByPath(targetTask.subtasks || [], path);
 
-      const updatedSubtasks = deleteSubtaskAtPath(targetTask.subtasks || [], path);
-      await handleSilentSaveTask({
-        ...targetTask,
-        subtasks: updatedSubtasks,
+      await executeDeleteWithSweetAlert({
+        title: 'Supprimer cette sous-tâche ?',
+        text: 'Voulez-vous vraiment supprimer cette sous-tâche ?',
+        itemName: targetSub?.title,
+        action: async () => {
+          const updatedSubtasks = deleteSubtaskAtPath(targetTask.subtasks || [], path);
+          await handleSilentSaveTask({
+            ...targetTask,
+            subtasks: updatedSubtasks,
+          });
+          if (
+            selectedTaskForDetail?.id === taskId &&
+            selectedSubtaskPath.join('/') === path.join('/')
+          ) {
+            setSelectedSubtaskPath(path.slice(0, -1));
+          }
+        },
+        successTitle: 'Sous-tâche supprimée !',
+        successMessage: 'La sous-tâche a été supprimée avec succès.',
       });
-
-      if (
-        selectedTaskForDetail?.id === taskId &&
-        selectedSubtaskPath.join('/') === path.join('/')
-      ) {
-        setSelectedSubtaskPath(path.slice(0, -1));
-      }
-      showToast?.('Sous-tâche supprimée.', 'success');
     },
-    [tasks, handleSilentSaveTask, selectedTaskForDetail?.id, selectedSubtaskPath, showToast]
+    [tasks, handleSilentSaveTask, selectedTaskForDetail?.id, selectedSubtaskPath]
   );
 
   const handleReorderSubtasksAtPath = useCallback(
@@ -622,16 +642,23 @@ export function useTaskLogic({
         promotedTask,
         ...tasks.map((t) => (t.id === parentTask.id ? cleanedParent : t)),
       ];
-      onUpdateTasks(nextList);
-      setSelectedTaskForDetail(promotedTask);
-      setSelectedSubtaskPath([]);
-      await Promise.all([
-        taskService.saveTask(promotedTask),
-        taskService.saveTask(cleanedParent),
-      ]);
-      showToast?.(`« ${sub.title} » convertie en tâche principale.`, 'success');
+      await executeOperationWithLoading({
+        loadingTitle: 'Conversion en tâche principale...',
+        loadingText: `Conversion de « ${sub.title} », veuillez patienter...`,
+        action: async () => {
+          await Promise.all([
+            taskService.saveTask(promotedTask),
+            taskService.saveTask(cleanedParent),
+          ]);
+          onUpdateTasks(nextList);
+          setSelectedTaskForDetail(promotedTask);
+          setSelectedSubtaskPath([]);
+        },
+        successTitle: 'Sous-tâche convertie !',
+        successMessage: `« ${sub.title} » a été convertie en tâche principale.`,
+      });
     },
-    [tasks, onUpdateTasks, showToast]
+    [tasks, onUpdateTasks]
   );
 
   // Gestion des sections, champs personnalisés & règles projet (persistés dans Supabase task_projects)
@@ -656,19 +683,26 @@ export function useTaskLogic({
       const trimmed = title.trim();
       if (!trimmed) return;
       const targetProjId = projectId === 'all' ? 'general' : projectId;
-      await persistProjectUpdate(targetProjId, (p) => {
-        const current = resolveProjectSections(p);
-        const newSec: TaskSection = {
-          id: `sec-${Date.now()}`,
-          title: trimmed,
-          orderIndex: current.length,
-          color: '#2A7B76',
-        };
-        return { ...p, sections: [...current, newSec] };
+      await executeOperationWithLoading({
+        loadingTitle: 'Création de la section...',
+        loadingText: `Ajout de la section « ${trimmed} », veuillez patienter...`,
+        action: async () => {
+          await persistProjectUpdate(targetProjId, (p) => {
+            const current = resolveProjectSections(p);
+            const newSec: TaskSection = {
+              id: `sec-${Date.now()}`,
+              title: trimmed,
+              orderIndex: current.length,
+              color: '#2A7B76',
+            };
+            return { ...p, sections: [...current, newSec] };
+          });
+        },
+        successTitle: 'Section créée !',
+        successMessage: `La section « ${trimmed} » a été créée avec succès.`,
       });
-      showToast?.(`Section « ${trimmed} » créée.`, 'success');
     },
-    [persistProjectUpdate, showToast]
+    [persistProjectUpdate]
   );
 
   const handleRenameSection = useCallback(
@@ -676,12 +710,20 @@ export function useTaskLogic({
       const trimmed = newTitle.trim();
       if (!trimmed) return;
       const targetProjId = projectId === 'all' ? 'general' : projectId;
-      await persistProjectUpdate(targetProjId, (p) => {
-        const current = resolveProjectSections(p);
-        return {
-          ...p,
-          sections: current.map((s) => (s.id === sectionId ? { ...s, title: trimmed } : s)),
-        };
+      await executeOperationWithLoading({
+        loadingTitle: 'Renommage de la section...',
+        loadingText: 'Mise à jour du nom de la section, veuillez patienter...',
+        action: async () => {
+          await persistProjectUpdate(targetProjId, (p) => {
+            const current = resolveProjectSections(p);
+            return {
+              ...p,
+              sections: current.map((s) => (s.id === sectionId ? { ...s, title: trimmed } : s)),
+            };
+          });
+        },
+        successTitle: 'Section renommée !',
+        successMessage: `La section a été renommée en « ${trimmed} ».`,
       });
     },
     [persistProjectUpdate]
@@ -690,30 +732,45 @@ export function useTaskLogic({
   const handleDeleteSection = useCallback(
     async (projectId: string, sectionId: string) => {
       const targetProjId = projectId === 'all' ? 'general' : projectId;
-      await persistProjectUpdate(targetProjId, (p) => {
-        const current = resolveProjectSections(p);
-        if (current.length <= 1) return p;
-        return {
-          ...p,
-          sections: current
-            .filter((s) => s.id !== sectionId)
-            .map((s, idx) => ({ ...s, orderIndex: idx })),
-        };
+      await executeDeleteWithSweetAlert({
+        title: 'Supprimer cette section ?',
+        text: 'Voulez-vous vraiment supprimer cette section du projet ?',
+        action: async () => {
+          await persistProjectUpdate(targetProjId, (p) => {
+            const current = resolveProjectSections(p);
+            if (current.length <= 1) return p;
+            return {
+              ...p,
+              sections: current
+                .filter((s) => s.id !== sectionId)
+                .map((s, idx) => ({ ...s, orderIndex: idx })),
+            };
+          });
+        },
+        successTitle: 'Section supprimée !',
+        successMessage: 'La section a été supprimée avec succès.',
       });
-      showToast?.('Section supprimée.', 'success');
     },
-    [persistProjectUpdate, showToast]
+    [persistProjectUpdate]
   );
 
   const handleToggleProjectRule = useCallback(
     async (projectId: string, ruleId: string) => {
       const targetProjId = projectId === 'all' ? 'general' : projectId;
-      await persistProjectUpdate(targetProjId, (p) => {
-        const rules = p.rules && p.rules.length > 0 ? p.rules : DEFAULT_PROJECT_RULES;
-        return {
-          ...p,
-          rules: rules.map((r) => (r.id === ruleId ? { ...r, enabled: !r.enabled } : r)),
-        };
+      await executeOperationWithLoading({
+        loadingTitle: 'Mise à jour de la règle...',
+        loadingText: 'Enregistrement des paramètres du projet, veuillez patienter...',
+        action: async () => {
+          await persistProjectUpdate(targetProjId, (p) => {
+            const rules = p.rules && p.rules.length > 0 ? p.rules : DEFAULT_PROJECT_RULES;
+            return {
+              ...p,
+              rules: rules.map((r) => (r.id === ruleId ? { ...r, enabled: !r.enabled } : r)),
+            };
+          });
+        },
+        successTitle: 'Règle mise à jour !',
+        successMessage: 'La règle d’automatisation du projet a été enregistrée.',
       });
     },
     [persistProjectUpdate]
@@ -722,42 +779,54 @@ export function useTaskLogic({
   const handleAddProjectCustomField = useCallback(
     async (projectId: string, field: TaskCustomFieldDef) => {
       const targetProjId = projectId === 'all' ? 'general' : projectId;
-      await persistProjectUpdate(targetProjId, (p) => ({
-        ...p,
-        customFields: [...(p.customFields || []), field],
-      }));
+      await executeOperationWithLoading({
+        loadingTitle: 'Ajout du champ personnalisé...',
+        loadingText: 'Enregistrement du nouveau champ sur le projet, veuillez patienter...',
+        action: async () => {
+          await persistProjectUpdate(targetProjId, (p) => ({
+            ...p,
+            customFields: [...(p.customFields || []), field],
+          }));
+        },
+        successTitle: 'Champ ajouté !',
+        successMessage: `Le champ "${field.name}" a été ajouté au projet.`,
+      });
     },
     [persistProjectUpdate]
   );
 
   const handleCreateSubtask = async (subtask: Subtask, targetTaskId?: string) => {
-    try {
-      const taskIdToUpdate = targetTaskId || taskForSubtaskModal?.id;
-      if (!taskIdToUpdate) return;
-      const target = tasks.find((t) => t.id === taskIdToUpdate);
-      if (!target) return;
+    const taskIdToUpdate = targetTaskId || taskForSubtaskModal?.id;
+    if (!taskIdToUpdate) return;
+    const target = tasks.find((t) => t.id === taskIdToUpdate);
+    if (!target) return;
 
-      const updatedTask = addSubtaskToTaskAtPath(target, [], subtask);
-      await taskService.saveTask(updatedTask);
-      onUpdateTasks(tasks.map((t) => (t.id === taskIdToUpdate ? updatedTask : t)));
-      if (selectedTaskForDetail && selectedTaskForDetail.id === taskIdToUpdate) {
-        setSelectedTaskForDetail(updatedTask);
-      }
-      logSystemAudit({
-        authorName: currentUser?.name || currentRole,
-        authorRole: currentUser?.role || currentRole,
-        targetName: subtask.assignedTo || target.assignedTo || target.title,
-        targetEmployeeId: subtask.employeeId || target.employeeId,
-        operationType: 'tache_projet',
-        operationLabel: 'Création Sous-Tâche',
-        details: `Sous-tâche "${subtask.title}" ajoutée sur "${target.title}".`,
-        level: 'success',
-        metadata: { assignedTo: subtask.assignedTo || target.assignedTo, taskId: target.id },
-      });
-      if (showToast) showToast(`Sous-tâche "${subtask.title}" créée avec succès !`, 'success');
-    } catch (err: any) {
-      await showErrorAlert('Erreur', err?.message || "Impossible d'ajouter la sous-tâche.");
-    }
+    await executeOperationWithLoading({
+      loadingTitle: 'Création de la sous-tâche...',
+      loadingText: `Ajout de "${subtask.title}" sur "${target.title}", veuillez patienter...`,
+      action: async () => {
+        const updatedTask = addSubtaskToTaskAtPath(target, [], subtask);
+        await taskService.saveTask(updatedTask);
+        onUpdateTasks(tasks.map((t) => (t.id === taskIdToUpdate ? updatedTask : t)));
+        if (selectedTaskForDetail && selectedTaskForDetail.id === taskIdToUpdate) {
+          setSelectedTaskForDetail(updatedTask);
+        }
+        logSystemAudit({
+          authorName: currentUser?.name || currentRole,
+          authorRole: currentUser?.role || currentRole,
+          targetName: subtask.assignedTo || target.assignedTo || target.title,
+          targetEmployeeId: subtask.employeeId || target.employeeId,
+          operationType: 'tache_projet',
+          operationLabel: 'Création Sous-Tâche',
+          details: `Sous-tâche "${subtask.title}" ajoutée sur "${target.title}".`,
+          level: 'success',
+          metadata: { assignedTo: subtask.assignedTo || target.assignedTo, taskId: target.id },
+        });
+      },
+      successTitle: 'Sous-tâche créée !',
+      successMessage: `La sous-tâche "${subtask.title}" a été ajoutée avec succès.`,
+      errorMessage: "Impossible d'ajouter la sous-tâche.",
+    });
   };
 
   const filteredTasks = useMemo(() => {

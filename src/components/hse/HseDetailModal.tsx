@@ -44,13 +44,11 @@ export const HseDetailModal: React.FC<HseDetailModalProps> = ({
 
   const handleDelete = async () => {
     if (!onDelete) return;
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer l'incident ${incident.reference} ?`)) {
-      setIsDeleting(true);
-      try {
-        await onDelete();
-      } finally {
-        setIsDeleting(false);
-      }
+    setIsDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setIsDeleting(false);
     }
   };
 

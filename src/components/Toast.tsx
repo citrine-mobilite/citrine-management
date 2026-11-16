@@ -15,12 +15,24 @@ interface ToastProps {
 }
 
 /**
- * Remplacement définitif des Toasts par les SweetAlerts :
- * Aucun toast n'est affiché. Les retours applicatifs utilisent exclusivement
- * le flux officiel : Loader synchrone -> Disparition du loader -> SweetAlert (Succès, Échec ou En attente).
+ * Toasts non-bloquants pour les retours généraux d'interface (connexion, déconnexion,
+ * permissions navigateur, copie presse-papier, exports...).
+ * Les opérations de Création, Modification et Suppression utilisent exclusivement
+ * le flux officiel : Modal Loader centré -> Disparition du loader -> SweetAlert (En attente, Succès ou Échec).
  */
-export default function ToastContainer(_props?: ToastProps) {
-  return null;
+export default function ToastContainer({ toasts = [], onDismiss }: ToastProps) {
+  if (!toasts || toasts.length === 0) return null;
+
+  return (
+    <div
+      aria-live="polite"
+      className="fixed bottom-4 right-4 z-[9990] flex flex-col gap-2 w-full max-w-sm pointer-events-none px-4 sm:px-0"
+    >
+      {toasts.map((toast) => (
+        <ToastItem key={toast.id} toast={toast} onDismiss={() => onDismiss(toast.id)} />
+      ))}
+    </div>
+  );
 }
 
 const ToastItem: React.FC<{

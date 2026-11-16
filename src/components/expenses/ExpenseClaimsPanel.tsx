@@ -17,6 +17,7 @@ import { ExpenseDetailModal } from './ExpenseDetailModal';
 import { NewExpenseModal } from './NewExpenseModal';
 import { ExpenseClaimsTable } from './ExpenseClaimsTable';
 import { logSystemAudit } from '../../services/adminAuditService';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface ExpenseClaimsPanelProps {
   currentUser?: AppUser | null;
@@ -93,36 +94,44 @@ export const ExpenseClaimsPanel: React.FC<ExpenseClaimsPanelProps> = ({
   };
 
   const handleUpdateStatus = async (claim: ExpenseClaim, newStatus: ExpenseClaimStatus, reason?: string) => {
-    try {
-      const updated: ExpenseClaim = {
-        ...claim,
-        status: newStatus,
-        ...(newStatus === 'approuve' ? { approvedBy: currentUser?.name || 'Direction', approvedAt: new Date().toISOString() } : {}),
-        ...(newStatus === 'rembourse' ? { reimbursedAt: new Date().toISOString() } : {}),
-        ...(reason ? { rejectionReason: reason } : {}),
-      };
-      await saveExpenseClaim(updated);
-      setSelectedClaim(updated);
-      logSystemAudit({
-        authorName: currentUser?.name || 'Direction',
-        authorRole: currentUser?.role || 'responsable',
-        targetName: claim.employeeName,
-        targetEmployeeId: claim.employeeId,
-        operationType: 'finance_frais',
-        operationLabel: `Note de Frais : ${newStatus}`,
-        details: `${claim.reference} (${claim.title}, ${formatCFA(claim.amount)}) passée au statut "${newStatus}".`,
-        level: newStatus === 'rejete' ? 'warning' : 'success',
-        metadata: { reference: claim.reference, status: newStatus },
-      });
-      showToast?.(`Note de frais mise à jour : ${newStatus}`, 'success');
-      onAddNotification?.({
-        title: 'Note de Frais actualisée',
-        message: `${claim.reference} (${claim.employeeName}) : statut passé à "${newStatus}".`,
-        type: newStatus === 'rejete' ? 'warning' : 'success',
-      });
-    } catch {
-      showToast?.('Erreur lors de la mise à jour.', 'error');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour de la note de frais...',
+      loadingText: `Traitement de "${claim.reference}", veuillez patienter...`,
+      action: async () => {
+        const updated: ExpenseClaim = {
+          ...claim,
+          status: newStatus,
+          ...(newStatus === 'approuve' ? { approvedBy: currentUser?.name || 'Direction', approvedAt: new Date().toISOString() } : {}),
+          ...(newStatus === 'rembourse' ? { reimbursedAt: new Date().toISOString() } : {}),
+          ...(reason ? { rejectionReason: reason } : {}),
+        };
+        await saveExpenseClaim(updated);
+        setSelectedClaim(updated);
+        logSystemAudit({
+          authorName: currentUser?.name || 'Direction',
+          authorRole: currentUser?.role || 'responsable',
+          targetName: claim.employeeName,
+          targetEmployeeId: claim.employeeId,
+          operationType: 'finance_frais',
+          operationLabel: `Note de Frais : ${newStatus}`,
+          details: `${claim.reference} (${claim.title}, ${formatCFA(claim.amount)}) passée au statut "${newStatus}".`,
+          level: newStatus === 'rejete' ? 'warning' : 'success',
+          metadata: { reference: claim.reference, status: newStatus },
+        });
+        onAddNotification?.({
+          title: 'Note de Frais actualisée',
+          message: `${claim.reference} (${claim.employeeName}) : statut passé à "${newStatus}".`,
+          type: newStatus === 'rejete' ? 'warning' : 'success',
+        });
+        return { status: newStatus };
+      },
+      isPendingCheck: (r) => r.status === 'soumis' || r.status === 'en_verification',
+      pendingTitle: 'Note de frais en attente',
+      pendingMessage: `La note ${claim.reference} est passée au statut "${newStatus}".`,
+      successTitle: 'Note de frais mise à jour !',
+      successMessage: `La note ${claim.reference} est désormais au statut "${newStatus}".`,
+      errorMessage: 'Erreur lors de la mise à jour de la note de frais.',
+    });
   };
 
   const handleCreateClaim = async (claimData: Partial<ExpenseClaim>) => {
@@ -131,50 +140,58 @@ export const ExpenseClaimsPanel: React.FC<ExpenseClaimsPanelProps> = ({
       return;
     }
 
-    try {
-      const selectedEmp = employees.find((emp) => emp.id === claimData.employeeId) || 
-        (currentUser?.employeeId ? employees.find((emp) => emp.id === currentUser.employeeId) : employees[0]);
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Soumission de la note de frais...',
+      loadingText: `Enregistrement de "${claimData.title}", veuillez patienter...`,
+      action: async () => {
+        const selectedEmp = employees.find((emp) => emp.id === claimData.employeeId) ||
+          (currentUser?.employeeId ? employees.find((emp) => emp.id === currentUser.employeeId) : employees[0]);
 
-      const claimToSave: ExpenseClaim = {
-        id: `exp-${Date.now()}`,
-        reference: `NDF-2026-${String(claims.length + 41).padStart(4, '0')}`,
-        employeeId: selectedEmp?.id || 'emp-citrine',
-        employeeName: selectedEmp?.name || currentUser?.name || 'Collaborateur Citrine',
-        employeeDepartment: selectedEmp?.department || 'Exploitation',
-        title: claimData.title,
-        missionLocation: claimData.missionLocation || 'Douala',
-        expenseDate: claimData.expenseDate || new Date().toISOString().split('T')[0],
-        category: (claimData.category as ExpenseCategory) || 'carburant',
-        amount: Number(claimData.amount),
-        receiptNumber: claimData.receiptNumber || '',
-        receiptDescription: claimData.receiptDescription || '',
-        paymentMode: (claimData.paymentMode as PaymentMode) || 'orange_money',
-        status: 'soumis',
-        notes: claimData.notes || '',
-        createdAt: new Date().toISOString(),
-      };
+        const claimToSave: ExpenseClaim = {
+          id: `exp-${Date.now()}`,
+          reference: `NDF-2026-${String(claims.length + 41).padStart(4, '0')}`,
+          employeeId: selectedEmp?.id || 'emp-citrine',
+          employeeName: selectedEmp?.name || currentUser?.name || 'Collaborateur Citrine',
+          employeeDepartment: selectedEmp?.department || 'Exploitation',
+          title: claimData.title!,
+          missionLocation: claimData.missionLocation || 'Douala',
+          expenseDate: claimData.expenseDate || new Date().toISOString().split('T')[0],
+          category: (claimData.category as ExpenseCategory) || 'carburant',
+          amount: Number(claimData.amount),
+          receiptNumber: claimData.receiptNumber || '',
+          receiptDescription: claimData.receiptDescription || '',
+          paymentMode: (claimData.paymentMode as PaymentMode) || 'orange_money',
+          status: 'soumis',
+          notes: claimData.notes || '',
+          createdAt: new Date().toISOString(),
+        };
 
-      await saveExpenseClaim(claimToSave);
+        await saveExpenseClaim(claimToSave);
+        logSystemAudit({
+          authorName: currentUser?.name || claimToSave.employeeName,
+          authorRole: currentUser?.role || 'collaborateur',
+          targetName: claimToSave.employeeName,
+          targetEmployeeId: claimToSave.employeeId,
+          operationType: 'finance_frais',
+          operationLabel: 'Soumission Note de Frais',
+          details: `${claimToSave.reference} : ${claimToSave.title} (${formatCFA(claimToSave.amount)}) à ${claimToSave.missionLocation}.`,
+          level: 'info',
+          metadata: { reference: claimToSave.reference, employeeId: claimToSave.employeeId },
+        });
+        onAddNotification?.({
+          title: 'Nouvelle Note de Frais',
+          message: `${claimToSave.employeeName} a soumis une note de frais de ${formatCFA(claimToSave.amount)}.`,
+          type: 'info',
+        });
+        return { status: 'pending' as const, ref: claimToSave.reference };
+      },
+      pendingTitle: 'Note de frais soumise (En attente)',
+      pendingMessage: 'Votre note de frais a été transmise et est en attente de validation.',
+      errorMessage: 'Erreur lors de la création de la note de frais.',
+    });
+
+    if (res.success) {
       setIsNewModalOpen(false);
-      logSystemAudit({
-        authorName: currentUser?.name || claimToSave.employeeName,
-        authorRole: currentUser?.role || 'collaborateur',
-        targetName: claimToSave.employeeName,
-        targetEmployeeId: claimToSave.employeeId,
-        operationType: 'finance_frais',
-        operationLabel: 'Soumission Note de Frais',
-        details: `${claimToSave.reference} : ${claimToSave.title} (${formatCFA(claimToSave.amount)}) à ${claimToSave.missionLocation}.`,
-        level: 'info',
-        metadata: { reference: claimToSave.reference, employeeId: claimToSave.employeeId },
-      });
-      showToast?.('Note de frais soumise avec succès !', 'success');
-      onAddNotification?.({
-        title: 'Nouvelle Note de Frais',
-        message: `${claimToSave.employeeName} a soumis une note de frais de ${formatCFA(claimToSave.amount)}.`,
-        type: 'info',
-      });
-    } catch {
-      showToast?.('Erreur lors de la création de la note de frais.', 'error');
     }
   };
 

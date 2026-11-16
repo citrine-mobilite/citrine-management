@@ -29,74 +29,90 @@ export function useVisitorsActions({
   showToast,
 }: UseVisitorsActionsParams) {
   const handleQuickCheckOut = async (visitor: VisitorLog) => {
-    try {
-      const now = new Date();
-      const checkOutTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const updated: VisitorLog = {
-        ...visitor,
-        status: 'sorti',
-        checkOutTime,
-      };
-      await saveVisitorLog(updated);
-      showToast?.(`Sortie enregistrée pour ${visitor.visitorName} à ${checkOutTime}.`, 'success');
-      onAddNotification?.({
-        title: 'Sortie Enregistrée',
-        message: `${visitor.visitorName} a quitté ${visitor.siteLocation} (Badge ${visitor.badgeNumber} restitué).`,
-        type: 'info',
-      });
-    } catch {
-      showToast?.("Erreur lors de l'enregistrement de sortie.", 'error');
-    }
+    const now = new Date();
+    const checkOutTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement de la sortie...',
+      loadingText: `Sortie de "${visitor.visitorName}", veuillez patienter...`,
+      action: async () => {
+        const updated: VisitorLog = {
+          ...visitor,
+          status: 'sorti',
+          checkOutTime,
+        };
+        await saveVisitorLog(updated);
+        onAddNotification?.({
+          title: 'Sortie Enregistrée',
+          message: `${visitor.visitorName} a quitté ${visitor.siteLocation} (Badge ${visitor.badgeNumber} restitué).`,
+          type: 'info',
+        });
+      },
+      successTitle: 'Sortie enregistrée !',
+      successMessage: `Sortie enregistrée pour ${visitor.visitorName} à ${checkOutTime}.`,
+      errorMessage: "Erreur lors de l'enregistrement de sortie.",
+    });
   };
 
   const handleQuickCheckIn = async (visitor: VisitorLog) => {
-    try {
-      const now = new Date();
-      const checkInTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const updated: VisitorLog = {
-        ...visitor,
-        status: 'sur_site',
-        checkInTime,
-        checkOutTime: undefined,
-      };
-      await saveVisitorLog(updated);
-      showToast?.(`Arrivée confirmée pour ${visitor.visitorName} à ${checkInTime}.`, 'success');
-    } catch {
-      showToast?.("Erreur lors de l'enregistrement d'arrivée.", 'error');
-    }
+    const now = new Date();
+    const checkInTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    await executeOperationWithLoading({
+      loadingTitle: "Enregistrement de l'arrivée...",
+      loadingText: `Arrivée de "${visitor.visitorName}", veuillez patienter...`,
+      action: async () => {
+        const updated: VisitorLog = {
+          ...visitor,
+          status: 'sur_site',
+          checkInTime,
+          checkOutTime: undefined,
+        };
+        await saveVisitorLog(updated);
+      },
+      successTitle: 'Arrivée confirmée !',
+      successMessage: `Arrivée confirmée pour ${visitor.visitorName} à ${checkInTime}.`,
+      errorMessage: "Erreur lors de l'enregistrement d'arrivée.",
+    });
   };
 
   const handleAuthorizeAccess = async (visitor: VisitorLog) => {
-    try {
-      const updated: VisitorLog = {
-        ...visitor,
-        status: 'sur_site',
-        authorizationConfirmed: true,
-      };
-      await saveVisitorLog(updated);
-      showToast?.(`Accès autorisé pour ${visitor.visitorName}. Badge ${visitor.badgeNumber} remis.`, 'success');
-      onAddNotification?.({
-        title: 'Accès Bâtiment Autorisé',
-        message: `${visitor.visitorName} (${visitor.visitorCompany}) a reçu l'autorisation d'accès.`,
-        type: 'info',
-      });
-    } catch {
-      showToast?.("Erreur lors de la validation d'accès.", 'error');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: "Validation de l'accès...",
+      loadingText: `Autorisation pour "${visitor.visitorName}", veuillez patienter...`,
+      action: async () => {
+        const updated: VisitorLog = {
+          ...visitor,
+          status: 'sur_site',
+          authorizationConfirmed: true,
+        };
+        await saveVisitorLog(updated);
+        onAddNotification?.({
+          title: 'Accès Bâtiment Autorisé',
+          message: `${visitor.visitorName} (${visitor.visitorCompany}) a reçu l'autorisation d'accès.`,
+          type: 'info',
+        });
+      },
+      successTitle: 'Accès autorisé !',
+      successMessage: `Accès autorisé pour ${visitor.visitorName}. Badge ${visitor.badgeNumber} remis.`,
+      errorMessage: "Erreur lors de la validation d'accès.",
+    });
   };
 
   const handleRejectAccess = async (visitor: VisitorLog) => {
-    try {
-      const updated: VisitorLog = {
-        ...visitor,
-        status: 'refuse',
-        authorizationConfirmed: false,
-      };
-      await saveVisitorLog(updated);
-      showToast?.(`Accès refusé pour ${visitor.visitorName}.`, 'error');
-    } catch {
-      showToast?.("Erreur lors du refus d'accès.", 'error');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: "Refus de l'accès...",
+      loadingText: `Enregistrement du refus pour "${visitor.visitorName}", veuillez patienter...`,
+      action: async () => {
+        const updated: VisitorLog = {
+          ...visitor,
+          status: 'refuse',
+          authorizationConfirmed: false,
+        };
+        await saveVisitorLog(updated);
+      },
+      successTitle: 'Accès refusé',
+      successMessage: `L'accès a été refusé pour ${visitor.visitorName}.`,
+      errorMessage: "Erreur lors du refus d'accès.",
+    });
   };
 
   const handleCreateVisitor = async (visitorData: Partial<VisitorLog>) => {

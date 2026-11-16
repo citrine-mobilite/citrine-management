@@ -5,7 +5,7 @@ import { extractPresenceRequests } from './requests/presenceRequestsUtils';
 import { isSelfOnlyUser, findMatchingEmployee, shouldEmployeeClock } from '../../utils/roleUtils';
 import { realtimeSyncService } from '../../services/realtimeSyncService';
 import { savePresenceAtomic } from '../../services/dataService';
-import { showErrorAlert, executeOperationWithLoading } from '../../utils/sweetAlert';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 import { isActualBadgePunch, getNextPresenceStep, executePresenceClockingStep } from './presenceClockStepHelper';
 import { buildFilteredPresencesList, splitClockingEmployeesByRole } from './presenceFiltersHelper';
 import { logSystemAudit } from '../../services/adminAuditService';
@@ -128,10 +128,29 @@ export function usePresencePanelLogic({
   }, [clockableEmployees]);
 
   const nextStep = getNextPresenceStep(currentPresence, moduleConfig);
-  const handleTriggerClockingStep = () => {
-    executePresenceClockingStep({
-      nextStep, activeEmployee, selectedDate, presences, attendanceIncidents,
-      moduleConfig, onUpdatePresences, onAddAttendanceIncident, onUpdateAttendanceIncidents, showToast,
+  const handleTriggerClockingStep = async () => {
+    if (nextStep.action === 'done' || !activeEmployee) return;
+    let recordedTime = '';
+    await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement du pointage...',
+      loadingText: `Sauvegarde du pointage de ${activeEmployee.name}, veuillez patienter...`,
+      action: async () => {
+        const res = await executePresenceClockingStep({
+          nextStep,
+          activeEmployee,
+          selectedDate,
+          presences,
+          attendanceIncidents,
+          moduleConfig,
+          onUpdatePresences,
+          onAddAttendanceIncident,
+          onUpdateAttendanceIncidents,
+        });
+        recordedTime = res.timeNow;
+      },
+      successTitle: 'Pointage enregistré !',
+      successMessage: `Action "${nextStep.label}" enregistrée à ${recordedTime || 'l’instant'} pour ${activeEmployee.name}.`,
+      errorMessage: 'Impossible de sauvegarder ce pointage.',
     });
   };
 
@@ -189,7 +208,7 @@ export function usePresencePanelLogic({
       editForm.pauseEnd !== (editingPresence.pauseEnd || '') ||
       editForm.departureTime !== (editingPresence.departureTime || '');
     if (isTimeModified && !editForm.correctionReason.trim()) {
-      await showErrorAlert('Motif obligatoire', "Un motif est obligatoire pour toute modification d'heure de pointage.");
+      showToast?.("Un motif est obligatoire pour toute modification d'heure de pointage.", 'error');
       return;
     }
     const updated = presences.map((p) => (p.id === editingPresence.id ? { ...p, ...editForm } : p));

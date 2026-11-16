@@ -3,10 +3,11 @@ import { Building2, Coffee, Save, ToggleLeft, ToggleRight, Info } from 'lucide-r
 import { CompanyModuleConfig } from '../../types';
 import { CompanyGpsSettingsCard } from './CompanyGpsSettingsCard';
 import { CompanyWorkScheduleCard } from './CompanyWorkScheduleCard';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface CompanyHoursAndGeneralSettingsProps {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -20,18 +21,23 @@ export const CompanyHoursAndGeneralSettings: React.FC<CompanyHoursAndGeneralSett
 
   const isBreakTrackingEnabled = formData.enableBreakTracking !== false;
 
-  const handleToggleBreaks = () => {
+  const handleToggleBreaks = async () => {
+    const nextState = !isBreakTrackingEnabled;
     const updated = {
       ...formData,
-      enableBreakTracking: !isBreakTrackingEnabled,
+      enableBreakTracking: nextState,
     };
-    setFormData(updated);
-    onUpdateModuleConfig(updated);
-    if (showToast) {
-      showToast(
-        `Pointage des pauses ${!isBreakTrackingEnabled ? 'activé (4 étapes)' : 'désactivé (2 étapes)'}`,
-        'success'
-      );
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour des pauses...',
+      loadingText: 'Veuillez patienter pendant la mise à jour du mode de pointage...',
+      action: async () => {
+        await onUpdateModuleConfig(updated);
+      },
+      successTitle: 'Mode de pointage mis à jour !',
+      successMessage: `Pointage des pauses ${nextState ? 'activé (4 étapes)' : 'désactivé (2 étapes)'}.`,
+    });
+    if (res.success) {
+      setFormData(updated);
     }
   };
 
@@ -93,9 +99,16 @@ export const CompanyHoursAndGeneralSettings: React.FC<CompanyHoursAndGeneralSett
 
         <button
           type="button"
-          onClick={() => {
-            onUpdateModuleConfig(formData);
-            if (showToast) showToast('Tous les paramètres ont été sauvegardés.', 'success');
+          onClick={async () => {
+            await executeOperationWithLoading({
+              loadingTitle: 'Enregistrement des paramètres...',
+              loadingText: 'Veuillez patienter pendant la sauvegarde des paramètres généraux...',
+              action: async () => {
+                await onUpdateModuleConfig(formData);
+              },
+              successTitle: 'Paramètres enregistrés !',
+              successMessage: 'Tous les paramètres ont été sauvegardés avec succès.',
+            });
           }}
           className="px-4 py-2 bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-2 self-start sm:self-auto"
         >

@@ -11,6 +11,7 @@ import {
 import { savePresenceAtomic } from '../../services/dataService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { realtimeSyncService } from '../../services/realtimeSyncService';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 import {
   ClockActionType,
   isSameClockEmployee,
@@ -19,10 +20,7 @@ import {
   buildAttendanceIncidentForAction,
 } from './clocking/clockingValidationHelpers';
 import { buildClockingNotification } from './clocking/clockingNotificationHelper';
-import {
-  upsertPresenceForClocking,
-  showClockingSuccessToast,
-} from './clocking/clockingPresenceRecordHelper';
+import { upsertPresenceForClocking } from './clocking/clockingPresenceRecordHelper';
 import { executeConfirmCustomClock } from './clocking/clockingCustomTimeHelper';
 import { executeConfirmEmergency } from './clocking/clockingEmergencyHelper';
 
@@ -30,13 +28,22 @@ interface UseClockingActionsProps {
   employeeProfile: Employee;
   presences: Presence[];
   todayStr: string;
-  onUpdatePresences: (updated: Presence[]) => void;
+  onUpdatePresences: (updated: Presence[]) => Promise<void> | void;
   showToast: (title: string, desc: string, type?: 'success' | 'warning' | 'info') => void;
   moduleConfig?: CompanyModuleConfig;
   attendanceIncidents?: AttendanceIncident[];
   onAddAttendanceIncident?: (incident: AttendanceIncident) => void;
   onAddNotification?: (log: NotificationLog) => void;
 }
+
+const CLOCK_ACTION_LABELS: Record<ClockActionType, string> = {
+  arrival: "Arrivée",
+  pauseStart: "Début de pause",
+  pauseEnd: "Reprise de pause",
+  departure: "Départ",
+  sortieProStart: "Sortie professionnelle",
+  sortieProEnd: "Retour de mission",
+};
 
 export function useClockingActions({
   employeeProfile,
@@ -56,118 +63,130 @@ export function useClockingActions({
     method: ClockingMethod,
     onSuccess: () => void,
     customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
-  ) => {
+  ): Promise<boolean> => {
     if (method === 'qr_code_door') {
-      const doorOk = await validateDoorQrMethod(moduleConfig, customLocation);
-      if (!doorOk) return;
+      const doorOk = await validateDoorQrMethod(moduleConfig, customLocation, showToast);
+      if (!doorOk) return false;
     }
 
     setIsLocating(true);
-    try {
-      const gps = await resolveClockingGpsAndZone(customLocation, showToast);
-      if (!gps) {
-        setIsLocating(false);
-        return;
-      }
+    let actionLabel = 'Pointage';
+    let recordedTimeStr = '';
+    let lateRecorded = false;
 
-      const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const lateThreshold = moduleConfig?.lateThresholdTime || '08:30';
-      const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
-
-      const existingToday = presences.find(
-        (p) => isSameClockEmployee(p.employeeId, employeeProfile) && p.date === todayStr
-      );
-
-      const action: ClockActionType =
-        pendingClockAction ||
-        (!existingToday?.arrivalTime ? 'arrival' : !existingToday?.departureTime ? 'departure' : 'arrival');
-
-      const { status, isLateArrival, targetIncident } = buildAttendanceIncidentForAction({
-        action,
-        timeStr,
-        lateThreshold,
-        plannedDeparture,
-        employeeProfile,
-        todayStr,
-        attendanceIncidents,
-      });
-
-      const { updatedPresences, targetPresence } = upsertPresenceForClocking({
-        presences,
-        employeeProfile,
-        todayStr,
-        action,
-        status,
-        timeStr,
-        locationName: gps.locationName,
-        latitude: gps.latitude,
-        longitude: gps.longitude,
-        method,
-        customLocation,
-        moduleConfig,
-      });
-
-      const targetNotification = onAddNotification
-        ? buildClockingNotification({
-            action,
-            timeStr,
-            todayStr,
-            locationName: gps.locationName,
-            employeeProfile,
-            isLateArrival,
-            lateThreshold,
-            plannedDeparture,
-          })
-        : null;
-
-      const atomicResult = await savePresenceAtomic(
-        targetPresence,
-        targetIncident,
-        targetNotification,
-        action
-      );
-      if (!atomicResult.success) {
-        throw new Error(atomicResult.error || 'Erreur lors de la transaction atomique de pointage.');
-      }
-
-      onUpdatePresences(updatedPresences);
-      if (targetIncident && onAddAttendanceIncident) {
-        onAddAttendanceIncident(targetIncident);
-      }
-      if (targetNotification && onAddNotification) {
-        onAddNotification(targetNotification);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+    const opRes = await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement du pointage...',
+      loadingText: 'Veuillez patienter pendant la géolocalisation et la sauvegarde...',
+      action: async () => {
+        const gps = await resolveClockingGpsAndZone(customLocation, showToast);
+        if (!gps) {
+          throw new Error('Signal GPS requis pour enregistrer votre pointage.');
         }
-      }
 
-      realtimeSyncService.broadcastPresencePunch({
-        presence: targetPresence,
-        incident: targetIncident,
-        notification: targetNotification,
-      });
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        recordedTimeStr = timeStr;
+        const lateThreshold = moduleConfig?.lateThresholdTime || '08:30';
+        const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
 
-      try {
-        pushNotificationBridgeService.sendPush({
-          title: `Pointage de ${employeeProfile.name}`,
-          message: `${employeeProfile.name} a effectué un pointage (${action}) à ${timeStr} sur le site ${gps.locationName}.`,
-          senderName: employeeProfile.name,
-          type: 'attendance',
-          link: 'presences',
+        const existingToday = presences.find(
+          (p) => isSameClockEmployee(p.employeeId, employeeProfile) && p.date === todayStr
+        );
+
+        const action: ClockActionType =
+          pendingClockAction ||
+          (!existingToday?.arrivalTime ? 'arrival' : !existingToday?.departureTime ? 'departure' : 'arrival');
+        actionLabel = CLOCK_ACTION_LABELS[action] || 'Pointage';
+
+        const { status, isLateArrival, targetIncident } = buildAttendanceIncidentForAction({
+          action,
+          timeStr,
+          lateThreshold,
+          plannedDeparture,
+          employeeProfile,
+          todayStr,
+          attendanceIncidents,
         });
-      } catch (e) {
-        console.warn('Failed to send push notification:', e);
-      }
+        lateRecorded = isLateArrival;
 
-      showClockingSuccessToast(action, isLateArrival, timeStr, showToast);
-      onSuccess();
-    } catch (err: any) {
-      console.error('Erreur validation pointage:', err);
-      showToast('Erreur', err?.message || 'Impossible de valider le pointage.', 'warning');
-    } finally {
-      setIsLocating(false);
-    }
+        const { updatedPresences, targetPresence } = upsertPresenceForClocking({
+          presences,
+          employeeProfile,
+          todayStr,
+          action,
+          status,
+          timeStr,
+          locationName: gps.locationName,
+          latitude: gps.latitude,
+          longitude: gps.longitude,
+          method,
+          customLocation,
+          moduleConfig,
+        });
+
+        const targetNotification = onAddNotification
+          ? buildClockingNotification({
+              action,
+              timeStr,
+              todayStr,
+              locationName: gps.locationName,
+              employeeProfile,
+              isLateArrival,
+              lateThreshold,
+              plannedDeparture,
+            })
+          : null;
+
+        const atomicResult = await savePresenceAtomic(
+          targetPresence,
+          targetIncident,
+          targetNotification,
+          action
+        );
+        if (!atomicResult.success) {
+          throw new Error(atomicResult.error || 'Erreur lors de la transaction atomique de pointage.');
+        }
+
+        await onUpdatePresences(updatedPresences);
+        if (targetIncident && onAddAttendanceIncident) {
+          onAddAttendanceIncident(targetIncident);
+        }
+        if (targetNotification && onAddNotification) {
+          onAddNotification(targetNotification);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+          }
+        }
+
+        realtimeSyncService.broadcastPresencePunch({
+          presence: targetPresence,
+          incident: targetIncident,
+          notification: targetNotification,
+        });
+
+        try {
+          pushNotificationBridgeService.sendPush({
+            title: `Pointage de ${employeeProfile.name}`,
+            message: `${employeeProfile.name} a effectué un pointage (${action}) à ${timeStr} sur le site ${gps.locationName}.`,
+            senderName: employeeProfile.name,
+            type: 'attendance',
+            link: 'presences',
+          });
+        } catch (e) {
+          console.warn('Failed to send push notification:', e);
+        }
+
+        onSuccess();
+      },
+      successTitle: `${actionLabel} enregistré !`,
+      successMessage: lateRecorded
+        ? `Pointage validé à ${recordedTimeStr} (retard consigné au registre).`
+        : `Votre pointage (${actionLabel}) a été validé à ${recordedTimeStr}.`,
+      errorMessage: 'Impossible de valider le pointage.',
+    });
+
+    setIsLocating(false);
+    return opRes.success;
   };
 
   const handleConfirmCustomClock = (

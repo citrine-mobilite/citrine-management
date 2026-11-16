@@ -7,6 +7,7 @@ import {
   RedundantItemRef,
 } from '../../../services/taskRedundancyService';
 import { taskService } from '../../../services/taskService';
+import { executeOperationWithLoading } from '../../../utils/sweetAlert';
 
 interface TaskRedundancyPanelProps {
   employee: Employee;
@@ -45,46 +46,49 @@ export const TaskRedundancyPanel: React.FC<TaskRedundancyPanelProps> = ({
 
   const handleIgnoreCluster = async (cluster: RedundancyCluster) => {
     setBusyId(cluster.clusterId);
-    try {
-      const uids = cluster.items.map((it) => it.uid);
-      const impactedTaskIds = Array.from(new Set(cluster.items.map((it) => it.taskId)));
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour des tâches...',
+      loadingText: 'Enregistrement de la décision, veuillez patienter...',
+      action: async () => {
+        const uids = cluster.items.map((it) => it.uid);
+        const impactedTaskIds = Array.from(new Set(cluster.items.map((it) => it.taskId)));
 
-      for (const taskId of impactedTaskIds) {
-        const task = tasks.find((t) => t.id === taskId);
-        if (!task) continue;
-        const existingIgnored = new Set(task.ignoredDuplicateIds || []);
-        uids.forEach((u) => {
-          if (u !== `task:${task.id}`) existingIgnored.add(u);
-        });
-
-        const updatedSubs = (task.subtasks || []).map((s) => {
-          const isInCluster = cluster.items.some((it) => it.subtaskId === s.id);
-          if (!isInCluster) return s;
-          const subIgnored = new Set(s.ignoredDuplicateIds || []);
+        for (const taskId of impactedTaskIds) {
+          const task = tasks.find((t) => t.id === taskId);
+          if (!task) continue;
+          const existingIgnored = new Set(task.ignoredDuplicateIds || []);
           uids.forEach((u) => {
-            if (u !== `sub:${task.id}:${s.id}`) subIgnored.add(u);
+            if (u !== `task:${task.id}`) existingIgnored.add(u);
           });
-          return { ...s, ignoredDuplicateIds: Array.from(subIgnored) };
-        });
 
-        const updatedTask: Task = {
-          ...task,
-          ignoredDuplicateIds: Array.from(existingIgnored),
-          subtasks: updatedSubs,
-          lastUpdatedTime: new Date().toISOString(),
-        };
+          const updatedSubs = (task.subtasks || []).map((s) => {
+            const isInCluster = cluster.items.some((it) => it.subtaskId === s.id);
+            if (!isInCluster) return s;
+            const subIgnored = new Set(s.ignoredDuplicateIds || []);
+            uids.forEach((u) => {
+              if (u !== `sub:${task.id}:${s.id}`) subIgnored.add(u);
+            });
+            return { ...s, ignoredDuplicateIds: Array.from(subIgnored) };
+          });
 
-        await taskService.saveTask(updatedTask);
-        if (onUpdateTask) onUpdateTask(updatedTask);
-      }
+          const updatedTask: Task = {
+            ...task,
+            ignoredDuplicateIds: Array.from(existingIgnored),
+            subtasks: updatedSubs,
+            lastUpdatedTime: new Date().toISOString(),
+          };
 
-      setHiddenClusterIds((prev) => [...prev, cluster.clusterId]);
-      if (showToast) showToast('Alerte de doublon ignorée.', 'success');
-    } catch (err: any) {
-      if (showToast) showToast(err?.message || "Impossible d'ignorer le doublon.", 'error');
-    } finally {
-      setBusyId(null);
-    }
+          await taskService.saveTask(updatedTask);
+          if (onUpdateTask) onUpdateTask(updatedTask);
+        }
+
+        setHiddenClusterIds((prev) => [...prev, cluster.clusterId]);
+      },
+      successTitle: 'Doublon ignoré !',
+      successMessage: "L'alerte de redondance a été marquée comme ignorée.",
+      errorMessage: "Impossible d'ignorer le doublon.",
+    });
+    setBusyId(null);
   };
 
   const handleMergeTasks = async (cluster: RedundancyCluster) => {
@@ -92,59 +96,64 @@ export const TaskRedundancyPanel: React.FC<TaskRedundancyPanelProps> = ({
     if (taskRefs.length < 2) return;
 
     setBusyId(cluster.clusterId);
-    try {
-      const primaryRef: RedundantItemRef = taskRefs[0];
-      const secondaryRefs = taskRefs.slice(1);
-      const primaryTask = tasks.find((t) => t.id === primaryRef.taskId);
-      if (!primaryTask) return;
+    let mergedTitle = '';
+    await executeOperationWithLoading({
+      loadingTitle: 'Fusion des tâches...',
+      loadingText: 'Regroupement des tâches et sous-tâches, veuillez patienter...',
+      action: async () => {
+        const primaryRef: RedundantItemRef = taskRefs[0];
+        const secondaryRefs = taskRefs.slice(1);
+        const primaryTask = tasks.find((t) => t.id === primaryRef.taskId);
+        if (!primaryTask) return;
+        mergedTitle = primaryTask.title;
 
-      let mergedSubtasks = [...(primaryTask.subtasks || [])];
-      let addedActualHours = Number(primaryTask.actualHours) || 0;
-      let addedEstimatedHours = Number(primaryTask.estimatedHours) || 0;
+        const mergedSubtasks = [...(primaryTask.subtasks || [])];
+        let addedActualHours = Number(primaryTask.actualHours) || 0;
+        let addedEstimatedHours = Number(primaryTask.estimatedHours) || 0;
 
-      for (const secRef of secondaryRefs) {
-        const secTask = tasks.find((t) => t.id === secRef.taskId);
-        if (!secTask || secTask.id === primaryTask.id) continue;
+        for (const secRef of secondaryRefs) {
+          const secTask = tasks.find((t) => t.id === secRef.taskId);
+          if (!secTask || secTask.id === primaryTask.id) continue;
 
-        addedActualHours += Number(secTask.actualHours) || 0;
-        addedEstimatedHours += Number(secTask.estimatedHours) || 0;
+          addedActualHours += Number(secTask.actualHours) || 0;
+          addedEstimatedHours += Number(secTask.estimatedHours) || 0;
 
-        if (Array.isArray(secTask.subtasks)) {
-          secTask.subtasks.forEach((sub) => {
-            const exists = mergedSubtasks.some(
-              (m) => m.title.trim().toLowerCase() === sub.title.trim().toLowerCase()
-            );
-            if (!exists) mergedSubtasks.push(sub);
-          });
+          if (Array.isArray(secTask.subtasks)) {
+            secTask.subtasks.forEach((sub) => {
+              const exists = mergedSubtasks.some(
+                (m) => m.title.trim().toLowerCase() === sub.title.trim().toLowerCase()
+              );
+              if (!exists) mergedSubtasks.push(sub);
+            });
+          }
+
+          const archivedSecondary: Task = {
+            ...secTask,
+            mergedIntoTaskId: primaryTask.id,
+            status: 'completed',
+            lastUpdatedTime: new Date().toISOString(),
+          };
+          await taskService.saveTask(archivedSecondary);
+          if (onUpdateTask) onUpdateTask(archivedSecondary);
         }
 
-        const archivedSecondary: Task = {
-          ...secTask,
-          mergedIntoTaskId: primaryTask.id,
-          status: 'completed',
+        const updatedPrimary: Task = {
+          ...primaryTask,
+          subtasks: mergedSubtasks,
+          actualHours: Math.round(addedActualHours * 10) / 10,
+          estimatedHours: Math.round(addedEstimatedHours * 10) / 10,
           lastUpdatedTime: new Date().toISOString(),
         };
-        await taskService.saveTask(archivedSecondary);
-        if (onUpdateTask) onUpdateTask(archivedSecondary);
-      }
+        await taskService.saveTask(updatedPrimary);
+        if (onUpdateTask) onUpdateTask(updatedPrimary);
 
-      const updatedPrimary: Task = {
-        ...primaryTask,
-        subtasks: mergedSubtasks,
-        actualHours: Math.round(addedActualHours * 10) / 10,
-        estimatedHours: Math.round(addedEstimatedHours * 10) / 10,
-        lastUpdatedTime: new Date().toISOString(),
-      };
-      await taskService.saveTask(updatedPrimary);
-      if (onUpdateTask) onUpdateTask(updatedPrimary);
-
-      setHiddenClusterIds((prev) => [...prev, cluster.clusterId]);
-      if (showToast) showToast(`Tâches fusionnées dans "${primaryTask.title}".`, 'success');
-    } catch (err: any) {
-      if (showToast) showToast(err?.message || 'Erreur lors de la fusion.', 'error');
-    } finally {
-      setBusyId(null);
-    }
+        setHiddenClusterIds((prev) => [...prev, cluster.clusterId]);
+      },
+      successTitle: 'Tâches fusionnées !',
+      successMessage: `Les tâches ont été fusionnées dans "${mergedTitle || 'la tâche principale'}".`,
+      errorMessage: 'Erreur lors de la fusion des tâches.',
+    });
+    setBusyId(null);
   };
 
   if (clusters.length === 0) {

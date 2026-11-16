@@ -23,7 +23,7 @@ import { ReminderToolbarAndHeader } from './reminders/ReminderToolbarAndHeader';
 
 interface ReminderPanelProps {
   reminders: Reminder[];
-  onUpdateReminders: (updated: Reminder[]) => void;
+  onUpdateReminders: (updated: Reminder[]) => Promise<void> | void;
   currentTime: string;
   employees?: Employee[];
   currentRole?: string;
@@ -76,14 +76,14 @@ export default function ReminderPanel({
           const updated = reminders.map((r) =>
             r.id === reminderData.id ? ({ ...r, ...reminderData } as Reminder) : r
           );
-          onUpdateReminders(updated);
+          await onUpdateReminders(updated);
         } else {
           const newReminderItem: Reminder = {
             id: `rem-${Date.now()}`,
             createdAt: new Date().toISOString(),
             ...reminderData,
           } as Reminder;
-          onUpdateReminders([newReminderItem, ...reminders]);
+          await onUpdateReminders([newReminderItem, ...reminders]);
         }
       },
       successTitle: isEdit ? 'Échéance mise à jour' : 'Échéance ajoutée',
@@ -103,7 +103,7 @@ export default function ReminderPanel({
           handleStopAlarm();
         }
         const updated = reminders.map((r) => (r.id === reminder.id ? renewed : r));
-        onUpdateReminders(updated);
+        await onUpdateReminders(updated);
       },
       successTitle: isRecurring ? 'Échéance renouvelée !' : 'Document validé !',
       successMessage: isRecurring
@@ -124,7 +124,7 @@ export default function ReminderPanel({
         if (activeRingingReminder?.id === id) {
           handleStopAlarm();
         }
-        onUpdateReminders(reminders.filter((r) => r.id !== id));
+        await onUpdateReminders(reminders.filter((r) => r.id !== id));
       },
       successTitle: 'Élément supprimé',
       successMessage: target?.title

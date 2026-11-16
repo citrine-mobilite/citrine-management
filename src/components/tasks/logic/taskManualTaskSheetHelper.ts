@@ -1,6 +1,5 @@
 import { Task, NotificationLog, Employee, AppUser } from '../../../types';
 import { clientMailService } from '../../../services/clientMailService';
-import { showErrorAlert } from '../../../utils/sweetAlert';
 import { logSystemAudit } from '../../../services/adminAuditService';
 import {
   getDoualaDateInfo,
@@ -243,12 +242,10 @@ export async function executeSendManualTaskSheet(params: {
       const rawError = result.error || "Erreur inconnue lors de l'envoi du TaskSheet.";
       console.error('❌ [TASKSHEET ÉCHEC]:', { error: rawError, fullResult: result });
       if (showToast) showToast(rawError, 'error');
-      await showErrorAlert("Échec d'envoi du TaskSheet", rawError);
     }
   } catch (err: any) {
     const rawException = err?.message || String(err);
     console.error('💥 [TASKSHEET EXCEPTION CLIENT]:', rawException);
     if (showToast) showToast(rawException, 'error');
-    await showErrorAlert('Exception inattendue', rawException);
   }
 }

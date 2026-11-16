@@ -24,7 +24,7 @@ import { logSystemAudit } from '../services/adminAuditService';
 
 interface CompanySettingsPanelProps {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
   employeeCount?: number;
   employees?: Employee[];
   presences?: Presence[];
@@ -117,9 +117,9 @@ export default function CompanySettingsPanel({
     ...(moduleConfig || {}),
   };
 
-  const handleUpdate = (updated: CompanyModuleConfig) => {
+  const handleUpdate = async (updated: CompanyModuleConfig): Promise<void> => {
     if (typeof onUpdateModuleConfig === 'function') {
-      onUpdateModuleConfig(updated);
+      await onUpdateModuleConfig(updated);
       logSystemAudit({
         authorName: 'Administrateur',
         authorRole: 'administrateur',

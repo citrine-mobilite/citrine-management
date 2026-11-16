@@ -30,7 +30,6 @@ export const CompanyLogoCard: React.FC<CompanyLogoCardProps> = ({
       const base64Data = event.target?.result as string;
       if (base64Data) {
         onSelectLogo(base64Data);
-        if (showToast) showToast('Logo officiel mis à jour.', 'success');
       }
     };
     reader.onerror = () => {

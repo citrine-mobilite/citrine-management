@@ -5,6 +5,7 @@ import { PWAInstallButton } from '../pwa/PWAInstallButton';
 import { saveDocument, COLLECTIONS } from '../../services/dataService';
 import { saveUser } from '../../services/userService';
 import { storeSecureSession } from '../../services/sessionService';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 import { ProfileIdentityCard } from './profile/ProfileIdentityCard';
 import { ProfileOrgAndSecurityCards } from './profile/ProfileOrgAndSecurityCards';
 
@@ -77,46 +78,54 @@ export const EmployeeProfileTab: React.FC<EmployeeProfileTabProps> = ({
   const handleSaveBirthDate = async () => {
     if (!draftBirthDate) return;
     setIsSavingBirthDate(true);
-    try {
-      const updatedEmp: Employee = { ...employeeProfile, birthDate: draftBirthDate };
-      await saveDocument(COLLECTIONS.EMPLOYEES, updatedEmp);
-      if (onUpdateEmployee) onUpdateEmployee(updatedEmp);
-      if (currentUser) {
-        const updatedUser: AppUser = { ...currentUser, birthDate: draftBirthDate };
-        await saveUser(updatedUser);
-        await storeSecureSession(updatedUser).catch(() => {});
-        if (onUpdateUser) onUpdateUser(updatedUser);
-      }
-      window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
-      setIsEditingBirthDate(false);
-    } catch (err) {
-      console.error('Erreur sauvegarde date de naissance:', err);
-    } finally {
-      setIsSavingBirthDate(false);
-    }
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour du profil...',
+      loadingText: 'Enregistrement de votre date de naissance, veuillez patienter...',
+      action: async () => {
+        const updatedEmp: Employee = { ...employeeProfile, birthDate: draftBirthDate };
+        await saveDocument(COLLECTIONS.EMPLOYEES, updatedEmp);
+        if (onUpdateEmployee) onUpdateEmployee(updatedEmp);
+        if (currentUser) {
+          const updatedUser: AppUser = { ...currentUser, birthDate: draftBirthDate };
+          await saveUser(updatedUser);
+          await storeSecureSession(updatedUser).catch(() => {});
+          if (onUpdateUser) onUpdateUser(updatedUser);
+        }
+        window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
+        setIsEditingBirthDate(false);
+      },
+      successTitle: 'Profil mis à jour !',
+      successMessage: 'Votre date de naissance a été enregistrée avec succès.',
+      errorMessage: 'Erreur lors de la sauvegarde de la date de naissance.',
+    });
+    setIsSavingBirthDate(false);
   };
 
   const handleSavePhone = async () => {
     const trimmed = draftPhone.trim();
     if (!trimmed) return;
     setIsSavingPhone(true);
-    try {
-      const updatedEmp: Employee = { ...employeeProfile, phone: trimmed };
-      await saveDocument(COLLECTIONS.EMPLOYEES, updatedEmp);
-      if (onUpdateEmployee) onUpdateEmployee(updatedEmp);
-      if (currentUser) {
-        const updatedUser: AppUser = { ...currentUser, phone: trimmed };
-        await saveUser(updatedUser);
-        await storeSecureSession(updatedUser).catch(() => {});
-        if (onUpdateUser) onUpdateUser(updatedUser);
-      }
-      window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
-      setIsEditingPhone(false);
-    } catch (err) {
-      console.error('Erreur sauvegarde téléphone:', err);
-    } finally {
-      setIsSavingPhone(false);
-    }
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour du profil...',
+      loadingText: 'Enregistrement de votre numéro de téléphone, veuillez patienter...',
+      action: async () => {
+        const updatedEmp: Employee = { ...employeeProfile, phone: trimmed };
+        await saveDocument(COLLECTIONS.EMPLOYEES, updatedEmp);
+        if (onUpdateEmployee) onUpdateEmployee(updatedEmp);
+        if (currentUser) {
+          const updatedUser: AppUser = { ...currentUser, phone: trimmed };
+          await saveUser(updatedUser);
+          await storeSecureSession(updatedUser).catch(() => {});
+          if (onUpdateUser) onUpdateUser(updatedUser);
+        }
+        window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
+        setIsEditingPhone(false);
+      },
+      successTitle: 'Numéro mis à jour !',
+      successMessage: 'Votre numéro de téléphone a été enregistré avec succès.',
+      errorMessage: 'Erreur lors de la sauvegarde du numéro de téléphone.',
+    });
+    setIsSavingPhone(false);
   };
 
   const currentBirthDate = employeeProfile.birthDate || currentUser?.birthDate;

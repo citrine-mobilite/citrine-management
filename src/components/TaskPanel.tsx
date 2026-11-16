@@ -185,6 +185,7 @@ export default function TaskPanel({
           onSelectTask={logic.openTaskDetail}
           onStatusChange={logic.handleStatusChange}
           onToggleSubtaskAtPath={logic.handleToggleSubtaskAtPath}
+          onUpdateSubtaskAtPath={logic.handleUpdateSubtaskAtPath}
           onMoveTask={logic.handleMoveTask}
         />
       )}
@@ -195,6 +196,7 @@ export default function TaskPanel({
           onSelectTask={logic.openTaskDetail}
           onStatusChange={logic.handleStatusChange}
           onToggleSubtaskAtPath={logic.handleToggleSubtaskAtPath}
+          onUpdateSubtaskAtPath={logic.handleUpdateSubtaskAtPath}
           onMoveTask={logic.handleMoveTask}
           onQuickCreateTask={logic.handleQuickCreateTask}
         />

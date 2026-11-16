@@ -177,13 +177,11 @@ export function useAppInitialData() {
   const handleAddAttendanceIncident = (incident: AttendanceIncident) =>
     addAttendanceIncidentWithNotification({ incident, attendanceIncidents, setAttendanceIncidents, setNotifications });
 
-  const handleUpdateModuleConfig = (newConfig: CompanyModuleConfig) => {
+  const handleUpdateModuleConfig = async (newConfig: CompanyModuleConfig): Promise<void> => {
     const fullConfig: CompanyModuleConfig = { ...moduleConfig, ...newConfig };
     setModuleConfig(fullConfig);
     persistStoredModuleConfig(fullConfig);
-    saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...fullConfig, id: 'main_config' }).catch((err) => {
-      console.warn('Erreur persistance BD company_settings:', err);
-    });
+    await saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...fullConfig, id: 'main_config' });
   };
 
   const refreshAll = () =>

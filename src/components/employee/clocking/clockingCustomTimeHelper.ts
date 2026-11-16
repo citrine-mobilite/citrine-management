@@ -1,6 +1,7 @@
 import { Employee, Presence } from '../../../types';
+import { executeOperationWithLoading } from '../../../utils/sweetAlert';
 
-export function executeConfirmCustomClock(params: {
+export async function executeConfirmCustomClock(params: {
   customClockHour: string;
   customClockMinute: string;
   customClockReason: string;
@@ -9,9 +10,9 @@ export function executeConfirmCustomClock(params: {
   employeeProfile: Employee;
   presences: Presence[];
   todayStr: string;
-  onUpdatePresences: (updated: Presence[]) => void;
+  onUpdatePresences: (updated: Presence[]) => Promise<void> | void;
   showToast: (title: string, desc: string, type?: 'success' | 'warning' | 'info') => void;
-}): void {
+}): Promise<void> {
   const {
     customClockHour,
     customClockMinute,
@@ -22,7 +23,6 @@ export function executeConfirmCustomClock(params: {
     presences,
     todayStr,
     onUpdatePresences,
-    showToast,
   } = params;
 
   if (!customClockReason.trim()) {
@@ -39,6 +39,8 @@ export function executeConfirmCustomClock(params: {
   if (existingIdx >= 0) {
     const existing = { ...updatedPresences[existingIdx] };
     existing.arrivalTime = timeStr;
+    existing.correctionReason = customClockReason.trim();
+    existing.correctionReasonStatus = 'pending';
     updatedPresences[existingIdx] = existing;
   } else {
     updatedPresences.push({
@@ -52,10 +54,21 @@ export function executeConfirmCustomClock(params: {
       departureTime: null,
       location: 'Bureau (Manuel)',
       clockingMethod: 'manual_admin',
+      correctionReason: customClockReason.trim(),
+      correctionReasonStatus: 'pending',
     });
   }
 
-  onUpdatePresences(updatedPresences);
   onSuccess();
-  showToast('Horaire Ajusté', `Votre pointage a été enregistré à ${timeStr}.`, 'success');
+  await executeOperationWithLoading({
+    loadingTitle: "Ajustement de l'horaire...",
+    loadingText: 'Enregistrement de votre demande d’ajustement, veuillez patienter...',
+    action: async () => {
+      await onUpdatePresences(updatedPresences);
+      return { status: 'pending' as const };
+    },
+    pendingTitle: 'Demande en attente',
+    pendingMessage: `Votre ajustement à ${timeStr} a été enregistré et transmis pour validation RH.`,
+    errorMessage: "Impossible d'enregistrer l'ajustement d'horaire.",
+  });
 }

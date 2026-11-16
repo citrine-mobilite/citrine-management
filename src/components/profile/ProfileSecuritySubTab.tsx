@@ -4,6 +4,7 @@ import { AppUser } from '../../types';
 import { saveUser } from '../../services/userService';
 import { storeSecureSession } from '../../services/sessionService';
 import { hashPassword, verifyPassword } from '../../utils/cryptoUtils';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface ProfileSecuritySubTabProps {
   currentUser: AppUser;
@@ -49,36 +50,41 @@ export const ProfileSecuritySubTab: React.FC<ProfileSecuritySubTabProps> = ({
     }
 
     setLoading(true);
-    try {
-      if (currentUser.passwordHash) {
-        const isValid = await verifyPassword(oldPassword, currentUser.passwordHash);
-        if (!isValid) {
-          setError('L’ancien mot de passe est incorrect.');
-          setLoading(false);
-          return;
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Modification du mot de passe...',
+      loadingText: 'Sécurisation de votre nouveau mot de passe, veuillez patienter...',
+      action: async () => {
+        if (currentUser.passwordHash) {
+          const isValid = await verifyPassword(oldPassword, currentUser.passwordHash);
+          if (!isValid) {
+            throw new Error('L’ancien mot de passe est incorrect.');
+          }
         }
-      }
 
-      const newHash = await hashPassword(newPassword);
-      const updatedUser: AppUser = {
-        ...currentUser,
-        passwordHash: newHash,
-      };
-      await saveUser(updatedUser);
-      await storeSecureSession(updatedUser).catch(() => {});
-      window.dispatchEvent(new CustomEvent('citrine:user_updated', { detail: updatedUser }));
-      onUpdateUser?.(updatedUser);
+        const newHash = await hashPassword(newPassword);
+        const updatedUser: AppUser = {
+          ...currentUser,
+          passwordHash: newHash,
+        };
+        await saveUser(updatedUser);
+        await storeSecureSession(updatedUser).catch(() => {});
+        window.dispatchEvent(new CustomEvent('citrine:user_updated', { detail: updatedUser }));
+        onUpdateUser?.(updatedUser);
+      },
+      successTitle: 'Mot de passe mis à jour !',
+      successMessage: 'Votre nouveau mot de passe est désormais actif.',
+      errorMessage: 'Erreur lors du changement de mot de passe.',
+    });
 
+    if (res.success) {
       setSuccess('Mot de passe mis à jour avec succès.');
-      showToast?.('Mot de passe mis à jour', 'success');
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch {
-      setError('Erreur lors du changement de mot de passe.');
-    } finally {
-      setLoading(false);
+    } else {
+      setError(res.error?.message || 'Erreur lors du changement de mot de passe.');
     }
+    setLoading(false);
   };
 
   return (

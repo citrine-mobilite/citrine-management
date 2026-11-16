@@ -28,7 +28,7 @@ import {
   AttendanceMonthlyReport,
   buildMonthlyAttendanceReport,
 } from '../../services/rhReportService';
-import { showErrorAlert, showSuccessAlert } from '../../utils/sweetAlert';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 export function useCollaboratorPanelLogic(params: {
   employees: Employee[];
@@ -36,8 +36,8 @@ export function useCollaboratorPanelLogic(params: {
   users: AppUser[];
   moduleConfig?: CompanyModuleConfig;
   initialSelectedEmployeeId?: string;
-  onUpdateEmployees: (employees: Employee[]) => void;
-  onUpdateUsers?: (users: AppUser[]) => void;
+  onUpdateEmployees: (employees: Employee[]) => Promise<void> | void;
+  onUpdateUsers?: (users: AppUser[]) => Promise<void> | void;
   onAddNotification?: (log: NotificationLog) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }) {
@@ -127,52 +127,94 @@ export function useCollaboratorPanelLogic(params: {
       showToast?.('Le nom du collaborateur est requis.', 'error');
       return;
     }
+    const isEdit = Boolean(editingEmployee);
+    const trimmedName = formData.name.trim();
     setIsSaving(true);
     try {
-      if (editingEmployee) {
-        await persistEditedCollaborator({
-          editingEmployee, formData, employees, users,
-          onUpdateEmployees, onUpdateUsers, onAddNotification,
-        });
-        setAuditOpsList(getAdminAuditOperations());
+      const res = await executeOperationWithLoading({
+        loadingTitle: isEdit ? 'Mise à jour du collaborateur...' : 'Création du collaborateur...',
+        loadingText: isEdit
+          ? `Modification de la fiche de "${trimmedName}" en cours, veuillez patienter...`
+          : `Création de la fiche et des accès de "${trimmedName}", veuillez patienter...`,
+        action: async () => {
+          if (editingEmployee) {
+            await persistEditedCollaborator({
+              editingEmployee,
+              formData,
+              employees,
+              users,
+              onUpdateEmployees,
+              onUpdateUsers,
+              onAddNotification,
+            });
+          } else {
+            await persistCreatedCollaborator({
+              formData,
+              employees,
+              users,
+              onUpdateEmployees,
+              onUpdateUsers,
+              onAddNotification,
+            });
+          }
+          setAuditOpsList(getAdminAuditOperations());
+        },
+        successTitle: isEdit ? 'Fiche modifiée !' : 'Collaborateur créé !',
+        successMessage: isEdit
+          ? `La fiche de "${trimmedName}" et ses accès associés ont été mis à jour avec succès.`
+          : `Le collaborateur "${trimmedName}" et son compte d'accès ont été créés avec succès.`,
+        errorMessage: isEdit
+          ? 'Erreur lors de la modification du collaborateur.'
+          : 'Erreur lors de la création du collaborateur.',
+      });
+      if (res.success) {
         setIsModalOpen(false);
-        await showSuccessAlert('Fiche modifiée !', `La fiche de "${formData.name.trim()}" et ses accès associés ont été mis à jour avec succès.`);
-      } else {
-        await persistCreatedCollaborator({
-          formData, employees, users,
-          onUpdateEmployees, onUpdateUsers, onAddNotification,
-        });
-        setAuditOpsList(getAdminAuditOperations());
-        setIsModalOpen(false);
-        await showSuccessAlert('Collaborateur créé !', `Le collaborateur "${formData.name.trim()}" et son compte d'accès ont été créés avec succès.`);
       }
-    } catch (err: any) {
-      console.error('❌ [CollaboratorPanel] Échec de la sauvegarde:', err);
-      await showErrorAlert('Échec de la création', err?.message || 'Erreur lors de la création du collaborateur.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleStatusChangeQuick = (empId: string, newStatus: Employee['status']) => {
+  const handleStatusChangeQuick = async (empId: string, newStatus: Employee['status']) => {
     const emp = employees.find((item) => item.id === empId);
     if (!emp) return;
     if (newStatus !== 'en_poste') {
       setStatusReasonModalTarget({ emp, targetStatus: newStatus });
       return;
     }
-    applyQuickEnPosteStatus({ emp, newStatus, employees, users, onUpdateEmployees, onUpdateUsers });
-    showToast?.('Statut du collaborateur et compte utilisateur mis à jour.', 'success');
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour du statut...',
+      loadingText: `Passage de "${emp.name}" en statut « En poste », veuillez patienter...`,
+      action: async () => {
+        await Promise.resolve(
+          applyQuickEnPosteStatus({ emp, newStatus, employees, users, onUpdateEmployees, onUpdateUsers })
+        );
+      },
+      successTitle: 'Statut mis à jour !',
+      successMessage: `Le statut de "${emp.name}" et son compte utilisateur ont été mis à jour.`,
+      errorMessage: 'Impossible de mettre à jour le statut du collaborateur.',
+    });
   };
 
-  const handleConfirmStatusReason = (
+  const handleConfirmStatusReason = async (
     empId: string, status: Employee['status'], reason: string, startDate: string, endDate: string
   ) => {
-    applyStatusReasonChange({
-      empId, status, reason, startDate, endDate, employees, users, moduleConfig, onUpdateEmployees, onUpdateUsers,
+    const emp = employees.find((item) => item.id === empId);
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour du statut...',
+      loadingText: `Enregistrement du changement de statut${emp ? ` pour "${emp.name}"` : ''}, veuillez patienter...`,
+      action: async () => {
+        await Promise.resolve(
+          applyStatusReasonChange({
+            empId, status, reason, startDate, endDate, employees, users, moduleConfig, onUpdateEmployees, onUpdateUsers,
+          })
+        );
+        setAuditOpsList(getAdminAuditOperations());
+      },
+      successTitle: 'Statut mis à jour !',
+      successMessage: `Statut et compte utilisateur mis à jour avec le motif : "${reason}".`,
+      errorMessage: 'Impossible de modifier le statut du collaborateur.',
     });
-    setAuditOpsList(getAdminAuditOperations());
-    showToast?.(`Statut et compte utilisateur mis à jour avec le motif : "${reason}"`, 'success');
   };
 
   const filtered = employees.filter((e) => {

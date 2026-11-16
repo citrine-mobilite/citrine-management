@@ -1,6 +1,5 @@
 import { Task, NotificationLog, Employee, AppUser } from '../../../types';
 import { clientMailService } from '../../../services/clientMailService';
-import { showErrorAlert } from '../../../utils/sweetAlert';
 import {
   getDoualaDateInfo,
   buildTimesheetHtmlReport,
@@ -233,12 +232,10 @@ export async function executeSendManualTimesheet(params: {
       const rawError = result.error || "Erreur inconnue lors de l'envoi de la fiche de temps.";
       console.error('❌ [FICHE DE TEMPS ÉCHEC]:', { error: rawError, fullResult: result });
       if (showToast) showToast(rawError, 'error');
-      await showErrorAlert("Échec d'envoi de la fiche de temps", rawError);
     }
   } catch (err: any) {
     const rawException = err?.message || String(err);
     console.error('💥 [FICHE DE TEMPS EXCEPTION CLIENT]:', rawException);
     if (showToast) showToast(rawException, 'error');
-    await showErrorAlert('Exception inattendue', rawException);
   }
 }

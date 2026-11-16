@@ -8,7 +8,6 @@ import {
 import { getCurrentUserLocation, calculateDistanceMeters, COMPANY_HQ_LOCATION } from '../../../utils/geolocation';
 import { isLate } from '../../../utils/dateUtils';
 import { verifyDoorQrToken } from '../../../services/qrDoorValidationService';
-import { showErrorAlert } from '../../../utils/sweetAlert';
 
 export type ClockActionType =
   | 'arrival'
@@ -28,23 +27,26 @@ export const isSameClockEmployee = (iEmpId: any, employeeProfile: Employee): boo
 
 export async function validateDoorQrMethod(
   moduleConfig: CompanyModuleConfig | undefined,
-  customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
+  customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string },
+  showToast?: (title: string, desc: string, type?: 'success' | 'warning' | 'info') => void
 ): Promise<boolean> {
   const providedToken = (customLocation?.qrCodeToken || '').trim();
   const doorValidation = await verifyDoorQrToken(providedToken, moduleConfig);
 
   if (doorValidation.isRevoked) {
-    showErrorAlert(
-      'QR Code Révoqué 🚫',
-      "Le QR Code de porte a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle."
+    showToast?.(
+      'QR Code Révoqué',
+      "Le QR Code de porte a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle.",
+      'warning'
     );
     return false;
   }
 
   if (!doorValidation.valid) {
-    showErrorAlert(
-      'Pointage Rejeté ❌',
-      "Le jeton du QR Code ne correspond pas au jeton officiel configuré pour la porte."
+    showToast?.(
+      'Pointage Rejeté',
+      "Le jeton du QR Code ne correspond pas au jeton officiel configuré pour la porte.",
+      'warning'
     );
     return false;
   }

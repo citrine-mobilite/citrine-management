@@ -3,6 +3,7 @@ import { AttendanceIncident, Employee, NotificationLog } from '../../../types';
 import { incidentService } from '../../../services/incidentService';
 import { pushNotificationBridgeService } from '../../../services/pushNotificationBridgeService';
 import { COLLECTIONS, saveDocument } from '../../../services/dataService';
+import { executeOperationWithLoading } from '../../../utils/sweetAlert';
 
 export function getIncidentTypeLabel(type: AttendanceIncident['type']): string {
   switch (type) {
@@ -29,7 +30,7 @@ export function getIncidentTypeLabel(type: AttendanceIncident['type']): string {
 interface UsePresenceIncidentsLogicProps {
   attendanceIncidents: AttendanceIncident[];
   employees: Employee[];
-  onUpdateAttendanceIncidents?: (incidents: AttendanceIncident[]) => void;
+  onUpdateAttendanceIncidents?: (incidents: AttendanceIncident[]) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -85,22 +86,33 @@ export function usePresenceIncidentsLogic({
   );
 
   const handleJustifyIncident = async (incident: AttendanceIncident, justifie: boolean) => {
-    const updated = {
-      ...incident,
-      isJustified: justifie,
-      status: (justifie ? 'justifie' : 'injustifie') as AttendanceIncident['status'],
-      adminComment:
-        adminNote.trim() ||
-        (justifie ? 'Validé et justifié par la direction.' : 'Maintenu non justifié par la direction.'),
-    };
+    const res = await executeOperationWithLoading({
+      loadingTitle: "Mise à jour de l'incident...",
+      loadingText: `Enregistrement de la décision pour ${incident.employeeName || 'le collaborateur'}, veuillez patienter...`,
+      action: async () => {
+        const updated = {
+          ...incident,
+          isJustified: justifie,
+          status: (justifie ? 'justifie' : 'injustifie') as AttendanceIncident['status'],
+          adminComment:
+            adminNote.trim() ||
+            (justifie ? 'Validé et justifié par la direction.' : 'Maintenu non justifié par la direction.'),
+        };
 
-    await incidentService.saveIncident(updated);
-    if (onUpdateAttendanceIncidents) {
-      onUpdateAttendanceIncidents(attendanceIncidents.map((i) => (i.id === incident.id ? updated : i)));
+        await incidentService.saveIncident(updated);
+        if (onUpdateAttendanceIncidents) {
+          await onUpdateAttendanceIncidents(attendanceIncidents.map((i) => (i.id === incident.id ? updated : i)));
+        }
+      },
+      successTitle: 'Décision enregistrée !',
+      successMessage: `Incident ${justifie ? 'validé et justifié' : 'marqué non justifié'}.`,
+      errorMessage: "Erreur lors de la mise à jour de l'incident.",
+    });
+
+    if (res.success) {
+      setSelectedIncidentForJustification(null);
+      setAdminNote('');
     }
-    showToast?.(`Incident ${justifie ? 'validé et justifié' : 'marqué non justifié'}.`, 'success');
-    setSelectedIncidentForJustification(null);
-    setAdminNote('');
   };
 
   const handleCreateManualIncident = async () => {
@@ -118,62 +130,70 @@ export function usePresenceIncidentsLogic({
 
     setIsCreating(true);
     try {
-      const now = new Date();
-      const newInc: AttendanceIncident = {
-        id: `inc-admin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        employeeId: emp.id,
-        employeeName: emp.name,
-        date: newDate,
-        timeString: newTime,
-        type: newType,
-        origin: 'signale_par_responsable',
-        reason: newReason.trim(),
-        isDeclaredInAdvance: false,
-        isJustified: false,
-        status: 'injustifie',
-        adminComment: newAdminNote.trim() || 'Signalement consigné manuellement au registre RH.',
-        createdAt: now.toISOString(),
-      };
+      const res = await executeOperationWithLoading({
+        loadingTitle: 'Consignation du signalement...',
+        loadingText: `Enregistrement du signalement pour ${emp.name}, veuillez patienter...`,
+        action: async () => {
+          const now = new Date();
+          const newInc: AttendanceIncident = {
+            id: `inc-admin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            date: newDate,
+            timeString: newTime,
+            type: newType,
+            origin: 'signale_par_responsable',
+            reason: newReason.trim(),
+            isDeclaredInAdvance: false,
+            isJustified: false,
+            status: 'injustifie',
+            adminComment: newAdminNote.trim() || 'Signalement consigné manuellement au registre RH.',
+            createdAt: now.toISOString(),
+          };
 
-      if (onUpdateAttendanceIncidents) {
-        onUpdateAttendanceIncidents([newInc, ...attendanceIncidents]);
-      }
+          if (onUpdateAttendanceIncidents) {
+            await onUpdateAttendanceIncidents([newInc, ...attendanceIncidents]);
+          }
 
-      pushNotificationBridgeService.sendPush({
-        title: `🚨 Signalement RH : ${emp.name}`,
-        message: `Signalement d'absence/manquement consigné pour le ${newDate}. Motif : ${newReason.trim()}`,
-        senderName: 'Direction RH',
-        type: 'alert',
+          pushNotificationBridgeService.sendPush({
+            title: `🚨 Signalement RH : ${emp.name}`,
+            message: `Signalement d'absence/manquement consigné pour le ${newDate}. Motif : ${newReason.trim()}`,
+            senderName: 'Direction RH',
+            type: 'alert',
+          });
+
+          const notif: NotificationLog = {
+            id: `notif-inc-${newInc.id}`,
+            type: 'system',
+            recipient: emp.email || emp.name,
+            title: '🚨 Signalement RH d’Absence Non Autorisée',
+            content: `Un signalement d'absence non validée a été consigné pour le ${newDate}. Motif : ${newReason.trim()}`,
+            payload: JSON.stringify({
+              source: 'incident_manual',
+              incidentId: newInc.id,
+              employeeId: emp.id,
+              employeeName: emp.name,
+              type: newType,
+              date: newDate,
+            }),
+            timestamp: now.toISOString(),
+            read: false,
+          };
+
+          await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+          }
+        },
+        successTitle: 'Signalement consigné !',
+        successMessage: `Signalement consigné avec succès sur ${emp.name}.`,
+        errorMessage: 'Erreur lors de la création du signalement.',
       });
 
-      const notif: NotificationLog = {
-        id: `notif-inc-${newInc.id}`,
-        type: 'system',
-        recipient: emp.email || emp.name,
-        title: '🚨 Signalement RH d’Absence Non Autorisée',
-        content: `Un signalement d'absence non validée a été consigné pour le ${newDate}. Motif : ${newReason.trim()}`,
-        payload: JSON.stringify({
-          source: 'incident_manual',
-          incidentId: newInc.id,
-          employeeId: emp.id,
-          employeeName: emp.name,
-          type: newType,
-          date: newDate,
-        }),
-        timestamp: now.toISOString(),
-        read: false,
-      };
-
-      await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+      if (res.success) {
+        setShowCreateModal(false);
+        setNewReason('');
       }
-
-      showToast?.(`Signalement consigné avec succès sur ${emp.name}.`, 'success');
-      setShowCreateModal(false);
-      setNewReason('');
-    } catch {
-      showToast?.('Erreur lors de la création du signalement.', 'error');
     } finally {
       setIsCreating(false);
     }

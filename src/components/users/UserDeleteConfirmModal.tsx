@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { Trash2, X, AlertTriangle } from 'lucide-react';
+import React from 'react';
+import { Trash2 } from 'lucide-react';
 import { AppUser } from '../../types';
-import { showSuccessAlert, showErrorAlert } from '../../utils/sweetAlert';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface UserDeleteConfirmModalProps {
   user: AppUser | null;
@@ -24,11 +24,19 @@ export const UserDeleteConfirmModal: React.FC<UserDeleteConfirmModalProps> = ({
     setIsDeleting(true);
     const name = user.name;
     try {
-      await onConfirm();
-      await showSuccessAlert('Utilisateur supprimé !', `Le compte "${name}" a été supprimé avec succès.`);
-      onClose();
-    } catch (err: any) {
-      await showErrorAlert('Échec de la suppression', err?.message || 'Erreur lors de la suppression de l\'utilisateur.');
+      const res = await executeOperationWithLoading({
+        loadingTitle: 'Suppression du compte...',
+        loadingText: `Suppression définitive de "${name}", veuillez patienter...`,
+        action: async () => {
+          await onConfirm();
+        },
+        successTitle: 'Utilisateur supprimé !',
+        successMessage: `Le compte "${name}" a été supprimé avec succès.`,
+        errorMessage: "Erreur lors de la suppression de l'utilisateur.",
+      });
+      if (res.success) {
+        onClose();
+      }
     } finally {
       setIsDeleting(false);
     }

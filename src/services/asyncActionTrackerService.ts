@@ -44,29 +44,36 @@ class AsyncActionTrackerService {
   public readonly DELAY_THRESHOLD_MS = 1000;
 
   /**
-   * Démarre le suivi d'une action asynchrone avec un seuil de 1 seconde.
-   * Retourne une fonction stop() à appeler à la fin de l'action.
+   * Démarre le suivi d'une action asynchrone.
+   * - immediate = true : affiche immédiatement le modal loader centré (obligatoire pour Création / Modification / Suppression)
+   * - immediate = false : seuil de 1 seconde pour les synchronisations silencieuses en arrière-plan
    */
-  public startAction(label: string = 'Traitement en cours...', details?: string): () => void {
+  public startAction(
+    label: string = 'Traitement en cours...',
+    details?: string,
+    immediate: boolean = false
+  ): () => void {
     const id = `action-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const startTime = Date.now();
 
     const actionInfo: AsyncActionInfo = { id, label, details, startTime };
     this.activeActions.set(id, actionInfo);
 
-    // Démarre un compte à rebours de 1 seconde.
-    // Si l'action n'est pas terminée au bout de 1s, elle devient "visible" et déclenche le loader.
-    const timer = setTimeout(() => {
-      this.pendingTimers.delete(id);
-      if (this.activeActions.has(id)) {
-        this.visibleActions.add(id);
-        this.updateState();
-      }
-    }, this.DELAY_THRESHOLD_MS);
+    if (immediate) {
+      this.visibleActions.add(id);
+      this.updateState();
+    } else {
+      const timer = setTimeout(() => {
+        this.pendingTimers.delete(id);
+        if (this.activeActions.has(id)) {
+          this.visibleActions.add(id);
+          this.updateState();
+        }
+      }, this.DELAY_THRESHOLD_MS);
 
-    this.pendingTimers.set(id, timer);
+      this.pendingTimers.set(id, timer);
+    }
 
-    // Retourne la fonction de finalisation
     return () => this.stopAction(id);
   }
 
@@ -74,7 +81,6 @@ class AsyncActionTrackerService {
    * Arrête le suivi d'une action.
    */
   public stopAction(id: string): void {
-    // Si le timer d'1s n'était pas encore échu, on l'annule (aucun loader n'aura été affiché)
     if (this.pendingTimers.has(id)) {
       clearTimeout(this.pendingTimers.get(id));
       this.pendingTimers.delete(id);
@@ -86,14 +92,15 @@ class AsyncActionTrackerService {
   }
 
   /**
-   * Enveloppe une Promesse ou une fonction asynchrone avec le suivi du seuil de 1 seconde.
+   * Enveloppe une Promesse ou une fonction asynchrone avec suivi global du loader.
    */
   public async track<T>(
     label: string,
     promiseOrFn: Promise<T> | (() => Promise<T>),
-    details?: string
+    details?: string,
+    immediate: boolean = false
   ): Promise<T> {
-    const stop = this.startAction(label, details);
+    const stop = this.startAction(label, details, immediate);
     try {
       if (typeof promiseOrFn === 'function') {
         return await promiseOrFn();

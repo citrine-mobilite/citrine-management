@@ -8,17 +8,17 @@ import {
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
 import { MODULES_LIST } from './companyModulesCatalog';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface CompanyModulesToggleProps {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const CompanyModulesToggle: React.FC<CompanyModulesToggleProps> = ({
   moduleConfig,
   onUpdateModuleConfig,
-  showToast,
 }) => {
   const [formData, setFormData] = useState<CompanyModuleConfig>({ ...moduleConfig });
 
@@ -26,20 +26,24 @@ export const CompanyModulesToggle: React.FC<CompanyModulesToggleProps> = ({
     setFormData({ ...moduleConfig });
   }, [moduleConfig]);
 
-  const handleToggle = (key: keyof CompanyModuleConfig, title: string) => {
+  const handleToggle = async (key: keyof CompanyModuleConfig, title: string) => {
     const currentState = formData[key] !== false;
     const newState = !currentState;
     const updated = {
       ...formData,
       [key]: newState,
     };
-    setFormData(updated);
-    onUpdateModuleConfig(updated);
-    if (showToast) {
-      showToast(
-        `Module "${title}" ${newState ? 'activé' : 'désactivé'}`,
-        'success'
-      );
+    const res = await executeOperationWithLoading({
+      loadingTitle: newState ? 'Activation du module...' : 'Désactivation du module...',
+      loadingText: `Veuillez patienter pendant la mise à jour du module "${title}"...`,
+      action: async () => {
+        await onUpdateModuleConfig(updated);
+      },
+      successTitle: newState ? 'Module activé !' : 'Module désactivé !',
+      successMessage: `Module "${title}" ${newState ? 'activé' : 'désactivé'} avec succès.`,
+    });
+    if (res.success) {
+      setFormData(updated);
     }
   };
 

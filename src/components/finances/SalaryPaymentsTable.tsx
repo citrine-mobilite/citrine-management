@@ -5,12 +5,13 @@ import { downloadPayslipPdf, exportElementToPdf } from '../../services/pdfExport
 import { exportToExcel } from '../../services/excelExportService';
 import { SalaryPaymentFormModal } from './SalaryPaymentFormModal';
 import { logSystemAudit } from '../../services/adminAuditService';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface SalaryPaymentsTableProps {
   salaryPayments: SalaryPayment[];
   employees: Employee[];
   salaryDebts?: EmployeeSalaryDebt[];
-  onUpdatePayments?: (updated: SalaryPayment[]) => void;
+  onUpdatePayments?: (updated: SalaryPayment[]) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -57,7 +58,7 @@ export const SalaryPaymentsTable: React.FC<SalaryPaymentsTableProps> = ({
   const activeLoanDeduction = activeLoanForForm ? activeLoanForForm.monthlyInstallment : 0;
   const calculatedNetSalary = Math.max(0, currentBaseSalary + bonusAmount - activeLoanDeduction);
 
-  const handleSavePayment = (e: React.FormEvent) => {
+  const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!onUpdatePayments) return;
 
@@ -81,21 +82,31 @@ export const SalaryPaymentsTable: React.FC<SalaryPaymentsTableProps> = ({
       notes: notes.trim(),
     };
 
-    onUpdatePayments([newPayment, ...salaryPayments]);
-    logSystemAudit({
-      targetName: selectedEmployee.name,
-      targetEmployeeId: selectedEmployee.id,
-      targetUserId: selectedEmployee.userId ? String(selectedEmployee.userId) : undefined,
-      operationType: 'salary_update',
-      operationLabel: 'Enregistrement Bulletin de Paie',
-      details: `Salaire net de ${formatXAF(calculatedNetSalary)} enregistré pour ${selectedEmployee.name} (${period})`,
-      level: 'success',
-      metadata: { period, netAmount: calculatedNetSalary, employeeEmail: selectedEmployee.email },
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement du bulletin de paie...',
+      loadingText: `Sauvegarde du paiement de ${selectedEmployee.name} (${period}), veuillez patienter...`,
+      action: async () => {
+        await onUpdatePayments([newPayment, ...salaryPayments]);
+        logSystemAudit({
+          targetName: selectedEmployee.name,
+          targetEmployeeId: selectedEmployee.id,
+          targetUserId: selectedEmployee.userId ? String(selectedEmployee.userId) : undefined,
+          operationType: 'salary_update',
+          operationLabel: 'Enregistrement Bulletin de Paie',
+          details: `Salaire net de ${formatXAF(calculatedNetSalary)} enregistré pour ${selectedEmployee.name} (${period})`,
+          level: 'success',
+          metadata: { period, netAmount: calculatedNetSalary, employeeEmail: selectedEmployee.email },
+        });
+      },
+      successTitle: 'Bulletin enregistré !',
+      successMessage: `Fiche de paie enregistrée avec succès pour ${selectedEmployee.name}.`,
     });
-    if (showToast) showToast(`Fiche de paie enregistrée avec succès pour ${selectedEmployee.name}.`, 'success');
-    setIsModalOpen(false);
-    setBonusAmount(0);
-    setNotes('');
+
+    if (res.success) {
+      setIsModalOpen(false);
+      setBonusAmount(0);
+      setNotes('');
+    }
   };
 
   const handleExportExcel = () => {

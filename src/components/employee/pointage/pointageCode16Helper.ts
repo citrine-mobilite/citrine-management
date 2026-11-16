@@ -12,7 +12,7 @@ export interface ValidateCode16Params {
   onConfirmClocking: (
     method: ClockingMethod,
     customLocation?: { latitude?: number; longitude?: number; locationName?: string; qrCodeToken?: string }
-  ) => void;
+  ) => Promise<boolean> | void;
   setShowClockingModal: (val: boolean) => void;
   showToast?: (title: string, desc: string, type?: 'success' | 'warning' | 'info') => void;
   fallbackProcessQr: (raw: string) => Promise<void>;
@@ -83,18 +83,14 @@ export async function validateCode16Attendance(params: ValidateCode16Params): Pr
       return;
     }
 
-    onConfirmClocking('badge_code_16', {
+    setShowClockingModal(false);
+    await onConfirmClocking('badge_code_16', {
       latitude: userLocation.latitude,
       longitude: userLocation.longitude,
       locationName: userLocation.zoneName
         ? `${officialSiteName} • ${userLocation.zoneName}`
         : 'Bureau (Validé par Clé 16 Caractères)',
     });
-
-    if (showToast) {
-      showToast('Clé 16 Caractères Validée !', 'Votre pointage a été enregistré avec succès.', 'success');
-    }
-    setShowClockingModal(false);
   } catch (err: any) {
     setActionError(err.message || 'Erreur de validation de la clé.');
   } finally {

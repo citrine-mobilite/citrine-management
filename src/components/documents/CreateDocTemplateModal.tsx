@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, CheckCircle2, FileText, AlignLeft, Info } from 'lucide-react';
 import { RHDocTemplate, TemplateField, DocumentCategory } from '../../types';
 import { saveRHDocumentTemplate } from '../../services/rhDocumentTemplateService';
-import { showSuccessAlert, showErrorAlert } from '../../utils/sweetAlert';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 import {
   createInitialTemplateFields,
   DEFAULT_TEMPLATE_BODY,
@@ -98,21 +98,25 @@ export const CreateDocTemplateModal: React.FC<CreateDocTemplateModalProps> = ({
         updatedAt: new Date().toISOString(),
       };
 
-      await saveRHDocumentTemplate(newTemplate);
+      const res = await executeOperationWithLoading({
+        loadingTitle: 'Création du modèle RH...',
+        loadingText: `Enregistrement de "${newTemplate.name}" en cours, veuillez patienter...`,
+        action: async () => {
+          await saveRHDocumentTemplate(newTemplate);
+        },
+        successTitle: 'Modèle enregistré !',
+        successMessage: `Le modèle officiel "${newTemplate.name}" a été enregistré avec succès en base de données.`,
+        errorMessage: "Impossible d'enregistrer le modèle.",
+      });
 
-      setIsSubmitting(false);
-      if (onTemplateCreated) {
-        onTemplateCreated(newTemplate);
+      if (res.success) {
+        if (onTemplateCreated) {
+          onTemplateCreated(newTemplate);
+        }
+        onClose();
+      } else {
+        setError(res.error?.message || "Erreur lors de l'enregistrement du modèle en base de données.");
       }
-      onClose();
-      await showSuccessAlert(
-        'Modèle enregistré !',
-        `Le modèle officiel "${newTemplate.name}" a été enregistré avec succès en base de données.`
-      );
-    } catch (err: any) {
-      setIsSubmitting(false);
-      setError(err?.message || "Erreur lors de l'enregistrement du modèle en base de données.");
-      await showErrorAlert("Erreur d'enregistrement", err?.message || "Impossible d'enregistrer le modèle.");
     } finally {
       setIsSubmitting(false);
     }

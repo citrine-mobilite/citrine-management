@@ -6,7 +6,7 @@ interface EditDocumentModalProps {
   isOpen: boolean;
   onClose: () => void;
   document: GeneratedDocument | null;
-  onSave: (updatedDocument: GeneratedDocument) => void;
+  onSave: (updatedDocument: GeneratedDocument) => Promise<void> | void;
   employees: Employee[];
   showToast?: (msg: string, type?: 'success' | 'error') => void;
 }
@@ -51,7 +51,7 @@ export const EditDocumentModal: React.FC<EditDocumentModalProps> = ({
 
   if (!isOpen || !doc) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       if (showToast) showToast('Le titre du document est obligatoire.', 'error');
@@ -82,13 +82,10 @@ export const EditDocumentModal: React.FC<EditDocumentModalProps> = ({
         saveToDatabase: true,
       };
 
-      onSave(updatedDoc);
-      setIsSubmitting(false);
+      await onSave(updatedDoc);
       onClose();
     } catch (err) {
-      setIsSubmitting(false);
       console.error('Erreur mise à jour document:', err);
-      if (showToast) showToast('Erreur lors de la modification du document.', 'error');
     } finally {
       setIsSubmitting(false);
     }

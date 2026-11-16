@@ -23,20 +23,19 @@ import { RecruitmentOffersView } from './RecruitmentOffersView';
 import { RecruitmentInterviewsView } from './RecruitmentInterviewsView';
 import { RecruitmentApplicationsView, getStageBadge } from './RecruitmentApplicationsView';
 import { RecruitmentTabsNav } from './RecruitmentTabsNav';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface RecruitmentPanelProps {
   currentUser?: AppUser | null;
   employees: Employee[];
   onAddNotification?: (n: any) => void;
   showToast?: (msg: string, type?: 'success' | 'error') => void;
-  onUpdateEmployees?: (employees: Employee[]) => void;
+  onUpdateEmployees?: (employees: Employee[]) => Promise<void> | void;
 }
 
 export const RecruitmentPanel: React.FC<RecruitmentPanelProps> = ({
   currentUser,
   employees,
-  onAddNotification,
-  showToast,
   onUpdateEmployees,
 }) => {
   const [activeTab, setActiveTab] = useState<'applications' | 'offers' | 'interviews'>('applications');
@@ -78,99 +77,129 @@ export const RecruitmentPanel: React.FC<RecruitmentPanelProps> = ({
   );
 
   const handleStageChange = async (app: JobApplication, newStage: ApplicationStage) => {
-    try {
-      const updated: JobApplication = {
-        ...app,
-        stage: newStage,
-        updatedAt: new Date().toISOString(),
-      };
-      await saveJobApplication(updated);
-      setSelectedApplication(updated);
-      showToast?.(`Statut mis à jour : ${newStage.replace('_', ' ')}`, 'success');
-    } catch {
-      showToast?.('Erreur lors de la mise à jour.', 'error');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour de la candidature...',
+      loadingText: `Mise à jour du statut de ${app.candidateName}, veuillez patienter...`,
+      action: async () => {
+        const updated: JobApplication = {
+          ...app,
+          stage: newStage,
+          updatedAt: new Date().toISOString(),
+        };
+        await saveJobApplication(updated);
+        setSelectedApplication(updated);
+      },
+      successTitle: 'Statut mis à jour !',
+      successMessage: `Candidature de ${app.candidateName} passée à : ${newStage.replace('_', ' ')}.`,
+      errorMessage: 'Erreur lors de la mise à jour.',
+    });
   };
 
   const handleCreateOffer = async (offerData: Partial<JobOffer>) => {
     if (!offerData.title) return;
-    try {
-      const offerToSave: JobOffer = {
-        id: `job-${Date.now()}`,
-        title: offerData.title,
-        department: offerData.department || 'Opérations',
-        location: offerData.location || 'Douala',
-        contractType: (offerData.contractType as JobContractType) || 'CDI',
-        openingsCount: Number(offerData.openingsCount) || 1,
-        description: offerData.description || '',
-        requirements: [],
-        salaryRange: offerData.salaryRange || 'Selon profil',
-        deadline: offerData.deadline || '',
-        status: offerData.status || 'ouvert',
-        createdAt: new Date().toISOString(),
-        createdBy: currentUser?.name || 'Direction RH Citrine',
-      };
-      await saveJobOffer(offerToSave);
+    const res = await executeOperationWithLoading({
+      loadingTitle: "Publication de l'offre d'emploi...",
+      loadingText: `Enregistrement de "${offerData.title}", veuillez patienter...`,
+      action: async () => {
+        const offerToSave: JobOffer = {
+          id: `job-${Date.now()}`,
+          title: offerData.title!,
+          department: offerData.department || 'Opérations',
+          location: offerData.location || 'Douala',
+          contractType: (offerData.contractType as JobContractType) || 'CDI',
+          openingsCount: Number(offerData.openingsCount) || 1,
+          description: offerData.description || '',
+          requirements: [],
+          salaryRange: offerData.salaryRange || 'Selon profil',
+          deadline: offerData.deadline || '',
+          status: offerData.status || 'ouvert',
+          createdAt: new Date().toISOString(),
+          createdBy: currentUser?.name || 'Direction RH Citrine',
+        };
+        await saveJobOffer(offerToSave);
+      },
+      successTitle: "Offre d'emploi créée !",
+      successMessage: `L'offre "${offerData.title}" a été publiée avec succès.`,
+      errorMessage: "Erreur lors de la création de l'offre.",
+    });
+    if (res.success) {
       setIsNewOfferModalOpen(false);
-      showToast?.('Offre d\'emploi créée avec succès !', 'success');
-    } catch {
-      showToast?.('Erreur lors de la création de l\'offre.', 'error');
     }
   };
 
   const handleCreateApplication = async (appData: Partial<JobApplication>) => {
     if (!appData.candidateName || !appData.candidatePhone) return;
-    try {
-      const selectedJob = offers.find((o) => o.id === appData.jobOfferId);
-      const appToSave: JobApplication = {
-        id: `app-${Date.now()}`,
-        jobOfferId: appData.jobOfferId || (offers[0]?.id || 'spontanee'),
-        jobOfferTitle: selectedJob ? selectedJob.title : 'Candidature spontanée',
-        candidateName: appData.candidateName,
-        candidateEmail: appData.candidateEmail || '',
-        candidatePhone: appData.candidatePhone,
-        candidateCity: appData.candidateCity || 'Douala',
-        currentPosition: appData.currentPosition || 'Candidat externe',
-        experienceYears: Number(appData.experienceYears) || 0,
-        stage: 'nouveau',
-        notes: appData.notes || '',
-        appliedAt: new Date().toISOString(),
-      };
-      await saveJobApplication(appToSave);
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Ajout du candidat...',
+      loadingText: `Enregistrement de ${appData.candidateName} dans le vivier, veuillez patienter...`,
+      action: async () => {
+        const selectedJob = offers.find((o) => o.id === appData.jobOfferId);
+        const appToSave: JobApplication = {
+          id: `app-${Date.now()}`,
+          jobOfferId: appData.jobOfferId || (offers[0]?.id || 'spontanee'),
+          jobOfferTitle: selectedJob ? selectedJob.title : 'Candidature spontanée',
+          candidateName: appData.candidateName!,
+          candidateEmail: appData.candidateEmail || '',
+          candidatePhone: appData.candidatePhone!,
+          candidateCity: appData.candidateCity || 'Douala',
+          currentPosition: appData.currentPosition || 'Candidat externe',
+          experienceYears: Number(appData.experienceYears) || 0,
+          stage: 'nouveau',
+          notes: appData.notes || '',
+          appliedAt: new Date().toISOString(),
+        };
+        await saveJobApplication(appToSave);
+      },
+      successTitle: 'Candidat ajouté !',
+      successMessage: `${appData.candidateName} a été ajouté au vivier avec succès.`,
+      errorMessage: "Erreur lors de l'ajout.",
+    });
+    if (res.success) {
       setIsNewApplicationModalOpen(false);
-      showToast?.('Candidat ajouté au vivier avec succès !', 'success');
-    } catch {
-      showToast?.('Erreur lors de l\'ajout.', 'error');
     }
   };
 
   const handleConvertCandidateToEmployee = async (app: JobApplication) => {
     if (!onUpdateEmployees) return;
-    const nameParts = app.candidateName.split(' ');
-    const firstName = nameParts[0] || 'Prénom';
-    const lastName = nameParts.slice(1).join(' ') || 'Nom';
+    await executeOperationWithLoading({
+      loadingTitle: 'Intégration du collaborateur...',
+      loadingText: `Embauche et création du profil de ${app.candidateName}, veuillez patienter...`,
+      action: async () => {
+        const nameParts = app.candidateName.split(' ');
+        const firstName = nameParts[0] || 'Prénom';
+        const lastName = nameParts.slice(1).join(' ') || 'Nom';
 
-    const newEmployee: Employee = {
-      id: `emp-${Date.now()}`,
-      uid: generateUuidV4(),
-      name: app.candidateName,
-      firstName,
-      lastName,
-      email: app.candidateEmail || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@citrine-mobilite.com`,
-      phone: app.candidatePhone,
-      roleType: 'employé',
-      role: app.jobOfferTitle.toLowerCase().includes('chauffeur') ? 'Chauffeur VTC' : 'Agent Logistique',
-      department: 'Logistique & Exploitation',
-      status: 'en_poste',
-      employmentStatus: 'en_poste',
-      hireDate: new Date().toISOString().split('T')[0],
-      salary: 180000,
-      avatarUrl: '',
-    };
+        const newEmployee: Employee = {
+          id: `emp-${Date.now()}`,
+          uid: generateUuidV4(),
+          name: app.candidateName,
+          firstName,
+          lastName,
+          email: app.candidateEmail || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@citrine-mobilite.com`,
+          phone: app.candidatePhone,
+          roleType: 'employé',
+          role: app.jobOfferTitle.toLowerCase().includes('chauffeur') ? 'Chauffeur VTC' : 'Agent Logistique',
+          department: 'Logistique & Exploitation',
+          status: 'en_poste',
+          employmentStatus: 'en_poste',
+          hireDate: new Date().toISOString().split('T')[0],
+          salary: 180000,
+          avatarUrl: '',
+        };
 
-    onUpdateEmployees([...employees, newEmployee]);
-    await handleStageChange(app, 'embauche');
-    showToast?.(`${app.candidateName} embauché chez Citrine !`, 'success');
+        await onUpdateEmployees([...employees, newEmployee]);
+        const updated: JobApplication = {
+          ...app,
+          stage: 'embauche',
+          updatedAt: new Date().toISOString(),
+        };
+        await saveJobApplication(updated);
+        setSelectedApplication(updated);
+      },
+      successTitle: 'Collaborateur embauché !',
+      successMessage: `${app.candidateName} a été embauché(e) et ajouté(e) à l'annuaire Citrine !`,
+      errorMessage: "Erreur lors de l'embauche du candidat.",
+    });
   };
 
   return (

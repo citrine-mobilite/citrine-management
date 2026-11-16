@@ -6,7 +6,7 @@ import { NotificationLog, CompanyModuleConfig } from '../../types/businessTypes'
 import { decideLeaveRequest, calculateDaysBetween } from '../../services/leaveService';
 import { terminateMission } from '../../services/missionLifecycleService';
 import { clientMailService } from '../../services/clientMailService';
-import { showSuccessAlert, showErrorAlert, confirmActionAlert } from '../../utils/sweetAlert';
+import { confirmActionAlert, executeOperationWithLoading } from '../../utils/sweetAlert';
 import { useLeaveAdminCreate } from './useLeaveAdminCreate';
 
 interface UseLeaveManagementLogicParams {
@@ -91,22 +91,22 @@ export function useLeaveManagementLogic({
     });
     if (!isConfirmed) return;
 
-    try {
-      const res = await terminateMission(
-        req.id, leaveRequests, employees, users, currentUser?.name || 'Direction RH',
-        onUpdateLeaveRequests, onUpdateEmployees, onUpdateUsers, onAddNotification
-      );
-      if (res.success) {
-        showToast?.('Mission Terminée ✓', `La mission de ${req.employeeName} a été clôturée. Collaborateur replacé en poste.`, 'success');
-        await showSuccessAlert('Mission terminée !', `La mission de ${req.employeeName} a été clôturée. Le collaborateur et son compte sont de nouveau « En poste ».`);
-      } else {
-        showToast?.('Erreur', res.error || 'Impossible de clôturer la mission.', 'warning');
-        await showErrorAlert('Erreur', res.error || 'Impossible de clôturer la mission.');
-      }
-    } catch {
-      showToast?.('Erreur', 'Impossible de clôturer la mission pour le moment.', 'warning');
-      await showErrorAlert('Erreur', 'Impossible de clôturer la mission pour le moment.');
-    }
+    await executeOperationWithLoading({
+      loadingTitle: 'Clôture de la mission...',
+      loadingText: `Mise à jour de la mission de ${req.employeeName}, veuillez patienter...`,
+      action: async () => {
+        const res = await terminateMission(
+          req.id, leaveRequests, employees, users, currentUser?.name || 'Direction RH',
+          onUpdateLeaveRequests, onUpdateEmployees, onUpdateUsers, onAddNotification
+        );
+        if (!res.success) {
+          throw new Error(res.error || 'Impossible de clôturer la mission.');
+        }
+      },
+      successTitle: 'Mission terminée !',
+      successMessage: `La mission de ${req.employeeName} a été clôturée. Le collaborateur et son compte sont de nouveau « En poste ».`,
+      errorMessage: 'Impossible de clôturer la mission pour le moment.',
+    });
   };
 
   const openActionModal = (req: LeaveRequest, action: 'approve' | 'reject' | 'modify') => {
@@ -129,75 +129,93 @@ export function useLeaveManagementLogic({
 
   const handleConfirmDecision = async () => {
     if (!selectedRequest) return;
+    if (actionType === 'reject' && !managerComment.trim()) {
+      showToast?.('Motif requis', 'Veuillez préciser le motif de refus à communiquer au collaborateur.', 'warning');
+      return;
+    }
+
     setIsProcessing(true);
     const emp = employees.find((e) => e.id === selectedRequest.employeeId);
     const deciderName = currentUser?.name || 'Responsable RH';
 
     try {
-      if (actionType === 'approve') {
-        await decideLeaveRequest(selectedRequest.id, {
-          status: 'approved',
-          managerComment: managerComment.trim() || 'Demande validée conformément aux nécessités de service.',
-          approvedStartDate: selectedRequest.startDate,
-          approvedEndDate: selectedRequest.endDate,
-          approvedDaysCount: selectedRequest.daysCount,
-          decidedBy: deciderName,
-          decidedByUserId: currentUser?.id,
-        }, selectedRequest, emp, onAddNotification);
-        showToast?.('Demande validée', `Le congé de ${selectedRequest.employeeName} a été validé.`, 'success');
-        setIsProcessing(false);
-        await showSuccessAlert('Demande validée !', `La demande de ${selectedRequest.employeeName} a été validée avec succès.`);
-      } else if (actionType === 'reject') {
-        if (!managerComment.trim()) {
-          showToast?.('Motif requis', 'Veuillez préciser le motif de refus à communiquer au collaborateur.', 'warning');
-          await showErrorAlert('Motif obligatoire', 'Veuillez préciser le motif de refus.');
-          setIsProcessing(false);
-          return;
-        }
-        await decideLeaveRequest(selectedRequest.id, {
-          status: 'rejected',
-          managerComment: managerComment.trim(),
-          decidedBy: deciderName,
-          decidedByUserId: currentUser?.id,
-        }, selectedRequest, emp, onAddNotification);
-        showToast?.('Demande refusée', `La demande de ${selectedRequest.employeeName} a été refusée.`, 'info');
-        setIsProcessing(false);
-        await showSuccessAlert('Demande refusée', `La demande de ${selectedRequest.employeeName} a été refusée.`);
-      } else if (actionType === 'modify') {
-        const days = modifiedDaysCount > 0 ? modifiedDaysCount : calculateDaysBetween(modifiedStartDate, modifiedEndDate);
-        await decideLeaveRequest(selectedRequest.id, {
-          status: 'modified',
-          managerComment: managerComment.trim() || 'Durée et période ajustées selon impératifs de service.',
-          approvedStartDate: modifiedStartDate,
-          approvedEndDate: modifiedEndDate,
-          approvedDaysCount: days,
-          decidedBy: deciderName,
-          decidedByUserId: currentUser?.id,
-        }, selectedRequest, emp, onAddNotification);
-        showToast?.('Durée ajustée', `La durée accordée a été ajustée à ${days} jour(s).`, 'success');
-        setIsProcessing(false);
-        await showSuccessAlert('Durée ajustée !', `La durée accordée pour ${selectedRequest.employeeName} a été ajustée à ${days} jour(s).`);
-      }
+      const days =
+        actionType === 'modify'
+          ? modifiedDaysCount > 0
+            ? modifiedDaysCount
+            : calculateDaysBetween(modifiedStartDate, modifiedEndDate)
+          : selectedRequest.daysCount;
 
-      if (emp) {
-        const leaveLabel = LEAVE_TYPE_LABELS[selectedRequest.type] || selectedRequest.type;
-        clientMailService.notifyLeaveDecision({
-          employeeName: emp.name || selectedRequest.employeeName,
-          employeeEmail: emp.email || selectedRequest.employeeEmail,
-          employeeId: emp.id || selectedRequest.employeeId,
-          leaveType: leaveLabel,
-          startDate: actionType === 'modify' ? modifiedStartDate : selectedRequest.startDate,
-          endDate: actionType === 'modify' ? modifiedEndDate : selectedRequest.endDate,
-          status: actionType === 'approve' ? 'approved' : actionType === 'reject' ? 'rejected' : 'modified',
-          reason: managerComment.trim() || undefined,
-          moduleConfig,
-        }).catch((err) => console.warn('[LeaveManagement] Notice email décision congé:', err));
-      }
+      const successTitle =
+        actionType === 'approve'
+          ? 'Demande validée !'
+          : actionType === 'reject'
+          ? 'Demande refusée'
+          : 'Durée ajustée !';
 
-      closeModal();
-    } catch {
-      setIsProcessing(false);
-      showToast?.('Erreur', 'Impossible de traiter la demande.', 'warning');
+      const successMessage =
+        actionType === 'approve'
+          ? `La demande de ${selectedRequest.employeeName} a été validée avec succès.`
+          : actionType === 'reject'
+          ? `La demande de ${selectedRequest.employeeName} a été refusée.`
+          : `La durée accordée pour ${selectedRequest.employeeName} a été ajustée à ${days} jour(s).`;
+
+      const res = await executeOperationWithLoading({
+        loadingTitle: 'Traitement de la décision...',
+        loadingText: `Enregistrement de la décision pour ${selectedRequest.employeeName}, veuillez patienter...`,
+        action: async () => {
+          if (actionType === 'approve') {
+            await decideLeaveRequest(selectedRequest.id, {
+              status: 'approved',
+              managerComment: managerComment.trim() || 'Demande validée conformément aux nécessités de service.',
+              approvedStartDate: selectedRequest.startDate,
+              approvedEndDate: selectedRequest.endDate,
+              approvedDaysCount: selectedRequest.daysCount,
+              decidedBy: deciderName,
+              decidedByUserId: currentUser?.id,
+            }, selectedRequest, emp, onAddNotification);
+          } else if (actionType === 'reject') {
+            await decideLeaveRequest(selectedRequest.id, {
+              status: 'rejected',
+              managerComment: managerComment.trim(),
+              decidedBy: deciderName,
+              decidedByUserId: currentUser?.id,
+            }, selectedRequest, emp, onAddNotification);
+          } else if (actionType === 'modify') {
+            await decideLeaveRequest(selectedRequest.id, {
+              status: 'modified',
+              managerComment: managerComment.trim() || 'Durée et période ajustées selon impératifs de service.',
+              approvedStartDate: modifiedStartDate,
+              approvedEndDate: modifiedEndDate,
+              approvedDaysCount: days,
+              decidedBy: deciderName,
+              decidedByUserId: currentUser?.id,
+            }, selectedRequest, emp, onAddNotification);
+          }
+
+          if (emp) {
+            const leaveLabel = LEAVE_TYPE_LABELS[selectedRequest.type] || selectedRequest.type;
+            clientMailService.notifyLeaveDecision({
+              employeeName: emp.name || selectedRequest.employeeName,
+              employeeEmail: emp.email || selectedRequest.employeeEmail,
+              employeeId: emp.id || selectedRequest.employeeId,
+              leaveType: leaveLabel,
+              startDate: actionType === 'modify' ? modifiedStartDate : selectedRequest.startDate,
+              endDate: actionType === 'modify' ? modifiedEndDate : selectedRequest.endDate,
+              status: actionType === 'approve' ? 'approved' : actionType === 'reject' ? 'rejected' : 'modified',
+              reason: managerComment.trim() || undefined,
+              moduleConfig,
+            }).catch((err) => console.warn('[LeaveManagement] Notice email décision congé:', err));
+          }
+        },
+        successTitle,
+        successMessage,
+        errorMessage: 'Impossible de traiter la demande.',
+      });
+
+      if (res.success) {
+        closeModal();
+      }
     } finally {
       setIsProcessing(false);
     }

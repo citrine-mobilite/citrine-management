@@ -4,6 +4,7 @@ import { realtimeSyncService } from '../../services/realtimeSyncService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { COMPANY_HQ_LOCATION } from '../../utils/geolocation';
 import { isLate } from '../../utils/dateUtils';
+import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 export async function executeKioskClockAction(params: {
   emp: Employee;
@@ -155,36 +156,41 @@ export async function executeKioskClockAction(params: {
     };
   }
 
-  const res = await savePresenceAtomic(targetPresence, targetIncident, targetNotification, action);
-  if (!res.success) {
-    console.error('Kiosk atomic save failed:', res.error);
-    setToastMessage(`Erreur denregistrement atomique: ${res.error}`);
-    setTimeout(() => setToastMessage(null), 4000);
-    return;
-  }
+  await executeOperationWithLoading({
+    loadingTitle: 'Validation sur borne...',
+    loadingText: `Enregistrement du pointage de ${emp.name}, veuillez patienter...`,
+    action: async () => {
+      const res = await savePresenceAtomic(targetPresence, targetIncident, targetNotification, action);
+      if (!res.success) {
+        throw new Error(res.error || 'Erreur lors de la transaction atomique sur borne.');
+      }
 
-  onUpdatePresences(updatedPresences);
-  if (targetIncident && onAddAttendanceIncident) onAddAttendanceIncident(targetIncident);
-  if (targetNotification && onAddNotification) {
-    onAddNotification(targetNotification);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-    }
-  }
+      onUpdatePresences(updatedPresences);
+      if (targetIncident && onAddAttendanceIncident) onAddAttendanceIncident(targetIncident);
+      if (targetNotification && onAddNotification) {
+        onAddNotification(targetNotification);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+        }
+      }
 
-  realtimeSyncService.broadcastPresencePunch({
-    presence: targetPresence,
-    incident: targetIncident,
-    notification: targetNotification,
+      realtimeSyncService.broadcastPresencePunch({
+        presence: targetPresence,
+        incident: targetIncident,
+        notification: targetNotification,
+      });
+
+      pushNotificationBridgeService.sendPush({
+        title: 'Pointage Enregistré ⏱️',
+        message: `${emp.name} a pointé : ${actionLabels[action] || action} à ${timeStr}.`,
+        senderName: emp.name,
+        type: 'attendance',
+        link: 'presences',
+      });
+      setToastMessage(null);
+    },
+    successTitle: 'Pointage sur borne validé !',
+    successMessage: `${emp.name} — ${actionLabels[action] || action} enregistré à ${timeStr}.`,
+    errorMessage: 'Impossible de valider le pointage sur la borne.',
   });
-
-  pushNotificationBridgeService.sendPush({
-    title: 'Pointage Enregistré ⏱️',
-    message: `${emp.name} a pointé : ${actionLabels[action] || action} à ${timeStr}.`,
-    senderName: emp.name,
-    type: 'attendance',
-    link: 'presences',
-  });
-  setToastMessage(`Pointage de ${emp.name} validé (${action}) à ${timeStr}`);
-  setTimeout(() => setToastMessage(null), 3000);
 }

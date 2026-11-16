@@ -10,11 +10,11 @@ import { InventoryReturnModal } from './inventory/InventoryReturnModal';
 import { InventoryDetailDrawer } from './inventory/InventoryDetailDrawer';
 import { InventoryDonateModal } from './inventory/InventoryDonateModal';
 import { InventoryBanner, InventoryFiltersBar } from './inventory/InventoryHeaderAndFilters';
-import { showSuccessAlert, executeOperationWithLoading, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
+import { executeOperationWithLoading, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface InventoryPanelProps {
   inventoryItems: InventoryItem[];
-  onUpdateInventoryItems: (items: InventoryItem[]) => void;
+  onUpdateInventoryItems: (items: InventoryItem[]) => Promise<void> | void;
   currentRole?: Role;
   currentUser?: AppUser | null;
   employees?: Employee[];
@@ -52,9 +52,9 @@ export default function InventoryPanel({
       loadingText: 'Enregistrement de l\'équipement en base de données...',
       action: async () => {
         if (exists) {
-          onUpdateInventoryItems(effectiveItems.map((i) => (i.id === item.id ? item : i)));
+          await onUpdateInventoryItems(effectiveItems.map((i) => (i.id === item.id ? item : i)));
         } else {
-          onUpdateInventoryItems([item, ...effectiveItems]);
+          await onUpdateInventoryItems([item, ...effectiveItems]);
         }
       },
       successTitle: exists ? 'Article modifié !' : 'Article enregistré !',
@@ -66,20 +66,27 @@ export default function InventoryPanel({
     const target = effectiveItems.find((i) => i.id === id);
     await executeDeleteWithSweetAlert({
       title: 'Supprimer ce matériel ?',
-      text: 'Voulez-vous vraiment retirer cet équipement de l\'inventaire ?',
+      text: "Voulez-vous vraiment retirer cet équipement de l'inventaire ?",
       itemName: target?.designation,
       action: async () => {
-        onUpdateInventoryItems(effectiveItems.filter((i) => i.id !== id));
+        await onUpdateInventoryItems(effectiveItems.filter((i) => i.id !== id));
       },
       successTitle: 'Matériel supprimé !',
-      successMessage: target?.designation ? `"${target.designation}" a été supprimé de l'inventaire.` : 'L\'article a été supprimé.',
+      successMessage: target?.designation ? `"${target.designation}" a été supprimé de l'inventaire.` : "L'article a été supprimé.",
     });
   };
 
   const handleItemUpdated = async (updated: InventoryItem) => {
-    onUpdateInventoryItems(effectiveItems.map((i) => (i.id === updated.id ? updated : i)));
-    if (historyItem?.id === updated.id) setHistoryItem(updated);
-    await showSuccessAlert('Inventaire synchronisé', `L'équipement "${updated.designation}" a été mis à jour.`);
+    await executeOperationWithLoading({
+      loadingTitle: "Mise à jour de l'inventaire...",
+      loadingText: `Enregistrement de "${updated.designation}", veuillez patienter...`,
+      action: async () => {
+        await onUpdateInventoryItems(effectiveItems.map((i) => (i.id === updated.id ? updated : i)));
+        if (historyItem?.id === updated.id) setHistoryItem(updated);
+      },
+      successTitle: 'Inventaire synchronisé !',
+      successMessage: `L'équipement "${updated.designation}" a été mis à jour.`,
+    });
   };
 
   const uniqueLocations = Array.from(

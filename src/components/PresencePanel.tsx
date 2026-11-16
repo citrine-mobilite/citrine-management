@@ -27,7 +27,7 @@ interface PresencePanelProps {
   onSelectTab?: (tab: any) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
   moduleConfig?: CompanyModuleConfig;
-  onUpdateModuleConfig?: (config: CompanyModuleConfig) => void;
+  onUpdateModuleConfig?: (config: CompanyModuleConfig) => Promise<void> | void;
   currentUser?: AppUser;
   attendanceIncidents?: AttendanceIncident[];
   onUpdateAttendanceIncidents?: (incidents: AttendanceIncident[]) => void;

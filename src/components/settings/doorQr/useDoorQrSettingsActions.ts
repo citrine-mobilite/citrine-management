@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { CompanyModuleConfig } from '../../../types';
 import { generateAndDownloadQrPoster } from '../../../utils/qrPosterGenerator';
-import { confirmActionAlert, showSuccessAlert } from '../../../utils/sweetAlert';
+import { confirmActionAlert, executeOperationWithLoading } from '../../../utils/sweetAlert';
 
 interface UseDoorQrSettingsActionsParams {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }
 
@@ -39,7 +39,7 @@ export function useDoorQrSettingsActions({
     setTokenInput(currentToken);
   }, [currentToken]);
 
-  const handleGenerateNewDoorQr = () => {
+  const handleGenerateNewDoorQr = async () => {
     setIsGenerating(true);
     const randomHex = Math.random().toString(36).substring(2, 7).toUpperCase();
     const timestampHex = Date.now().toString(36).toUpperCase();
@@ -52,26 +52,34 @@ export function useDoorQrSettingsActions({
         ? [...existingRevoked, currentToken]
         : existingRevoked;
 
-    onUpdateModuleConfig({
-      ...(moduleConfig || {}),
-      doorQrCodeToken: newToken,
-      qrCodeSecret: newToken,
-      doorQrCodeRevoked: false,
-      revokedDoorTokens: updatedRevoked,
-      doorQrCodeGeneratedAt: new Date().toISOString(),
-      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
-      doorQrRequireGps: requireGps,
-    } as any);
-
-    setTokenInput(newToken);
-    setIsGenerating(false);
-    showToast?.(
-      "Nouveau QR Code d’Entrée généré ! L'ancien QR code est révoqué et ne permettra plus aucun pointage.",
-      'success'
-    );
+    try {
+      const res = await executeOperationWithLoading({
+        loadingTitle: 'Génération du QR Code...',
+        loadingText: "Veuillez patienter pendant la création du nouveau QR Code d'entrée...",
+        action: async () => {
+          await onUpdateModuleConfig({
+            ...(moduleConfig || {}),
+            doorQrCodeToken: newToken,
+            qrCodeSecret: newToken,
+            doorQrCodeRevoked: false,
+            revokedDoorTokens: updatedRevoked,
+            doorQrCodeGeneratedAt: new Date().toISOString(),
+            doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
+            doorQrRequireGps: requireGps,
+          } as any);
+        },
+        successTitle: 'Nouveau QR Code généré !',
+        successMessage: "L'ancien QR code est révoqué et ne permettra plus aucun pointage.",
+      });
+      if (res.success) {
+        setTokenInput(newToken);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const handleApplyToken = () => {
+  const handleApplyToken = async () => {
     const newToken = tokenInput.trim() || 'CITRINE_DOOR_HQ_MAIN_2026';
     const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens)
       ? moduleConfig.revokedDoorTokens
@@ -81,17 +89,24 @@ export function useDoorQrSettingsActions({
         ? [...existingRevoked, currentToken]
         : existingRevoked;
 
-    onUpdateModuleConfig({
-      ...(moduleConfig || {}),
-      doorQrCodeToken: newToken,
-      qrCodeSecret: newToken,
-      doorQrCodeRevoked: false,
-      revokedDoorTokens: updatedRevoked,
-      doorQrCodeGeneratedAt: new Date().toISOString(),
-      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
-      doorQrRequireGps: requireGps,
-    } as any);
-    showToast?.('Jeton du QR Code mis à jour avec succès !', 'success');
+    await executeOperationWithLoading({
+      loadingTitle: 'Mise à jour du jeton...',
+      loadingText: 'Veuillez patienter pendant la sauvegarde du jeton QR...',
+      action: async () => {
+        await onUpdateModuleConfig({
+          ...(moduleConfig || {}),
+          doorQrCodeToken: newToken,
+          qrCodeSecret: newToken,
+          doorQrCodeRevoked: false,
+          revokedDoorTokens: updatedRevoked,
+          doorQrCodeGeneratedAt: new Date().toISOString(),
+          doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
+          doorQrRequireGps: requireGps,
+        } as any);
+      },
+      successTitle: 'Jeton mis à jour !',
+      successMessage: 'Jeton du QR Code mis à jour avec succès.',
+    });
   };
 
   const handleInvalidateToken = async () => {
@@ -113,32 +128,44 @@ export function useDoorQrSettingsActions({
         : existingRevoked;
     const revokedToken = `CITRINE_REVOKED_${Math.random().toString(36).substring(2, 8).toUpperCase()}_${Date.now()}`;
 
-    onUpdateModuleConfig({
-      ...(moduleConfig || {}),
-      doorQrCodeToken: revokedToken,
-      qrCodeSecret: revokedToken,
-      doorQrCodeRevoked: true,
-      revokedDoorTokens: [...updatedRevoked, revokedToken],
-      doorQrCodeGeneratedAt: new Date().toISOString(),
-      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
-      doorQrRequireGps: requireGps,
-    } as any);
-    setTokenInput(revokedToken);
-    showToast?.('QR Code invalidé et révoqué.', 'success');
-    await showSuccessAlert(
-      'QR Code invalidé !',
-      "Le QR Code d'entrée a été révoqué avec succès. Aucun ancien badge ne sera accepté."
-    );
+    const res = await executeOperationWithLoading({
+      loadingTitle: 'Révocation du QR Code...',
+      loadingText: 'Veuillez patienter pendant la révocation du jeton...',
+      action: async () => {
+        await onUpdateModuleConfig({
+          ...(moduleConfig || {}),
+          doorQrCodeToken: revokedToken,
+          qrCodeSecret: revokedToken,
+          doorQrCodeRevoked: true,
+          revokedDoorTokens: [...updatedRevoked, revokedToken],
+          doorQrCodeGeneratedAt: new Date().toISOString(),
+          doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
+          doorQrRequireGps: requireGps,
+        } as any);
+      },
+      successTitle: 'QR Code invalidé !',
+      successMessage: "Le QR Code d'entrée a été révoqué avec succès. Aucun ancien badge ne sera accepté.",
+    });
+    if (res.success) {
+      setTokenInput(revokedToken);
+    }
   };
 
-  const handleSaveParams = (e: React.FormEvent) => {
+  const handleSaveParams = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateModuleConfig({
-      ...(moduleConfig || {}),
-      doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
-      doorQrRequireGps: requireGps,
-    } as any);
-    showToast?.('Paramètres de la borne d’entrée enregistrés.', 'success');
+    await executeOperationWithLoading({
+      loadingTitle: 'Enregistrement de la borne...',
+      loadingText: "Veuillez patienter pendant la sauvegarde des paramètres de la borne d'entrée...",
+      action: async () => {
+        await onUpdateModuleConfig({
+          ...(moduleConfig || {}),
+          doorQrSiteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
+          doorQrRequireGps: requireGps,
+        } as any);
+      },
+      successTitle: 'Paramètres enregistrés !',
+      successMessage: "Paramètres de la borne d'entrée enregistrés avec succès.",
+    });
   };
 
   const handleCopyToken = () => {

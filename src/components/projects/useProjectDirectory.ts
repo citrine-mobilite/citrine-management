@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { StrategicProject } from '../../types';
 import { computeProjectProgress, deleteStrategicProject, saveStrategicProject } from '../../services/projectService';
 import { logSystemAudit } from '../../services/adminAuditService';
+import { executeDeleteWithSweetAlert, executeOperationWithLoading } from '../../utils/sweetAlert';
 
 export type ProjectFilterStatus = 'active' | 'on_hold' | 'completed' | 'all';
 export type ProjectViewMode = 'list' | 'grid';
@@ -9,7 +10,7 @@ export type ProjectSortBy = 'recent' | 'progress' | 'name';
 
 interface UseProjectDirectoryParams {
   projects: StrategicProject[];
-  onUpdateProjects?: (updated: StrategicProject[]) => void;
+  onUpdateProjects?: (updated: StrategicProject[]) => Promise<void> | void;
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
   defaultFilter?: ProjectFilterStatus;
   compactOnHome?: boolean;
@@ -18,7 +19,6 @@ interface UseProjectDirectoryParams {
 export function useProjectDirectory({
   projects,
   onUpdateProjects,
-  showToast,
   defaultFilter = 'active',
   compactOnHome = false,
 }: UseProjectDirectoryParams) {
@@ -83,38 +83,53 @@ export function useProjectDirectory({
 
   const handleSaveProject = async (project: StrategicProject) => {
     const existsBefore = projects.some((p) => p.id === project.id);
-    const saved = await saveStrategicProject(project);
-    if (onUpdateProjects) {
-      const exists = projects.some((p) => p.id === saved.id);
-      const nextList = exists
-        ? projects.map((p) => (p.id === saved.id ? saved : p))
-        : [saved, ...projects];
-      onUpdateProjects(nextList);
-    }
-    logSystemAudit({
-      targetName: saved.name,
-      operationType: 'tache_projet',
-      operationLabel: existsBefore ? 'Modification Projet Stratégique' : 'Création Projet Stratégique',
-      details: `Projet "${saved.name}" ${existsBefore ? 'mis à jour' : 'créé'} (Statut: ${saved.status}, Jalons: ${(saved.milestones || []).length}).`,
-      level: 'success',
+    await executeOperationWithLoading({
+      loadingTitle: existsBefore ? 'Mise à jour du projet...' : 'Création du projet...',
+      loadingText: `Enregistrement de "${project.name}", veuillez patienter...`,
+      action: async () => {
+        const saved = await saveStrategicProject(project);
+        if (onUpdateProjects) {
+          const exists = projects.some((p) => p.id === saved.id);
+          const nextList = exists
+            ? projects.map((p) => (p.id === saved.id ? saved : p))
+            : [saved, ...projects];
+          await onUpdateProjects(nextList);
+        }
+        logSystemAudit({
+          targetName: saved.name,
+          operationType: 'tache_projet',
+          operationLabel: existsBefore ? 'Modification Projet Stratégique' : 'Création Projet Stratégique',
+          details: `Projet "${saved.name}" ${existsBefore ? 'mis à jour' : 'créé'} (Statut: ${saved.status}, Jalons: ${(saved.milestones || []).length}).`,
+          level: 'success',
+        });
+      },
+      successTitle: existsBefore ? 'Projet mis à jour !' : 'Projet créé !',
+      successMessage: `Le projet « ${project.name} » a été ${existsBefore ? 'mis à jour' : 'créé'} avec succès.`,
     });
-    showToast?.(`Projet « ${saved.name} » enregistré.`, 'success');
   };
 
   const handleDeleteProject = async (projectId: string) => {
     const removed = projects.find((p) => p.id === projectId);
-    await deleteStrategicProject(projectId);
-    if (onUpdateProjects) {
-      onUpdateProjects(projects.filter((p) => p.id !== projectId));
-    }
-    logSystemAudit({
-      targetName: removed?.name || projectId,
-      operationType: 'tache_projet',
-      operationLabel: 'Suppression Projet Stratégique',
-      details: `Projet supprimé : "${removed?.name || projectId}".`,
-      level: 'warning',
+    await executeDeleteWithSweetAlert({
+      title: 'Supprimer ce projet ?',
+      text: 'Voulez-vous vraiment supprimer ce projet stratégique ?',
+      itemName: removed?.name,
+      action: async () => {
+        await deleteStrategicProject(projectId);
+        if (onUpdateProjects) {
+          await onUpdateProjects(projects.filter((p) => p.id !== projectId));
+        }
+        logSystemAudit({
+          targetName: removed?.name || projectId,
+          operationType: 'tache_projet',
+          operationLabel: 'Suppression Projet Stratégique',
+          details: `Projet supprimé : "${removed?.name || projectId}".`,
+          level: 'warning',
+        });
+      },
+      successTitle: 'Projet supprimé !',
+      successMessage: removed?.name ? `Le projet « ${removed.name} » a été supprimé.` : 'Le projet a été supprimé.',
     });
-    showToast?.('Projet supprimé.', 'info');
   };
 
   const openCreateForm = () => {

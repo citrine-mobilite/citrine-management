@@ -29,7 +29,6 @@ import {
 } from '../../../services/taskSheetReportService';
 import { clientMailService } from '../../../services/clientMailService';
 import { logSystemAudit } from '../../../services/adminAuditService';
-import { showErrorAlert, showSuccessAlert } from '../../../utils/sweetAlert';
 
 interface CustomUnforeseenEvent {
   id: string;
@@ -87,6 +86,7 @@ export function useTaskSheetModalLogic({
   const [newNoteUrgency, setNewNoteUrgency] = useState<TaskSheetNoteUrgency>('haute');
   const [newNoteTarget, setNewNoteTarget] = useState('Manager Direct');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailFeedback, setEmailFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -332,12 +332,12 @@ export function useTaskSheetModalLogic({
           details: `${eventTitle} transmise par e-mail avec pièce jointe ${excelFilename}.`,
           level: 'success',
         });
-        await showSuccessAlert('E-mail envoyé', `${eventTitle} transmise avec succès.`);
+        setEmailFeedback({ type: 'success', message: `${eventTitle} transmise par e-mail avec succès.` });
       } else {
-        await showErrorAlert("Échec d'envoi", result.error || "Impossible d'envoyer l'e-mail.");
+        setEmailFeedback({ type: 'error', message: result.error || "Impossible d'envoyer l'e-mail." });
       }
     } catch (err: any) {
-      await showErrorAlert("Erreur d'envoi", err?.message || String(err));
+      setEmailFeedback({ type: 'error', message: err?.message || String(err) });
     } finally {
       setIsSendingEmail(false);
     }
@@ -351,6 +351,6 @@ export function useTaskSheetModalLogic({
     newNoteCategory, setNewNoteCategory, newNoteUrgency, setNewNoteUrgency, newNoteTarget, setNewNoteTarget,
     dailyData, monthlyData, yearlyData, handleAddTaskSheetNote, handleRemoveNote,
     handleAddCustomUnforeseen, handleRemoveCustomUnforeseen, handleExportExcel, handleExportPdf,
-    handleSendEmail, isSendingEmail,
+    handleSendEmail, isSendingEmail, emailFeedback, setEmailFeedback,
   };
 }
