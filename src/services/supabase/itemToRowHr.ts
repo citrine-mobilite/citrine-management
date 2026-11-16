@@ -137,11 +137,13 @@ export function mapHrItemToRow(table: string, item: any, base: any, docId: strin
     case 'task_projects':
       return {
         ...base,
+        doc_id: docId,
         name: item.name || 'Projet',
         description: item.description || null,
         color: item.color || null,
         icon: item.icon || null,
         member_ids: item.memberIds || [],
+        raw_data: item,
       };
     case 'reminders': {
       const empIdNumeric =

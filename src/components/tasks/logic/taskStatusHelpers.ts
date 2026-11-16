@@ -5,6 +5,8 @@ import { executeOperationWithLoading } from '../../../utils/sweetAlert';
 import { notifyExceptionalTaskCompletion } from '../../../services/exceptionalTaskCompletionService';
 import { logSystemAudit } from '../../../services/adminAuditService';
 
+import { getUnfinishedBlockers } from './asanaTreeEngine';
+
 export async function changeTaskStatusAction(params: {
   taskId: string;
   newStatus: TaskStatus;
@@ -31,14 +33,28 @@ export async function changeTaskStatusAction(params: {
   const targetTask = tasks.find((t) => t.id === taskId);
   if (!targetTask) return;
 
+  if (newStatus === 'completed') {
+    const blockers = getUnfinishedBlockers(targetTask.dependsOnIds, tasks);
+    if (blockers.length > 0) {
+      showToast?.(
+        `Action bloquée : terminez d'abord « ${blockers[0].title} ».`,
+        'error'
+      );
+      return;
+    }
+  }
+
   const updatedSubtasks = (targetTask.subtasks || []).map((s) =>
-    newStatus === 'completed' ? { ...s, completed: true, status: 'completed' as TaskStatus } : s
+    newStatus === 'completed'
+      ? { ...s, completed: true, status: 'completed' as TaskStatus, completedAt: s.completedAt || new Date().toISOString() }
+      : s
   );
 
   const updatedTask: Task = {
     ...targetTask,
     status: newStatus,
     subtasks: updatedSubtasks,
+    completedAt: newStatus === 'completed' ? targetTask.completedAt || new Date().toISOString() : undefined,
     lastUpdatedTime: new Date().toISOString(),
   };
   await taskService.saveTask(updatedTask);

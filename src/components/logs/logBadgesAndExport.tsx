@@ -12,7 +12,7 @@ export function getOperationBadge(type: AdminAccountOperation['operationType']) 
       return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-md text-[10px] font-bold">Conseil Discipline</span>;
     case 'feuille_avancement_taches':
     case 'feuille_de_temps':
-      return <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px] font-bold">TaskSheet</span>;
+      return <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px] font-bold">Feuille de Tâches</span>;
     case 'presence_pointage':
       return <span className="bg-cyan-100 text-cyan-800 border border-cyan-200 px-2 py-0.5 rounded-md text-[10px] font-bold">Pointage &amp; Présence</span>;
     case 'tache_projet':

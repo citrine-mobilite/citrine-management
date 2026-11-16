@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Save, Bell, FileText } from 'lucide-react';
 import { Reminder, Employee } from '../../types';
 import { DEADLINE_TEMPLATES } from '../../services/reminderService';
+import { DEADLINE_TEMPLATE_GROUPS } from '../../services/reminders/reminderConstants';
 import { useReminderModalLogic } from './modal/useReminderModalLogic';
 import { ReminderDeadlineAndScheduleFields } from './modal/ReminderDeadlineAndScheduleFields';
 import { ReminderRecipientsSection } from './modal/ReminderRecipientsSection';
@@ -95,21 +96,41 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
         </div>
 
         {logic.kind === 'deadline' && !logic.isEditing && (
-          <div className="space-y-1.5">
-            <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wide">
-              Modèles rapides
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {DEADLINE_TEMPLATES.map((tpl) => (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  onClick={() => logic.handleApplyTemplate(tpl.id)}
-                  className="px-2.5 py-1.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-emerald-50 hover:border-emerald-200 hover:text-[#2A7B76] text-stone-700 text-[11px] font-semibold transition cursor-pointer"
-                >
-                  + {tpl.label}
-                </button>
-              ))}
+          <div className="space-y-2.5 p-3 rounded-2xl bg-stone-50/90 border border-stone-200/80">
+            <div className="text-[11px] font-bold text-stone-600 uppercase tracking-wide">
+              Modèles rapides d&apos;entreprise
+            </div>
+            <div className="space-y-2">
+              {DEADLINE_TEMPLATE_GROUPS.map((grp) => {
+                const items = DEADLINE_TEMPLATES.filter((t) => t.group === grp.id);
+                if (items.length === 0) return null;
+                return (
+                  <div key={grp.id} className="space-y-1">
+                    <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                      {grp.label}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {items.map((tpl) => {
+                        const isSelected = logic.selectedTemplateId === tpl.id;
+                        return (
+                          <button
+                            key={tpl.id}
+                            type="button"
+                            onClick={() => logic.handleApplyTemplate(tpl.id)}
+                            className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#2A7B76] border-[#2A7B76] text-white shadow-2xs'
+                                : 'border-stone-200 bg-white hover:bg-emerald-50 hover:border-emerald-200 hover:text-[#2A7B76] text-stone-700'
+                            }`}
+                          >
+                            + {tpl.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

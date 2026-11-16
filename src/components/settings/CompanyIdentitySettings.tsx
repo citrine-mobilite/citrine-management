@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, Save, CheckCircle2 } from 'lucide-react';
 import { CompanyModuleConfig, DEFAULT_MODULE_CONFIG } from '../../types';
-import { CITRINE_DEFAULT_LOGO_BASE64 } from '../../assets/citrineLogoBase64';
 import { CompanyLogoCard } from './CompanyLogoCard';
 import { CompanyLegalInfoFields } from './CompanyLegalInfoFields';
 import { CompanyAddressContactFields } from './CompanyAddressContactFields';
@@ -53,12 +52,12 @@ export const CompanyIdentitySettings: React.FC<CompanyIdentitySettingsProps> = (
   const handleResetToDefaultLogo = () => {
     const updated = {
       ...formData,
-      companyLogoBase64: CITRINE_DEFAULT_LOGO_BASE64,
+      companyLogoBase64: '/citrine-logo.png',
     };
     setFormData(updated);
     onUpdateModuleConfig(updated);
     setIsSaved(true);
-    if (showToast) showToast('Logo officiel Citrine restauré en base de données.', 'success');
+    if (showToast) showToast('Logo officiel Citrine (/citrine-logo.png) restauré.', 'success');
   };
 
   const handleSubmit = (e: React.FormEvent) => {

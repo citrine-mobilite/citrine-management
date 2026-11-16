@@ -120,6 +120,9 @@ export const AppOperationsTabRoutes: React.FC<AppTabRouterProps> = ({
           currentUser={currentUser!}
           onUpdateUsers={onUpdateUsers}
           employees={employees}
+          presences={presences}
+          tasks={tasks}
+          salaryPayments={salaryPayments}
           onUpdateEmployees={onUpdateEmployees}
           showToast={showToast}
         />
@@ -150,6 +153,10 @@ export const AppOperationsTabRoutes: React.FC<AppTabRouterProps> = ({
       {activeTab === 'profile' && currentUser && (
         <ProfilePage
           currentUser={currentUser}
+          employees={employees}
+          presences={presences}
+          tasks={tasks}
+          salaryPayments={salaryPayments}
           onBackToDashboard={() => setActiveTab(currentUser.role === 'employé' ? 'employee_portal' : 'dashboard')}
           onLogout={onLogout} onAddNotification={onAddNotification} showToast={showToast}
           onUpdateUser={onUpdateUser}

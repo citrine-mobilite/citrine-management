@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ArrowLeft,
+  BarChart3,
   Bell,
   Briefcase,
   CheckSquare,
@@ -11,6 +12,7 @@ import {
   Printer,
 } from 'lucide-react';
 import { Employee, Presence, SalaryPayment, Task } from '../../types';
+import { isTaskAssignedToEmployee } from '../../utils/rendementTaskHelpers';
 import { CollaboratorDetailTab } from './collaboratorConstants';
 import { CollaboratorDetailProfileCard } from './CollaboratorDetailProfileCard';
 import { CollaboratorDetailTabs } from './CollaboratorDetailTabs';
@@ -50,15 +52,17 @@ export const CollaboratorDetailView: React.FC<CollaboratorDetailViewProps> = ({
 }) => {
   const empPresences = presences.filter((p) => p.employeeId === emp.id);
   const empPayslips = salaryPayments.filter((p) => p.employeeId === emp.id);
-  const empTasks = tasks.filter((t) => t.assignedTo === emp.name && t.status !== 'completed');
+  const allEmpTasks = tasks.filter((t) => isTaskAssignedToEmployee(t, emp));
+  const empTasks = allEmpTasks.filter((t) => t.status !== 'completed');
 
   const tabs: { id: CollaboratorDetailTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'payslips', label: `${empPayslips.length} Fiches de Paie (Mois par mois)`, icon: <FileText className="h-3.5 w-3.5" /> },
-    { id: 'presences', label: `Historique des Présences (${empPresences.length})`, icon: <Clock className="h-3.5 w-3.5" /> },
-    { id: 'map', label: 'Carte des Badges (GPS Leaflet)', icon: <MapPin className="h-3.5 w-3.5" /> },
-    { id: 'alerts', label: 'Alertes Actives (0)', icon: <Bell className="h-3.5 w-3.5" /> },
-    { id: 'tasks', label: `Tâches Non Terminées (${empTasks.length})`, icon: <CheckSquare className="h-3.5 w-3.5" /> },
-    { id: 'missions', label: `Missions Professionnelles (${(emp.missionHistory || []).length})`, icon: <Briefcase className="h-3.5 w-3.5" /> },
+    { id: 'statistics', label: `Statistiques & Rendement (${allEmpTasks.length})`, icon: <BarChart3 className="h-3.5 w-3.5" /> },
+    { id: 'payslips', label: `${empPayslips.length} Fiches de Paie`, icon: <FileText className="h-3.5 w-3.5" /> },
+    { id: 'presences', label: `Présences (${empPresences.length})`, icon: <Clock className="h-3.5 w-3.5" /> },
+    { id: 'map', label: 'Carte GPS', icon: <MapPin className="h-3.5 w-3.5" /> },
+    { id: 'tasks', label: `Tâches Actives (${empTasks.length})`, icon: <CheckSquare className="h-3.5 w-3.5" /> },
+    { id: 'missions', label: `Missions (${(emp.missionHistory || []).length})`, icon: <Briefcase className="h-3.5 w-3.5" /> },
+    { id: 'alerts', label: 'Alertes (0)', icon: <Bell className="h-3.5 w-3.5" /> },
   ];
 
   return (
@@ -128,6 +132,7 @@ export const CollaboratorDetailView: React.FC<CollaboratorDetailViewProps> = ({
           empPayslips={empPayslips}
           empPresences={empPresences}
           empTasks={empTasks}
+          allTasks={tasks}
           rhReportMonth={rhReportMonth}
           setRhReportMonth={setRhReportMonth}
           isGeneratingRhReport={isGeneratingRhReport}

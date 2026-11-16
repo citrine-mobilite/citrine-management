@@ -45,11 +45,11 @@ export const EmployeeRendementHistogram: React.FC<EmployeeRendementHistogramProp
 
   const teamAvgRate = useMemo(() => {
     if (processedList.length === 0) return 0;
-    const sum = processedList.reduce((acc, m) => acc + m.taskRendementRate, 0);
+    const sum = processedList.reduce((acc, m) => acc + (Number.isFinite(m.taskRendementRate) ? m.taskRendementRate : 0), 0);
     return Math.round(sum / processedList.length);
   }, [processedList]);
 
-  const maxHours = Math.max(...processedList.map((m) => m.estimatedHoursTotal), 35);
+  const maxHours = Math.max(...processedList.map((m) => (Number.isFinite(m.estimatedHoursTotal) ? m.estimatedHoursTotal : 0)), 35);
 
   const getBarColor = (rate: number) => {
     if (rate >= 80) return 'from-emerald-500 to-teal-600 border-emerald-400';
@@ -68,18 +68,13 @@ export const EmployeeRendementHistogram: React.FC<EmployeeRendementHistogramProp
   return (
     <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-stone-100">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-emerald-50 text-[#2A7B76] rounded-xl border border-emerald-100">
-              <BarChart3 className="h-5 w-5" />
-            </div>
-            <h3 className="font-serif font-bold text-base text-stone-900">
-              Histogramme Comparatif du Rendement & Charges par Collaborateur
-            </h3>
+        <div className="flex items-center gap-2">
+          <div className="p-2 bg-emerald-50 text-[#2A7B76] rounded-xl border border-emerald-100">
+            <BarChart3 className="h-5 w-5" />
           </div>
-          <p className="text-xs text-stone-500 pl-9">
-            Diagramme dynamique en bâtons : Progression réelle des tâches, sous-tâches, jalons et heures planifiées.
-          </p>
+          <h3 className="font-serif font-bold text-base text-stone-900">
+            Histogramme Comparatif du Rendement &amp; Charges par Collaborateur
+          </h3>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs">

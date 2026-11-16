@@ -123,7 +123,7 @@ export function addTimesheetNote(data: {
     authorRole: 'collaborateur',
     targetName: newNote.employeeName,
     targetEmployeeId: newNote.employeeId,
-    operationType: 'feuille_de_temps',
+    operationType: 'feuille_avancement_taches',
     operationLabel: 'Point à signaler consigné',
     details: `Point de vigilance (${newNote.category.toUpperCase()} - ${newNote.urgency}) : "${newNote.content}" pour le ${newNote.date}`,
     level: newNote.urgency === 'critique' ? 'error' : newNote.urgency === 'haute' ? 'warning' : 'info',

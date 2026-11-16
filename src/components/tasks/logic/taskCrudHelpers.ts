@@ -1,5 +1,7 @@
 import { Task, NotificationLog, TaskProject, Subtask } from '../../../types';
 import { taskService } from '../../../services/taskService';
+import { COLLECTIONS, saveDocument } from '../../../services/dataService';
+import { DEFAULT_PROJECT_RULES, DEFAULT_PROJECT_SECTIONS } from '../taskConstants';
 import { pushNotificationBridgeService } from '../../../services/pushNotificationBridgeService';
 import {
   showErrorAlert,
@@ -77,22 +79,35 @@ export async function createNewProjectAction(params: {
   setActiveProjectId: (id: string) => void;
 }) {
   const { newProject, projects, setProjects, setActiveProjectId } = params;
+  const enrichedProject: TaskProject = {
+    ...newProject,
+    docId: newProject.docId || newProject.id,
+    sections:
+      newProject.sections && newProject.sections.length > 0
+        ? newProject.sections
+        : DEFAULT_PROJECT_SECTIONS,
+    rules:
+      newProject.rules && newProject.rules.length > 0
+        ? newProject.rules
+        : DEFAULT_PROJECT_RULES,
+  };
   await executeOperationWithLoading({
     loadingTitle: 'Création du projet...',
-    loadingText: 'Enregistrement du projet en base...',
+    loadingText: 'Enregistrement du projet dans Supabase...',
     action: async () => {
-      setProjects([...projects, newProject]);
-      setActiveProjectId(newProject.id);
+      await saveDocument(COLLECTIONS.TASK_PROJECTS, enrichedProject);
+      setProjects([...projects.filter((p) => p.id !== enrichedProject.id), enrichedProject]);
+      setActiveProjectId(enrichedProject.id);
       logSystemAudit({
-        targetName: newProject.name,
+        targetName: enrichedProject.name,
         operationType: 'tache_projet',
         operationLabel: 'Création Dossier Projet',
-        details: `Nouveau dossier projet créé : "${newProject.name}"`,
+        details: `Nouveau dossier projet créé : "${enrichedProject.name}"`,
         level: 'success',
       });
     },
     successTitle: 'Projet créé !',
-    successMessage: `Le projet "${newProject.name}" a été créé avec succès.`,
+    successMessage: `Le projet "${enrichedProject.name}" a été créé avec succès.`,
   });
 }
 

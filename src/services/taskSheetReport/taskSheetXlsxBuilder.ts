@@ -4,10 +4,12 @@ import { preparePlanDuJourData } from './preparePlanDuJourData';
 import {
   CITRINE_XLSX_COLORS,
   applyCellBox,
+  applyOfficialExcelHeaderFooter,
   applyPriorityStyle,
   applyStatusBadgeStyle,
   styleBannerRow,
   styleColumnHeadersRow,
+  styleOfficialFooterRow,
   styleSectionHeaderRow,
 } from './taskSheetXlsxStyles';
 
@@ -38,8 +40,9 @@ export async function buildTaskSheetXlsxWorkbook(data: TaskSheetReportData): Pro
   ws1.columns = [{ width: 32 }, { width: 34 }, { width: 12 }, { width: 16 }, { width: 16 }, { width: 18 }];
 
   let r = 1;
-  styleBannerRow(ws1, r++, 6, 'CITRINE MOBILITÉ', false);
-  styleBannerRow(ws1, r++, 6, `TASKSHEET (FEUILLE D'AVANCEMENT DES TÂCHES) — ${p.dept}`, true);
+  applyOfficialExcelHeaderFooter(ws1);
+  styleBannerRow(ws1, r++, 6, 'CITRINE SARL — Société à Responsabilité Limitée · République du Cameroun (Document Officiel)', false);
+  styleBannerRow(ws1, r++, 6, `FEUILLE DE TÂCHES JOURNALIÈRE — ${p.dept}`, true);
 
   const metaRow = ws1.getRow(r++);
   metaRow.height = 20;
@@ -158,9 +161,13 @@ export async function buildTaskSheetXlsxWorkbook(data: TaskSheetReportData): Pro
   applyCellBox(mgrRow.getCell(1), { bg: CITRINE_XLSX_COLORS.slateHeader, bold: true });
   for (let c = 2; c <= 6; c++) applyCellBox(mgrRow.getCell(c), {});
 
+  r++;
+  styleOfficialFooterRow(ws1, r++, 6);
+
   const ws2 = wb.addWorksheet('Suivi manager', { views: [{ showGridLines: true }] });
+  applyOfficialExcelHeaderFooter(ws2);
   ws2.columns = [{ width: 32 }, { width: 42 }, { width: 22 }, { width: 16 }, { width: 16 }];
-  styleBannerRow(ws2, 1, 5, 'CITRINE MOBILITÉ — SUIVI MANAGER & PILOTAGE OPÉRATIONNEL', false);
+  styleBannerRow(ws2, 1, 5, 'CITRINE SARL — SUIVI MANAGER & PILOTAGE OPÉRATIONNEL', false);
   const m2 = ws2.getRow(2);
   m2.values = [`Collaborateur : ${employeeName}`, `Département : ${p.dept}`, 'Douala', p.dateText, p.dayText];
   for (let c = 1; c <= 5; c++) applyCellBox(m2.getCell(c), { bg: CITRINE_XLSX_COLORS.slateHeader, bold: true });
@@ -180,6 +187,7 @@ export async function buildTaskSheetXlsxWorkbook(data: TaskSheetReportData): Pro
     applyCellBox(row.getCell(1), { bg: CITRINE_XLSX_COLORS.slateBg, bold: true });
     for (let c = 2; c <= 5; c++) applyCellBox(row.getCell(c), {});
   });
+  styleOfficialFooterRow(ws2, 10, 5);
 
   return wb;
 }

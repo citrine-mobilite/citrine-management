@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import { CompanyInfo, DEFAULT_COMPANY_INFO } from './pdfCompanyInfo';
-import { CITRINE_DEFAULT_LOGO_BASE64 } from '../../assets/citrineLogoBase64';
+import { getCachedPublicLogoDataUrl } from './publicLogoLoader';
 
 export interface OfficialDocumentData {
   id?: string;
@@ -33,7 +33,9 @@ export function drawCitrineOfficialHeader(
   logoBase64?: string
 ): number {
   let y = startY;
-  const imageToUse = logoBase64 || CITRINE_DEFAULT_LOGO_BASE64;
+  const resolvedCandidate =
+    logoBase64 && logoBase64.startsWith('data:image/') ? logoBase64 : undefined;
+  const imageToUse = resolvedCandidate || getCachedPublicLogoDataUrl();
 
   let imageRendered = false;
   if (imageToUse) {

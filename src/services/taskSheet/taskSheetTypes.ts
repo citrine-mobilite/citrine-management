@@ -76,7 +76,13 @@ export interface MonthlyTaskSheetData {
   month: string;
   monthName: string;
   totalDaysWorked: number;
+  workingDaysInMonth: number;
+  weekdayDaysWorked: number;
+  weekendDaysWorked: number;
   totalHoursWorked: number;
+  presentDays?: number;
+  lateDays?: number;
+  absentDays?: number;
   totalTasksAssigned: number;
   totalTasksCompleted: number;
   totalSubtasksCount: number;
@@ -97,6 +103,7 @@ export interface MonthlyTaskSheetData {
   dailyBreakdown: {
     date: string;
     dayName: string;
+    isWeekend?: boolean;
     arrivalTime: string;
     departureTime: string;
     hoursWorked: number;
@@ -111,13 +118,29 @@ export interface YearlyTaskSheetData {
   year: number;
   totalHoursWorked: number;
   totalDaysPresent: number;
+  totalWorkingDays: number;
+  totalWeekendDaysWorked: number;
   totalTasksCompleted: number;
   avgCompletionRate: number;
+  totalSubtasksAssigned?: number;
+  totalSubtasksCompleted?: number;
+  subtaskCompletionRate?: number;
+  topTimeTasks?: Array<{
+    id: string;
+    title: string;
+    hours: number;
+    status: string;
+    subtasksCount: number;
+    completedSubtasksCount: number;
+  }>;
   monthlyBreakdown: {
     monthName: string;
     daysWorked: number;
+    workingDays: number;
+    weekendDaysWorked: number;
     hoursWorked: number;
     tasksCompleted: number;
+    subtasksTotal?: number;
     rendementRate: number;
   }[];
 }

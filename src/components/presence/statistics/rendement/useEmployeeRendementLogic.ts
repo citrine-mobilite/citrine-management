@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { Employee, Task, Subtask, TaskStatus } from '../../../../types';
 import { haptic } from '../../../../services/hapticService';
 import { computeEmployeeRendement, getTaskDynamicProgress } from '../../../../utils/rendementCalculator';
+import { computeTaskTimeEntry, round1, safeNum } from '../../../../utils/rendementTaskHelpers';
 import { notifyExceptionalTaskCompletion } from '../../../../services/exceptionalTaskCompletionService';
 import {
   StatusFilter,
@@ -67,22 +68,19 @@ export function useEmployeeRendementLogic({
   );
 
   const metrics = useMemo(() => {
-    return computeEmployeeRendement(employee, tasks, assiduiteRate, periodRange);
+    return computeEmployeeRendement(employee, tasks, safeNum(assiduiteRate, 100), periodRange);
   }, [employee, tasks, assiduiteRate, periodRange]);
 
   const tasksWithDynamicData = useMemo(() => {
     return metrics.assignedTasks.map((t) => {
-      let estimatedHours = Number(t.estimatedHours) || 4;
-      if (!t.estimatedHours) {
-        if (t.priority === 'urgent') estimatedHours = 10;
-        else if (t.priority === 'high' || t.priority === 'haut') estimatedHours = 7;
-        else if (t.priority === 'low') estimatedHours = 2;
-      }
-      if (t.subtasks && t.subtasks.length > 0) {
-        const subHours = t.subtasks.reduce((sum, s) => sum + (s.estimatedHours || 2), 0);
-        estimatedHours = Math.max(estimatedHours, subHours);
-      }
-      return { ...t, estimatedHours, dynamicProgress: getTaskDynamicProgress(t) };
+      const timeEntry = computeTaskTimeEntry(t);
+      return {
+        ...t,
+        estimatedHours: timeEntry.estimatedHours,
+        actualHours: timeEntry.actualHours,
+        effectiveHours: timeEntry.effectiveHours,
+        dynamicProgress: getTaskDynamicProgress(t),
+      };
     });
   }, [metrics.assignedTasks]);
 
@@ -116,11 +114,12 @@ export function useEmployeeRendementLogic({
 
   const filteredSummary = useMemo(() => {
     const count = sortedByRecencyTasks.length;
-    const totalHours = sortedByRecencyTasks.reduce((acc, t) => acc + t.estimatedHours, 0);
+    const totalHours = round1(sortedByRecencyTasks.reduce((acc, t) => acc + safeNum(t.estimatedHours), 0));
     const completedCount = sortedByRecencyTasks.filter((t) => t.status === 'completed').length;
-    const avgProgress = count > 0
-      ? Math.round(sortedByRecencyTasks.reduce((acc, t) => acc + t.dynamicProgress, 0) / count)
-      : 0;
+    const avgProgress =
+      count > 0
+        ? Math.round(sortedByRecencyTasks.reduce((acc, t) => acc + safeNum(t.dynamicProgress), 0) / count)
+        : 0;
     return { count, totalHours, completedCount, avgProgress };
   }, [sortedByRecencyTasks]);
 

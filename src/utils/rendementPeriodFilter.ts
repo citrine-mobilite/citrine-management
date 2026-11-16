@@ -3,6 +3,8 @@ import {
   RendementPeriodFilter,
   isTaskAssignedToEmployee,
   getItemCompletionDate,
+  computeTaskTimeEntry,
+  round1,
 } from './rendementTaskHelpers';
 
 export function filterTasksForRendementPeriod(
@@ -130,52 +132,88 @@ export function filterTasksForRendementPeriod(
 }
 
 export function aggregateAssignedTaskCounters(assignedTasks: Task[]) {
+  const todayStr = new Date().toISOString().split('T')[0];
   let completedTasks = 0;
   let inProgressTasks = 0;
+  let todoTasks = 0;
   let blockedTasks = 0;
+  let overdueTasks = 0;
   let totalSubtasks = 0;
   let completedSubtasks = 0;
   let milestonesCount = 0;
   let completedMilestones = 0;
   let estimatedHoursTotal = 0;
   let actualHoursTotal = 0;
+  let effectiveHoursSpent = 0;
+  let progressSum = 0;
+  let topTimeTaskTitle: string | null = null;
+  let topTimeTaskHours = 0;
 
-  assignedTasks.forEach((t) => {
+  (assignedTasks || []).forEach((t) => {
     const isCompleted =
       t.status === 'completed' ||
       (t as any).completed === true ||
       Boolean(t.subtasks && t.subtasks.length > 0 && t.subtasks.every((s) => s.completed || s.status === 'completed'));
-    if (isCompleted) completedTasks++;
-    else if (t.status === 'in_progress' || t.status === 'en_cours' || t.status === 'pending_validation')
+
+    if (isCompleted) {
+      completedTasks++;
+    } else if (t.status === 'in_progress' || t.status === 'en_cours' || t.status === 'pending_validation') {
       inProgressTasks++;
-    else if (t.status === 'blocked') blockedTasks++;
+    } else if (t.status === 'blocked') {
+      blockedTasks++;
+    } else {
+      todoTasks++;
+    }
+
+    if (!isCompleted && t.dueDate && t.dueDate < todayStr) {
+      overdueTasks++;
+    }
 
     if (t.isMilestone) {
       milestonesCount++;
-      if (isCompleted || (t.milestoneProgress ?? 0) >= 100) completedMilestones++;
+      if (isCompleted || (typeof t.milestoneProgress === 'number' && t.milestoneProgress >= 100)) {
+        completedMilestones++;
+      }
     }
 
     if (t.subtasks && t.subtasks.length > 0) {
       totalSubtasks += t.subtasks.length;
       t.subtasks.forEach((s) => {
         if (s.completed || s.status === 'completed') completedSubtasks++;
-        estimatedHoursTotal += Number(s.estimatedHours) || 1.5;
-        actualHoursTotal += Number(s.actualHours) || 0;
       });
-    } else {
-      estimatedHoursTotal += 1;
+    }
+
+    const timeEntry = computeTaskTimeEntry(t);
+    estimatedHoursTotal += timeEntry.estimatedHours;
+    actualHoursTotal += timeEntry.actualHours;
+    effectiveHoursSpent += timeEntry.effectiveHours;
+    progressSum += timeEntry.progress;
+
+    const rankHours = timeEntry.effectiveHours > 0 ? timeEntry.effectiveHours : timeEntry.estimatedHours;
+    if (rankHours > topTimeTaskHours) {
+      topTimeTaskHours = rankHours;
+      topTimeTaskTitle = timeEntry.title;
     }
   });
+
+  const avgTaskProgress =
+    assignedTasks.length > 0 ? Math.round(progressSum / assignedTasks.length) : 0;
 
   return {
     completedTasks,
     inProgressTasks,
+    todoTasks,
     blockedTasks,
+    overdueTasks,
     totalSubtasks,
     completedSubtasks,
     milestonesCount,
     completedMilestones,
-    estimatedHoursTotal,
-    actualHoursTotal,
+    estimatedHoursTotal: round1(estimatedHoursTotal),
+    actualHoursTotal: round1(actualHoursTotal),
+    effectiveHoursSpent: round1(effectiveHoursSpent),
+    avgTaskProgress,
+    topTimeTaskTitle,
+    topTimeTaskHours: round1(topTimeTaskHours),
   };
 }

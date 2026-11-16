@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Employee, Presence, SalaryPayment, Task } from '../../types';
+import { isTaskAssignedToEmployee, safeNum } from '../../utils/rendementTaskHelpers';
 import { formatCollaboratorXAF } from './collaboratorConstants';
 
 interface CollaboratorRecapInsightsGridProps {
@@ -56,13 +57,9 @@ export const CollaboratorRecapInsightsGrid: React.FC<CollaboratorRecapInsightsGr
           monthlyMinutes += Math.max(0, depM - arrM - (depM - arrM > 300 ? breakM : 0));
         }
       });
-    const monthlyHours = Math.round((monthlyMinutes / 60) * 10) / 10;
+    const monthlyHours = safeNum(Math.round((monthlyMinutes / 60) * 10) / 10, 0);
 
-    const myAllTasks = tasks.filter(
-      (t) =>
-        String(t.employeeId || '') === String(emp.id) ||
-        (t.assignedTo || '').toLowerCase() === emp.name.toLowerCase()
-    );
+    const myAllTasks = (tasks || []).filter((t) => isTaskAssignedToEmployee(t, emp));
     const completedTasks = myAllTasks.filter((t) => t.status === 'completed').length;
     const blockedTasks = myAllTasks.filter((t) => t.status === 'blocked').length;
     const overdueTasks = myAllTasks.filter(
@@ -70,7 +67,7 @@ export const CollaboratorRecapInsightsGrid: React.FC<CollaboratorRecapInsightsGr
     ).length;
     const taskRate = myAllTasks.length > 0 ? Math.round((completedTasks / myAllTasks.length) * 100) : 0;
 
-    const totalNetPaid = payslips.reduce((sum, p) => sum + (Number(p.netAmount) || 0), 0);
+    const totalNetPaid = payslips.reduce((sum, p) => sum + safeNum(p.netAmount, 0), 0);
     const lastPayslip = payslips[0];
 
     const missions = emp.missionHistory || [];

@@ -1,11 +1,10 @@
 import React from 'react';
-import { FolderKanban, FolderPlus, Plus, Trophy, Send } from 'lucide-react';
+import { FolderKanban, FolderPlus, Plus, Send } from 'lucide-react';
 import { HumaanTaskCheck } from '../illustrations/HumaanIllustrations';
 
 interface TaskHeaderBannerProps {
   onOpenNewProject: () => void;
   onOpenCreateTask: () => void;
-  onOpenCreateMilestone?: () => void;
   onOpenCreateSubtask?: () => void;
   onSendTaskSheet?: () => void;
 }
@@ -13,7 +12,6 @@ interface TaskHeaderBannerProps {
 export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
   onOpenNewProject,
   onOpenCreateTask,
-  onOpenCreateMilestone,
   onOpenCreateSubtask,
   onSendTaskSheet,
 }) => {
@@ -25,7 +23,7 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-serif font-bold text-xl whitespace-nowrap">Tâches & Jalons Stratégiques</h2>
+            <h2 className="font-serif font-bold text-xl whitespace-nowrap">Gestion des Tâches</h2>
             <span className="text-[10px] font-bold bg-white/20 text-emerald-100 px-2 py-0.5 rounded-full border border-white/20">
               Style Asana Pro
             </span>
@@ -38,53 +36,37 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap items-center justify-center md:justify-end gap-2 w-full md:w-auto">
-        {/* Envoyer ma TaskSheet */}
         {onSendTaskSheet && (
           <button
             onClick={onSendTaskSheet}
             className="w-full md:w-auto justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-md border border-emerald-400"
-            title="Envoyer votre TaskSheet (Feuille d'avancement des tâches) de la journée"
+            title="Envoyer votre TaskSheet de la journée"
           >
             <Send className="h-3.5 w-3.5 text-white shrink-0" />
             <span>TaskSheet</span>
           </button>
         )}
 
-        {/* Nouveau Projet */}
         <button
           onClick={onOpenNewProject}
           className="w-full md:w-auto justify-center bg-white/15 hover:bg-white/25 text-white font-semibold px-3 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer border border-white/25 active:scale-98 whitespace-nowrap"
-          title="Créer un nouveau projet ou module d'entreprise"
+          title="Créer un nouveau projet"
         >
           <FolderPlus className="h-3.5 w-3.5 text-emerald-200 shrink-0" />
           <span>Projet</span>
         </button>
 
-        {/* Nouveau Jalon */}
-        {onOpenCreateMilestone && (
-          <button
-            onClick={onOpenCreateMilestone}
-            className="w-full md:w-auto justify-center bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 font-bold px-3 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-xs"
-            title="Définir un jalon stratégique majeur avec date cible et livrable clé"
-          >
-            <Trophy className="h-3.5 w-3.5 text-amber-300 shrink-0" />
-            <span>Jalon</span>
-          </button>
-        )}
-
-        {/* Nouvelle Sous-Tâche */}
         {onOpenCreateSubtask && (
           <button
             onClick={onOpenCreateSubtask}
             className="w-full md:w-auto justify-center bg-indigo-500/25 hover:bg-indigo-500/35 text-indigo-100 border border-indigo-400/30 font-bold px-3 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-98 whitespace-nowrap shadow-xs"
-            title="Créer une sous-tâche détaillée avec le procédé haute précision Asana"
+            title="Créer une sous-tâche détaillée"
           >
             <Plus className="h-3.5 w-3.5 text-indigo-300 shrink-0" />
             <span>Sous-Tâche</span>
           </button>
         )}
 
-        {/* Nouvelle Tâche */}
         <button
           onClick={onOpenCreateTask}
           className="col-span-2 sm:col-span-1 w-full md:w-auto justify-center bg-white text-[#2A7B76] hover:bg-emerald-50 font-bold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 shadow-md hover:shadow transition cursor-pointer active:scale-98 whitespace-nowrap"

@@ -3,6 +3,11 @@ import { getCollectionData, saveDocumentData } from '../db/repository';
 import { sendThreadedEmployeeEmail, getEffectiveSmtpConfig, parseEmailList } from '../services/serverMailService';
 import { sendWeeklyConsolidatedReport, compileWeeklyAttendanceData } from '../services/weeklyAttendanceReportService';
 import { executeDailyTaskSheetDispatch } from '../services/dailyTaskSheetCronService';
+import {
+  executeMonthlyTaskSheetDispatch,
+  executeYearlyTaskSheetDispatch,
+  sendSingleEmployeeTaskSheetEmail,
+} from '../services/periodicTaskSheetCronService';
 import { sendMondayGreetingToAllEmployees } from '../services/mondayGreetingMailService';
 
 export function registerMailAndCronRoutes(app: express.Express): void {
@@ -155,6 +160,48 @@ export function registerMailAndCronRoutes(app: express.Express): void {
       res.status(result.success ? 200 : 500).json(result);
     } catch (err: any) {
       console.error('[API /api/cron/monday-greeting Error]:', err);
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  app.all('/api/cron/monthly-tasksheet', async (req: express.Request, res: express.Response) => {
+    try {
+      const monthStr = (req.query.month as string) || req.body?.month;
+      const result = await executeMonthlyTaskSheetDispatch({ monthStr });
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (err: any) {
+      console.error('[API /api/cron/monthly-tasksheet Error]:', err);
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  app.all('/api/cron/yearly-tasksheet', async (req: express.Request, res: express.Response) => {
+    try {
+      const rawYear = (req.query.year as string) || req.body?.year;
+      const year = rawYear ? parseInt(String(rawYear), 10) : undefined;
+      const result = await executeYearlyTaskSheetDispatch({ year });
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (err: any) {
+      console.error('[API /api/cron/yearly-tasksheet Error]:', err);
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  app.post('/api/reports/tasksheet/send', async (req: express.Request, res: express.Response) => {
+    try {
+      const { employeeId, mode, period, overrideRecipients } = req.body || {};
+      if (!employeeId || !mode) {
+        return res.status(400).json({ success: false, error: 'Paramètres employeeId et mode requis.' });
+      }
+      const result = await sendSingleEmployeeTaskSheetEmail({
+        employeeId: String(employeeId),
+        mode,
+        period,
+        overrideRecipients,
+      });
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (err: any) {
+      console.error('[API /api/reports/tasksheet/send Error]:', err);
       res.status(500).json({ success: false, error: err?.message || String(err) });
     }
   });

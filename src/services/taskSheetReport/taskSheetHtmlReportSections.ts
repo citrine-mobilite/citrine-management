@@ -1,5 +1,6 @@
 import { TaskSheetReportData } from './taskSheetReportTypes';
 import { PreparedPlanDuJour } from './preparePlanDuJourData';
+import { buildOfficialEmailCompanyHeaderHtml } from './citrineOfficialEmailHeaderFooter';
 
 export function buildTaskSheetHtmlHeaderAndStats(data: TaskSheetReportData, p: PreparedPlanDuJour): string {
   const employeeName = data.employeeName || 'Collaborateur';
@@ -7,24 +8,15 @@ export function buildTaskSheetHtmlHeaderAndStats(data: TaskSheetReportData, p: P
   const capacityBorder = p.capacityStatus === 'overloaded' ? '#fecdd3' : (p.capacityStatus === 'optimal' ? '#a7f3d0' : '#99f6e4');
   const capacityColor = p.capacityStatus === 'overloaded' ? '#9f1239' : (p.capacityStatus === 'optimal' ? '#064e3b' : '#115e59');
 
+  const officialHeaderHtml = buildOfficialEmailCompanyHeaderHtml(
+    `FEUILLE DE TÂCHES JOURNALIÈRE — ${p.dept}`,
+    `<div><strong>Collaborateur :</strong> ${employeeName}</div>
+     <div><strong>Lieu :</strong> Douala • <strong>Département :</strong> ${p.dept}</div>
+     <div><strong>Date :</strong> ${p.dateText} (${p.dayText})</div>`
+  );
+
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; border-bottom: 2px solid #164e4b; margin-bottom: 16px;">
-      <tr>
-        <td class="email-stack" style="vertical-align: top; padding-bottom: 12px;">
-          <div style="font-family: Georgia, serif; font-size: 26px; font-weight: 900; font-style: italic; color: #164e4b; letter-spacing: 0.5px; line-height: 1;">
-            CITRINE
-          </div>
-          <div style="font-size: 12.5px; font-weight: 800; color: #164e4b; margin-top: 4px; text-transform: uppercase;">
-            TASKSHEET (FEUILLE D&apos;AVANCEMENT DES TÂCHES) — ${p.dept}
-          </div>
-        </td>
-        <td align="right" class="email-stack-left" style="vertical-align: top; padding-bottom: 12px; font-size: 11px; color: #44403c; line-height: 1.5; font-family: Consolas, monospace;">
-          <div><strong>Collaborateur :</strong> ${employeeName}</div>
-          <div><strong>Lieu :</strong> Douala • <strong>Département :</strong> ${p.dept}</div>
-          <div><strong>Date :</strong> ${p.dateText} (${p.dayText})</div>
-        </td>
-      </tr>
-    </table>
+    ${officialHeaderHtml}
 
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f8fafc" style="width: 100%; background-color: #f8fafc; border: 1px solid #cbd5e1; margin-bottom: 16px;">
       <tr>

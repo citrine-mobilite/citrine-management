@@ -208,5 +208,29 @@ export function mapModuleSupabaseRowToItem(table: string, row: any): any | null 
     };
   }
 
+  if (table === 'task_projects') {
+    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    const originalId = raw.id || row.doc_id || String(row.id);
+    return {
+      ...raw,
+      id: originalId,
+      docId: row.doc_id || originalId,
+      _dbId: row.id,
+      name: row.name || raw.name || 'Projet',
+      description: row.description ?? raw.description ?? '',
+      color: row.color ?? raw.color,
+      icon: row.icon ?? raw.icon ?? '📁',
+      memberIds: Array.isArray(raw.memberIds)
+        ? raw.memberIds
+        : Array.isArray(row.member_ids)
+        ? row.member_ids
+        : [],
+      sections: Array.isArray(raw.sections) ? raw.sections : undefined,
+      customFields: Array.isArray(raw.customFields) ? raw.customFields : undefined,
+      rules: Array.isArray(raw.rules) ? raw.rules : undefined,
+      createdAt: row.created_at || raw.createdAt || '',
+    };
+  }
+
   return null;
 }

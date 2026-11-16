@@ -1,18 +1,24 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Task, NotificationLog, Employee, TaskPriority, AppUser } from '../types';
-import { 
-  TaskStatsCards, 
-  TaskKanbanBoard, 
-  TaskTableView, 
-  TaskDetailDrawer, 
-  TaskCreateModal, 
-  TaskProjectModal, 
-  TaskProjectBar, 
+import {
+  TaskStatsCards,
+  TaskKanbanBoard,
+  TaskTableView,
+  TaskTimelineView,
+  TaskCalendarView,
+  TaskMyTasksView,
+  TaskInboxView,
+  TaskProjectRulesModal,
+  synthesizeTaskInboxItems,
+  TaskDetailDrawer,
+  TaskCreateModal,
+  TaskProjectModal,
+  TaskProjectBar,
   TaskFilterBar,
   TaskHeaderBanner,
   TaskRendementAnalyticsView,
   SubtaskCreateModal,
-  useTaskLogic
+  useTaskLogic,
 } from './tasks';
 
 interface TaskPanelProps {
@@ -35,6 +41,8 @@ export default function TaskPanel({
   showToast,
   currentUser,
 }: TaskPanelProps) {
+  const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
+
   const logic = useTaskLogic({
     tasks,
     onUpdateTasks,
@@ -45,41 +53,53 @@ export default function TaskPanel({
     showToast,
   });
 
+  const inboxCount = useMemo(() => synthesizeTaskInboxItems(tasks).length, [tasks]);
+
   const getPriorityBadge = (p: TaskPriority) => {
     switch (p) {
       case 'urgent':
-        return <span className="bg-purple-100 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Urgente ⚡</span>;
+        return (
+          <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap">
+            Urgente
+          </span>
+        );
       case 'high':
-        return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Haute 🔴</span>;
+      case 'haut':
+        return (
+          <span className="bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap">
+            Haute
+          </span>
+        );
       case 'medium':
-        return <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Moyenne 🟡</span>;
+        return (
+          <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap">
+            Moyenne
+          </span>
+        );
       case 'low':
       default:
-        return <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">Basse 🟢</span>;
+        return (
+          <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap">
+            Basse
+          </span>
+        );
     }
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
-      
-      {/* Header Banner avec création de tâches, jalons et sous-tâches stylées */}
-      <TaskHeaderBanner
-        onOpenNewProject={() => logic.setIsNewProjectModalOpen(true)}
-        onOpenCreateTask={() => {
-          logic.setIsMilestoneModalDefault(false);
-          logic.setCreateModalDefaultStatus('todo');
-          logic.setIsCreateModalOpen(true);
-        }}
-        onOpenCreateMilestone={() => {
-          logic.setIsMilestoneModalDefault(true);
-          logic.setCreateModalDefaultStatus('todo');
-          logic.setIsCreateModalOpen(true);
-        }}
-        onOpenCreateSubtask={() => logic.handleOpenCreateSubtask()}
-        onSendTaskSheet={logic.handleSendManualTaskSheet}
-      />
+    <div className="space-y-5 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
+      {logic.activeView !== 'rendement' && (
+        <TaskHeaderBanner
+          onOpenNewProject={() => logic.setIsNewProjectModalOpen(true)}
+          onOpenCreateTask={() => {
+            logic.setCreateModalDefaultStatus('todo');
+            logic.setIsCreateModalOpen(true);
+          }}
+          onOpenCreateSubtask={() => logic.handleOpenCreateSubtask()}
+          onSendTaskSheet={logic.handleSendManualTaskSheet}
+        />
+      )}
 
-      {/* Project / Modules Switcher Bar */}
       <TaskProjectBar
         projects={logic.visibleProjects}
         activeProjectId={logic.activeProjectId}
@@ -87,33 +107,66 @@ export default function TaskPanel({
         activeView={logic.activeView}
         onChangeView={logic.setActiveView}
         tasks={tasks}
+        inboxCount={inboxCount}
         onOpenNewProject={() => logic.setIsNewProjectModalOpen(true)}
+        onOpenProjectRules={() => setIsRulesModalOpen(true)}
       />
 
-      {/* KPI Stats */}
-      <TaskStatsCards tasks={logic.filteredTasks} />
+      {logic.activeView !== 'rendement' && (
+        <>
+          <TaskStatsCards tasks={logic.filteredTasks} />
 
-      {/* Search and Filters Toolbar */}
-      <TaskFilterBar
-        searchTerm={logic.searchTerm}
-        onSearchChange={logic.setSearchTerm}
-        filterPriority={logic.filterPriority}
-        onPriorityChange={logic.setFilterPriority}
-        filterAssignee={logic.filterAssignee}
-        onAssigneeChange={logic.setFilterAssignee}
-        filterType={logic.filterType}
-        onTypeChange={logic.setFilterType}
-        filterDatePeriod={logic.filterDatePeriod}
-        onDatePeriodChange={logic.setFilterDatePeriod}
-        employees={logic.visibleEmployees}
-      />
+          <TaskFilterBar
+            searchTerm={logic.searchTerm}
+            onSearchChange={logic.setSearchTerm}
+            filterPriority={logic.filterPriority}
+            onPriorityChange={logic.setFilterPriority}
+            filterAssignee={logic.filterAssignee}
+            onAssigneeChange={logic.setFilterAssignee}
+            filterType={logic.filterType}
+            onTypeChange={logic.setFilterType}
+            filterDatePeriod={logic.filterDatePeriod}
+            onDatePeriodChange={logic.setFilterDatePeriod}
+            employees={logic.visibleEmployees}
+          />
+        </>
+      )}
 
-      {/* Mode 1: Kanban défilant horizontal strict */}
+      {logic.activeView === 'list' && (
+        <TaskTableView
+          tasks={logic.filteredTasks}
+          projects={logic.visibleProjects}
+          activeProject={logic.activeProject}
+          employees={logic.visibleEmployees}
+          onStatusChange={logic.handleStatusChange}
+          onSelectTask={logic.openTaskDetail}
+          onSilentSaveTask={logic.handleSilentSaveTask}
+          onMoveTask={logic.handleMoveTask}
+          onQuickCreateTask={logic.handleQuickCreateTask}
+          onToggleSubtaskAtPath={logic.handleToggleSubtaskAtPath}
+          onUpdateSubtaskAtPath={logic.handleUpdateSubtaskAtPath}
+          onInlineAddSubtask={logic.handleInlineAddSubtask}
+          onDeleteSubtaskAtPath={logic.handleDeleteSubtaskAtPath}
+          onAddSection={logic.handleAddSection}
+          onRenameSection={logic.handleRenameSection}
+          onDeleteSection={logic.handleDeleteSection}
+          onOpenCreateSubtask={logic.handleOpenCreateSubtask}
+          onDeleteTask={logic.handleOpenDeleteModal}
+          getPriorityBadge={getPriorityBadge}
+        />
+      )}
+
       {logic.activeView === 'kanban' && (
         <TaskKanbanBoard
           tasks={logic.filteredTasks}
+          activeProject={logic.activeProject}
           onStatusChange={logic.handleStatusChange}
-          onSelectTask={logic.setSelectedTaskForDetail}
+          onSelectTask={logic.openTaskDetail}
+          onMoveTask={logic.handleMoveTask}
+          onQuickCreateTask={logic.handleQuickCreateTask}
+          onToggleSubtaskAtPath={logic.handleToggleSubtaskAtPath}
+          onInlineAddSubtask={logic.handleInlineAddSubtask}
+          onAddSection={logic.handleAddSection}
           onOpenCreateModal={(status) => {
             logic.setIsMilestoneModalDefault(false);
             logic.setCreateModalDefaultStatus(status);
@@ -125,20 +178,50 @@ export default function TaskPanel({
         />
       )}
 
-      {/* Mode 2: Vue Tableau / Liste structurée */}
-      {logic.activeView === 'table' && (
-        <TaskTableView
+      {logic.activeView === 'timeline' && (
+        <TaskTimelineView
           tasks={logic.filteredTasks}
-          projects={logic.visibleProjects}
+          activeProject={logic.activeProject}
+          onSelectTask={logic.openTaskDetail}
           onStatusChange={logic.handleStatusChange}
-          onSelectTask={logic.setSelectedTaskForDetail}
-          onOpenCreateSubtask={logic.handleOpenCreateSubtask}
-          onDeleteTask={logic.handleOpenDeleteModal}
-          getPriorityBadge={getPriorityBadge}
+          onToggleSubtaskAtPath={logic.handleToggleSubtaskAtPath}
+          onMoveTask={logic.handleMoveTask}
         />
       )}
 
-      {/* Mode 3: Vue Rendement & Charge de travail (Mode Asana Pro / Business) */}
+      {logic.activeView === 'calendar' && (
+        <TaskCalendarView
+          tasks={logic.filteredTasks}
+          onSelectTask={logic.openTaskDetail}
+          onStatusChange={logic.handleStatusChange}
+          onToggleSubtaskAtPath={logic.handleToggleSubtaskAtPath}
+          onMoveTask={logic.handleMoveTask}
+          onQuickCreateTask={logic.handleQuickCreateTask}
+        />
+      )}
+
+      {logic.activeView === 'mytasks' && (
+        <TaskMyTasksView
+          tasks={logic.filteredTasks}
+          projects={logic.visibleProjects}
+          employees={logic.visibleEmployees}
+          currentUser={currentUser}
+          currentRole={currentRole}
+          onSelectTask={logic.openTaskDetail}
+          onStatusChange={logic.handleStatusChange}
+          onToggleSubtaskAtPath={logic.handleToggleSubtaskAtPath}
+          onMoveTask={logic.handleMoveTask}
+          onQuickCreateTask={logic.handleQuickCreateTask}
+        />
+      )}
+
+      {logic.activeView === 'inbox' && (
+        <TaskInboxView
+          tasks={tasks}
+          onSelectTask={logic.openTaskDetail}
+        />
+      )}
+
       {logic.activeView === 'rendement' && (
         <TaskRendementAnalyticsView
           tasks={logic.filteredTasks}
@@ -149,7 +232,6 @@ export default function TaskPanel({
         />
       )}
 
-      {/* Modal Création Tâche ou Jalon */}
       <TaskCreateModal
         isOpen={logic.isCreateModalOpen}
         onClose={() => logic.setIsCreateModalOpen(false)}
@@ -161,9 +243,9 @@ export default function TaskPanel({
         isMilestoneDefault={logic.isMilestoneModalDefault}
         currentRole={currentRole}
         currentUser={currentUser}
+        existingTasks={tasks}
       />
 
-      {/* Modal Création Sous-tâche Haute Précision (Style Asana Pro) */}
       <SubtaskCreateModal
         isOpen={logic.isSubtaskModalOpen}
         onClose={() => logic.setIsSubtaskModalOpen(false)}
@@ -176,7 +258,6 @@ export default function TaskPanel({
         currentRole={currentRole}
       />
 
-      {/* Modal Création Nouveau Module / Projet */}
       <TaskProjectModal
         isOpen={logic.isNewProjectModalOpen}
         onClose={() => logic.setIsNewProjectModalOpen(false)}
@@ -184,14 +265,32 @@ export default function TaskPanel({
         employees={logic.visibleEmployees}
       />
 
-      {/* Drawer Fiche Détail */}
+      <TaskProjectRulesModal
+        isOpen={isRulesModalOpen}
+        onClose={() => setIsRulesModalOpen(false)}
+        project={logic.activeProject}
+        onToggleRule={logic.handleToggleProjectRule}
+        onAddSection={logic.handleAddSection}
+        onDeleteSection={logic.handleDeleteSection}
+      />
+
       {logic.selectedTaskForDetail && (
         <TaskDetailDrawer
           task={logic.selectedTaskForDetail}
+          subtaskPath={logic.selectedSubtaskPath}
+          onNavigatePath={logic.setSelectedSubtaskPath}
+          allTasks={tasks}
           employees={logic.visibleEmployees}
           projects={logic.visibleProjects}
-          onClose={() => logic.setSelectedTaskForDetail(null)}
+          onClose={logic.closeTaskDetail}
           onSaveTask={logic.handleSaveTask}
+          onSilentSaveTask={logic.handleSilentSaveTask}
+          onToggleSubtaskAtPath={logic.handleToggleSubtaskAtPath}
+          onUpdateSubtaskAtPath={logic.handleUpdateSubtaskAtPath}
+          onInlineAddSubtask={logic.handleInlineAddSubtask}
+          onDeleteSubtaskAtPath={logic.handleDeleteSubtaskAtPath}
+          onReorderSubtasksAtPath={logic.handleReorderSubtasksAtPath}
+          onPromoteSubtaskToTask={logic.handlePromoteSubtaskToTask}
           onDeleteTask={logic.handleOpenDeleteModal}
           showToast={showToast}
           currentRole={currentRole}

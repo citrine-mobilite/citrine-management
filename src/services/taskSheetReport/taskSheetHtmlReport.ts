@@ -6,6 +6,7 @@ import {
 } from './taskSheetHtmlReportSections';
 import { buildTaskSheetHtmlBodyTables } from './taskSheetHtmlReportBody';
 import { buildOutlookHtmlDocument } from '../mail/outlookEmailShell';
+import { buildOfficialEmailCompanyFooterHtml } from './citrineOfficialEmailHeaderFooter';
 
 export function buildTaskSheetHtmlReport(data: TaskSheetReportData): string {
   const p = preparePlanDuJourData(data);
@@ -17,13 +18,9 @@ export function buildTaskSheetHtmlReport(data: TaskSheetReportData): string {
         ${buildTaskSheetHtmlHeaderAndStats(data, p)}
         ${buildTaskSheetHtmlAttendanceSection(data, p)}
         ${buildTaskSheetHtmlBodyTables(data, p)}
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-          <tr>
-            <td align="center" style="padding-top: 10px; font-size: 11px; color: #78716c; text-align: center;">
-              <em>Le classeur officiel Microsoft Excel (.xlsx) stylisé du TaskSheet est joint à ce message.</em>
-            </td>
-          </tr>
-        </table>
+        ${buildOfficialEmailCompanyFooterHtml(
+          'Le classeur officiel Microsoft Excel (.xlsx) stylisé de la Feuille de Tâches est joint à ce message.'
+        )}
       </td>
     </tr>
   `;

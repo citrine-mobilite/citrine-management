@@ -4,6 +4,7 @@ import {
   RendementPeriodFilter,
   isTaskAssignedToEmployee,
   getTaskDynamicProgress,
+  safeNum,
 } from './rendementTaskHelpers';
 import {
   filterTasksForRendementPeriod,
@@ -19,7 +20,8 @@ export function computeEmployeeRendement(
   assiduiteRate: number = 100,
   periodFilter?: RendementPeriodFilter
 ): EmployeeRendementMetrics {
-  const rawAssignedTasks = allTasks.filter((t) => isTaskAssignedToEmployee(t, employee));
+  const safeAssiduite = Math.max(0, Math.min(100, Math.round(safeNum(assiduiteRate, 100))));
+  const rawAssignedTasks = (allTasks || []).filter((t) => isTaskAssignedToEmployee(t, employee));
 
   let assignedTasks = rawAssignedTasks;
   let totalWorkUnits = 0;
@@ -29,9 +31,9 @@ export function computeEmployeeRendement(
   if (periodFilter && periodFilter.startStr && periodFilter.endStr) {
     const filtered = filterTasksForRendementPeriod(rawAssignedTasks, employee, periodFilter);
     assignedTasks = filtered.relevantTasks;
-    totalWorkUnits = filtered.totalWorkUnits;
-    completedWorkUnits = filtered.completedWorkUnits;
-    hasActivity = filtered.hasActivity;
+    totalWorkUnits = safeNum(filtered.totalWorkUnits, 0);
+    completedWorkUnits = safeNum(filtered.completedWorkUnits, 0);
+    hasActivity = Boolean(filtered.hasActivity);
   } else {
     assignedTasks.forEach((t) => {
       if (t.subtasks && t.subtasks.length > 0) {
@@ -50,14 +52,14 @@ export function computeEmployeeRendement(
   const counters = aggregateAssignedTaskCounters(assignedTasks);
 
   const taskRendementRate =
-    !hasActivity || totalWorkUnits === 0
+    !hasActivity || totalWorkUnits <= 0
       ? 0
-      : Math.round((completedWorkUnits / totalWorkUnits) * 100);
+      : Math.max(0, Math.min(100, Math.round((completedWorkUnits / totalWorkUnits) * 100)));
 
   const globalCombinedScore =
     hasActivity && totalWorkUnits > 0
-      ? Math.round(0.5 * assiduiteRate + 0.5 * taskRendementRate)
-      : Math.round(assiduiteRate * 0.5);
+      ? Math.max(0, Math.min(100, Math.round(0.5 * safeAssiduite + 0.5 * taskRendementRate)))
+      : Math.max(0, Math.min(100, Math.round(safeAssiduite * 0.5)));
 
   let capacityStatus: 'overloaded' | 'optimal' | 'available' = 'optimal';
   if (counters.estimatedHoursTotal > 50) {
@@ -72,7 +74,7 @@ export function computeEmployeeRendement(
     totalTasks: assignedTasks.length,
     ...counters,
     taskRendementRate,
-    assiduiteRate,
+    assiduiteRate: safeAssiduite,
     globalCombinedScore,
     capacityStatus,
     hasActivity,

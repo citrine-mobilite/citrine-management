@@ -1,3 +1,5 @@
+import { DEFAULT_COMPANY_INFO } from './pdf/pdfCompanyInfo';
+
 /**
  * Export structured tabular data to Microsoft Excel (.xls formatted HTML table)
  */
@@ -38,7 +40,7 @@ export function exportToExcel(
       </style>
     </head>
     <body>
-      <div class="company-header">CITRINE MOBILITÉ</div>
+      <div class="company-header">${DEFAULT_COMPANY_INFO.name} — ${DEFAULT_COMPANY_INFO.subTitle} (République du Cameroun · Document Officiel)</div>
       <div class="title">${title}</div>
       <table border="1" style="border-collapse: collapse;">
         <thead>
@@ -60,6 +62,9 @@ export function exportToExcel(
             .join('')}
         </tbody>
       </table>
+      <div style="margin-top: 12px; padding-top: 6px; border-top: 2px solid #D4A82F; font-size: 10px; color: #475569; text-align: center;">
+        <strong>${DEFAULT_COMPANY_INFO.name}</strong> · ${DEFAULT_COMPANY_INFO.address} · Tél. ${DEFAULT_COMPANY_INFO.phone} · ${DEFAULT_COMPANY_INFO.email} · Capital : ${DEFAULT_COMPANY_INFO.capital} · NUI : ${DEFAULT_COMPANY_INFO.nui} · RCCM : ${DEFAULT_COMPANY_INFO.rccm}
+      </div>
     </body>
     </html>
   `;

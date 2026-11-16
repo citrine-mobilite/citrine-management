@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
 import { Employee, Presence, SalaryPayment, Task } from '../../types';
 import { downloadPayslipPdf } from '../../services/pdfExportService';
 import { CollaboratorPresenceMap } from '../CollaboratorPresenceMap';
+import { UserStatisticsSummaryPanel } from '../presence/statistics/UserStatisticsSummaryPanel';
+import { EmployeeRendementDetailModal } from '../presence/statistics/EmployeeRendementDetailModal';
+import { computePresenceStatistics } from '../presence/statistics/statisticsCalculations';
+import { TaskSheetModal } from '../tasksheet/TaskSheetModal';
 import { CollaboratorDetailTab, formatCollaboratorXAF } from './collaboratorConstants';
 import { CollaboratorPresencesAndMissionsTab } from './CollaboratorPresencesAndMissionsTab';
 
@@ -12,6 +16,7 @@ interface CollaboratorDetailTabsProps {
   empPayslips: SalaryPayment[];
   empPresences: Presence[];
   empTasks: Task[];
+  allTasks?: Task[];
   rhReportMonth: string;
   setRhReportMonth: (m: string) => void;
   isGeneratingRhReport: boolean;
@@ -24,13 +29,38 @@ export const CollaboratorDetailTabs: React.FC<CollaboratorDetailTabsProps> = ({
   empPayslips,
   empPresences,
   empTasks,
+  allTasks = [],
   rhReportMonth,
   setRhReportMonth,
   isGeneratingRhReport,
   onGenerateMonthlyReport,
 }) => {
+  const [taskSheetState, setTaskSheetState] = useState<{
+    employee: Employee;
+    mode: 'day' | 'month' | 'year';
+  } | null>(null);
+  const [rendementModalEmployee, setRendementModalEmployee] = useState<Employee | null>(null);
+
+  const tasksSource = allTasks.length > 0 ? allTasks : empTasks;
+
+  const assiduiteRate = useMemo(() => {
+    const res = computePresenceStatistics([emp], empPresences, 'all');
+    return res.statsByEmployee[0]?.assiduiteRate ?? 100;
+  }, [emp, empPresences]);
+
   return (
     <div className="bg-white p-5 rounded-3xl border border-stone-200/80 shadow-2xs">
+      {activeDetailTab === 'statistics' && (
+        <UserStatisticsSummaryPanel
+          employee={emp}
+          presences={empPresences}
+          tasks={tasksSource}
+          salaryPayments={empPayslips}
+          onOpenTaskSheet={(targetEmp, mode) => setTaskSheetState({ employee: targetEmp, mode })}
+          onOpenFullRendement={(targetEmp) => setRendementModalEmployee(targetEmp)}
+        />
+      )}
+
       {activeDetailTab === 'payslips' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -121,7 +151,7 @@ export const CollaboratorDetailTabs: React.FC<CollaboratorDetailTabsProps> = ({
       {activeDetailTab === 'tasks' && (
         <div className="space-y-3">
           <h4 className="font-serif font-bold text-xs text-stone-900 pb-2 border-b border-stone-100">
-            Liste des jalons & tâches assignés
+            Liste des jalons &amp; tâches assignés en cours
           </h4>
           <div className="space-y-2">
             {empTasks.length === 0 ? (
@@ -137,7 +167,7 @@ export const CollaboratorDetailTabs: React.FC<CollaboratorDetailTabsProps> = ({
                   <div className="space-y-0.5">
                     <span className="font-bold text-xs text-stone-900">{t.title}</span>
                     <p className="text-[10px] text-stone-400">
-                      Échéance : {t.date} à {t.time}
+                      Échéance : {t.dueDate || t.date || 'Non fixée'} {t.time ? `à ${t.time}` : ''}
                     </p>
                   </div>
                   <span
@@ -156,6 +186,27 @@ export const CollaboratorDetailTabs: React.FC<CollaboratorDetailTabsProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {taskSheetState && (
+        <TaskSheetModal
+          isOpen={Boolean(taskSheetState)}
+          onClose={() => setTaskSheetState(null)}
+          employee={taskSheetState.employee}
+          allTasks={tasksSource}
+          presences={empPresences}
+          defaultMode={taskSheetState.mode}
+        />
+      )}
+
+      {rendementModalEmployee && (
+        <EmployeeRendementDetailModal
+          isOpen={Boolean(rendementModalEmployee)}
+          onClose={() => setRendementModalEmployee(null)}
+          employee={rendementModalEmployee}
+          tasks={tasksSource}
+          assiduiteRate={assiduiteRate}
+        />
       )}
     </div>
   );

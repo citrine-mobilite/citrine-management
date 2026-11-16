@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Users, Download, FileText, ShieldCheck, Plus } from 'lucide-react';
 import { HumaanUsers } from './illustrations/HumaanIllustrations';
-import { AppUser, Employee } from '../types';
+import { AppUser, Employee, Presence, SalaryPayment, Task } from '../types';
 import { UserFormModal } from './users/UserFormModal';
 import { UserTableItemRow } from './users/UserTableItemRow';
 import { UserFilterToolbar } from './users/UserFilterToolbar';
+import { UserDetailStatsModal } from './users/UserDetailStatsModal';
 import { exportToExcel } from '../services/excelExportService';
 import { exportElementToPdf } from '../services/pdfExportService';
 import { useUserManagementActions } from './users/useUserManagementActions';
@@ -16,6 +17,9 @@ interface UserManagementPanelProps {
   onUpdateUsers?: (updated: AppUser[]) => void;
   employees?: Employee[];
   onUpdateEmployees?: (updated: Employee[]) => void;
+  presences?: Presence[];
+  tasks?: Task[];
+  salaryPayments?: SalaryPayment[];
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -24,8 +28,11 @@ export default function UserManagementPanel({
   onAddNotification,
   currentUser,
   onUpdateUsers,
-  employees,
+  employees = [],
   onUpdateEmployees,
+  presences = [],
+  tasks = [],
+  salaryPayments = [],
   showToast,
 }: UserManagementPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,6 +41,7 @@ export default function UserManagementPanel({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+  const [detailUser, setDetailUser] = useState<AppUser | null>(null);
 
   const filteredUsers = users.filter((u) => {
     if (roleFilter !== 'all' && u.role !== roleFilter) return false;
@@ -94,7 +102,7 @@ export default function UserManagementPanel({
               <ShieldCheck className="h-6 w-6 text-emerald-200" />
             </div>
             <h2 className="font-serif font-bold text-xl md:text-2xl">
-              Utilisateurs & Rôles Système
+              Utilisateurs &amp; Rôles Système
             </h2>
           </div>
         </div>
@@ -186,6 +194,7 @@ export default function UserManagementPanel({
                     key={user.id}
                     user={user}
                     currentUserId={currentUser.id}
+                    onViewDetails={setDetailUser}
                     onEdit={handleEditUser}
                     onDelete={handleDeleteUser}
                   />
@@ -195,6 +204,19 @@ export default function UserManagementPanel({
           </table>
         </div>
       </div>
+
+      {detailUser && (
+        <UserDetailStatsModal
+          isOpen={Boolean(detailUser)}
+          onClose={() => setDetailUser(null)}
+          user={detailUser}
+          employees={employees}
+          presences={presences}
+          tasks={tasks}
+          salaryPayments={salaryPayments}
+          onEditUser={handleEditUser}
+        />
+      )}
 
       {isModalOpen && (
         <UserFormModal

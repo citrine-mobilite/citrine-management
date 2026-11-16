@@ -41,23 +41,13 @@ export const TaskTimePyramid: React.FC<TaskTimePyramidProps> = ({
   return (
     <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-100">
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <div className="p-2.5 bg-gradient-to-br from-[#2A7B76] to-emerald-800 text-white rounded-2xl shadow-sm">
             <Layers className="h-5 w-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-serif font-bold text-base text-stone-900">
-                Pyramide du Temps Passé & Distribution des Charges
-              </h3>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-[#2A7B76] border border-emerald-200">
-                Style Pyramide des Âges
-              </span>
-            </div>
-            <p className="text-xs text-stone-500 mt-0.5">
-              Tâches ordonnées de celle qui a demandé le plus de temps à celle qui en a demandé le moins.
-            </p>
-          </div>
+          <h3 className="font-serif font-bold text-base text-stone-900">
+            Pyramide du Temps Passé &amp; Distribution des Charges
+          </h3>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

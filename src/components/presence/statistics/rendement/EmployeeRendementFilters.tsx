@@ -77,16 +77,11 @@ export const EmployeeRendementFilters: React.FC<EmployeeRendementFiltersProps> =
 }) => (
   <>
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
-      <div>
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-emerald-50 text-[#2A7B76] rounded-xl border border-emerald-100">
-            <CheckSquare className="h-4 w-4" />
-          </div>
-          <h3 className="font-serif font-bold text-base text-stone-900">Détail des Tâches &amp; Sous-Tâches</h3>
+      <div className="flex items-center gap-2">
+        <div className="p-2 bg-emerald-50 text-[#2A7B76] rounded-xl border border-emerald-100">
+          <CheckSquare className="h-4 w-4" />
         </div>
-        <p className="text-xs text-stone-500 mt-0.5">
-          Filtrage complet multicritère (statut, priorité, projet, nature, durée, période, tri) avec recalcul immédiat.
-        </p>
+        <h3 className="font-serif font-bold text-base text-stone-900">Détail des Tâches &amp; Sous-Tâches</h3>
       </div>
 
       <div className="bg-stone-100 p-1 rounded-xl flex items-center border border-stone-200 text-xs font-bold shrink-0">

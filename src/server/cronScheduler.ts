@@ -1,4 +1,5 @@
 import { executeDailyTaskSheetDispatch } from '../services/dailyTaskSheetCronService';
+import { executeMonthlyTaskSheetDispatch } from '../services/periodicTaskSheetCronService';
 import { sendWeeklyConsolidatedReport } from '../services/weeklyAttendanceReportService';
 import { sendMondayGreetingToAllEmployees } from '../services/mondayGreetingMailService';
 
@@ -7,11 +8,13 @@ export function startScheduledCronJobs(): NodeJS.Timeout {
     const now = new Date();
     const options: Intl.DateTimeFormatOptions = {
       timeZone: 'Africa/Douala',
+      day: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
       hour12: false,
     };
     const parts = new Intl.DateTimeFormat('en-GB', options).formatToParts(now);
+    const dayOfMonth = parseInt(parts.find((p) => p.type === 'day')?.value || '0', 10);
     const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
     const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
 
@@ -31,6 +34,16 @@ export function startScheduledCronJobs(): NodeJS.Timeout {
         await sendMondayGreetingToAllEmployees({ forceMonday: true });
       } catch (err) {
         console.error('[CRON LUNDI 08:00 Error]:', err);
+      }
+    }
+
+    const monthlyTaskSheetKey = `monthly_tasksheet_cron_sent_${todayStr.slice(0, 7)}`;
+    if (dayOfMonth === 1 && hour === 8 && minute === 30 && !(global as any)[monthlyTaskSheetKey]) {
+      (global as any)[monthlyTaskSheetKey] = true;
+      try {
+        await executeMonthlyTaskSheetDispatch();
+      } catch (err) {
+        console.error('[CRON MENSUEL 1er 08:30 Error]:', err);
       }
     }
 

@@ -49,9 +49,16 @@ export function useReminderModalLogic({
   const [selectedPeriods, setSelectedPeriods] = useState<string[]>(['exact']);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [allEmployees, setAllEmployees] = useState(true);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [lastTemplateNote, setLastTemplateNote] = useState<string>('');
+  const [lastTemplateEntity, setLastTemplateEntity] = useState<string>('');
 
   useEffect(() => {
     if (!isOpen) return;
+
+    setSelectedTemplateId(null);
+    setLastTemplateNote('');
+    setLastTemplateEntity('');
 
     if (initialReminder) {
       const detectedKind: ReminderKind =
@@ -108,16 +115,50 @@ export function useReminderModalLogic({
 
   const isEditing = Boolean(initialReminder && initialReminder.id);
 
+  const computeNextMonthlyDueDate = (dayOfMonth: number): string => {
+    const now = new Date();
+    const currentDay = now.getDate();
+    const targetMonthOffset = dayOfMonth >= currentDay ? 0 : 1;
+    const targetMonthDate = new Date(now.getFullYear(), now.getMonth() + targetMonthOffset, 1);
+    const lastDay = new Date(
+      targetMonthDate.getFullYear(),
+      targetMonthDate.getMonth() + 1,
+      0
+    ).getDate();
+    const finalDay = Math.min(dayOfMonth, lastDay);
+    const y = targetMonthDate.getFullYear();
+    const m = String(targetMonthDate.getMonth() + 1).padStart(2, '0');
+    const d = String(finalDay).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
   const handleApplyTemplate = (templateId: string) => {
     const tpl = DEADLINE_TEMPLATES.find((t) => t.id === templateId);
     if (!tpl) return;
+    setSelectedTemplateId(tpl.id);
     setKind('deadline');
     setCategory(tpl.category);
     setTitle(tpl.title);
     setRenewalCycle(tpl.renewalCycle);
     setAlertLeadDays(tpl.alertLeadDays);
-    if (!note.trim()) {
+
+    if (tpl.entityName && (!entityName.trim() || entityName === lastTemplateEntity)) {
+      setEntityName(tpl.entityName);
+      setLastTemplateEntity(tpl.entityName);
+    }
+
+    if (!note.trim() || note === lastTemplateNote) {
       setNote(tpl.note);
+      setLastTemplateNote(tpl.note);
+    }
+
+    if (tpl.suggestedDayOfMonth) {
+      setDate(computeNextMonthlyDueDate(tpl.suggestedDayOfMonth));
+    }
+
+    if (tpl.id === 'salaires_mensuels' && !isEmployee) {
+      setAllEmployees(true);
+      setSelectedEmployeeIds([]);
     }
   };
 
@@ -192,6 +233,7 @@ export function useReminderModalLogic({
     note, setNote, date, setDate, renewalCycle, setRenewalCycle,
     alertLeadDays, setAlertLeadDays, enableSoundAlarm, setEnableSoundAlarm,
     time, setTime, selectedPeriods, selectedEmployeeIds, allEmployees,
+    selectedTemplateId,
     isEditing, handleApplyTemplate, handleTogglePeriod,
     handleToggleEmployee, handleToggleAllEmployees, handleSubmit,
   };

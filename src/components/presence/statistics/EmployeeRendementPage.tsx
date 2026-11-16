@@ -2,7 +2,9 @@ import React from 'react';
 import { Employee, Task, Presence, AttendanceIncident, AppUser } from '../../../types';
 import { SubtaskCreateModal } from '../../tasks/SubtaskCreateModal';
 import { TaskSheetModal } from '../../tasksheet/TaskSheetModal';
+import { TaskTimeSpentHistogram } from './TaskTimeSpentHistogram';
 import { TaskTimePyramid } from './TaskTimePyramid';
+import { TaskRedundancyPanel } from './TaskRedundancyPanel';
 import { useEmployeeRendementLogic } from './rendement/useEmployeeRendementLogic';
 import { EmployeeRendementHeader } from './rendement/EmployeeRendementHeader';
 import { EmployeeRendementFilters } from './rendement/EmployeeRendementFilters';
@@ -45,7 +47,16 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
         onOpenTaskSheet={logic.openTaskSheet}
       />
 
-      <div ref={logic.taskDetailSectionRef} className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm space-y-5">
+      <TaskTimeSpentHistogram
+        tasks={logic.sortedByRecencyTasks}
+        employee={employee}
+        title={`Temps Passé par Sous-Tâche — ${employee.name}`}
+        maxItems={10}
+        showAssigneeInTooltip={false}
+        onSelectTask={(entry) => logic.handleSelectFromPyramid(entry.taskId)}
+      />
+
+      <div ref={logic.taskDetailSectionRef} className="bg-white p-6 rounded-3xl border border-stone-200 shadow-2xs space-y-5">
         <EmployeeRendementFilters
           limitToTen={logic.limitToTen}
           setLimitToTen={logic.setLimitToTen}
@@ -108,6 +119,13 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
       </div>
 
       <TaskTimePyramid tasks={logic.sortedByRecencyTasks} onSelectTask={logic.handleSelectFromPyramid} />
+
+      <TaskRedundancyPanel
+        employee={employee}
+        tasks={tasks}
+        onUpdateTask={onUpdateTask}
+        showToast={showToast}
+      />
 
       {logic.activeModalTask && (
         <SubtaskCreateModal

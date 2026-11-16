@@ -1,6 +1,5 @@
 import { CompanyModuleConfig, DEFAULT_MODULE_CONFIG } from '../../types';
 import { safeStorage } from '../../utils/safeStorage';
-import { CITRINE_DEFAULT_LOGO_BASE64 } from '../../assets/citrineLogoBase64';
 
 export const MODULE_CACHE_KEY = 'citrine_module_config';
 
@@ -19,7 +18,7 @@ export function getStoredModuleConfig(): CompanyModuleConfig {
         return {
           ...DEFAULT_MODULE_CONFIG,
           ...configObj,
-          companyLogoBase64: configObj.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+          companyLogoBase64: configObj.companyLogoBase64 || '/citrine-logo.png',
         };
       }
     }

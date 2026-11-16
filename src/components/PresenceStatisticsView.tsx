@@ -41,9 +41,7 @@ export function PresenceStatisticsView({
   });
 
   if (logic.selectedRendementEmployee) {
-    const statRow = logic.statsByEmployeeList.find(
-      (s) => s.employee.id === logic.selectedRendementEmployee!.id
-    );
+    const statRow = logic.statRowByEmployeeId.get(String(logic.selectedRendementEmployee.id));
     const empAssiduite = statRow ? statRow.assiduiteRate : 100;
 
     return (
@@ -95,13 +93,20 @@ export function PresenceStatisticsView({
       ) : (
         <PresenceStatisticsRendementTab
           filteredMetricsList={logic.filteredMetricsList}
+          statRowByEmployeeId={logic.statRowByEmployeeId}
+          periodTasksForHistogram={logic.periodTasksForHistogram}
           dynamicTeamRate={logic.dynamicTeamRate}
+          avgCombinedScorePeriod={logic.avgCombinedScorePeriod}
           totalSubtasksCount={logic.totalSubtasksCount}
           completedSubtasksCount={logic.completedSubtasksCount}
           totalAssignedTasksPeriod={logic.totalAssignedTasksPeriod}
           totalCompletedTasksPeriod={logic.totalCompletedTasksPeriod}
           totalInProgressTasksPeriod={logic.totalInProgressTasksPeriod}
+          totalBlockedTasksPeriod={logic.totalBlockedTasksPeriod}
+          totalOverdueTasksPeriod={logic.totalOverdueTasksPeriod}
           totalMilestonesPeriod={logic.totalMilestonesPeriod}
+          totalEffectiveHoursPeriod={logic.totalEffectiveHoursPeriod}
+          totalEstimatedHoursPeriod={logic.totalEstimatedHoursPeriod}
           onSelectRendementEmployee={(emp) => logic.setSelectedRendementEmployee(emp)}
           onOpenTaskSheetModal={logic.handleOpenTaskSheetModal}
           onSelectEmployee={onSelectEmployee}

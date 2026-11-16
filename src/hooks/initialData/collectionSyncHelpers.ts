@@ -11,7 +11,6 @@ import {
   StrategicProject,
 } from '../../types';
 import { saveDocument, deleteDocument, getCollection, COLLECTIONS } from '../../services/dataService';
-import { CITRINE_DEFAULT_LOGO_BASE64 } from '../../assets/citrineLogoBase64';
 import { persistStoredModuleConfig } from './moduleConfigStorage';
 
 export async function syncCollectionDiff<T extends { id: string }>(
@@ -136,7 +135,7 @@ export async function refreshInitialCollectionsData(setters: {
             ...DEFAULT_MODULE_CONFIG,
             ...prev,
             ...dbConfig,
-            companyLogoBase64: dbConfig.companyLogoBase64 || prev.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+            companyLogoBase64: dbConfig.companyLogoBase64 || prev.companyLogoBase64 || '/citrine-logo.png',
           };
           persistStoredModuleConfig(mergedConfig);
           return mergedConfig;

@@ -7,7 +7,6 @@ import {
 } from '../../types';
 import { subscribeToCollection, subscribeToDocument, getCollection, COLLECTIONS } from '../../services/dataService';
 import { subscribeToUsers } from '../../services/userService';
-import { CITRINE_DEFAULT_LOGO_BASE64 } from '../../assets/citrineLogoBase64';
 import { realtimeSyncService } from '../../services/realtimeSyncService';
 import { syncMissionsAndEmployeeStatus } from '../../services/missionLifecycleService';
 import { persistStoredModuleConfig } from './moduleConfigStorage';
@@ -84,7 +83,7 @@ export function useInitialDataSubscriptions({
               ...DEFAULT_MODULE_CONFIG,
               ...prev,
               ...data,
-              companyLogoBase64: data.companyLogoBase64 || prev.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+              companyLogoBase64: data.companyLogoBase64 || prev.companyLogoBase64 || '/citrine-logo.png',
             };
             persistStoredModuleConfig(merged);
             return merged;
@@ -104,7 +103,7 @@ export function useInitialDataSubscriptions({
                 ...DEFAULT_MODULE_CONFIG,
                 ...prev,
                 ...dbConfig,
-                companyLogoBase64: dbConfig.companyLogoBase64 || prev.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+                companyLogoBase64: dbConfig.companyLogoBase64 || prev.companyLogoBase64 || '/citrine-logo.png',
               };
               persistStoredModuleConfig(merged);
               return merged;

@@ -1,16 +1,44 @@
 import React from 'react';
-import { LayoutGrid, ListOrdered, FolderPlus, Trophy, FolderKanban } from 'lucide-react';
-import { TaskProject, Task } from '../../types';
+import {
+  Calendar,
+  FolderKanban,
+  FolderPlus,
+  GanttChart,
+  Inbox,
+  LayoutGrid,
+  ListTree,
+  Trophy,
+  UserCheck,
+  Workflow,
+} from 'lucide-react';
+import { Task, TaskProject } from '../../types';
+import type { AsanaViewMode } from './useTaskLogic';
 
 interface TaskProjectBarProps {
   projects: TaskProject[];
   activeProjectId: string;
   onSelectProject: (id: string) => void;
-  activeView: 'kanban' | 'table' | 'rendement';
-  onChangeView: (view: 'kanban' | 'table' | 'rendement') => void;
+  activeView: AsanaViewMode;
+  onChangeView: (view: AsanaViewMode) => void;
   tasks: Task[];
+  inboxCount?: number;
   onOpenNewProject: () => void;
+  onOpenProjectRules?: () => void;
 }
+
+const VIEW_TABS: Array<{
+  id: AsanaViewMode;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  { id: 'list', label: 'Liste', icon: ListTree },
+  { id: 'kanban', label: 'Tableau', icon: LayoutGrid },
+  { id: 'timeline', label: 'Chronologie', icon: GanttChart },
+  { id: 'calendar', label: 'Calendrier', icon: Calendar },
+  { id: 'mytasks', label: 'Mes Tâches', icon: UserCheck },
+  { id: 'inbox', label: 'Boîte de réception', icon: Inbox },
+  { id: 'rendement', label: 'Rendement', icon: Trophy },
+];
 
 export const TaskProjectBar: React.FC<TaskProjectBarProps> = ({
   projects,
@@ -19,7 +47,9 @@ export const TaskProjectBar: React.FC<TaskProjectBarProps> = ({
   activeView,
   onChangeView,
   tasks,
+  inboxCount = 0,
   onOpenNewProject,
+  onOpenProjectRules,
 }) => {
   const getProjectCount = (projId: string) =>
     projId === 'all'
@@ -89,58 +119,63 @@ export const TaskProjectBar: React.FC<TaskProjectBarProps> = ({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={onOpenNewProject}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-[#2A7B76] hover:bg-emerald-50 border border-stone-200 transition cursor-pointer whitespace-nowrap shrink-0"
-          title="Créer un nouveau projet"
-        >
-          <FolderPlus className="h-3.5 w-3.5" />
-          <span>Nouveau projet</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {onOpenProjectRules && (
+            <button
+              type="button"
+              onClick={onOpenProjectRules}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 hover:bg-stone-100 border border-stone-200 transition cursor-pointer whitespace-nowrap shrink-0"
+              title="Règles et sections du projet"
+            >
+              <Workflow className="h-3.5 w-3.5 text-[#2A7B76]" />
+              <span>Règles</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onOpenNewProject}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-[#2A7B76] hover:bg-emerald-50 border border-stone-200 transition cursor-pointer whitespace-nowrap shrink-0"
+            title="Créer un nouveau projet"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+            <span>Nouveau projet</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-stone-100">
-        <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl shrink-0 border border-stone-200/80 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => onChangeView('kanban')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
-              activeView === 'kanban'
-                ? 'bg-white text-[#2A7B76]'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            <LayoutGrid className="h-3.5 w-3.5" />
-            <span>Kanban</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onChangeView('table')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
-              activeView === 'table'
-                ? 'bg-white text-[#2A7B76]'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            <ListOrdered className="h-3.5 w-3.5" />
-            <span>Tableau / Liste</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onChangeView('rendement')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
-              activeView === 'rendement'
-                ? 'bg-white text-[#2A7B76]'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            <Trophy className="h-3.5 w-3.5 text-amber-600" />
-            <span>Rendement &amp; Charge</span>
-          </button>
+        <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200/80 overflow-x-auto max-w-full">
+          {VIEW_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeView === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onChangeView(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
+                  isActive
+                    ? 'bg-white text-[#2A7B76]'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Icon
+                  className={`h-3.5 w-3.5 ${
+                    tab.id === 'rendement' && isActive ? 'text-amber-600' : ''
+                  }`}
+                />
+                <span>{tab.label}</span>
+                {tab.id === 'inbox' && inboxCount > 0 && (
+                  <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-700 font-bold">
+                    {inboxCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        <span className="text-[11px] text-stone-500 hidden sm:inline font-mono tabular-nums">
+        <span className="text-[11px] text-stone-500 hidden md:inline font-mono tabular-nums whitespace-nowrap">
           {projects.filter((p) => p.id !== 'all').length} projet(s) actif(s)
         </span>
       </div>

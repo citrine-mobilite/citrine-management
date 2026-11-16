@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Employee, Presence, Task, AppUser } from '../../../../types';
-import { computePresenceStatistics, StatisticsPeriod } from '../statisticsCalculations';
+import { computePresenceStatistics, EmployeeStatRow, StatisticsPeriod } from '../statisticsCalculations';
 import { computeEmployeeRendement } from '../../../../utils/rendementCalculator';
 import { isSelfOnlyUser, findMatchingEmployee, isManagerOrAdminEmployee } from '../../../../utils/roleUtils';
+import { round1, safeNum } from '../../../../utils/rendementTaskHelpers';
 
 interface UsePresenceStatisticsLogicProps {
   employees: Employee[];
@@ -34,14 +35,14 @@ export function usePresenceStatisticsLogic({
   const [taskSheetMode, setTaskSheetMode] = useState<'day' | 'month' | 'year'>('month');
 
   const trackedEmployees = useMemo(() => {
-    const base = employees.filter((e) => {
+    const base = (employees || []).filter((e) => {
       const st = e.employmentStatus || (typeof e.status === 'string' ? e.status : (e.status ? 'en_poste' : 'parti'));
       const isEnPoste = st === 'en_poste' || st === ('true' as any);
       if (!isEnPoste) return false;
       if (e.roleType === 'sponsor') return false;
       if (!isManagerOrAdminEmployee(e)) return true;
 
-      return presences.some((p) => {
+      return (presences || []).some((p) => {
         if (String(p.employeeId) !== String(e.id)) return false;
         if (p.status === 'absent') return false;
         const arr = (p.arrivalTime || '').trim();
@@ -62,6 +63,14 @@ export function usePresenceStatisticsLogic({
 
   const statsByEmployeeList = stats?.statsByEmployee || [];
 
+  const statRowByEmployeeId = useMemo(() => {
+    const map = new Map<string, EmployeeStatRow>();
+    statsByEmployeeList.forEach((s) => {
+      map.set(String(s.employee.id), s);
+    });
+    return map;
+  }, [statsByEmployeeList]);
+
   const filteredStatsByEmployee = useMemo(() => {
     if (!searchQuery.trim()) return statsByEmployeeList;
     const q = searchQuery.toLowerCase();
@@ -73,16 +82,21 @@ export function usePresenceStatisticsLogic({
   }, [statsByEmployeeList, searchQuery]);
 
   const employeeRendementMetricsList = useMemo(() => {
+    const periodFilter =
+      period === 'all'
+        ? undefined
+        : {
+            startStr: stats.startStr,
+            endStr: stats.endStr,
+            period,
+          };
+
     return trackedEmployees.map((emp) => {
-      const statRow = statsByEmployeeList.find((s) => s.employee.id === emp.id);
-      const empAssiduite = statRow ? statRow.assiduiteRate : 100;
-      return computeEmployeeRendement(emp, tasks, empAssiduite, {
-        startStr: stats.startStr,
-        endStr: stats.endStr,
-        period,
-      });
+      const statRow = statRowByEmployeeId.get(String(emp.id));
+      const empAssiduite = statRow ? safeNum(statRow.assiduiteRate, 100) : 100;
+      return computeEmployeeRendement(emp, tasks, empAssiduite, periodFilter);
     });
-  }, [trackedEmployees, tasks, statsByEmployeeList, stats.startStr, stats.endStr, period]);
+  }, [trackedEmployees, tasks, statRowByEmployeeId, stats.startStr, stats.endStr, period]);
 
   const filteredMetricsList = useMemo(() => {
     if (!searchQuery.trim()) return employeeRendementMetricsList;
@@ -94,35 +108,87 @@ export function usePresenceStatisticsLogic({
     );
   }, [employeeRendementMetricsList, searchQuery]);
 
+  const periodTasksForHistogram = useMemo(() => {
+    const taskMap = new Map<string, Task>();
+    filteredMetricsList.forEach((m) => {
+      m.assignedTasks.forEach((t) => {
+        if (!t || !t.id) return;
+        const existing = taskMap.get(t.id);
+        if (!existing) {
+          taskMap.set(t.id, t);
+        } else if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
+          const existingSubs = Array.isArray(existing.subtasks) ? existing.subtasks : [];
+          const subIds = new Set(existingSubs.map((s) => s.id));
+          const mergedSubs = [...existingSubs];
+          t.subtasks.forEach((s) => {
+            if (!subIds.has(s.id)) {
+              subIds.add(s.id);
+              mergedSubs.push(s);
+            }
+          });
+          taskMap.set(t.id, { ...existing, subtasks: mergedSubs });
+        }
+      });
+    });
+    if (taskMap.size === 0 && !searchQuery.trim() && filteredMetricsList.length === 0) {
+      (tasks || []).forEach((t) => {
+        if (t && t.id) taskMap.set(t.id, t);
+      });
+    }
+    return Array.from(taskMap.values());
+  }, [filteredMetricsList, searchQuery, tasks]);
+
   const dynamicTeamRate = useMemo(() => {
     if (employeeRendementMetricsList.length === 0) return 0;
-    const sum = employeeRendementMetricsList.reduce((acc, m) => acc + m.taskRendementRate, 0);
+    const sum = employeeRendementMetricsList.reduce((acc, m) => acc + safeNum(m.taskRendementRate), 0);
     return Math.round(sum / employeeRendementMetricsList.length);
   }, [employeeRendementMetricsList]);
 
+  const avgCombinedScorePeriod = useMemo(() => {
+    if (filteredMetricsList.length === 0) return 0;
+    const sum = filteredMetricsList.reduce((acc, m) => acc + safeNum(m.globalCombinedScore), 0);
+    return Math.round(sum / filteredMetricsList.length);
+  }, [filteredMetricsList]);
+
   const totalSubtasksCount = useMemo(
-    () => employeeRendementMetricsList.reduce((sum, m) => sum + m.totalSubtasks, 0),
-    [employeeRendementMetricsList]
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.totalSubtasks), 0),
+    [filteredMetricsList]
   );
   const completedSubtasksCount = useMemo(
-    () => employeeRendementMetricsList.reduce((sum, m) => sum + m.completedSubtasks, 0),
-    [employeeRendementMetricsList]
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.completedSubtasks), 0),
+    [filteredMetricsList]
   );
   const totalAssignedTasksPeriod = useMemo(
-    () => employeeRendementMetricsList.reduce((sum, m) => sum + m.totalTasks, 0),
-    [employeeRendementMetricsList]
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.totalTasks), 0),
+    [filteredMetricsList]
   );
   const totalCompletedTasksPeriod = useMemo(
-    () => employeeRendementMetricsList.reduce((sum, m) => sum + m.completedTasks, 0),
-    [employeeRendementMetricsList]
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.completedTasks), 0),
+    [filteredMetricsList]
   );
   const totalInProgressTasksPeriod = useMemo(
-    () => employeeRendementMetricsList.reduce((sum, m) => sum + m.inProgressTasks, 0),
-    [employeeRendementMetricsList]
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.inProgressTasks), 0),
+    [filteredMetricsList]
+  );
+  const totalBlockedTasksPeriod = useMemo(
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.blockedTasks), 0),
+    [filteredMetricsList]
+  );
+  const totalOverdueTasksPeriod = useMemo(
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.overdueTasks), 0),
+    [filteredMetricsList]
   );
   const totalMilestonesPeriod = useMemo(
-    () => employeeRendementMetricsList.reduce((sum, m) => sum + m.milestonesCount, 0),
-    [employeeRendementMetricsList]
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.milestonesCount), 0),
+    [filteredMetricsList]
+  );
+  const totalEffectiveHoursPeriod = useMemo(
+    () => round1(filteredMetricsList.reduce((sum, m) => sum + safeNum(m.effectiveHoursSpent), 0)),
+    [filteredMetricsList]
+  );
+  const totalEstimatedHoursPeriod = useMemo(
+    () => round1(filteredMetricsList.reduce((sum, m) => sum + safeNum(m.estimatedHoursTotal), 0)),
+    [filteredMetricsList]
   );
 
   const handleOpenTaskSheetModal = (employee: Employee, mode: 'day' | 'month' | 'year' = 'month') => {
@@ -148,15 +214,22 @@ export function usePresenceStatisticsLogic({
     taskSheetMode,
     stats,
     statsByEmployeeList,
+    statRowByEmployeeId,
     filteredStatsByEmployee,
     filteredMetricsList,
+    periodTasksForHistogram,
     dynamicTeamRate,
+    avgCombinedScorePeriod,
     totalSubtasksCount,
     completedSubtasksCount,
     totalAssignedTasksPeriod,
     totalCompletedTasksPeriod,
     totalInProgressTasksPeriod,
+    totalBlockedTasksPeriod,
+    totalOverdueTasksPeriod,
     totalMilestonesPeriod,
+    totalEffectiveHoursPeriod,
+    totalEstimatedHoursPeriod,
     handleOpenTaskSheetModal,
   };
 }

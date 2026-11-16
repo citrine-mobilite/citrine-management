@@ -1,4 +1,5 @@
 import type ExcelJS from 'exceljs';
+import { DEFAULT_COMPANY_INFO } from '../pdf/pdfCompanyInfo';
 
 export const CITRINE_XLSX_COLORS = {
   emeraldDark: 'FF164E4B',
@@ -6,6 +7,7 @@ export const CITRINE_XLSX_COLORS = {
   emeraldTint: 'FFECFDF5',
   emeraldBorder: 'FFA7F3D0',
   emeraldText: 'FF065F46',
+  goldAccent: 'FFD4A82F',
   slateHeader: 'FFF1F5F9',
   slateBg: 'FFF8FAFC',
   slateZebra: 'FFFCFBF9',
@@ -54,7 +56,50 @@ export function styleBannerRow(
       color: { argb: CITRINE_XLSX_COLORS.white },
     };
     cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    if (sub) {
+      cell.border = {
+        bottom: { style: 'medium', color: { argb: CITRINE_XLSX_COLORS.goldAccent } },
+      };
+    }
   }
+}
+
+export function styleOfficialFooterRow(
+  ws: ExcelJS.Worksheet,
+  rowIdx: number,
+  colCount: number
+) {
+  const row = ws.getRow(rowIdx);
+  row.getCell(1).value =
+    `${DEFAULT_COMPANY_INFO.name} · ${DEFAULT_COMPANY_INFO.address} (${DEFAULT_COMPANY_INFO.city}, ${DEFAULT_COMPANY_INFO.country}) · Tél. ${DEFAULT_COMPANY_INFO.phone} · ${DEFAULT_COMPANY_INFO.email} · Capital ${DEFAULT_COMPANY_INFO.capital} · NUI : ${DEFAULT_COMPANY_INFO.nui} · RCCM : ${DEFAULT_COMPANY_INFO.rccm}`;
+  ws.mergeCells(rowIdx, 1, rowIdx, colCount);
+  row.height = 24;
+  for (let c = 1; c <= colCount; c++) {
+    const cell = row.getCell(c);
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: CITRINE_XLSX_COLORS.slateHeader },
+    };
+    cell.font = {
+      name: 'Calibri',
+      size: 8.5,
+      bold: true,
+      color: { argb: CITRINE_XLSX_COLORS.textMuted },
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.border = {
+      top: { style: 'medium', color: { argb: CITRINE_XLSX_COLORS.goldAccent } },
+      bottom: { style: 'thin', color: { argb: CITRINE_XLSX_COLORS.border } },
+    };
+  }
+}
+
+export function applyOfficialExcelHeaderFooter(ws: ExcelJS.Worksheet) {
+  ws.headerFooter = {
+    oddHeader: `&L&B${DEFAULT_COMPANY_INFO.name}&B — ${DEFAULT_COMPANY_INFO.subTitle}&RRépublique du Cameroun · Document Officiel`,
+    oddFooter: `&C${DEFAULT_COMPANY_INFO.name} · ${DEFAULT_COMPANY_INFO.address} · NUI : ${DEFAULT_COMPANY_INFO.nui} · RCCM : ${DEFAULT_COMPANY_INFO.rccm} · Page &P / &N`,
+  };
 }
 
 export function styleSectionHeaderRow(

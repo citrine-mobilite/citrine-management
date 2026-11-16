@@ -86,12 +86,17 @@ export function usePresencePanelLogic({
   const empPresences = presences.filter((p) => p.employeeId === activeEmployee?.id);
   const currentPresence = presences.find((p) => p.employeeId === activeEmployee?.id && p.date === selectedDate);
 
-  const presentCount = empPresences.filter((p) => p.status === 'present').length;
-  const lateCount = empPresences.filter((p) => p.status === 'late').length;
-  const absentCount = empPresences.filter((p) => p.status === 'absent').length;
+  const isWeDate = (dateStr?: string) => {
+    if (!dateStr) return false;
+    const dow = new Date(`${dateStr.split('T')[0]}T12:00:00`).getDay();
+    return dow === 0 || dow === 6;
+  };
+  const presentCount = empPresences.filter((p) => p.status === 'present' || (isWeDate(p.date) && p.status === 'late')).length;
+  const lateCount = empPresences.filter((p) => p.status === 'late' && !isWeDate(p.date)).length;
+  const absentCount = empPresences.filter((p) => p.status === 'absent' && !isWeDate(p.date)).length;
   const totalActDays = presentCount + lateCount + absentCount || 1;
   const punctualityRate = Math.round((presentCount / totalActDays) * 100);
-  const attendanceRate = Math.round(((presentCount + lateCount) / (totalActDays + 1)) * 100) || 50;
+  const attendanceRate = Math.round(((presentCount + lateCount) / totalActDays) * 100) || 100;
 
   useEffect(() => {
     const unsub = realtimeSyncService.subscribeToPresenceUpdates((eventData) => {

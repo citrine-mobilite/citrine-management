@@ -13,14 +13,9 @@ export const RendementTaskDurationChart: React.FC<{
   return (
     <div className="bg-stone-50 p-5 rounded-2xl border border-stone-200 space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-serif font-bold text-sm text-stone-900">
-            Diagramme de Temps Passé par Tâche (Classé du plus long au plus court)
-          </h3>
-          <p className="text-[11px] text-stone-500">
-            Estimation du temps de travail (heures) basée sur la complexité et les sous-tâches.
-          </p>
-        </div>
+        <h3 className="font-serif font-bold text-sm text-stone-900">
+          Temps Passé par Tâche
+        </h3>
         <span className="text-xs font-bold text-[#2A7B76] bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
           {sortedTasks.length} Tâche(s) active(s)
         </span>
@@ -28,7 +23,9 @@ export const RendementTaskDurationChart: React.FC<{
 
       <div className="space-y-3 pt-2">
         {sortedTasks.map((task) => {
-          const percentage = Math.round((task.estimatedHours / maxHours) * 100);
+          const safeHours = Number.isFinite(task.estimatedHours) ? task.estimatedHours : 0;
+          const safeMax = Number.isFinite(maxHours) && maxHours > 0 ? maxHours : 1;
+          const percentage = Math.round((safeHours / safeMax) * 100);
           const isCompleted = task.status === 'completed';
           return (
             <div key={task.id} className="space-y-1">

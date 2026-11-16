@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Download, FileText, Check } from 'lucide-react';
 import { GeneratedDocument, CompanyModuleConfig } from '../../types';
 import { generateCitrineOfficialDocumentPdf, OfficialDocumentData } from '../../services/pdf/citrineOfficialDocumentPdf';
-import { CITRINE_DEFAULT_LOGO_BASE64 } from '../../assets/citrineLogoBase64';
+import { ensurePublicLogoLoaded } from '../../services/pdf/publicLogoLoader';
 
 interface OfficialDocumentModalProps {
   isOpen: boolean;
@@ -28,12 +28,12 @@ export const OfficialDocumentModal: React.FC<OfficialDocumentModalProps> = ({
 
   if (!isOpen || !document) return null;
 
-  // Image du logo : conservée telle quelle en BD (Base64) ou fallback raster direct (aucun SVG)
+  // Image du logo : conservée en BD si personnalisée, sinon logo officiel du dossier public
   const currentLogo =
     document.metadata?.logoBase64 ||
-    moduleConfig?.companyLogoBase64 ||
-    CITRINE_DEFAULT_LOGO_BASE64 ||
-    '/citrine-logo.png';
+    (moduleConfig?.companyLogoBase64 && moduleConfig.companyLogoBase64.startsWith('data:image/')
+      ? moduleConfig.companyLogoBase64
+      : '/citrine-logo.png');
 
   const docDate = document.createdAt
     ? new Date(document.createdAt).toLocaleDateString('fr-FR', {
@@ -70,7 +70,8 @@ export const OfficialDocumentModal: React.FC<OfficialDocumentModalProps> = ({
     document.templateParams?.department ||
     'Service Opérations';
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
+    const resolvedLogoDataUrl = await ensurePublicLogoLoaded(currentLogo);
     const data: OfficialDocumentData = {
       id: document.id,
       referenceNumber: refCode,
@@ -89,7 +90,7 @@ export const OfficialDocumentModal: React.FC<OfficialDocumentModalProps> = ({
         "Dans l'attente de la suite réservée à la présente, nous vous prions d'agréer l'expression de nos salutations distinguées.",
       signatoryCompany: 'Pour CITRINE SARL',
       signatoryTitle: 'La Direction Générale',
-      logoBase64: currentLogo,
+      logoBase64: resolvedLogoDataUrl,
       includeSignature: includeSignature,
       signatureType: includeSignature ? 'direction_only' : 'none',
       collaboratorSignatureLabel: document.employeeName ? `Pour accord : ${document.employeeName}` : 'Le Collaborateur',

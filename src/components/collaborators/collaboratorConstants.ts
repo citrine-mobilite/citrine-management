@@ -2,6 +2,7 @@ import { AppUser, Employee, EmployeeStatus, UserRole } from '../../types';
 
 export type CollaboratorViewMode = 'list' | 'detail';
 export type CollaboratorDetailTab =
+  | 'statistics'
   | 'payslips'
   | 'presences'
   | 'map'

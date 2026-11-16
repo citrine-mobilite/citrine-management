@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 export const COLLECTIONS = {
   EMPLOYEES: 'employees',
   TASKS: 'tasks',
+  TASK_PROJECTS: 'task_projects',
   REMINDERS: 'reminders',
   PRESENCES: 'presences',
   DOCUMENTS: 'documents',

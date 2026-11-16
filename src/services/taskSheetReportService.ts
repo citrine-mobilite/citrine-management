@@ -21,3 +21,15 @@ export {
   buildTaskSheetExcelBuffer,
   buildTaskSheetExcelBase64,
 } from './taskSheetReport/taskSheetXlsxBuilder';
+export {
+  buildMonthlyTaskSheetHtmlReport,
+  buildYearlyTaskSheetHtmlReport,
+} from './taskSheetReport/monthlyYearlyTaskSheetHtmlReport';
+export {
+  buildMonthlyTaskSheetXlsxWorkbook,
+  buildMonthlyTaskSheetExcelBuffer,
+  buildMonthlyTaskSheetExcelBase64,
+  buildYearlyTaskSheetXlsxWorkbook,
+  buildYearlyTaskSheetExcelBuffer,
+  buildYearlyTaskSheetExcelBase64,
+} from './taskSheetReport/monthlyYearlyTaskSheetXlsxBuilder';

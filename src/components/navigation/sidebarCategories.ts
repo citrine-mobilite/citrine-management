@@ -128,7 +128,7 @@ export function getSidebarCategories({
   if (moduleConfig.enableTasks !== false) {
     opItems.push({
       id: 'tasks',
-      label: 'Tâches & Jalons',
+      label: 'Gestion des Tâches',
       description: '',
       icon: Calendar,
     });

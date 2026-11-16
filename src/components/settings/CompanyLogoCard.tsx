@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
 import { Image as ImageIcon, Upload, RotateCcw, CheckCircle2 } from 'lucide-react';
-import { CITRINE_DEFAULT_LOGO_BASE64 } from '../../assets/citrineLogoBase64';
 
 interface CompanyLogoCardProps {
   companyLogoBase64?: string;
@@ -65,11 +64,15 @@ export const CompanyLogoCard: React.FC<CompanyLogoCardProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center gap-5 pt-1">
         <div className="p-4 bg-stone-50/80 rounded-2xl border border-stone-200 flex items-center justify-center min-w-[200px] h-20 shadow-inner">
           <img
-            src={companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64}
+            src={companyLogoBase64 || '/citrine-logo.png'}
             alt="Logo Entreprise"
             className="max-h-14 max-w-[190px] object-contain"
             onError={(e) => {
-              (e.target as HTMLImageElement).src = '/citrine-logo.png';
+              const img = e.target as HTMLImageElement;
+              if (!img.dataset.fallbackTried) {
+                img.dataset.fallbackTried = '1';
+                img.src = '/logo.png';
+              }
             }}
           />
         </div>

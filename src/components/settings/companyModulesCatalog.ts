@@ -53,7 +53,7 @@ export const MODULES_LIST: ModuleDefinition[] = [
   },
   {
     key: 'enableTasks',
-    title: 'Tâches & Jalons',
+    title: 'Gestion des Tâches',
     description: 'Attribution de missions, suivi d\'avancement, dates d\'échéance et statuts des livrables.',
     icon: Calendar,
     category: 'operations',

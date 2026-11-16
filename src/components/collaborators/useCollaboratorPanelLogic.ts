@@ -59,7 +59,7 @@ export function useCollaboratorPanelLogic(params: {
   const [selectedEmpId, setSelectedEmpId] = useState<string | null>(
     initialSelectedEmployeeId || null
   );
-  const [activeDetailTab, setActiveDetailTab] = useState<CollaboratorDetailTab>('payslips');
+  const [activeDetailTab, setActiveDetailTab] = useState<CollaboratorDetailTab>('statistics');
 
   useEffect(() => {
     if (initialSelectedEmployeeId) {

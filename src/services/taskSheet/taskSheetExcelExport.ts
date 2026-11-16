@@ -1,4 +1,5 @@
 import { DailyTaskSheetData } from './taskSheetTypes';
+import { DEFAULT_COMPANY_INFO } from '../pdf/pdfCompanyInfo';
 
 export function exportDailyTaskSheetToExcel(data: DailyTaskSheetData) {
   const safeName = data.employee.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
@@ -28,8 +29,12 @@ export function exportDailyTaskSheetToExcel(data: DailyTaskSheetData) {
     </head>
     <body>
       <table border="0" style="width: 100%; border-collapse: collapse; margin-bottom: 6px;">
-        <tr><td colspan="6" class="company-header" style="border: none; padding-bottom: 2px;">CITRINE</td></tr>
-        <tr><td colspan="6" class="subtitle" style="border-top: none; border-left: none; border-right: none; margin-bottom: 8px;">TASKSHEET — FEUILLE D'AVANCEMENT DES TÂCHES (${data.department.toUpperCase()})</td></tr>
+        <tr>
+          <td colspan="4" class="company-header" style="border: none; padding-bottom: 2px;">${DEFAULT_COMPANY_INFO.name}</td>
+          <td colspan="2" style="border: none; text-align: right; font-size: 9pt; font-weight: bold; color: #104c38;">RÉPUBLIQUE DU CAMEROUN · DOCUMENT OFFICIEL</td>
+        </tr>
+        <tr><td colspan="6" style="border: none; font-size: 9pt; color: #64748b; padding-top: 0;">${DEFAULT_COMPANY_INFO.subTitle} — ${DEFAULT_COMPANY_INFO.baseline}</td></tr>
+        <tr><td colspan="6" class="subtitle" style="border-top: none; border-left: none; border-right: none; margin-bottom: 8px;">FEUILLE DE TÂCHES JOURNALIÈRE (${data.department.toUpperCase()})</td></tr>
         <tr><td colspan="6" style="height: 6px; border: none;"></td></tr>
         <tr>
           <td style="border: none; width: 140px;"><strong>Date :</strong> ${data.date}</td>
@@ -148,6 +153,15 @@ export function exportDailyTaskSheetToExcel(data: DailyTaskSheetData) {
         <tr>
           <td style="width: 28%; font-weight: bold; background-color: #f8fafc;">Point à signaler au manager :</td>
           <td colspan="5" class="blue-text">${data.managerAlertPoint || 'Aucun point bloquant majeur à signaler.'}</td>
+        </tr>
+      </table>
+
+      <table border="0" style="width: 100%; border-collapse: collapse; border-top: 2px solid #D4A82F; margin-top: 10px;">
+        <tr>
+          <td colspan="6" style="border: none; text-align: center; font-size: 9pt; color: #475569; padding-top: 8px;">
+            <strong>${DEFAULT_COMPANY_INFO.name}</strong> · ${DEFAULT_COMPANY_INFO.address} (${DEFAULT_COMPANY_INFO.city}, ${DEFAULT_COMPANY_INFO.country}) · Tél. ${DEFAULT_COMPANY_INFO.phone} · ${DEFAULT_COMPANY_INFO.email}<br/>
+            SARL au capital de ${DEFAULT_COMPANY_INFO.capital} — NUI : ${DEFAULT_COMPANY_INFO.nui} — RCCM : ${DEFAULT_COMPANY_INFO.rccm}
+          </td>
         </tr>
       </table>
     </body>

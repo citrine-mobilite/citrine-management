@@ -11,6 +11,7 @@ import {
   ALERT_LEAD_OPTIONS,
   DeadlineTemplate,
   DEADLINE_TEMPLATES,
+  DEADLINE_TEMPLATE_GROUPS,
 } from './reminders/reminderConstants';
 
 export type { ReminderUrgencyLevel, ReminderUrgencyInfo, DeadlineTemplate };
@@ -19,6 +20,7 @@ export {
   RENEWAL_CYCLE_LABELS,
   ALERT_LEAD_OPTIONS,
   DEADLINE_TEMPLATES,
+  DEADLINE_TEMPLATE_GROUPS,
 };
 
 function startOfDay(date: Date): Date {

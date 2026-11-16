@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, CheckSquare, Clock, Trophy, ShieldCheck } from 'lucide-react';
 import { Employee, Task, Subtask, TaskStatus } from '../../../types';
 import { haptic } from '../../../services/hapticService';
+import { computeTaskTimeEntry, isTaskAssignedToEmployee, safeNum } from '../../../utils/rendementTaskHelpers';
 import {
   RendementTaskDurationChart,
   RendementTaskAccordionList,
@@ -27,35 +28,26 @@ export const EmployeeRendementDetailModal: React.FC<EmployeeRendementDetailModal
   onUpdateTask,
   showToast,
 }) => {
-  if (!isOpen) return null;
+  const employeeTasks = (tasks || []).filter((t) => isTaskAssignedToEmployee(t, employee));
 
-  const employeeTasks = tasks.filter(
-    (t) =>
-      t.employeeId === employee.id ||
-      t.assignedTo === employee.name ||
-      t.assignedTo === employee.email
-  );
-
+  const safeAssiduite = safeNum(assiduiteRate, 100);
   const totalAssigned = employeeTasks.length;
   const completedTasks = employeeTasks.filter((t) => t.status === 'completed').length;
   const taskCompletionRate = totalAssigned > 0 ? Math.round((completedTasks / totalAssigned) * 100) : 0;
-  const globalScore = Math.round((assiduiteRate + taskCompletionRate) / 2);
+  const globalScore = Math.round((safeAssiduite + taskCompletionRate) / 2);
 
   const tasksWithDuration: TaskWithDuration[] = employeeTasks.map((t) => {
-    let estimatedHours = 4;
-    if (t.priority === 'high' || t.priority === 'urgent') estimatedHours = 8;
-    else if (t.priority === 'low') estimatedHours = 2;
-    if (t.subtasks && t.subtasks.length > 0) {
-      estimatedHours = Math.max(estimatedHours, t.subtasks.length * 2);
-    }
-    return { ...t, estimatedHours };
+    const entry = computeTaskTimeEntry(t);
+    return { ...t, estimatedHours: entry.effectiveHours > 0 ? entry.effectiveHours : entry.estimatedHours };
   });
 
   const sortedTasks = [...tasksWithDuration].sort((a, b) => b.estimatedHours - a.estimatedHours);
-  const maxHours = Math.max(...sortedTasks.map((t) => t.estimatedHours), 1);
+  const maxHours = Math.max(...sortedTasks.map((t) => safeNum(t.estimatedHours, 0)), 1);
 
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(sortedTasks[0]?.id || null);
   const [newSubtaskTitles, setNewSubtaskTitles] = useState<{ [taskId: string]: string }>({});
+
+  if (!isOpen) return null;
 
   const handleToggleSubtask = (task: Task, subtaskId: string) => {
     haptic.light();
@@ -148,7 +140,7 @@ export const EmployeeRendementDetailModal: React.FC<EmployeeRendementDetailModal
               <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Assiduité Présence</span>
               <div className="flex items-center gap-2 mt-1">
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                <span className="font-serif font-bold text-xl text-stone-900">{assiduiteRate}%</span>
+                <span className="font-serif font-bold text-xl text-stone-900">{safeAssiduite}%</span>
               </div>
             </div>
 

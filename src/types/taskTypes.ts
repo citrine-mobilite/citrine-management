@@ -28,6 +28,32 @@ export interface Incident {
   resolvedAt?: string;
 }
 
+export type TaskRecurrence = 'none' | 'daily' | 'weekly' | 'monthly';
+export type PersonalTaskBucket = 'recent' | 'today' | 'upcoming' | 'later';
+
+export interface TaskSection {
+  id: string;
+  title: string;
+  orderIndex: number;
+  color?: string;
+  collapsed?: boolean;
+}
+
+export interface TaskCustomFieldDef {
+  id: string;
+  name: string;
+  type: 'text' | 'number' | 'select';
+  options?: string[];
+}
+
+export interface TaskProjectRule {
+  id: string;
+  name: string;
+  trigger: 'all_subtasks_done' | 'moved_to_blocked' | 'task_completed';
+  action: 'complete_parent' | 'notify_lead' | 'create_next_recurrence';
+  enabled: boolean;
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -37,6 +63,8 @@ export interface Subtask {
   employeeId?: string;
   priority?: TaskPriority;
   status?: TaskStatus;
+  sectionId?: string;
+  orderIndex?: number;
   startDate?: string;
   dueDate?: string;
   endDate?: string;
@@ -45,6 +73,11 @@ export interface Subtask {
   actualHours?: number;
   tags?: string[];
   acceptanceCriteria?: string[];
+  dependsOnIds?: string[];
+  likedBy?: string[];
+  followerIds?: string[];
+  recurrence?: TaskRecurrence;
+  customFields?: Record<string, string | number>;
   comments?: Comment[];
   subtasks?: Subtask[];
   blockerReason?: string;
@@ -52,16 +85,22 @@ export interface Subtask {
   incidents?: Incident[];
   createdAt?: string;
   completedAt?: string;
+  ignoredDuplicateIds?: string[];
+  mergedIntoTaskId?: string;
 }
 
 export interface TaskProject {
   id: string;
+  docId?: string;
   name: string;
   description?: string;
   color?: string;
   icon?: string;
   createdAt: string;
   memberIds?: string[]; // IDs des collaborateurs faisant partie de ce projet (accès restreint)
+  sections?: TaskSection[];
+  customFields?: TaskCustomFieldDef[];
+  rules?: TaskProjectRule[];
 }
 
 export interface Task {
@@ -70,6 +109,7 @@ export interface Task {
   title: string;
   description?: string;
   date: string;
+  startDate?: string;
   time: string;
   priority: TaskPriority;
   status: TaskStatus;
@@ -80,9 +120,21 @@ export interface Task {
   dueDate?: string;
   category?: string;
   projectId?: string;
+  sectionId?: string;
+  personalBucket?: PersonalTaskBucket;
+  orderIndex?: number;
   isMilestone?: boolean; // Indique si la tâche est un Jalon stratégique clé
   milestoneProgress?: number; // Progression du jalon (0 - 100%)
   milestoneTarget?: string; // Livrable ou indicateur attendu pour ce jalon
+  tags?: string[];
+  acceptanceCriteria?: string[];
+  dependsOnIds?: string[];
+  likedBy?: string[];
+  followerIds?: string[];
+  recurrence?: TaskRecurrence;
+  customFields?: Record<string, string | number>;
+  blockerReason?: string;
+  isBlocked?: boolean;
   comments?: Comment[];
   attachments?: Attachment[];
   incidents?: Incident[];
@@ -95,6 +147,8 @@ export interface Task {
   completedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  ignoredDuplicateIds?: string[];
+  mergedIntoTaskId?: string;
 }
 
 export type ReminderTrigger = '5m' | '15m' | '30m' | '1h' | '1d' | 'none';
