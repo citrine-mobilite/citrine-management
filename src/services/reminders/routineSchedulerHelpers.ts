@@ -99,7 +99,7 @@ export const ROUTINE_PRESETS: RoutinePresetTemplate[] = [
 export function isRoutineReminder(reminder: Reminder): boolean {
   if (!reminder) return false;
   if (reminder.kind === 'routine' || reminder.kind === 'alarm') return true;
-  if (reminder.kind === 'deadline') return false;
+  if (reminder.kind === 'deadline' || reminder.kind === 'movement') return false;
   if (
     reminder.recurrenceMode ||
     (Array.isArray(reminder.recurrenceDays) && reminder.recurrenceDays.length > 0)

@@ -183,7 +183,8 @@ export function updateSubtaskAtPath(
 }
 
 /**
- * Ajoute une sous-tâche enfant au chemin donné (path=[] => ajoute sur la tâche racine).
+ * Ajoute une sous-tâche enfant au chemin donné (path=[] => ajoute sur la tâche racine),
+ * en tête de liste pour conserver l'ordre de la plus récente à la plus ancienne.
  */
 export function addSubtaskToTaskAtPath(
   task: Task,
@@ -192,10 +193,13 @@ export function addSubtaskToTaskAtPath(
 ): Task {
   if (path.length === 0) {
     const list = task.subtasks || [];
-    const nextOrder = list.length;
+    const nextList = [{ ...newSubtask, orderIndex: 0 }, ...list].map((item, idx) => ({
+      ...item,
+      orderIndex: idx,
+    }));
     return {
       ...task,
-      subtasks: [...list, { ...newSubtask, orderIndex: nextOrder }],
+      subtasks: nextList,
       lastUpdatedTime: new Date().toISOString(),
     };
   }
@@ -203,9 +207,13 @@ export function addSubtaskToTaskAtPath(
     ...task,
     subtasks: updateSubtaskAtPath(task.subtasks || [], path, (parentSub) => {
       const children = parentSub.subtasks || [];
+      const nextChildren = [{ ...newSubtask, orderIndex: 0 }, ...children].map((item, idx) => ({
+        ...item,
+        orderIndex: idx,
+      }));
       return {
         ...parentSub,
-        subtasks: [...children, { ...newSubtask, orderIndex: children.length }],
+        subtasks: nextChildren,
       };
     }),
     lastUpdatedTime: new Date().toISOString(),

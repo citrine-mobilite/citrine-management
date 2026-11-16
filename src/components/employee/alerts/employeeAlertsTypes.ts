@@ -4,6 +4,7 @@ import {
   formatRoutineRecurrenceLabel,
   isRoutineReminder,
 } from '../../../services/reminderService';
+import { mergeRemindersWithLocalMovements } from '../../../services/taskSheet/importantPointsUtils';
 
 export interface PersonalAlert {
   id: string;
@@ -13,7 +14,7 @@ export interface PersonalAlert {
   timestamp: string;
   read: boolean;
   actionUrl?: string;
-  category: 'Tâche' | 'Pointage' | 'Sécurité' | 'Alerte' | 'Note' | 'Congés';
+  category: 'Tâche' | 'Pointage' | 'Sécurité' | 'Alerte' | 'Note' | 'Congés' | 'Mouvement';
 }
 
 export function formatExactTimestamp(ts?: string): string {
@@ -99,7 +100,9 @@ export function buildPersonalAlertsList(params: {
     '1h': '1h avant',
   };
 
-  reminders.forEach((r) => {
+  const mergedReminders = mergeRemindersWithLocalMovements(reminders, employeeProfile.id);
+
+  mergedReminders.forEach((r) => {
     const isForMe =
       r.allEmployees ||
       (r.employeeId && isEmployeeMatch(r.employeeId)) ||
@@ -107,6 +110,23 @@ export function buildPersonalAlertsList(params: {
 
     if (!isForMe || deletedAlertIds.has(r.id) || seenIds.has(r.id)) return;
     seenIds.add(r.id);
+
+    if (r.kind === 'movement' || String(r.id || '').startsWith('mov-')) {
+      const durationText = r.duration ? ` • Durée : ${r.duration}` : '';
+      const locationText = r.location ? ` • Lieu : ${r.location}` : '';
+      const noteText = r.note || r.description || 'Petit mouvement hors tâches';
+      list.push({
+        id: r.id,
+        title: r.title || 'Petit mouvement',
+        message: `${noteText}${durationText}${locationText} • Point important (hors tâches)`,
+        type: 'info',
+        timestamp: r.date && r.time ? `${r.date} ${r.time}` : r.createdAt ? r.createdAt.slice(0, 10) : 'Aujourd’hui',
+        read: readAlertIds.has(r.id) || Boolean(r.isResolved || r.status === 'completed'),
+        actionUrl: '#employee/alerts',
+        category: 'Mouvement',
+      });
+      return;
+    }
 
     const periodsText =
       r.triggerPeriods && r.triggerPeriods.length > 0

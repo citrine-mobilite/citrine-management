@@ -67,11 +67,14 @@ export async function executeMonthlyTaskSheetDispatch(options?: {
   const errors: string[] = [];
 
   try {
-    const [employees, users, tasks, presences] = await Promise.all([
+    const [employees, users, tasks, presences, reminders, strategicProjects, notifications] = await Promise.all([
       getCollectionData('employees'),
       getCollectionData('users'),
       getCollectionData('tasks'),
       getCollectionData('presences'),
+      getCollectionData('reminders'),
+      getCollectionData('strategic_projects'),
+      getCollectionData('notifications'),
     ]);
 
     const recipients = options?.recipientEmails?.length ? options.recipientEmails : resolveAdminRecipients(users);
@@ -86,9 +89,12 @@ export async function executeMonthlyTaskSheetDispatch(options?: {
     for (const emp of activeEmployees) {
       const empName = emp.name || 'Collaborateur';
       try {
-        const monthlyData = generateMonthlyTaskSheet(emp, targetMonth, tasks, presences);
+        const monthlyData = generateMonthlyTaskSheet(emp, targetMonth, tasks, presences, reminders, strategicProjects, notifications);
         const hasActivity =
-          monthlyData.totalDaysWorked > 0 || (monthlyData.tasksList && monthlyData.tasksList.length > 0);
+          monthlyData.totalDaysWorked > 0 ||
+          (monthlyData.tasksList && monthlyData.tasksList.length > 0) ||
+          (monthlyData.remindersSummary?.totalOccurrences || 0) > 0 ||
+          (monthlyData.importantPointsSummary?.totalPoints || 0) > 0;
         if (!hasActivity) continue;
 
         const htmlContent = buildMonthlyTaskSheetHtmlReport(monthlyData);
@@ -153,11 +159,14 @@ export async function executeYearlyTaskSheetDispatch(options?: {
   const errors: string[] = [];
 
   try {
-    const [employees, users, tasks, presences] = await Promise.all([
+    const [employees, users, tasks, presences, reminders, strategicProjects, notifications] = await Promise.all([
       getCollectionData('employees'),
       getCollectionData('users'),
       getCollectionData('tasks'),
       getCollectionData('presences'),
+      getCollectionData('reminders'),
+      getCollectionData('strategic_projects'),
+      getCollectionData('notifications'),
     ]);
 
     const recipients = options?.recipientEmails?.length ? options.recipientEmails : resolveAdminRecipients(users);
@@ -172,8 +181,12 @@ export async function executeYearlyTaskSheetDispatch(options?: {
     for (const emp of activeEmployees) {
       const empName = emp.name || 'Collaborateur';
       try {
-        const yearlyData = generateYearlyTaskSheet(emp, targetYear, tasks, presences);
-        const hasActivity = yearlyData.totalDaysPresent > 0 || (yearlyData.totalSubtasksAssigned || 0) > 0;
+        const yearlyData = generateYearlyTaskSheet(emp, targetYear, tasks, presences, reminders, strategicProjects, notifications);
+        const hasActivity =
+          yearlyData.totalDaysPresent > 0 ||
+          (yearlyData.totalSubtasksAssigned || 0) > 0 ||
+          (yearlyData.remindersSummary?.totalOccurrences || 0) > 0 ||
+          (yearlyData.importantPointsSummary?.totalPoints || 0) > 0;
         if (!hasActivity) continue;
 
         const htmlContent = buildYearlyTaskSheetHtmlReport(yearlyData);
@@ -236,12 +249,15 @@ export async function sendSingleEmployeeTaskSheetEmail(params: {
   overrideRecipients?: string[];
 }) {
   const { employeeId, mode, period, overrideRecipients } = params;
-  const [employees, users, tasks, presences, incidents] = await Promise.all([
+  const [employees, users, tasks, presences, incidents, reminders, strategicProjects, notifications] = await Promise.all([
     getCollectionData('employees'),
     getCollectionData('users'),
     getCollectionData('tasks'),
     getCollectionData('presences'),
     getCollectionData('attendance_incidents'),
+    getCollectionData('reminders'),
+    getCollectionData('strategic_projects'),
+    getCollectionData('notifications'),
   ]);
 
   const emp = employees.find((e: any) => String(e.id) === String(employeeId));
@@ -255,7 +271,7 @@ export async function sendSingleEmployeeTaskSheetEmail(params: {
 
   if (mode === 'month') {
     const monthStr = period || new Date().toISOString().slice(0, 7);
-    const monthlyData = generateMonthlyTaskSheet(emp, monthStr, tasks, presences);
+    const monthlyData = generateMonthlyTaskSheet(emp, monthStr, tasks, presences, reminders, strategicProjects, notifications);
     const htmlContent = buildMonthlyTaskSheetHtmlReport(monthlyData);
     const excelBuffer = await buildMonthlyTaskSheetExcelBuffer(monthlyData);
     return sendThreadedEmployeeEmail({
@@ -279,7 +295,7 @@ export async function sendSingleEmployeeTaskSheetEmail(params: {
 
   if (mode === 'year') {
     const yearNum = period ? parseInt(period, 10) || new Date().getFullYear() : new Date().getFullYear();
-    const yearlyData = generateYearlyTaskSheet(emp, yearNum, tasks, presences);
+    const yearlyData = generateYearlyTaskSheet(emp, yearNum, tasks, presences, reminders, strategicProjects, notifications);
     const htmlContent = buildYearlyTaskSheetHtmlReport(yearlyData);
     const excelBuffer = await buildYearlyTaskSheetExcelBuffer(yearlyData);
     return sendThreadedEmployeeEmail({
@@ -308,6 +324,11 @@ export async function sendSingleEmployeeTaskSheetEmail(params: {
     empEmail: emp.email || '',
     tasks,
     dayIso: douala.dayIso,
+    reminders,
+    strategicProjects,
+    notifications,
+    department: emp.department,
+    roleType: emp.roleType,
   });
   const attendanceSummary = buildEmployeeDailyAttendanceSummary({
     empId: emp.id,
@@ -329,9 +350,11 @@ export async function sendSingleEmployeeTaskSheetEmail(params: {
     items: taskSummary.items,
     blockers: taskSummary.blockers,
     managerPoints: taskSummary.managerPoints,
+    importantPoints: taskSummary.importantPoints,
     totalEstimatedHours: taskSummary.totalEstimated,
     totalActualHours: taskSummary.totalActual,
     topPriorities: taskSummary.topPriorities,
+    scheduleSlots: taskSummary.scheduleSlots,
     postponedTasks: taskSummary.postponedTasks,
   };
 

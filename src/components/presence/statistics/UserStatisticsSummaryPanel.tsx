@@ -9,7 +9,7 @@ import {
   ArrowUpRight,
   AlertTriangle,
 } from 'lucide-react';
-import { AppUser, Employee, Presence, SalaryPayment, Task } from '../../../types';
+import { AppUser, Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../../../types';
 import { computePresenceStatistics, StatisticsPeriod } from './statisticsCalculations';
 import { computeEmployeeRendement } from '../../../utils/rendementCalculator';
 import { findMatchingEmployee } from '../../../utils/roleUtils';
@@ -22,6 +22,9 @@ interface UserStatisticsSummaryPanelProps {
   user?: AppUser | null;
   presences: Presence[];
   tasks: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
+  strategicProjects?: StrategicProject[];
   salaryPayments?: SalaryPayment[];
   onOpenFullRendement?: (emp: Employee) => void;
   onOpenTaskSheet?: (emp: Employee, mode: 'day' | 'month' | 'year') => void;
@@ -41,6 +44,9 @@ export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProp
   user,
   presences = [],
   tasks = [],
+  reminders = [],
+  notifications = [],
+  strategicProjects = [],
   salaryPayments = [],
   onOpenFullRendement,
   onOpenTaskSheet,
@@ -90,8 +96,12 @@ export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProp
       period === 'all' || !presenceStats
         ? undefined
         : { startStr: presenceStats.startStr, endStr: presenceStats.endStr, period };
-    return computeEmployeeRendement(resolvedEmployee, tasks, assiduite, periodFilter);
-  }, [resolvedEmployee, tasks, presenceStats, period]);
+    return computeEmployeeRendement(resolvedEmployee, tasks, assiduite, periodFilter, {
+      reminders,
+      strategicProjects,
+      notifications,
+    });
+  }, [resolvedEmployee, tasks, presenceStats, period, reminders, strategicProjects, notifications]);
 
   const paidStats = useMemo(() => {
     if (!resolvedEmployee) return { count: 0, totalNet: 0 };
@@ -266,7 +276,7 @@ export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProp
 
         <div className="p-4 bg-stone-50/70 rounded-2xl border border-stone-200/80 space-y-3">
           <h4 className="text-xs font-bold text-stone-800 uppercase tracking-wider">
-            Répartition Tâches, Jalons &amp; Alertes
+            Répartition Tâches, Jalons &amp; Points Importants
           </h4>
           <div className="grid grid-cols-3 gap-2.5 text-xs tabular-nums">
             <div className="p-2.5 bg-white rounded-xl border border-stone-200/70">
@@ -286,13 +296,15 @@ export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProp
               <strong className="text-sm text-rose-700 font-bold">{rMet.blockedTasks}</strong>
             </div>
             <div className="p-2.5 bg-white rounded-xl border border-stone-200/70">
-              <span className="text-[10px] text-stone-500 block">En retard</span>
-              <strong className="text-sm text-amber-700 font-bold">{rMet.overdueTasks}</strong>
-            </div>
-            <div className="p-2.5 bg-white rounded-xl border border-stone-200/70">
               <span className="text-[10px] text-stone-500 block">Jalons</span>
               <strong className="text-sm text-stone-900 font-bold">
                 {rMet.completedMilestones}/{rMet.milestonesCount}
+              </strong>
+            </div>
+            <div className="p-2.5 bg-amber-50/70 rounded-xl border border-amber-200/70">
+              <span className="text-[10px] text-amber-800 block">Pt. Imp. (Hors tâches)</span>
+              <strong className="text-sm text-amber-800 font-bold">
+                {rMet.importantPointsCount ?? rMet.remindersCount ?? 0} ({rMet.importantPointsHoursTotal ?? rMet.remindersHoursTotal ?? 0}h)
               </strong>
             </div>
           </div>

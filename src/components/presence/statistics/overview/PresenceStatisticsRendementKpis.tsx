@@ -15,6 +15,11 @@ interface PresenceStatisticsRendementKpisProps {
   totalEstimatedHoursPeriod: number;
   dynamicTeamRate: number;
   avgCombinedScorePeriod: number;
+  totalRemindersPeriod?: number;
+  totalRemindersResolvedPeriod?: number;
+  totalRemindersHoursPeriod?: number;
+  totalImportantPointsPeriod?: number;
+  totalImportantPointsHoursPeriod?: number;
 }
 
 export const PresenceStatisticsRendementKpis: React.FC<PresenceStatisticsRendementKpisProps> = ({
@@ -30,6 +35,11 @@ export const PresenceStatisticsRendementKpis: React.FC<PresenceStatisticsRendeme
   totalEstimatedHoursPeriod,
   dynamicTeamRate,
   avgCombinedScorePeriod,
+  totalRemindersPeriod = 0,
+  totalRemindersResolvedPeriod = 0,
+  totalRemindersHoursPeriod = 0,
+  totalImportantPointsPeriod = 0,
+  totalImportantPointsHoursPeriod = 0,
 }) => {
   const safeTotalTasks = safeNum(totalAssignedTasksPeriod);
   const safeDoneTasks = safeNum(totalCompletedTasksPeriod);
@@ -45,7 +55,7 @@ export const PresenceStatisticsRendementKpis: React.FC<PresenceStatisticsRendeme
         </div>
         <div className="min-w-0">
           <span className="text-[11px] font-semibold text-stone-500 block">
-            Tâches sur la Période
+            Tâches &amp; Jalons
           </span>
           <h3 className="text-xl font-bold font-serif text-stone-900 mt-0.5 tabular-nums">
             {safeTotalTasks}
@@ -62,13 +72,13 @@ export const PresenceStatisticsRendementKpis: React.FC<PresenceStatisticsRendeme
         </div>
         <div className="min-w-0">
           <span className="text-[11px] font-semibold text-stone-500 block">
-            Avancement Tâches
+            Avancement &amp; Points Importants
           </span>
           <h3 className="text-xl font-bold font-serif text-stone-900 mt-0.5 tabular-nums">
             {safeDoneTasks} / {safeTotalTasks}
           </h3>
           <span className="text-[11px] text-stone-500 font-medium tabular-nums">
-            {safeNum(totalInProgressTasksPeriod)} en cours · {safeNum(totalBlockedTasksPeriod)} bloquée(s)
+            {safeNum(totalInProgressTasksPeriod)} en cours · {safeNum(totalBlockedTasksPeriod)} bloq. · {Math.max(safeNum(totalImportantPointsPeriod), safeNum(totalRemindersPeriod))} pt(s) imp.
           </span>
         </div>
       </div>
@@ -79,13 +89,13 @@ export const PresenceStatisticsRendementKpis: React.FC<PresenceStatisticsRendeme
         </div>
         <div className="min-w-0">
           <span className="text-[11px] font-semibold text-stone-500 block">
-            Heures &amp; Sous-tâches
+            Heures (Tâches + Pt. Imp.)
           </span>
           <h3 className="text-xl font-bold font-serif text-stone-900 mt-0.5 tabular-nums">
             {safeNum(totalEffectiveHoursPeriod)}h / {safeNum(totalEstimatedHoursPeriod)}h
           </h3>
           <span className="text-[11px] text-stone-500 font-medium tabular-nums">
-            {safeDoneSub}/{safeTotalSub} sous-tâches ({subtaskRate}%)
+            {safeDoneSub}/{safeTotalSub} sous-tâches ({subtaskRate}%) · {Math.max(safeNum(totalImportantPointsHoursPeriod), safeNum(totalRemindersHoursPeriod))}h pt(s) imp. ({safeNum(totalRemindersResolvedPeriod)}/{Math.max(safeNum(totalImportantPointsPeriod), safeNum(totalRemindersPeriod))})
           </span>
         </div>
       </div>

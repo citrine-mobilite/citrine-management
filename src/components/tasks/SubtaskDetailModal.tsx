@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X, Save, AlertTriangle } from 'lucide-react';
-import { Subtask, Employee, TaskProject, AppUser } from '../../types';
+import { Subtask, Employee, TaskProject, AppUser, Task } from '../../types';
 import { useSubtaskDetailLogic } from './subtaskDetail/useSubtaskDetailLogic';
 import { SubtaskDetailCoreFields } from './subtaskDetail/SubtaskDetailCoreFields';
 import { SubtaskDetailIncidentsAndComments } from './subtaskDetail/SubtaskDetailIncidentsAndComments';
 import { SubtaskDetailNestedList } from './subtaskDetail/SubtaskDetailNestedList';
+import { AsanaRichFieldsPicker } from './shared/AsanaRichFieldsPicker';
+import { SubtaskCreateModal } from './SubtaskCreateModal';
 
 interface SubtaskDetailModalProps {
   isOpen: boolean;
@@ -13,6 +15,7 @@ interface SubtaskDetailModalProps {
   onSaveSubtask: (updatedSubtask: Subtask) => void;
   employees: Employee[];
   projects?: TaskProject[];
+  allTasks?: Task[];
   showToast?: (message: string, type?: 'success' | 'error') => void;
   currentUser?: AppUser | null;
   currentRole?: string;
@@ -26,10 +29,13 @@ const SubtaskDetailModalContent: React.FC<
   onSaveSubtask,
   employees,
   projects = [],
+  allTasks = [],
   showToast,
   currentUser,
   currentRole,
 }) => {
+  const [isRichNestedModalOpen, setIsRichNestedModalOpen] = useState(false);
+
   const logic = useSubtaskDetailLogic({
     subtask,
     onClose,
@@ -40,12 +46,20 @@ const SubtaskDetailModalContent: React.FC<
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex justify-end animate-in fade-in">
-      <div className="bg-white w-full max-w-xl h-full shadow-2xl border-l border-stone-200 flex flex-col p-6 overflow-y-auto space-y-5 animate-in slide-in-from-right duration-300">
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      className="fixed inset-0 z-[60] bg-stone-900/40 backdrop-blur-xs flex justify-end animate-in fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="bg-white w-full max-w-xl h-full shadow-2xl border-l border-stone-200 flex flex-col p-6 overflow-y-auto space-y-5 animate-in slide-in-from-right duration-300"
+      >
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-[#2A7B76]/10 text-[#2A7B76] border border-[#2A7B76]/20">
-              📋 Détail de la Sous-Tâche
+              📋 Sous-tâche · Évolution &amp; Réalisation
             </span>
             {logic.isBlocked && (
               <span className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
@@ -54,6 +68,7 @@ const SubtaskDetailModalContent: React.FC<
             )}
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-xl text-stone-400 hover:bg-stone-100 cursor-pointer"
           >
@@ -79,10 +94,30 @@ const SubtaskDetailModalContent: React.FC<
             setDraftStartDate={logic.setDraftStartDate}
             draftDueDate={logic.draftDueDate}
             setDraftDueDate={logic.setDraftDueDate}
-            draftActualHours={logic.draftActualHours}
-            setDraftActualHours={logic.setDraftActualHours}
+            draftTime={logic.draftTime}
+            setDraftTime={logic.setDraftTime}
             draftAssignedTo={logic.draftAssignedTo}
             setDraftAssignedTo={logic.setDraftAssignedTo}
+          />
+
+          <AsanaRichFieldsPicker
+            estimatedHours={logic.draftEstimatedHours}
+            setEstimatedHours={logic.setDraftEstimatedHours}
+            actualHours={logic.draftActualHours}
+            setActualHours={logic.setDraftActualHours}
+            tags={logic.draftTags}
+            setTags={logic.setDraftTags}
+            dependsOnIds={logic.draftDependsOnIds}
+            setDependsOnIds={logic.setDraftDependsOnIds}
+            existingTasks={allTasks}
+            excludeNodeId={subtask.id}
+            recurrence={logic.draftRecurrence}
+            setRecurrence={logic.setDraftRecurrence}
+            followerIds={logic.draftFollowerIds}
+            setFollowerIds={logic.setDraftFollowerIds}
+            employees={employees}
+            criteria={logic.draftCriteria}
+            setCriteria={logic.setDraftCriteria}
           />
 
           <SubtaskDetailIncidentsAndComments
@@ -106,10 +141,18 @@ const SubtaskDetailModalContent: React.FC<
             totalCount={logic.totalCount}
             subtaskFilterPeriod={logic.subtaskFilterPeriod}
             setSubtaskFilterPeriod={logic.setSubtaskFilterPeriod}
+            subtaskFilterDate={logic.subtaskFilterDate}
+            setSubtaskFilterDate={logic.setSubtaskFilterDate}
+            subtaskRangeStart={logic.subtaskRangeStart}
+            setSubtaskRangeStart={logic.setSubtaskRangeStart}
+            subtaskRangeEnd={logic.subtaskRangeEnd}
+            setSubtaskRangeEnd={logic.setSubtaskRangeEnd}
+            activeRangeLabel={logic.activeRangeLabel}
             draftDueDate={logic.draftDueDate}
             newSubtaskTitle={logic.newSubtaskTitle}
             setNewSubtaskTitle={logic.setNewSubtaskTitle}
             onAddSubtask={logic.handleAddSubtask}
+            onOpenRichSubtaskModal={() => setIsRichNestedModalOpen(true)}
             onToggleSubtask={logic.handleToggleSubtask}
             onSelectNestedSubtask={logic.setSelectedNestedSubtask}
             onDeleteSubtask={(subId) =>
@@ -127,6 +170,20 @@ const SubtaskDetailModalContent: React.FC<
             </button>
           </div>
         </form>
+
+        <SubtaskCreateModal
+          isOpen={isRichNestedModalOpen}
+          onClose={() => setIsRichNestedModalOpen(false)}
+          onCreateSubtask={(richSub) => {
+            logic.handleAddRichNestedSubtask(richSub);
+          }}
+          employees={employees}
+          parentSubtaskTitle={subtask.title}
+          availableTasks={allTasks}
+          projects={projects}
+          currentUser={currentUser}
+          currentRole={currentRole}
+        />
 
         {logic.selectedNestedSubtask && (
           <SubtaskDetailModal
@@ -152,6 +209,7 @@ const SubtaskDetailModalContent: React.FC<
             }}
             employees={employees}
             projects={projects}
+            allTasks={allTasks}
             showToast={showToast}
             currentUser={currentUser}
             currentRole={currentRole}

@@ -122,6 +122,26 @@ export function exportDailyTaskSheetToExcel(data: DailyTaskSheetData) {
       </table>
 
       <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+        <tr><td colspan="6" style="background-color: #92400e; color: #ffffff; font-weight: bold; font-size: 11pt; padding: 6px 10px; border: 1px solid #78350f;">📌 POINTS IMPORTANTS (ALERTES, RAPPELS &amp; PETITS MOUVEMENTS) — HORS TÂCHES (${(data.importantPoints || []).length})</td></tr>
+        <tr>
+          <td class="col-header" style="width: 12%; background-color: #b45309;">Heure</td>
+          <td class="col-header" style="width: 18%; background-color: #b45309;">Catégorie</td>
+          <td class="col-header" colspan="2" style="background-color: #b45309;">Sujet &amp; Détails</td>
+          <td class="col-header" style="width: 12%; text-align: center; background-color: #b45309;">Durée</td>
+          <td class="col-header" style="width: 14%; text-align: center; background-color: #b45309;">Statut</td>
+        </tr>
+        ${(data.importantPoints && data.importantPoints.length > 0) ? data.importantPoints.map((pt) => `
+          <tr>
+            <td style="font-weight: bold; font-family: monospace;">${pt.time}</td>
+            <td style="font-weight: bold; color: #92400e;">${pt.categoryLabel}</td>
+            <td colspan="2"><strong>${pt.title}</strong>${pt.detail ? ` — ${pt.detail}` : ''}</td>
+            <td style="text-align: right;">${pt.durationMinutes} min</td>
+            <td style="text-align: center; font-weight: bold;">${pt.statusLabel}</td>
+          </tr>
+        `).join('') : `<tr><td colspan="6" style="text-align: center; color: #64748b; font-style: italic; padding: 8px;">Aucun point important relevé ce jour.</td></tr>`}
+      </table>
+
+      <table border="1" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
         <tr><td colspan="6" class="section-header">🕒 PLAN HORAIRE (08:00 – 17:00) — Pause déjeuner officielle 12h00 – 13h00</td></tr>
         <tr><td class="col-header" style="width: 25%;">Heure</td><td class="col-header" colspan="5">Ce que je fais sur ce créneau</td></tr>
         ${data.scheduleSlots.map((s) => {

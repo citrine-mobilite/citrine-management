@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GeneratedDocument, Role, Employee, AppUser, CompanyModuleConfig } from '../types';
+import { GeneratedDocument, Role, Employee, AppUser, CompanyModuleConfig, Reminder, NotificationLog } from '../types';
 import { DocTemplateSelector } from './documents/DocTemplateSelector';
 import { DocumentGrid } from './documents/DocumentGrid';
 import { DocumentTableView } from './documents/DocumentTableView';
@@ -20,6 +20,10 @@ import {
 } from './documents/DocumentGeneratorBannerAndToolbar';
 import { confirmActionAlert, executeDeleteWithSweetAlert, executeOperationWithLoading } from '../utils/sweetAlert';
 import { isSelfOnlyUser, findMatchingEmployee } from '../utils/roleUtils';
+import {
+  buildDailyImportantPoints,
+  mergeRemindersWithLocalMovements,
+} from '../services/taskSheet/importantPointsUtils';
 
 interface DocumentGeneratorPanelProps {
   documents: GeneratedDocument[];
@@ -28,6 +32,8 @@ interface DocumentGeneratorPanelProps {
   currentRole?: Role;
   currentUser?: AppUser | null;
   employees?: Employee[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
   moduleConfig?: CompanyModuleConfig;
   showToast?: (message: string, type?: 'success' | 'error') => void;
   onAddNotification?: (notification: any) => void;
@@ -38,6 +44,8 @@ export default function DocumentGeneratorPanel({
   setDocuments,
   onUpdateDocuments,
   employees = [],
+  reminders = [],
+  notifications = [],
   moduleConfig,
   showToast,
   currentUser,
@@ -156,10 +164,26 @@ export default function DocumentGeneratorPanel({
     }
   };
 
+  const todayIso = new Date().toISOString().split('T')[0];
+  const todayRemindersCount = useMemo(() => {
+    if (!myEmp) {
+      return reminders.filter((r) => (r.date || '').startsWith(todayIso) || r.allEmployees).length;
+    }
+    const merged = mergeRemindersWithLocalMovements(reminders, myEmp.id);
+    const dayPts = buildDailyImportantPoints({
+      employee: myEmp,
+      dateIso: todayIso,
+      reminders: merged,
+      notifications,
+    });
+    return dayPts.length;
+  }, [reminders, notifications, myEmp, todayIso]);
+
   return (
     <div className="space-y-6">
       <DocumentGeneratorBanner
         totalDocumentsCount={documents.length}
+        todayRemindersCount={todayRemindersCount}
         isRestricted={isRestricted}
         isResettingTemplates={isResettingTemplates}
         onOpenCreateTemplate={() => setIsCreateTemplateModalOpen(true)}

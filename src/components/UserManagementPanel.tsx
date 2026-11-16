@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Users, Download, FileText, ShieldCheck, Plus } from 'lucide-react';
 import { HumaanUsers } from './illustrations/HumaanIllustrations';
-import { AppUser, Employee, Presence, SalaryPayment, Task } from '../types';
+import { AppUser, Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../types';
 import { UserFormModal } from './users/UserFormModal';
 import { UserTableItemRow } from './users/UserTableItemRow';
 import { UserFilterToolbar } from './users/UserFilterToolbar';
@@ -19,6 +19,9 @@ interface UserManagementPanelProps {
   onUpdateEmployees?: (updated: Employee[]) => void;
   presences?: Presence[];
   tasks?: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
+  strategicProjects?: StrategicProject[];
   salaryPayments?: SalaryPayment[];
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
@@ -32,6 +35,9 @@ export default function UserManagementPanel({
   onUpdateEmployees,
   presences = [],
   tasks = [],
+  reminders = [],
+  notifications = [],
+  strategicProjects = [],
   salaryPayments = [],
   showToast,
 }: UserManagementPanelProps) {
@@ -213,6 +219,9 @@ export default function UserManagementPanel({
           employees={employees}
           presences={presences}
           tasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           salaryPayments={salaryPayments}
           onEditUser={handleEditUser}
         />

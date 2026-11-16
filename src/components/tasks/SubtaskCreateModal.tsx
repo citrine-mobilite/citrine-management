@@ -16,6 +16,7 @@ import { SubtaskTimingAndStatusFields } from './subtaskCreate/SubtaskTimingAndSt
 import { AsanaRichFieldsPicker } from './shared/AsanaRichFieldsPicker';
 import { findPotentialDuplicatesForInput } from '../../services/taskRedundancyService';
 import { RedundancyWarningBanner } from './RedundancyWarningBanner';
+import { ModalPortal } from '../common/ModalPortal';
 
 interface SubtaskCreateModalProps {
   isOpen: boolean;
@@ -76,6 +77,7 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
   }, [isEmpOrIntern, myName, assignedTo]);
 
   useEffect(() => {
+    if (!isOpen) return;
     if (parentTask) {
       setSelectedTaskId(parentTask.id);
       if (parentTask.dueDate || parentTask.date) {
@@ -89,7 +91,8 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
     } else if (availableTasks.length > 0 && !selectedTaskId) {
       setSelectedTaskId(availableTasks[0].id);
     }
-  }, [parentTask, defaultTaskId, availableTasks, selectedTaskId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, parentTask?.id, defaultTaskId]);
 
   const potentialDuplicates = useMemo(() => {
     const pool = availableTasks.length > 0 ? availableTasks : parentTask ? [parentTask] : [];
@@ -137,6 +140,7 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
       acceptanceCriteria: criteria.length > 0 ? criteria : undefined,
       subtasks: [],
       createdAt: new Date().toISOString(),
+      completedAt: status === 'completed' ? new Date().toISOString() : undefined,
     };
 
     onCreateSubtask(newSubtask, selectedTaskId || currentParent?.id);
@@ -153,8 +157,17 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/50 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white/95 backdrop-blur-2xl rounded-3xl w-full max-w-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.18)] border border-white/80 overflow-hidden flex flex-col my-auto max-h-[94vh] animate-in zoom-in-95 duration-200">
+    <ModalPortal>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-[70] bg-stone-900/50 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200"
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="bg-white/95 backdrop-blur-2xl rounded-3xl w-full max-w-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.18)] border border-white/80 overflow-hidden flex flex-col my-auto max-h-[94vh] animate-in zoom-in-95 duration-200"
+        >
         <SubtaskCreateModalHeader
           onClose={onClose}
           parentTask={parentTask}
@@ -178,7 +191,7 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
                 Intitulé de la sous-tâche <span className="text-rose-500">*</span>
               </span>
               <span className="text-[10px] font-normal text-stone-400">
-                Mêmes attributs qu'une tâche Asana
+                Fonctionnalités identiques à une tâche complète
               </span>
             </label>
             <input
@@ -268,6 +281,7 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
         </form>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

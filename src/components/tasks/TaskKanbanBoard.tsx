@@ -21,8 +21,13 @@ import {
   getUnfinishedBlockers,
   resolveProjectSections,
   resolveTaskSectionId,
-  sortSubtasksByOrder,
 } from './logic/asanaTreeEngine';
+import {
+  filterAndSortSubtasks,
+  getCurrentWeekBounds,
+  SubtaskFilterPeriod,
+} from '../../utils/subtaskFilterUtils';
+import { SubtaskFilterBar } from './shared/SubtaskFilterBar';
 import { executeDeleteWithSweetAlert } from '../../utils/sweetAlert';
 
 interface TaskKanbanBoardProps {
@@ -74,9 +79,13 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
   onInlineAddSubtask,
   onAddSection,
   onOpenCreateModal,
+  onOpenCreateSubtask,
   onDeleteTask,
   getPriorityBadge,
 }) => {
+  const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const currentWeekBounds = useMemo(() => getCurrentWeekBounds(), []);
+
   const [groupBy, setGroupBy] = useState<'status' | 'section'>('status');
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
@@ -86,6 +95,11 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
   const [newSubTitle, setNewSubTitle] = useState('');
   const [addingSectionCol, setAddingSectionCol] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState('');
+
+  const [subtaskFilterPeriod, setSubtaskFilterPeriod] = useState<SubtaskFilterPeriod>('current_week');
+  const [subtaskFilterDate, setSubtaskFilterDate] = useState<string>(todayIso);
+  const [subtaskRangeStart, setSubtaskRangeStart] = useState<string>(currentWeekBounds.startIso);
+  const [subtaskRangeEnd, setSubtaskRangeEnd] = useState<string>(currentWeekBounds.endIso);
 
   const [customColumns, setCustomColumns] = useState<Array<{ id: string; title: string; bgSoft: string; borderSoft: string; textSoft: string }>>(() => {
     try {
@@ -163,8 +177,8 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* Board Mode Switch (Statuts vs Sections Asana) */}
-      <div className="flex items-center justify-between gap-3">
+      {/* Board Mode Switch + Subtask Period Filter */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex items-center gap-1 p-1 bg-stone-100 border border-stone-200 rounded-lg text-xs">
           <button
             type="button"
@@ -186,9 +200,17 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
           </button>
         </div>
 
-        <span className="text-xs text-stone-500 hidden sm:inline">
-          Glissez les cartes pour changer de colonne ou réorganiser l'ordre
-        </span>
+        <SubtaskFilterBar
+          period={subtaskFilterPeriod}
+          onChangePeriod={setSubtaskFilterPeriod}
+          specificDate={subtaskFilterDate}
+          onChangeSpecificDate={setSubtaskFilterDate}
+          rangeStart={subtaskRangeStart}
+          onChangeRangeStart={setSubtaskRangeStart}
+          rangeEnd={subtaskRangeEnd}
+          onChangeRangeEnd={setSubtaskRangeEnd}
+          compact
+        />
       </div>
 
       <div className="w-full overflow-x-auto pb-4 pt-1">
@@ -424,23 +446,58 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
                               </span>
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setExpandedCards((prev) => ({ ...prev, [task.id]: true }));
-                                setAddingSubOnCard(task.id);
-                                setNewSubTitle('');
-                              }}
-                              className="text-[#2A7B76] hover:underline font-medium flex items-center gap-0.5 cursor-pointer"
-                            >
-                              <Plus className="h-3 w-3" />
-                              <span>Sous-tâche</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {onOpenCreateSubtask && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenCreateSubtask(task)}
+                                  className="text-stone-500 hover:text-[#2A7B76] font-medium cursor-pointer"
+                                  title="Formulaire complet de sous-tâche"
+                                >
+                                  Complet
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExpandedCards((prev) => ({ ...prev, [task.id]: true }));
+                                  setAddingSubOnCard(task.id);
+                                  setNewSubTitle('');
+                                }}
+                                className="text-[#2A7B76] hover:underline font-medium flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <Plus className="h-3 w-3" />
+                                <span>Sous-tâche</span>
+                              </button>
+                            </div>
                           </div>
 
-                          {isExpanded && (
+                          {isExpanded && (() => {
+                            const { displayedSubtasks, hiddenCount } = filterAndSortSubtasks(
+                              task.subtasks || [],
+                              {
+                                period: subtaskFilterPeriod,
+                                specificDate: subtaskFilterDate,
+                                startDate: subtaskRangeStart,
+                                endDate: subtaskRangeEnd,
+                              },
+                              task.dueDate || task.date
+                            );
+                            return (
                             <div className="space-y-1 pl-1 pt-1">
-                              {sortSubtasksByOrder(task.subtasks || []).map((sub) => {
+                              {displayedSubtasks.length === 0 && hiddenCount > 0 && (
+                                <div className="text-[10px] text-amber-800 bg-amber-50 px-2 py-1 rounded flex items-center justify-between gap-1">
+                                  <span>{hiddenCount} hors semaine en cours</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSubtaskFilterPeriod('all')}
+                                    className="font-bold underline cursor-pointer"
+                                  >
+                                    Tout voir
+                                  </button>
+                                </div>
+                              )}
+                              {displayedSubtasks.map((sub) => {
                                 const subDone = Boolean(sub.completed || sub.status === 'completed');
                                 return (
                                   <div
@@ -467,9 +524,31 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
                                     >
                                       {sub.title}
                                     </button>
+                                    {(sub.tags || []).map((tag) => (
+                                      <span
+                                        key={tag}
+                                        className="text-[9px] px-1 rounded bg-teal-50 text-[#2A7B76] border border-teal-200 font-medium shrink-0 max-w-[70px] truncate"
+                                      >
+                                        #{tag}
+                                      </span>
+                                    ))}
+                                    {(sub.dueDate || sub.endDate) && (
+                                      <span className="text-[9px] font-mono text-stone-400 shrink-0">
+                                        {(sub.dueDate || sub.endDate || '').slice(5)}
+                                      </span>
+                                    )}
                                   </div>
                                 );
                               })}
+                              {displayedSubtasks.length > 0 && hiddenCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSubtaskFilterPeriod('all')}
+                                  className="text-[10px] text-[#2A7B76] hover:underline font-medium cursor-pointer"
+                                >
+                                  + {hiddenCount} hors période · Afficher toutes
+                                </button>
+                              )}
 
                               {addingSubOnCard === task.id && (
                                 <input
@@ -491,7 +570,8 @@ export const TaskKanbanBoard: React.FC<TaskKanbanBoardProps> = ({
                                 />
                               )}
                             </div>
-                          )}
+                            );
+                          })()}
                         </div>
 
                         {/* Footer */}

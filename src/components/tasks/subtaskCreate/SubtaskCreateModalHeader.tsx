@@ -36,7 +36,7 @@ export const SubtaskCreateModalHeader: React.FC<SubtaskCreateModalHeaderProps> =
               Nouvelle sous-tâche
             </h3>
             <p className="text-xs text-stone-500 font-medium">
-              Découpage opérationnel et suivi du rendement
+              Évolution &amp; réalisation rattachée au job description de la tâche
             </p>
           </div>
         </div>

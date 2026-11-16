@@ -18,6 +18,10 @@ import {
   TaskPriority,
 } from '../../types';
 import { TaskKanbanBoard } from './TaskKanbanBoard';
+import {
+  getSubtaskCreatedTimestamp,
+  sortSubtasksNewestFirst,
+} from '../../utils/subtaskFilterUtils';
 
 const getPriorityBadge = (p: TaskPriority) => {
   switch (p) {
@@ -122,7 +126,8 @@ export const TaskMyTasksView: React.FC<TaskMyTasksViewProps> = ({
     const projectMap = new Map<string, string>(projects.map((p) => [p.id, p.name]));
 
     const walkSubs = (parentTask: Task, subs: Subtask[], parentPath: string[]) => {
-      for (const s of subs) {
+      const sortedSubs = sortSubtasksNewestFirst(subs, parentTask.dueDate || parentTask.date);
+      for (const s of sortedSubs) {
         const path = [...parentPath, s.id];
         const completed = Boolean(s.completed || s.status === 'completed');
         if (
@@ -174,6 +179,22 @@ export const TaskMyTasksView: React.FC<TaskMyTasksViewProps> = ({
         walkSubs(task, task.subtasks, []);
       }
     });
+
+    for (const [bucketId, list] of map.entries()) {
+      list.sort((a, b) => {
+        if (b.dueDate !== a.dueDate) {
+          return (b.dueDate || '').localeCompare(a.dueDate || '');
+        }
+        const createdA = a.subtask
+          ? getSubtaskCreatedTimestamp(a.subtask)
+          : new Date(a.task.createdAt || a.task.date || 0).getTime() || 0;
+        const createdB = b.subtask
+          ? getSubtaskCreatedTimestamp(b.subtask)
+          : new Date(b.task.createdAt || b.task.date || 0).getTime() || 0;
+        return createdB - createdA;
+      });
+      map.set(bucketId, list);
+    }
 
     return map;
   }, [tasks, projects, selectedPerson, hideCompleted, todayIso, nextWeekIso]);
@@ -366,6 +387,18 @@ export const TaskMyTasksView: React.FC<TaskMyTasksViewProps> = ({
                         >
                           {item.kind === 'subtask' ? `↳ ${item.title}` : item.title}
                         </button>
+                        {((item.subtask?.tags || item.task.tags) || []).length > 0 && (
+                          <div className="hidden md:flex flex-wrap items-center gap-1 shrink-0">
+                            {((item.subtask?.tags || item.task.tags) || []).map((tag) => (
+                              <span
+                                key={tag}
+                                className="text-[10px] px-1.5 py-0.2 rounded bg-teal-50 text-[#2A7B76] border border-teal-200 font-medium"
+                              >
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-3 text-xs text-stone-500 shrink-0">

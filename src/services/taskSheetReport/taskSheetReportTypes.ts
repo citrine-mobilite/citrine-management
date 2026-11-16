@@ -1,3 +1,5 @@
+import type { TaskSheetImportantPoint } from '../taskSheet/importantPointsUtils';
+
 export interface TaskSheetItem {
   index: number;
   taskTitle: string;
@@ -74,6 +76,7 @@ export interface TaskSheetReportData {
   items: TaskSheetItem[];
   blockers: TaskSheetBlocker[];
   managerPoints: TaskSheetManagerPoint[];
+  importantPoints?: TaskSheetImportantPoint[];
   totalEstimatedHours: number;
   totalActualHours: number;
   topPriorities?: TaskSheetPriority[];

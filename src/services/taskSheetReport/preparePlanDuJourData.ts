@@ -71,8 +71,15 @@ export function preparePlanDuJourData(data: TaskSheetReportData) {
   const prioritiesRate = prioritiesTotal > 0 ? Math.round((prioritiesCompleted / prioritiesTotal) * 100) : 0;
   const prioritiesEngagementRate = prioritiesTotal > 0 ? Math.round(((prioritiesCompleted + prioritiesInProgress) / prioritiesTotal) * 100) : 0;
 
+  const importantPoints = data.importantPoints || [];
+  const importantPointsCount = importantPoints.length;
+  const alertsCount = importantPoints.filter((pt) => pt.category === 'alerte').length;
+  const remindersCount = importantPoints.filter((pt) => pt.category === 'rappel').length;
+  const movementsCount = importantPoints.filter((pt) => pt.category === 'mouvement').length;
+  const importantPointsMinutes = importantPoints.reduce((sum, pt) => sum + (pt.durationMinutes || 0), 0);
+
   const officialDailyNetHours = 8;
-  const plannedMinutes = tasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+  const plannedMinutes = tasks.reduce((sum, t) => sum + t.estimatedMinutes, 0) + importantPointsMinutes;
   const activeMilestone = topPriorities.find((p) => p.isMilestone);
   const hasMilestone = Boolean(activeMilestone);
   const maxRecommendedSubtasks = hasMilestone ? 5 : 8;
@@ -86,18 +93,21 @@ export function preparePlanDuJourData(data: TaskSheetReportData) {
   let capacityStatus: 'optimal' | 'overloaded' | 'available' = 'optimal';
   let capacityAdvice = '';
 
-  if (totalTasks === 0) {
+  if (totalTasks === 0 && importantPointsCount === 0) {
     capacityStatus = 'available';
-    capacityAdvice = `ℹ️ Aucune activité opérationnelle enregistrée : le collaborateur n'a rien fait ce jour (aucune sous-tâche en cours ni terminée).`;
+    capacityAdvice = `ℹ️ Aucune activité opérationnelle enregistrée : le collaborateur n'a rien fait ce jour (aucune sous-tâche ni point important).`;
+  } else if (totalTasks === 0 && importantPointsCount > 0) {
+    capacityStatus = plannedMinutes > 600 ? 'overloaded' : plannedMinutes >= 420 ? 'optimal' : 'available';
+    capacityAdvice = `📌 Aucune sous-tâche formelle ce jour, mais ${importantPointsCount} point(s) important(s) suivi(s) (${Math.round((importantPointsMinutes / 60) * 10) / 10}h : ${alertsCount} alerte(s), ${remindersCount} rappel(s), ${movementsCount} petit(s) mouvement(s)).`;
   } else if (plannedMinutes > 600) {
     capacityStatus = 'overloaded';
-    capacityAdvice = `⚠️ Surcharge détectée : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (dépassement du seuil de 10h/jour, capacité max 12h). Risque d'inachèvement : priorisez ou déléguez certaines sous-tâches.`;
+    capacityAdvice = `⚠️ Surcharge détectée : ${Math.round(plannedMinutes / 60)}h planifiées (sous-tâches${importantPointsCount > 0 ? ` + ${importantPointsCount} point(s) important(s)` : ''}, dépassement du seuil de 10h/jour). Priorisez ou déléguez certaines actions.`;
   } else if (plannedMinutes >= 420) {
     capacityStatus = 'optimal';
-    capacityAdvice = `✅ Charge nominale et réaliste : ${Math.round(plannedMinutes / 60)}h estimées sur les sous-tâches (dans la plage recommandée de 7h à 10h, max 12h/jour).`;
+    capacityAdvice = `✅ Charge nominale et réaliste : ${Math.round(plannedMinutes / 60)}h estimées (sous-tâches${importantPointsCount > 0 ? ` + ${importantPointsCount} point(s) important(s) hors-tâches` : ''}, plage recommandée 7h–10h).`;
   } else {
     capacityStatus = 'available';
-    capacityAdvice = `💡 Capacité disponible : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (capacité max : 12h). Vous pouvez traiter des sous-tâches supplémentaires.`;
+    capacityAdvice = `💡 Capacité disponible : ${Math.round(plannedMinutes / 60)}h planifiées (sous-tâches${importantPointsCount > 0 ? ` + ${importantPointsCount} point(s) important(s)` : ''}, max : 12h). Vous pouvez traiter des sous-tâches supplémentaires.`;
   }
 
   const scheduleSlots = buildCleanedScheduleSlots(data, tasks, topPriorities, totalTasks);
@@ -135,6 +145,7 @@ export function preparePlanDuJourData(data: TaskSheetReportData) {
     capacityStatus, capacityAdvice, scheduleSlots, presenceIncidents, unforeseenEvents,
     totalLostMinutes, availabilityRate, punctualityRate, isLateToday, postponedTasks,
     managerAlertPoint, managerPoints: data.managerPoints,
+    importantPoints, importantPointsCount, alertsCount, remindersCount, movementsCount, importantPointsMinutes,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  Zap,
 } from 'lucide-react';
 import { PersonalAlert } from './employeeAlertsTypes';
 
@@ -79,6 +80,8 @@ export const EmployeeAlertsListView: React.FC<EmployeeAlertsListViewProps> = ({
                       <ShieldAlert className="w-3.5 h-3.5 text-red-600" />
                     ) : isIncident ? (
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    ) : alert.category === 'Mouvement' ? (
+                      <Zap className="w-3.5 h-3.5 text-amber-600" />
                     ) : alert.category === 'Tâche' ? (
                       <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
                     ) : (

@@ -1,17 +1,24 @@
 import React from 'react';
-import { Trophy, TrendingUp, Target, Layers, Zap } from 'lucide-react';
+import { Trophy, TrendingUp, Target, Layers, Zap, Flag } from 'lucide-react';
 import { Task } from '../../../types';
 import { WorkloadStatRow } from './rendementAnalyticsUtils';
+import { StrategicMilestoneEntry } from '../../../services/reminders/reminderActivityUtils';
 
 interface AnalyticsMilestonesTabProps {
   milestones: Task[];
+  strategicMilestones?: StrategicMilestoneEntry[];
   completedMilestones: number;
+  totalMilestonesCount?: number;
 }
 
 export const AnalyticsMilestonesTab: React.FC<AnalyticsMilestonesTabProps> = ({
   milestones,
+  strategicMilestones = [],
   completedMilestones,
+  totalMilestonesCount,
 }) => {
+  const effectiveTotal = totalMilestonesCount ?? milestones.length + strategicMilestones.length;
+
   return (
     <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm space-y-6">
       <div className="flex items-center justify-between">
@@ -21,15 +28,75 @@ export const AnalyticsMilestonesTab: React.FC<AnalyticsMilestonesTabProps> = ({
             Portefeuille des Jalons Majeurs d'Entreprise
           </h3>
           <p className="text-xs text-stone-500">
-            Livrables stratégiques et étapes clés validant la progression des projets.
+            Livrables stratégiques, jalons de projets et étapes clés validant la progression.
           </p>
         </div>
         <span className="text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 px-3 py-1 rounded-xl">
-          {completedMilestones} / {milestones.length} Jalons Franchis
+          {completedMilestones} / {effectiveTotal} Jalons Franchis
         </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+        {strategicMilestones.map((sm) => {
+          const progress = sm.isDone ? 100 : sm.status === 'in_progress' ? 50 : 0;
+          let statusLabel = 'En cours (Projet)';
+          let statusStyle = 'bg-teal-50 text-[#20635F] border-teal-200';
+          if (sm.isDone) {
+            statusLabel = 'Franchi (Projet)';
+            statusStyle = 'bg-purple-50 text-purple-800 border-purple-200';
+          } else if (sm.isBlocked) {
+            statusLabel = 'Bloqué (Projet)';
+            statusStyle = 'bg-rose-50 text-rose-800 border-rose-200';
+          } else if (sm.isOverdue) {
+            statusLabel = 'En retard (Projet)';
+            statusStyle = 'bg-amber-50 text-amber-800 border-amber-200';
+          }
+
+          return (
+            <div
+              key={`sm-${sm.projectId}-${sm.milestoneId}`}
+              className="bg-teal-50/40 p-5 rounded-2xl border border-teal-200/80 space-y-3.5 shadow-2xs hover:shadow-md transition"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusStyle}`}>
+                    {statusLabel}
+                  </span>
+                  <h4 className="font-serif font-bold text-sm text-stone-900 mt-1 flex items-center gap-1.5">
+                    <Flag className="h-3.5 w-3.5 text-[#2A7B76] shrink-0" />
+                    <span>{sm.title}</span>
+                  </h4>
+                  <p className="text-[11px] font-semibold text-[#2A7B76]">Projet : {sm.projectName}</p>
+                </div>
+                <span className="font-mono text-base font-bold text-stone-900 bg-white border border-stone-200 px-2.5 py-1 rounded-xl">
+                  {progress}%
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <div className="w-full bg-stone-200 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-[#2A7B76] h-full rounded-full transition-all duration-500"
+                    style={{ width: `${Math.max(progress, 5)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-stone-500 font-medium">
+                  <span>Échéance : {sm.targetDate || 'Non définie'}</span>
+                  <span>Statut : {sm.status}</span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-teal-200/60 flex items-center justify-between text-[11px] text-stone-600">
+                <span className="flex items-center gap-1 font-semibold">
+                  <span>👤 Responsable :</span>
+                  <span>{sm.ownerName || 'Direction'}</span>
+                </span>
+                <span className="font-bold text-[#2A7B76]">Jalon Stratégique</span>
+              </div>
+            </div>
+          );
+        })}
+
         {milestones.map((milestone) => {
           const isCompleted =
             milestone.status === 'completed' || (milestone.milestoneProgress ?? 0) >= 100;
@@ -108,9 +175,9 @@ export const AnalyticsMilestonesTab: React.FC<AnalyticsMilestonesTabProps> = ({
           );
         })}
 
-        {milestones.length === 0 && (
+        {milestones.length === 0 && strategicMilestones.length === 0 && (
           <div className="col-span-2 text-center py-16 text-stone-400 italic text-xs border-2 border-dashed border-stone-200 rounded-3xl">
-            Aucun jalon stratégique défini. Utilisez "+ Nouveau Jalon" dans la bannière supérieure pour en créer un.
+            Aucun jalon stratégique défini. Utilisez &quot;+ Nouveau Jalon&quot; ou le module Projets Stratégiques pour en créer un.
           </div>
         )}
       </div>

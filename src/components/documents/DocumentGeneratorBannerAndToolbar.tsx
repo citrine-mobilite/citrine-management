@@ -13,6 +13,7 @@ import { HumaanInnovation } from '../illustrations/HumaanIllustrations';
 
 interface DocumentGeneratorBannerProps {
   totalDocumentsCount: number;
+  todayRemindersCount?: number;
   isRestricted: boolean;
   isResettingTemplates: boolean;
   onOpenCreateTemplate: () => void;
@@ -22,6 +23,7 @@ interface DocumentGeneratorBannerProps {
 
 export const DocumentGeneratorBanner: React.FC<DocumentGeneratorBannerProps> = ({
   totalDocumentsCount,
+  todayRemindersCount = 0,
   isRestricted,
   isResettingTemplates,
   onOpenCreateTemplate,
@@ -34,8 +36,15 @@ export const DocumentGeneratorBanner: React.FC<DocumentGeneratorBannerProps> = (
         <FileText className="h-5 w-5 text-emerald-200" />
         <h2 className="font-serif font-bold text-2xl md:text-3xl">Générateur de Documents RH & Contrats</h2>
       </div>
-      <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl text-xs font-semibold text-emerald-100 border border-white/15">
-        <span>{totalDocumentsCount} document{totalDocumentsCount > 1 ? 's' : ''} archivé{totalDocumentsCount > 1 ? 's' : ''}</span>
+      <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
+        <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl text-xs font-semibold text-emerald-100 border border-white/15">
+          <span>{totalDocumentsCount} document{totalDocumentsCount > 1 ? 's' : ''} archivé{totalDocumentsCount > 1 ? 's' : ''}</span>
+        </div>
+        {todayRemindersCount > 0 && (
+          <div className="inline-flex items-center gap-1.5 bg-amber-400/20 px-3 py-1 rounded-xl text-xs font-bold text-amber-200 border border-amber-300/35 tabular-nums">
+            <span>🔔 {todayRemindersCount} rappel{todayRemindersCount > 1 ? 's' : ''} / point{todayRemindersCount > 1 ? 's' : ''} aujourd'hui</span>
+          </div>
+        )}
       </div>
     </div>
 

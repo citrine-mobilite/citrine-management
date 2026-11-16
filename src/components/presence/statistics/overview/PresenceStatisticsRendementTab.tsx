@@ -24,6 +24,11 @@ interface PresenceStatisticsRendementTabProps {
   totalMilestonesPeriod: number;
   totalEffectiveHoursPeriod: number;
   totalEstimatedHoursPeriod: number;
+  totalRemindersPeriod?: number;
+  totalRemindersResolvedPeriod?: number;
+  totalRemindersHoursPeriod?: number;
+  totalImportantPointsPeriod?: number;
+  totalImportantPointsHoursPeriod?: number;
   onSelectRendementEmployee: (emp: Employee) => void;
   onOpenTaskSheetModal: (emp: Employee, mode: 'day' | 'month' | 'year') => void;
   onSelectEmployee?: (id: string) => void;
@@ -51,6 +56,11 @@ export const PresenceStatisticsRendementTab: React.FC<PresenceStatisticsRendemen
   totalMilestonesPeriod,
   totalEffectiveHoursPeriod,
   totalEstimatedHoursPeriod,
+  totalRemindersPeriod = 0,
+  totalRemindersResolvedPeriod = 0,
+  totalRemindersHoursPeriod = 0,
+  totalImportantPointsPeriod = 0,
+  totalImportantPointsHoursPeriod = 0,
   onSelectRendementEmployee,
   onOpenTaskSheetModal,
   onSelectEmployee,
@@ -77,6 +87,11 @@ export const PresenceStatisticsRendementTab: React.FC<PresenceStatisticsRendemen
         totalEstimatedHoursPeriod={totalEstimatedHoursPeriod}
         dynamicTeamRate={dynamicTeamRate}
         avgCombinedScorePeriod={avgCombinedScorePeriod}
+        totalRemindersPeriod={totalRemindersPeriod}
+        totalRemindersResolvedPeriod={totalRemindersResolvedPeriod}
+        totalRemindersHoursPeriod={totalRemindersHoursPeriod}
+        totalImportantPointsPeriod={totalImportantPointsPeriod}
+        totalImportantPointsHoursPeriod={totalImportantPointsHoursPeriod}
       />
 
       <TaskTimeSpentHistogram
@@ -191,7 +206,12 @@ export const PresenceStatisticsRendementTab: React.FC<PresenceStatisticsRendemen
                       ) : (
                         <div className="text-[10px] text-stone-400">0 jalon</div>
                       )}
-                      <div className="text-[10px] text-stone-400">Prog. moy. {safeNum(m.avgTaskProgress)}%</div>
+                      <div className="text-[10px] text-stone-400">
+                        Prog. moy. {safeNum(m.avgTaskProgress)}%
+                        {Math.max(safeNum(m.importantPointsCount), safeNum(m.remindersCount)) > 0
+                          ? ` · ${Math.max(safeNum(m.importantPointsCount), safeNum(m.remindersCount))} pt(s) imp.`
+                          : ''}
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-3 text-center max-w-[190px]">
@@ -202,6 +222,11 @@ export const PresenceStatisticsRendementTab: React.FC<PresenceStatisticsRendemen
                         <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.2 rounded border ${cap.color}`}>
                           {cap.text}
                         </span>
+                        {Math.max(safeNum(m.importantPointsHoursTotal), safeNum(m.remindersHoursTotal)) > 0 && (
+                          <span className="ml-1 text-[10px] text-amber-700 font-mono">
+                            ({Math.max(safeNum(m.importantPointsHoursTotal), safeNum(m.remindersHoursTotal))}h pt.imp)
+                          </span>
+                        )}
                       </div>
                       {m.topTimeTaskTitle && (
                         <div className="text-[10px] text-stone-500 truncate mt-0.5" title={m.topTimeTaskTitle}>

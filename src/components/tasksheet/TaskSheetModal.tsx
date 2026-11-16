@@ -18,6 +18,9 @@ export const TaskSheetModal: React.FC<TaskSheetModalProps> = ({
   presences,
   incidents = [],
   projects = [],
+  reminders = [],
+  strategicProjects = [],
+  notifications = [],
   defaultMode,
   defaultDate,
   currentUser,
@@ -29,6 +32,9 @@ export const TaskSheetModal: React.FC<TaskSheetModalProps> = ({
     presences,
     incidents,
     projects,
+    reminders,
+    strategicProjects,
+    notifications,
     defaultMode,
     defaultDate,
     currentUser,
@@ -133,7 +139,28 @@ export const TaskSheetModal: React.FC<TaskSheetModalProps> = ({
 
               {logic.mode === 'day' && (
                 <div className="space-y-4">
-                  <TaskSheetDailyTasksSection dailyData={logic.dailyData} />
+                  <TaskSheetDailyTasksSection
+                    dailyData={logic.dailyData}
+                    isAddingMovement={logic.isAddingMovement}
+                    onToggleAddingMovement={(force) =>
+                      logic.setIsAddingMovement(force !== undefined ? force : !logic.isAddingMovement)
+                    }
+                    newMovementTitle={logic.newMovementTitle}
+                    onChangeNewMovementTitle={logic.setNewMovementTitle}
+                    newMovementTime={logic.newMovementTime}
+                    onChangeNewMovementTime={logic.setNewMovementTime}
+                    newMovementDuration={logic.newMovementDuration}
+                    onChangeNewMovementDuration={logic.setNewMovementDuration}
+                    newMovementCategory={logic.newMovementCategory}
+                    onChangeNewMovementCategory={logic.setNewMovementCategory}
+                    newMovementLocation={logic.newMovementLocation}
+                    onChangeNewMovementLocation={logic.setNewMovementLocation}
+                    newMovementNote={logic.newMovementNote}
+                    onChangeNewMovementNote={logic.setNewMovementNote}
+                    onSubmitMovement={logic.handleAddQuickMovement}
+                    onToggleMovementStatus={logic.handleToggleMovementStatus}
+                    onDeleteMovement={logic.handleDeleteMovement}
+                  />
                   <TaskSheetDailyScheduleAndUnforeseen
                     dailyData={logic.dailyData}
                     employee={employee}

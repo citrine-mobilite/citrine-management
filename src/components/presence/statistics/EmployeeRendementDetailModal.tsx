@@ -81,11 +81,23 @@ export const EmployeeRendementDetailModal: React.FC<EmployeeRendementDetailModal
     if (!title) return;
     haptic.medium();
 
-    const newSub: Subtask = { id: `sub-${Date.now()}`, title, completed: false };
+    const nowIso = new Date().toISOString();
+    const todayIso = nowIso.split('T')[0];
+    const newSub: Subtask = {
+      id: `sub-${Date.now()}`,
+      title,
+      completed: false,
+      status: 'todo',
+      startDate: todayIso,
+      dueDate: todayIso,
+      endDate: todayIso,
+      createdAt: nowIso,
+      subtasks: [],
+    };
     onUpdateTask?.({
       ...task,
-      subtasks: [...(task.subtasks || []), newSub],
-      lastUpdatedTime: new Date().toISOString(),
+      subtasks: [newSub, ...(task.subtasks || [])],
+      lastUpdatedTime: nowIso,
     });
     setNewSubtaskTitles({ ...newSubtaskTitles, [task.id]: '' });
     showToast?.('Sous-tâche ajoutée avec succès.', 'success');

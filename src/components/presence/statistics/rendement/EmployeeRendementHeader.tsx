@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, CheckSquare, Clock, Trophy, ShieldCheck, Calendar, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, CheckSquare, Clock, Trophy, ShieldCheck, Calendar, FileSpreadsheet, Bell } from 'lucide-react';
 import { Employee } from '../../../../types';
 import { EmployeeRendementMetrics, safeNum } from '../../../../utils/rendementTaskHelpers';
 import { HumaanTeamCelebration } from '../../../illustrations/HumaanIllustrations';
@@ -54,6 +54,12 @@ export const EmployeeRendementHeader: React.FC<EmployeeRendementHeaderProps> = (
                 <span className="bg-amber-400 text-amber-950 font-bold px-2 py-0.5 rounded-md text-[10px] inline-flex items-center gap-1 tabular-nums">
                   <Trophy className="h-3 w-3" />
                   {metrics.completedMilestones}/{metrics.milestonesCount} jalons
+                </span>
+              )}
+              {(safeNum(metrics.importantPointsCount) > 0 || safeNum(metrics.remindersCount) > 0) && (
+                <span className="bg-white/20 text-white border border-white/25 font-bold px-2 py-0.5 rounded-md text-[10px] inline-flex items-center gap-1 tabular-nums">
+                  <Bell className="h-3 w-3 text-amber-300" />
+                  {Math.max(safeNum(metrics.importantPointsCount), safeNum(metrics.remindersCount))} pt(s) imp. ({Math.max(safeNum(metrics.importantPointsHoursTotal), safeNum(metrics.remindersHoursTotal))}h)
                 </span>
               )}
             </div>
@@ -137,7 +143,7 @@ export const EmployeeRendementHeader: React.FC<EmployeeRendementHeaderProps> = (
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs">
-          <span className="text-[11px] font-semibold text-stone-500">Temps Passé &amp; Sous-tâches</span>
+          <span className="text-[11px] font-semibold text-stone-500">Temps Passé (Tâches + Pt. Imp.)</span>
           <div className="flex items-center gap-2 mt-1">
             <Clock className="h-5 w-5 text-blue-600" />
             <span className="font-serif font-bold text-xl text-stone-900 tabular-nums">
@@ -146,6 +152,9 @@ export const EmployeeRendementHeader: React.FC<EmployeeRendementHeaderProps> = (
           </div>
           <span className="text-[11px] text-stone-500 mt-1 block tabular-nums">
             {safeNum(metrics.completedSubtasks)}/{safeNum(metrics.totalSubtasks)} sous-tâches ({subtaskPct}%)
+            {Math.max(safeNum(metrics.importantPointsHoursTotal), safeNum(metrics.remindersHoursTotal)) > 0
+              ? ` · ${Math.max(safeNum(metrics.importantPointsHoursTotal), safeNum(metrics.remindersHoursTotal))}h pt(s) imp.`
+              : ''}
           </span>
         </div>
       </div>

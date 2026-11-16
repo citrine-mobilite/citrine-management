@@ -10,6 +10,7 @@ import {
   PersonalTaskBucket,
   TaskCustomFieldDef,
   TaskSection,
+  Reminder,
 } from '../../types';
 import {
   DEFAULT_PROJECT_RULES,
@@ -60,6 +61,8 @@ interface UseTaskLogicProps {
   onAddNotification: (log: NotificationLog) => void;
   currentRole: string;
   employees: Employee[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
   currentUser?: AppUser | null;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
@@ -70,6 +73,8 @@ export function useTaskLogic({
   onAddNotification,
   currentRole,
   employees,
+  reminders = [],
+  notifications = [],
   currentUser,
   showToast,
 }: UseTaskLogicProps) {
@@ -979,6 +984,14 @@ export function useTaskLogic({
     isRestrictedStaff,
     visibleEmployees,
     handleSendManualTaskSheet: () =>
-      executeSendManualTaskSheet({ tasks, currentUser, currentEmployee, onAddNotification, showToast }),
+      executeSendManualTaskSheet({
+        tasks,
+        reminders,
+        notifications,
+        currentUser,
+        currentEmployee,
+        onAddNotification,
+        showToast,
+      }),
   };
 }

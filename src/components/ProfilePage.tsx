@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, Shield, Lock, Activity, ArrowLeft, LogOut, BarChart3 } from 'lucide-react';
-import { AppUser, ConnectionLog, Employee, Presence, SalaryPayment, Task } from '../types';
+import { AppUser, ConnectionLog, Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../types';
 import { subscribeToConnectionLogs } from '../services/connectionLogService';
 import { ProfileInfoSubTab } from './profile/ProfileInfoSubTab';
 import { ProfileSecuritySubTab } from './profile/ProfileSecuritySubTab';
@@ -16,6 +16,9 @@ interface ProfilePageProps {
   employees?: Employee[];
   presences?: Presence[];
   tasks?: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
+  strategicProjects?: StrategicProject[];
   salaryPayments?: SalaryPayment[];
   onBackToDashboard: () => void;
   onLogout: () => void;
@@ -29,6 +32,9 @@ export default function ProfilePage({
   employees = [],
   presences = [],
   tasks = [],
+  reminders = [],
+  notifications = [],
+  strategicProjects = [],
   salaryPayments = [],
   onBackToDashboard,
   onLogout,
@@ -137,6 +143,9 @@ export default function ProfilePage({
             employees={employees}
             presences={presences}
             tasks={tasks}
+            reminders={reminders}
+            notifications={notifications}
+            strategicProjects={strategicProjects}
             salaryPayments={salaryPayments}
             onOpenTaskSheet={(targetEmp, mode) => setTaskSheetState({ employee: targetEmp, mode })}
             onOpenFullRendement={(targetEmp) => setRendementModalEmployee(targetEmp)}
@@ -178,6 +187,9 @@ export default function ProfilePage({
           employee={taskSheetState.employee}
           allTasks={tasks}
           presences={presences}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           defaultMode={taskSheetState.mode}
           currentUser={currentUser}
           currentRole={currentUser.role}

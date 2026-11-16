@@ -6,7 +6,9 @@ import {
   EmployeeSalaryDebt,
   NotificationLog,
   Presence,
+  Reminder,
   SalaryPayment,
+  StrategicProject,
   Task,
 } from '../types';
 import { CollaboratorAvatarPickerModal } from './collaborators/CollaboratorAvatarPickerModal';
@@ -26,6 +28,9 @@ interface CollaboratorPanelProps {
   employees: Employee[];
   presences?: Presence[];
   tasks?: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
+  strategicProjects?: StrategicProject[];
   salaryPayments?: SalaryPayment[];
   salaryDebts?: EmployeeSalaryDebt[];
   onUpdateEmployees: (employees: Employee[]) => void;
@@ -44,6 +49,9 @@ export default function CollaboratorPanel({
   employees,
   presences = [],
   tasks = [],
+  reminders = [],
+  notifications = [],
+  strategicProjects = [],
   salaryPayments = [],
   onUpdateEmployees,
   onAddNotification,
@@ -74,6 +82,9 @@ export default function CollaboratorPanel({
           presences={presences}
           salaryPayments={salaryPayments}
           tasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           activeDetailTab={logic.activeDetailTab}
           setActiveDetailTab={logic.setActiveDetailTab}
           rhReportMonth={logic.rhReportMonth}

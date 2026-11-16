@@ -68,16 +68,6 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   const [criteria, setCriteria] = useState<string[]>([]);
 
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
-  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState(
-    isEmpOrIntern ? myName : currentUser?.name || employees[0]?.name || 'Équipe'
-  );
-  const [newSubtaskHours, setNewSubtaskHours] = useState<number>(2);
-  const [newSubtaskPriority, setNewSubtaskPriority] = useState<TaskPriority>('medium');
-  const [newSubtaskStartDate, setNewSubtaskStartDate] = useState(todayIso);
-  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState(todayIso);
-  const [newSubtaskTagsText, setNewSubtaskTagsText] = useState('');
-  const [newSubtaskDepId, setNewSubtaskDepId] = useState('');
   const [showSubtaskForm, setShowSubtaskForm] = useState(false);
 
   const selectedProj = useMemo(
@@ -123,36 +113,8 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
       ? employees.filter((e) => selectedProj.memberIds!.includes(e.id))
       : employees;
 
-  const handleAddSubtaskQuick = () => {
-    if (!newSubtaskTitle.trim()) return;
-    const assignedEmp = employees.find((e) => e.name === newSubtaskAssignee);
-    const subDueDate = newSubtaskDueDate || date || todayIso;
-    const parsedTags = newSubtaskTagsText
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    const newSub: Subtask = {
-      id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      title: newSubtaskTitle.trim(),
-      completed: false,
-      status: 'todo',
-      priority: newSubtaskPriority,
-      assignedTo: newSubtaskAssignee,
-      employeeId: assignedEmp?.id,
-      startDate: newSubtaskStartDate || startDate || todayIso,
-      dueDate: subDueDate,
-      endDate: subDueDate,
-      estimatedHours: Number(newSubtaskHours) || 2,
-      tags: parsedTags.length > 0 ? parsedTags : undefined,
-      dependsOnIds: newSubtaskDepId ? [newSubtaskDepId] : undefined,
-      subtasks: [],
-      createdAt: new Date().toISOString(),
-    };
-    setSubtasks([...subtasks, newSub]);
-    setNewSubtaskTitle('');
-    setNewSubtaskTagsText('');
-    setNewSubtaskDepId('');
+  const handleAddSubtask = (newSub: Subtask) => {
+    setSubtasks([newSub, ...subtasks]);
   };
 
   const handleUpdateSubtaskDueDateInline = (index: number, updatedDate: string) => {
@@ -213,10 +175,23 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col my-auto max-h-[94vh]">
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      className="fixed inset-0 z-[60] bg-stone-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col my-auto max-h-[94vh]"
+      >
         <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
-          <h3 className="font-serif font-bold text-base text-stone-900">Créer une nouvelle tâche</h3>
+          <div>
+            <h3 className="font-serif font-bold text-base text-stone-900">Créer une nouvelle tâche</h3>
+            <p className="text-[11px] text-stone-500">
+              Cadre / Job description dont l&apos;évolution sera suivie via ses sous-tâches
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -244,7 +219,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
 
           <div>
             <label className="block font-bold text-stone-700 mb-1">
-              Description &amp; Consignes (Optionnel)
+              Description &amp; Consignes (Job description)
             </label>
             <textarea
               rows={2}
@@ -301,25 +276,12 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
             subtasks={subtasks}
             showSubtaskForm={showSubtaskForm}
             setShowSubtaskForm={setShowSubtaskForm}
-            newSubtaskTitle={newSubtaskTitle}
-            setNewSubtaskTitle={setNewSubtaskTitle}
-            newSubtaskAssignee={newSubtaskAssignee}
-            setNewSubtaskAssignee={setNewSubtaskAssignee}
-            newSubtaskHours={newSubtaskHours}
-            setNewSubtaskHours={setNewSubtaskHours}
-            newSubtaskStartDate={newSubtaskStartDate}
-            setNewSubtaskStartDate={setNewSubtaskStartDate}
-            newSubtaskDueDate={newSubtaskDueDate}
-            setNewSubtaskDueDate={newSubtaskDueDate}
-            newSubtaskPriority={newSubtaskPriority}
-            setNewSubtaskPriority={setNewSubtaskPriority}
-            newSubtaskTagsText={newSubtaskTagsText}
-            setNewSubtaskTagsText={setNewSubtaskTagsText}
-            newSubtaskDepId={newSubtaskDepId}
-            setNewSubtaskDepId={setNewSubtaskDepId}
+            defaultAssignee={isEmpOrIntern ? myName : assignedList[0] || 'Équipe'}
+            defaultStartDate={startDate}
+            defaultDueDate={date}
             availableEmployees={availableEmployees}
             existingTasks={existingTasks}
-            onAddSubtaskQuick={handleAddSubtaskQuick}
+            onAddSubtask={handleAddSubtask}
             onUpdateSubtaskDueDateInline={handleUpdateSubtaskDueDateInline}
             onRemoveSubtask={handleRemoveSubtask}
           />

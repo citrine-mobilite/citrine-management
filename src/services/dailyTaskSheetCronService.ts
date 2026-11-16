@@ -8,6 +8,7 @@ import {
 import { isStrictSuperAdminAccount } from './weeklyAttendanceReportService';
 import { buildEmployeeTasksSummary } from './taskSheet/dailyTaskSheetTasksBuilder';
 import { buildEmployeeDailyAttendanceSummary } from './taskSheet/dailyTaskSheetAttendanceBuilder';
+import { buildDailyImportantPoints } from './taskSheet/importantPointsUtils';
 import { publishDailyTaskSheetBeamsNotification } from '../server/services/pusherBeamsService';
 
 export interface DailyTaskSheetDispatchResult {
@@ -48,13 +49,16 @@ export async function executeDailyTaskSheetDispatch(options?: {
   }
 
   try {
-    const [employees, users, tasks, presences, incidents, companySettingsList] = await Promise.all([
+    const [employees, users, tasks, presences, incidents, companySettingsList, reminders, strategicProjects, notifications] = await Promise.all([
       getCollectionData('employees'),
       getCollectionData('users'),
       getCollectionData('tasks'),
       getCollectionData('presences'),
       getCollectionData('attendance_incidents'),
       getCollectionData('company_settings'),
+      getCollectionData('reminders'),
+      getCollectionData('strategic_projects'),
+      getCollectionData('notifications'),
     ]);
 
     const companySettings = companySettingsList && companySettingsList.length > 0 ? companySettingsList[0] : null;
@@ -101,7 +105,14 @@ export async function executeDailyTaskSheetDispatch(options?: {
         return matchEmp && pDate === doualaTime.dayIso;
       });
 
-      return hasTasks || hasPresence;
+      const hasImportantPoints = buildDailyImportantPoints({
+        employee: emp,
+        dateIso: doualaTime.dayIso,
+        reminders: reminders as any,
+        notifications: notifications as any,
+      }).length > 0;
+
+      return hasTasks || hasPresence || hasImportantPoints;
     });
 
     for (const emp of activeEmployees) {
@@ -116,6 +127,11 @@ export async function executeDailyTaskSheetDispatch(options?: {
           empEmail,
           tasks,
           dayIso: doualaTime.dayIso,
+          reminders,
+          strategicProjects,
+          notifications,
+          department: emp.department,
+          roleType: emp.roleType,
         });
         const attendanceSummary = buildEmployeeDailyAttendanceSummary({
           empId,
@@ -137,9 +153,11 @@ export async function executeDailyTaskSheetDispatch(options?: {
           items: taskSummary.items,
           blockers: taskSummary.blockers,
           managerPoints: taskSummary.managerPoints,
+          importantPoints: taskSummary.importantPoints,
           totalEstimatedHours: taskSummary.totalEstimated,
           totalActualHours: taskSummary.totalActual,
           topPriorities: taskSummary.topPriorities,
+          scheduleSlots: taskSummary.scheduleSlots,
           postponedTasks: taskSummary.postponedTasks,
         };
 

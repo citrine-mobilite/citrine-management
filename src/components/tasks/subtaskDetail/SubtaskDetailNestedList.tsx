@@ -1,18 +1,30 @@
 import React from 'react';
-import { Trash2, Filter, History } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { Subtask } from '../../../types';
-import { formatSubtaskRelativeDate } from '../../../utils/subtaskFilterUtils';
+import {
+  formatSubtaskRelativeDate,
+  SubtaskFilterPeriod,
+} from '../../../utils/subtaskFilterUtils';
+import { SubtaskFilterBar } from '../shared/SubtaskFilterBar';
 
 interface SubtaskDetailNestedListProps {
   displayedSubtasks: Subtask[];
   hiddenCount: number;
   totalCount: number;
-  subtaskFilterPeriod: 'last3days' | 'all';
-  setSubtaskFilterPeriod: (p: 'last3days' | 'all') => void;
+  subtaskFilterPeriod: SubtaskFilterPeriod;
+  setSubtaskFilterPeriod: (p: SubtaskFilterPeriod) => void;
+  subtaskFilterDate: string;
+  setSubtaskFilterDate: (d: string) => void;
+  subtaskRangeStart: string;
+  setSubtaskRangeStart: (d: string) => void;
+  subtaskRangeEnd: string;
+  setSubtaskRangeEnd: (d: string) => void;
+  activeRangeLabel?: string;
   draftDueDate: string;
   newSubtaskTitle: string;
   setNewSubtaskTitle: (v: string) => void;
   onAddSubtask: () => void;
+  onOpenRichSubtaskModal?: () => void;
   onToggleSubtask: (subId: string) => void;
   onSelectNestedSubtask: (sub: Subtask) => void;
   onDeleteSubtask: (subId: string) => void;
@@ -24,61 +36,71 @@ export const SubtaskDetailNestedList: React.FC<SubtaskDetailNestedListProps> = (
   totalCount,
   subtaskFilterPeriod,
   setSubtaskFilterPeriod,
+  subtaskFilterDate,
+  setSubtaskFilterDate,
+  subtaskRangeStart,
+  setSubtaskRangeStart,
+  subtaskRangeEnd,
+  setSubtaskRangeEnd,
+  activeRangeLabel,
   draftDueDate,
   newSubtaskTitle,
   setNewSubtaskTitle,
   onAddSubtask,
+  onOpenRichSubtaskModal,
   onToggleSubtask,
   onSelectNestedSubtask,
   onDeleteSubtask,
 }) => {
   return (
     <div className="space-y-2.5 bg-stone-50 p-4 rounded-2xl border border-stone-200/80">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-stone-200/60">
-        <h4 className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
-          <span>Sous-tâches subordonnées</span>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-200/80 text-stone-700 font-semibold">
-            {displayedSubtasks.length}/{totalCount}
-          </span>
-        </h4>
+      <div className="flex flex-col gap-2 pb-2 border-b border-stone-200/60">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
+            <span>Sous-tâches subordonnées</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-200/80 text-stone-700 font-semibold">
+              {displayedSubtasks.length}/{totalCount}
+            </span>
+            {activeRangeLabel && (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white text-stone-600 border border-stone-200">
+                {activeRangeLabel}
+              </span>
+            )}
+          </h4>
 
-        <div className="flex items-center gap-1 self-start sm:self-auto bg-stone-200/70 p-0.5 rounded-xl text-[10px] font-bold">
-          <button
-            type="button"
-            onClick={() => setSubtaskFilterPeriod('last3days')}
-            className={`px-2 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
-              subtaskFilterPeriod === 'last3days'
-                ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-            title="3 derniers jours uniquement"
-          >
-            <Filter className="h-2.5 w-2.5" />
-            <span>3 derniers jours</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSubtaskFilterPeriod('all')}
-            className={`px-2 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
-              subtaskFilterPeriod === 'all'
-                ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-            title="Toutes les sous-tâches"
-          >
-            <History className="h-2.5 w-2.5" />
-            <span>Toutes ({totalCount})</span>
-          </button>
+          {onOpenRichSubtaskModal && (
+            <button
+              type="button"
+              onClick={onOpenRichSubtaskModal}
+              className="text-[11px] font-bold text-[#2A7B76] hover:underline cursor-pointer"
+            >
+              + Formulaire complet
+            </button>
+          )}
         </div>
+
+        <SubtaskFilterBar
+          period={subtaskFilterPeriod}
+          onChangePeriod={setSubtaskFilterPeriod}
+          specificDate={subtaskFilterDate}
+          onChangeSpecificDate={setSubtaskFilterDate}
+          rangeStart={subtaskRangeStart}
+          onChangeRangeStart={setSubtaskRangeStart}
+          rangeEnd={subtaskRangeEnd}
+          onChangeRangeEnd={setSubtaskRangeEnd}
+          totalCount={totalCount}
+        />
       </div>
 
-      {subtaskFilterPeriod === 'last3days' && hiddenCount > 0 && (
+      {subtaskFilterPeriod !== 'all' && hiddenCount > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1.5 text-[10px] text-amber-900 flex items-center justify-between gap-1">
-          <span>💡 {hiddenCount} sous-tâche(s) antérieure(s) masquée(s).</span>
+          <span>
+            💡 {hiddenCount} sous-tâche(s) hors période masquée(s) (semaine en cours par défaut).
+          </span>
           <button
             type="button"
             onClick={() => setSubtaskFilterPeriod('all')}
-            className="font-bold underline cursor-pointer"
+            className="font-bold underline cursor-pointer shrink-0"
           >
             Afficher tout
           </button>
@@ -89,7 +111,7 @@ export const SubtaskDetailNestedList: React.FC<SubtaskDetailNestedListProps> = (
         {displayedSubtasks.length === 0 ? (
           <div className="text-center py-4 bg-white rounded-xl border border-dashed border-stone-200 text-stone-400 text-xs">
             {totalCount > 0
-              ? `Aucune sur les 3 derniers jours (${totalCount} antérieure${totalCount > 1 ? 's' : ''}).`
+              ? `Aucune sous-tâche sur cette période (${totalCount} au total).`
               : 'Aucune sous-tâche subordonnée.'}
           </div>
         ) : (
@@ -117,7 +139,7 @@ export const SubtaskDetailNestedList: React.FC<SubtaskDetailNestedListProps> = (
                     }}
                     className="flex-1 min-w-0 cursor-pointer"
                   >
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span
                         className={`text-xs block truncate hover:underline ${
                           sub.completed ? 'line-through text-stone-400' : 'text-stone-800 font-bold'
@@ -128,6 +150,19 @@ export const SubtaskDetailNestedList: React.FC<SubtaskDetailNestedListProps> = (
                       <span className="text-[9px] font-mono px-1 rounded bg-stone-100 text-stone-500">
                         📅 {relDate}
                       </span>
+                      {sub.priority && (
+                        <span className="text-[9px] px-1 rounded bg-stone-100 text-stone-600 font-semibold uppercase">
+                          {sub.priority}
+                        </span>
+                      )}
+                      {(sub.tags || []).map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-[9px] px-1.5 py-0.2 rounded bg-teal-50 text-[#2A7B76] border border-teal-200 font-semibold"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
                     </div>
                   </div>
                   {(sub.status === 'blocked' ||

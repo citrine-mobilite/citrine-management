@@ -57,6 +57,17 @@ export interface EmployeeRendementMetrics {
   completedSubtasks: number;
   milestonesCount: number;
   completedMilestones: number;
+  blockedMilestones?: number;
+  strategicMilestonesCount?: number;
+  completedStrategicMilestones?: number;
+  remindersCount?: number;
+  remindersResolvedCount?: number;
+  remindersOverdueCount?: number;
+  remindersHoursTotal?: number;
+  importantPointsCount?: number;
+  importantPointsAlertsCount?: number;
+  importantPointsMovementsCount?: number;
+  importantPointsHoursTotal?: number;
   estimatedHoursTotal: number;
   actualHoursTotal: number;
   effectiveHoursSpent: number;

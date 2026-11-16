@@ -153,7 +153,7 @@ export interface Task {
 
 export type ReminderTrigger = '5m' | '15m' | '30m' | '1h' | '1d' | 'none';
 
-export type ReminderKind = 'deadline' | 'routine' | 'alarm';
+export type ReminderKind = 'deadline' | 'routine' | 'alarm' | 'movement';
 
 export type ReminderCategory = 'vehicule' | 'fiscalite' | 'administratif' | 'rh' | 'autre';
 
@@ -185,6 +185,7 @@ export interface Reminder {
   recurrenceMode?: ReminderRecurrenceMode;
   recurrenceDays?: number[]; // 0=Dimanche .. 6=Samedi (ex: [1, 3, 5] pour Lun/Mer/Ven)
   routineType?: ReminderRoutineType;
+  movementCategory?: string;
   sendPushNotification?: boolean;
   enableSoundAlarm?: boolean;
   lastTriggeredKey?: string;

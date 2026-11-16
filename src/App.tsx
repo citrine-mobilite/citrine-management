@@ -26,6 +26,53 @@ export default function App() {
     moduleConfig: initialData.moduleConfig,
   });
 
+  const todayStr = React.useMemo(() => new Date().toISOString().split('T')[0], []);
+
+  const todayTasksCount = React.useMemo(() => {
+    let count = 0;
+    (initialData.tasks || []).forEach(t => {
+      if ((t.dueDate === todayStr || t.date === todayStr) && t.status !== 'completed') {
+        count++;
+      }
+      if (t.subtasks && Array.isArray(t.subtasks)) {
+        t.subtasks.forEach(sub => {
+          if (sub.dueDate === todayStr && sub.status !== 'completed') {
+            count++;
+          }
+        });
+      }
+    });
+    return count;
+  }, [initialData.tasks, todayStr]);
+
+  const todayProjectsCount = React.useMemo(() => {
+    let count = 0;
+    (initialData.strategicProjects || []).forEach(p => {
+      if (p.deadline === todayStr && p.status !== 'completed') {
+        count++;
+      }
+      if (p.milestones && Array.isArray(p.milestones)) {
+        p.milestones.forEach(m => {
+          if (m.dueDate === todayStr && !m.completed) {
+            count++;
+          }
+        });
+      }
+    });
+    return count;
+  }, [initialData.strategicProjects, todayStr]);
+
+  const pendingDisciplineCount = React.useMemo(() => {
+    return (initialData.disciplinaryIncidents || []).filter(
+      d => !d.decision && d.status !== 'sanctionne' && d.status !== 'classe'
+    ).length;
+  }, [initialData.disciplinaryIncidents]);
+
+  const unreadRemindersCount = React.useMemo(
+    () => getHomeUrgentReminders(initialData.reminders).length,
+    [initialData.reminders]
+  );
+
   if (app.isAuthLoading) {
     return (
       <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
@@ -87,10 +134,13 @@ export default function App() {
             }}
             isOpen={app.isSidebarOpen}
             onToggleOpen={() => app.setIsSidebarOpen((prev) => !prev)}
-            unreadRemindersCount={getHomeUrgentReminders(initialData.reminders).length}
+            unreadRemindersCount={unreadRemindersCount}
             pendingPresencesRequestsCount={app.pendingPresencesRequestsCount}
             pendingLeavesCount={app.pendingLeavesCount}
             nonBadgedEmployeesCount={app.nonBadgedEmployeesCount}
+            todayTasksCount={todayTasksCount}
+            todayProjectsCount={todayProjectsCount}
+            pendingDisciplineCount={pendingDisciplineCount}
             mobileMenuOpen={app.mobileMenuOpen}
             onToggleMobileMenu={() => app.setMobileMenuOpen((prev) => !prev)}
             onCloseMobileMenu={() => app.setMobileMenuOpen(false)}
@@ -150,6 +200,12 @@ export default function App() {
             onUpdateLeaveRequests={initialData.setLeaveRequests}
             strategicProjects={initialData.strategicProjects}
             onUpdateStrategicProjects={initialData.setStrategicProjects}
+            todayTasksCount={todayTasksCount}
+            todayProjectsCount={todayProjectsCount}
+            pendingDisciplineCount={pendingDisciplineCount}
+            pendingLeavesCount={app.pendingLeavesCount}
+            unreadNotificationsCount={app.unreadNotificationsCount}
+            pendingPresencesRequestsCount={app.pendingPresencesRequestsCount}
             onLogout={app.handleLogout}
           />
         </main>

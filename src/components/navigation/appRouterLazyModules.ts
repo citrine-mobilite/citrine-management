@@ -93,4 +93,10 @@ export interface AppTabRouterProps {
   onUpdateLeaveRequests?: (leaves: LeaveRequest[]) => void;
   strategicProjects?: StrategicProject[];
   onUpdateStrategicProjects?: (projects: StrategicProject[]) => void;
+  todayTasksCount?: number;
+  todayProjectsCount?: number;
+  pendingDisciplineCount?: number;
+  pendingLeavesCount?: number;
+  unreadNotificationsCount?: number;
+  pendingPresencesRequestsCount?: number;
 }

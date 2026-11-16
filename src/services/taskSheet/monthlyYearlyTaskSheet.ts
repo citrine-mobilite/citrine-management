@@ -1,6 +1,16 @@
-import { Employee, Presence, Task } from '../../types';
+import { Employee, NotificationLog, Presence, Reminder, StrategicProject, Task } from '../../types';
 import { isTaskAssignedToEmployee } from '../../utils/rendementCalculator';
 import { MonthlyTaskSheetData, YearlyTaskSheetData } from './taskSheetTypes';
+import {
+  computeEmployeeReminderStatsInRange,
+  extractStrategicMilestones,
+  getEmployeeRemindersForDate,
+} from '../reminders/reminderActivityUtils';
+import {
+  buildDailyImportantPoints,
+  computeImportantPointsPeriodSummary,
+  mergeRemindersWithLocalMovements,
+} from './importantPointsUtils';
 
 function computePresenceDayHours(p: Presence | undefined): number {
   if (!p) return 0;
@@ -24,8 +34,12 @@ export function generateMonthlyTaskSheet(
   employee: Employee,
   monthStr: string,
   allTasks: Task[],
-  presences: Presence[]
+  presences: Presence[],
+  reminders: Reminder[] = [],
+  strategicProjects: StrategicProject[] = [],
+  notifications: NotificationLog[] = []
 ): MonthlyTaskSheetData {
+  const mergedReminders = mergeRemindersWithLocalMovements(reminders, employee.id);
   const [yStr, mStr] = monthStr.split('-');
   const y = parseInt(yStr, 10) || new Date().getFullYear();
   const m = parseInt(mStr, 10) || new Date().getMonth() + 1;
@@ -131,6 +145,14 @@ export function generateMonthlyTaskSheet(
         ? 'Absent'
         : '-';
 
+    const dayRemindersCount = getEmployeeRemindersForDate(mergedReminders, employee, dayDateStr).length;
+    const dayPointsCount = buildDailyImportantPoints({
+      employee,
+      dateIso: dayDateStr,
+      reminders: mergedReminders,
+      notifications,
+    }).length;
+
     dailyBreakdown.push({
       date: dayDateStr,
       dayName: dayNameFr,
@@ -140,6 +162,8 @@ export function generateMonthlyTaskSheet(
       hoursWorked: Math.round(hoursWorked * 10) / 10,
       status: mappedStatus,
       tasksDoneCount: tasksDone,
+      remindersCount: dayRemindersCount,
+      importantPointsCount: dayPointsCount,
     });
   }
 
@@ -220,6 +244,47 @@ export function generateMonthlyTaskSheet(
 
   const completionRate = totalTasksAssigned > 0 ? Math.round((totalTasksCompleted / totalTasksAssigned) * 100) : 0;
 
+  const monthStartIso = `${y}-${String(m).padStart(2, '0')}-01`;
+  const monthEndIso = `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+  const monthReminderStats = computeEmployeeReminderStatsInRange(
+    mergedReminders,
+    employee,
+    monthStartIso,
+    monthEndIso
+  );
+  const importantPointsSummary = computeImportantPointsPeriodSummary({
+    employee,
+    startIso: monthStartIso,
+    endIso: monthEndIso,
+    reminders: mergedReminders,
+    notifications,
+    maxRecentItems: 20,
+  });
+  const monthStrategicMilestones = extractStrategicMilestones(
+    strategicProjects,
+    employee,
+    monthStartIso,
+    monthEndIso
+  );
+  const taskMilestones = tasksList.filter((t) => t.isMilestone);
+  const milestoneItems = [
+    ...monthStrategicMilestones.map((m) => ({
+      id: m.milestoneId,
+      title: m.title,
+      projectName: m.projectName,
+      status: m.isDone ? 'completed' : m.isBlocked ? 'blocked' : m.status,
+      targetDate: m.targetDate,
+      progress: m.isDone ? 100 : m.status === 'in_progress' ? 50 : 0,
+    })),
+    ...taskMilestones.map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      targetDate: t.date,
+      progress: t.completionPercentage,
+    })),
+  ];
+
   return {
     employee,
     month: monthStr,
@@ -237,6 +302,19 @@ export function generateMonthlyTaskSheet(
     totalSubtasksCount,
     completedSubtasksCount,
     completionRate,
+    milestonesSummary: {
+      total: milestoneItems.length,
+      completed: milestoneItems.filter((m) => m.status === 'completed' || m.progress >= 100).length,
+      blocked: milestoneItems.filter((m) => m.status === 'blocked').length,
+      items: milestoneItems,
+    },
+    remindersSummary: {
+      totalOccurrences: monthReminderStats.totalOccurrences,
+      resolvedCount: monthReminderStats.resolvedCount,
+      overdueCount: monthReminderStats.overdueCount,
+      totalHours: monthReminderStats.totalHours,
+    },
+    importantPointsSummary,
     tasksList,
     dailyBreakdown,
   };
@@ -256,8 +334,12 @@ export function generateYearlyTaskSheet(
   employee: Employee,
   year: number,
   allTasks: Task[],
-  presences: Presence[]
+  presences: Presence[],
+  reminders: Reminder[] = [],
+  strategicProjects: StrategicProject[] = [],
+  notifications: NotificationLog[] = []
 ): YearlyTaskSheetData {
+  const mergedReminders = mergeRemindersWithLocalMovements(reminders, employee.id);
   let totalHoursWorked = 0;
   let totalDaysPresent = 0;
   let totalWorkingDays = 0;
@@ -325,6 +407,19 @@ export function generateYearlyTaskSheet(
     });
     const rendementRate = totalSubCount > 0 ? Math.round((tasksCompleted / totalSubCount) * 100) : 0;
 
+    const mDays = new Date(year, idx + 1, 0).getDate();
+    const mStartIso = `${monthStr}-01`;
+    const mEndIso = `${monthStr}-${String(mDays).padStart(2, '0')}`;
+    const mRemStats = computeEmployeeReminderStatsInRange(mergedReminders, employee, mStartIso, mEndIso);
+    const mPointsStats = computeImportantPointsPeriodSummary({
+      employee,
+      startIso: mStartIso,
+      endIso: mEndIso,
+      reminders: mergedReminders,
+      notifications,
+      maxRecentItems: 5,
+    });
+
     totalDaysPresent += daysWorked;
     totalWorkingDays += workingDays;
     totalWeekendDaysWorked += weekendDaysWorked;
@@ -340,6 +435,8 @@ export function generateYearlyTaskSheet(
       hoursWorked,
       tasksCompleted,
       subtasksTotal: totalSubCount,
+      remindersCount: mRemStats.totalOccurrences,
+      importantPointsCount: mPointsStats.totalPoints,
       rendementRate,
     };
   });
@@ -379,6 +476,37 @@ export function generateYearlyTaskSheet(
     .sort((a, b) => b.hours - a.hours)
     .slice(0, 8);
 
+  const yearStartIso = `${year}-01-01`;
+  const yearEndIso = `${year}-12-31`;
+  const yearReminderStats = computeEmployeeReminderStatsInRange(
+    mergedReminders,
+    employee,
+    yearStartIso,
+    yearEndIso
+  );
+  const importantPointsSummary = computeImportantPointsPeriodSummary({
+    employee,
+    startIso: yearStartIso,
+    endIso: yearEndIso,
+    reminders: mergedReminders,
+    notifications,
+    maxRecentItems: 25,
+  });
+  const yearStrategicMilestones = extractStrategicMilestones(
+    strategicProjects,
+    employee,
+    yearStartIso,
+    yearEndIso
+  );
+  const yearTaskMilestones = yearTasks.filter((t) => t.isMilestone);
+  const totalMilestonesCount = yearStrategicMilestones.length + yearTaskMilestones.length;
+  const completedMilestonesCount =
+    yearStrategicMilestones.filter((m) => m.isDone).length +
+    yearTaskMilestones.filter((t) => t.status === 'completed' || (t.milestoneProgress ?? 0) >= 100).length;
+  const blockedMilestonesCount =
+    yearStrategicMilestones.filter((m) => m.isBlocked).length +
+    yearTaskMilestones.filter((t) => t.status === 'blocked').length;
+
   return {
     employee,
     year,
@@ -391,6 +519,18 @@ export function generateYearlyTaskSheet(
     totalSubtasksAssigned: yearSubtasksTotal,
     totalSubtasksCompleted: yearSubtasksDone,
     subtaskCompletionRate: yearSubtasksTotal > 0 ? Math.round((yearSubtasksDone / yearSubtasksTotal) * 100) : avgCompletionRate,
+    milestonesSummary: {
+      total: totalMilestonesCount,
+      completed: completedMilestonesCount,
+      blocked: blockedMilestonesCount,
+    },
+    remindersSummary: {
+      totalOccurrences: yearReminderStats.totalOccurrences,
+      resolvedCount: yearReminderStats.resolvedCount,
+      overdueCount: yearReminderStats.overdueCount,
+      totalHours: yearReminderStats.totalHours,
+    },
+    importantPointsSummary,
     topTimeTasks,
     monthlyBreakdown,
   };

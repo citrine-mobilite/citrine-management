@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import { Task } from '../../../types';
+import { sortSubtasksNewestFirst } from '../../../utils/subtaskFilterUtils';
 
 export interface TaskWithDuration extends Task {
   estimatedHours: number;
@@ -90,7 +91,7 @@ export const RendementTaskAccordionList: React.FC<RendementTaskAccordionListProp
       <div className="space-y-3">
         {sortedTasks.map((task) => {
           const isExpanded = expandedTaskId === task.id;
-          const subtasks = task.subtasks || [];
+          const subtasks = sortSubtasksNewestFirst(task.subtasks || [], task.dueDate || task.date);
           const completedSub = subtasks.filter((s) => s.completed).length;
 
           return (
@@ -136,7 +137,7 @@ export const RendementTaskAccordionList: React.FC<RendementTaskAccordionListProp
                         key={sub.id}
                         className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 shadow-3xs"
                       >
-                        <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                        <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0 flex-wrap">
                           <input
                             type="checkbox"
                             checked={sub.completed}
@@ -151,6 +152,14 @@ export const RendementTaskAccordionList: React.FC<RendementTaskAccordionListProp
                           >
                             {sub.title}
                           </span>
+                          {(sub.tags || []).map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-[9px] px-1.5 py-0.2 rounded bg-teal-50 text-[#2A7B76] border border-teal-200 font-semibold"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
                         </label>
 
                         <button

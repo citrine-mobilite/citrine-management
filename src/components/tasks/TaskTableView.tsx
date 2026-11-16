@@ -27,8 +27,13 @@ import {
   getUnfinishedBlockers,
   resolveProjectSections,
   resolveTaskSectionId,
-  sortSubtasksByOrder,
 } from './logic/asanaTreeEngine';
+import {
+  filterAndSortSubtasks,
+  getCurrentWeekBounds,
+  SubtaskFilterPeriod,
+} from '../../utils/subtaskFilterUtils';
+import { SubtaskFilterBar } from './shared/SubtaskFilterBar';
 
 interface TaskTableViewProps {
   tasks: Task[];
@@ -75,12 +80,16 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
   onAddSection,
   onRenameSection,
   onDeleteSection,
+  onOpenCreateSubtask,
   onDeleteTask,
 }) => {
   const sections: TaskSection[] = useMemo(
     () => resolveProjectSections(activeProject),
     [activeProject]
   );
+
+  const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const currentWeekBounds = useMemo(() => getCurrentWeekBounds(), []);
 
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
@@ -95,6 +104,11 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
   const [newSectionName, setNewSectionName] = useState('');
   const [showAddSection, setShowAddSection] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+
+  const [subtaskFilterPeriod, setSubtaskFilterPeriod] = useState<SubtaskFilterPeriod>('current_week');
+  const [subtaskFilterDate, setSubtaskFilterDate] = useState<string>(todayIso);
+  const [subtaskRangeStart, setSubtaskRangeStart] = useState<string>(currentWeekBounds.startIso);
+  const [subtaskRangeEnd, setSubtaskRangeEnd] = useState<string>(currentWeekBounds.endIso);
 
   const groupedBySection = useMemo(() => {
     const map = new Map<string, Task[]>();
@@ -144,18 +158,32 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
     task: Task,
     subtasks: Subtask[],
     parentPath: string[],
-    depth: number
+    depth: number,
+    parentDate?: string
   ): React.ReactNode => {
-    return sortSubtasksByOrder(subtasks).map((sub) => {
-      const path = [...parentPath, sub.id];
-      const pathKey = `${task.id}::${path.join('/')}`;
-      const children = sub.subtasks || [];
-      const hasChildren = children.length > 0;
-      const isExpanded = Boolean(expandedNodes[pathKey]);
-      const isDone = Boolean(sub.completed || sub.status === 'completed');
-      const blockers = getUnfinishedBlockers(sub.dependsOnIds, tasks);
-      const dueStr = sub.dueDate || sub.endDate || '';
-      const isOverdue = !isDone && dueStr && dueStr < new Date().toISOString().split('T')[0];
+    const { displayedSubtasks, hiddenCount } = filterAndSortSubtasks(
+      subtasks,
+      {
+        period: subtaskFilterPeriod,
+        specificDate: subtaskFilterDate,
+        startDate: subtaskRangeStart,
+        endDate: subtaskRangeEnd,
+      },
+      parentDate || task.dueDate || task.date
+    );
+
+    return (
+      <>
+        {displayedSubtasks.map((sub) => {
+          const path = [...parentPath, sub.id];
+          const pathKey = `${task.id}::${path.join('/')}`;
+          const children = sub.subtasks || [];
+          const hasChildren = children.length > 0;
+          const isExpanded = Boolean(expandedNodes[pathKey]);
+          const isDone = Boolean(sub.completed || sub.status === 'completed');
+          const blockers = getUnfinishedBlockers(sub.dependsOnIds, tasks);
+          const dueStr = sub.dueDate || sub.endDate || '';
+          const isOverdue = !isDone && dueStr && dueStr < todayIso;
 
       return (
         <React.Fragment key={pathKey}>
@@ -236,6 +264,19 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
                   <span className="text-[11px] text-stone-400 tabular-nums shrink-0">
                     {children.filter((c) => c.completed).length}/{children.length}
                   </span>
+                )}
+
+                {(sub.tags || []).length > 0 && (
+                  <div className="hidden md:flex flex-wrap items-center gap-1 shrink-0">
+                    {(sub.tags || []).map((tag) => (
+                      <span
+                        key={tag}
+                        className="text-[10px] px-1.5 py-0.2 rounded bg-teal-50 text-[#2A7B76] border border-teal-200 font-medium"
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
                 )}
 
                 {blockers.length > 0 && (
@@ -354,7 +395,7 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
             </td>
           </tr>
 
-          {isExpanded && hasChildren && renderSubtaskTreeRows(task, children, path, depth + 1)}
+          {isExpanded && hasChildren && renderSubtaskTreeRows(task, children, path, depth + 1, sub.dueDate || sub.endDate)}
 
           {addingSubUnderKey === pathKey && (
             <tr className="bg-stone-50 border-t border-stone-100">
@@ -393,48 +434,91 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
           )}
         </React.Fragment>
       );
-    });
+    })}
+        {hiddenCount > 0 && (
+          <tr className="bg-amber-50/50 border-t border-stone-100 text-[11px] text-amber-900">
+            <td colSpan={7} className="py-1.5 px-3">
+              <div
+                className="flex items-center justify-between gap-2"
+                style={{ paddingLeft: `${depth * 22}px` }}
+              >
+                <span>
+                  {displayedSubtasks.length === 0
+                    ? `Aucune sous-tâche sur la période affichée (${hiddenCount} hors semaine en cours).`
+                    : `${hiddenCount} autre${hiddenCount > 1 ? 's' : ''} sous-tâche${hiddenCount > 1 ? 's' : ''} hors période masquée${hiddenCount > 1 ? 's' : ''}.`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSubtaskFilterPeriod('all')}
+                  className="font-bold text-[#2A7B76] hover:underline cursor-pointer"
+                >
+                  Afficher toutes
+                </button>
+              </div>
+            </td>
+          </tr>
+        )}
+      </>
+    );
   };
 
   return (
     <div id="tasks-table-container" className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
       {/* Toolbar */}
-      <div className="px-4 py-3 border-b border-stone-200 flex flex-wrap items-center justify-between gap-3 bg-stone-50/70">
-        <div className="flex items-center gap-3">
-          <h4 className="font-semibold text-sm text-stone-900 tabular-nums">
-            Liste hiérarchique ({tasks.length})
-          </h4>
-          <button
-            type="button"
-            onClick={() => {
-              const anyExpanded = Object.values(expandedNodes).some(Boolean);
-              toggleExpandAll(!anyExpanded);
-            }}
-            className="text-xs font-medium text-[#2A7B76] hover:underline cursor-pointer whitespace-nowrap"
-          >
-            {Object.values(expandedNodes).some(Boolean)
-              ? 'Tout réduire'
-              : 'Tout déplier (sous-tâches)'}
-          </button>
+      <div className="px-4 py-3 border-b border-stone-200 space-y-2.5 bg-stone-50/70">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <h4 className="font-semibold text-sm text-stone-900 tabular-nums">
+              Tâches (Job descriptions) &amp; Sous-tâches ({tasks.length})
+            </h4>
+            <button
+              type="button"
+              onClick={() => {
+                const anyExpanded = Object.values(expandedNodes).some(Boolean);
+                toggleExpandAll(!anyExpanded);
+              }}
+              className="text-xs font-medium text-[#2A7B76] hover:underline cursor-pointer whitespace-nowrap"
+            >
+              {Object.values(expandedNodes).some(Boolean)
+                ? 'Tout réduire'
+                : 'Tout déplier (sous-tâches)'}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="px-3 py-1.5 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-semibold rounded-lg flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Excel</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              className="px-3 py-1.5 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-semibold rounded-lg flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+            >
+              <FileText className="h-3.5 w-3.5 text-rose-600" />
+              <span>PDF</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="px-3 py-1.5 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-semibold rounded-lg flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
-          >
-            <Download className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Excel</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleExportPdf}
-            className="px-3 py-1.5 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-semibold rounded-lg flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
-          >
-            <FileText className="h-3.5 w-3.5 text-rose-600" />
-            <span>PDF</span>
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-stone-200/70">
+          <span className="text-[11px] font-medium text-stone-500">
+            Affichage des sous-tâches :
+          </span>
+          <SubtaskFilterBar
+            period={subtaskFilterPeriod}
+            onChangePeriod={setSubtaskFilterPeriod}
+            specificDate={subtaskFilterDate}
+            onChangeSpecificDate={setSubtaskFilterDate}
+            rangeStart={subtaskRangeStart}
+            onChangeRangeStart={setSubtaskRangeStart}
+            rangeEnd={subtaskRangeEnd}
+            onChangeRangeEnd={setSubtaskRangeEnd}
+          />
         </div>
       </div>
 
@@ -701,12 +785,16 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setAddingSubUnderKey(task.id);
-                                    setExpandedNodes((prev) => ({ ...prev, [task.id]: true }));
-                                    setNewSubTitle('');
+                                    if (onOpenCreateSubtask) {
+                                      onOpenCreateSubtask(task);
+                                    } else {
+                                      setAddingSubUnderKey(task.id);
+                                      setExpandedNodes((prev) => ({ ...prev, [task.id]: true }));
+                                      setNewSubTitle('');
+                                    }
                                   }}
                                   className="opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-[#2A7B76] cursor-pointer transition shrink-0"
-                                  title="Ajouter une sous-tâche"
+                                  title="Ajouter une sous-tâche complète"
                                 >
                                   <Plus className="h-3.5 w-3.5" />
                                 </button>

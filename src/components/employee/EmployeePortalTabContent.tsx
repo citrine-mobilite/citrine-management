@@ -170,6 +170,9 @@ export const EmployeePortalTabContent: React.FC<EmployeePortalTabContentProps> =
           onAddNotification={onAddNotification}
           currentRole="employé"
           employees={employees}
+          reminders={reminders || []}
+          strategicProjects={strategicProjects || []}
+          notifications={notifications || []}
           currentUser={currentUser}
           showToast={(msg, type) => logic.showToast('Tâches', msg, type === 'error' ? 'warning' : 'success')}
         />

@@ -106,6 +106,51 @@ export async function buildTaskSheetXlsxWorkbook(data: TaskSheetReportData): Pro
   for (let c = 1; c <= 6; c++) applyCellBox(footRow.getCell(c), { bg: CITRINE_XLSX_COLORS.emeraldDark, color: CITRINE_XLSX_COLORS.white, bold: true, align: c >= 3 ? 'center' : 'left' });
   r++;
 
+  styleSectionHeaderRow(
+    ws1,
+    r++,
+    6,
+    `POINTS IMPORTANTS (ALERTES, RAPPELS & PETITS MOUVEMENTS) — HORS TÂCHES (${p.importantPointsCount})`
+  );
+  styleColumnHeadersRow(
+    ws1,
+    r++,
+    ['Heure', 'Sujet & Détails', 'Catégorie', 'Durée (min)', 'Lieu / Source', 'Statut'],
+    ['center', 'left', 'center', 'right', 'center', 'center']
+  );
+  if (p.importantPoints.length > 0) {
+    p.importantPoints.forEach((pt, idx) => {
+      const row = ws1.getRow(r++);
+      row.height = 22;
+      const bg = idx % 2 === 1 ? CITRINE_XLSX_COLORS.slateZebra : CITRINE_XLSX_COLORS.white;
+      row.values = [
+        pt.time || '09:00',
+        pt.detail ? `${pt.title} — ${pt.detail}` : pt.title,
+        pt.categoryLabel,
+        `${pt.durationMinutes} min`,
+        pt.location || pt.source || '—',
+        pt.statusLabel,
+      ];
+      applyCellBox(row.getCell(1), { bg, align: 'center', bold: true });
+      applyCellBox(row.getCell(2), { bg, bold: true });
+      applyCellBox(row.getCell(3), {
+        bg: pt.category === 'alerte' ? CITRINE_XLSX_COLORS.roseBg : CITRINE_XLSX_COLORS.amberBg,
+        color: pt.category === 'alerte' ? CITRINE_XLSX_COLORS.roseText : CITRINE_XLSX_COLORS.amberText,
+        bold: true,
+        align: 'center',
+      });
+      applyCellBox(row.getCell(4), { bg, align: 'right', bold: true });
+      applyCellBox(row.getCell(5), { bg, align: 'center', color: CITRINE_XLSX_COLORS.textMuted });
+      applyStatusBadgeStyle(row.getCell(6), pt.isResolved ? 'Fait' : pt.isOverdue ? 'Bloqué' : 'En cours');
+    });
+  } else {
+    const emptyPts = ws1.getRow(r++);
+    emptyPts.getCell(1).value = 'Aucun point important (alerte, rappel ou petit mouvement) relevé ce jour.';
+    ws1.mergeCells(emptyPts.number, 1, emptyPts.number, 6);
+    applyCellBox(emptyPts.getCell(1), { bg: CITRINE_XLSX_COLORS.slateBg, italic: true, align: 'center', color: CITRINE_XLSX_COLORS.textMuted });
+  }
+  r++;
+
   styleSectionHeaderRow(ws1, r++, 6, 'PLAN HORAIRE (08:00 – 17:00) — Pause déjeuner 12h00 – 13h00');
   styleColumnHeadersRow(ws1, r++, ['Créneau Horaire', 'Activité réalisée sur le créneau', '', '', '', 'Observation'], ['left', 'left', 'left', 'left', 'left', 'center']);
   ws1.mergeCells(r - 1, 2, r - 1, 5);
@@ -173,7 +218,8 @@ export async function buildTaskSheetXlsxWorkbook(data: TaskSheetReportData): Pro
   for (let c = 1; c <= 5; c++) applyCellBox(m2.getCell(c), { bg: CITRINE_XLSX_COLORS.slateHeader, bold: true });
   styleSectionHeaderRow(ws2, 4, 5, 'DIAGNOSTIC DE CHARGE & REMONTÉES');
   const diagRows: [string, string][] = [
-    ['Temps planifié (sous-tâches)', `${Math.round(p.plannedMinutes / 60)}h (${p.plannedMinutes} min)`],
+    ['Temps planifié (sous-tâches + points importants)', `${Math.round((p.plannedMinutes / 60) * 10) / 10}h (${p.plannedMinutes} min)`],
+    ['Points importants hors-tâches', `${p.importantPointsCount} (${p.alertsCount} alertes · ${p.remindersCount} rappels · ${p.movementsCount} petits mouvements)`],
     ['Statut capacitaire', p.capacityStatus === 'overloaded' ? 'Surcharge (> 10h/jour)' : p.capacityStatus === 'optimal' ? 'Charge nominale (7h–10h)' : 'Capacité disponible (< 7h)'],
     ['Conseil opérationnel', p.capacityAdvice],
     ['Synthèse manager', p.managerAlertPoint || 'Aucun blocage particulier à signaler.'],
@@ -187,7 +233,7 @@ export async function buildTaskSheetXlsxWorkbook(data: TaskSheetReportData): Pro
     applyCellBox(row.getCell(1), { bg: CITRINE_XLSX_COLORS.slateBg, bold: true });
     for (let c = 2; c <= 5; c++) applyCellBox(row.getCell(c), {});
   });
-  styleOfficialFooterRow(ws2, 10, 5);
+  styleOfficialFooterRow(ws2, 11, 5);
 
   return wb;
 }

@@ -71,6 +71,12 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onUpdateStrategicProjects={onUpdateStrategicProjects}
           moduleConfig={moduleConfig}
           showToast={showToast}
+          todayTasksCount={props.todayTasksCount}
+          todayProjectsCount={props.todayProjectsCount}
+          pendingDisciplineCount={props.pendingDisciplineCount}
+          pendingLeavesCount={props.pendingLeavesCount}
+          unreadNotificationsCount={props.unreadNotificationsCount}
+          pendingPresencesRequestsCount={props.pendingPresencesRequestsCount}
         />
       )}
 
@@ -141,6 +147,9 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           presences={presences}
           tasks={tasks}
           incidents={attendanceIncidents}
+          reminders={reminders}
+          strategicProjects={strategicProjects}
+          notifications={notifications}
           currentUser={currentUser}
           currentRole={currentUser?.role}
           onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
@@ -170,6 +179,9 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onAddNotification={onAddNotification}
           currentRole={currentUser?.role || 'Administrateur'}
           employees={employees}
+          reminders={reminders}
+          strategicProjects={strategicProjects}
+          notifications={notifications}
           selectedEmployeeId={selectedEmployeeId}
           showToast={showToast}
           currentUser={currentUser}
@@ -185,6 +197,8 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
             salaryPayments={salaryPayments} financialTransactions={financialTransactions}
             salaryDebts={salaryDebts} onUpdatePresences={onUpdatePresences} onUpdateTasks={onUpdateTasks}
             onAddNotification={onAddNotification} currentTime={currentTime}
+            reminders={reminders}
+            onUpdateReminders={onUpdateReminders}
             onOpenProfileModal={onOpenProfileModal} moduleConfig={moduleConfig}
             attendanceIncidents={attendanceIncidents}
             onAddAttendanceIncident={onAddAttendanceIncident}

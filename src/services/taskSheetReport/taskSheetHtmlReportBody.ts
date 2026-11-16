@@ -1,6 +1,14 @@
 import { TaskSheetReportData } from './taskSheetReportTypes';
 import { PreparedPlanDuJour } from './preparePlanDuJourData';
 
+function escHtml(v: unknown): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function buildTaskSheetHtmlBodyTables(data: TaskSheetReportData, p: PreparedPlanDuJour): string {
   const employeeName = data.employeeName || 'Collaborateur';
 
@@ -97,6 +105,66 @@ export function buildTaskSheetHtmlBodyTables(data: TaskSheetReportData, p: Prepa
               </tfoot>
             </table>
           </div>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width: 100%; background-color: #ffffff; border: 1px solid #fcd34d; margin-bottom: 16px;">
+      <tr>
+        <td bgcolor="#92400e" style="background-color: #92400e; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+              <td class="email-stack" style="color: #ffffff;">POINTS IMPORTANTS (Alertes, Rappels &amp; Petits mouvements) — Hors tâches</td>
+              <td align="right" class="email-stack-left" style="font-size: 10.5px; color: #fef3c7; font-weight: 700; font-family: Consolas, monospace;">
+                ${p.importantPointsCount} pt(s) · ${p.alertsCount} alerte(s) · ${p.remindersCount} rappel(s) · ${p.movementsCount} mvt(s)
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 0;">
+          ${p.importantPoints.length > 0 ? `
+            <div class="email-scroll-x">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="email-mobile-table" style="width: 100%; font-size: 11px;">
+                <thead>
+                  <tr bgcolor="#b45309" style="background-color: #b45309; color: #ffffff; font-size: 10.5px;">
+                    <th align="left" style="padding: 6px 10px; color: #ffffff; width: 65px;">Heure</th>
+                    <th align="left" style="padding: 6px 8px; color: #ffffff; width: 125px;">Catégorie</th>
+                    <th align="left" style="padding: 6px 10px; color: #ffffff;">Sujet &amp; Détails</th>
+                    <th align="right" style="padding: 6px 8px; color: #ffffff; width: 65px;">Durée</th>
+                    <th align="center" style="padding: 6px 8px; color: #ffffff; width: 90px;">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${p.importantPoints.map((pt, idx) => {
+                    const catBg = pt.category === 'alerte' ? '#ffe4e6' : pt.category === 'mouvement' ? '#e0e7ff' : '#ccfbf1';
+                    const catCol = pt.category === 'alerte' ? '#9f1239' : pt.category === 'mouvement' ? '#3730a3' : '#115e59';
+                    const stBg = pt.isResolved ? '#d1fae5' : pt.isOverdue ? '#fee2e2' : '#fef3c7';
+                    const stCol = pt.isResolved ? '#065f46' : pt.isOverdue ? '#991b1b' : '#92400e';
+                    const rowBg = idx % 2 === 0 ? '#ffffff' : '#fffbeb';
+                    return `
+                      <tr bgcolor="${rowBg}" style="background-color: ${rowBg};">
+                        <td style="padding: 7px 10px; font-family: Consolas, monospace; font-weight: 700; color: #78350f; border-bottom: 1px solid #fde68a;">${escHtml(pt.time)}</td>
+                        <td style="padding: 7px 8px; border-bottom: 1px solid #fde68a;">
+                          <span style="display: inline-block; padding: 2px 7px; font-size: 9.5px; font-weight: 800; background-color: ${catBg}; color: ${catCol};">${escHtml(pt.categoryLabel)}</span>
+                        </td>
+                        <td style="padding: 7px 10px; color: #1c1917; border-bottom: 1px solid #fde68a;">
+                          <strong>${escHtml(pt.title)}</strong>
+                          ${pt.detail ? `<div style="font-size: 10px; color: #64748b; margin-top: 2px;">${escHtml(pt.detail)}</div>` : ''}
+                          ${pt.location ? `<div style="font-size: 9.5px; color: #92400e; margin-top: 1px;">Lieu : ${escHtml(pt.location)}</div>` : ''}
+                        </td>
+                        <td align="right" style="padding: 7px 8px; font-family: Consolas, monospace; font-weight: 700; color: #78350f; border-bottom: 1px solid #fde68a;">${pt.durationMinutes} min</td>
+                        <td align="center" style="padding: 7px 8px; border-bottom: 1px solid #fde68a;">
+                          <span style="display: inline-block; padding: 2px 7px; font-size: 9.5px; font-weight: 700; background-color: ${stBg}; color: ${stCol};">${escHtml(pt.statusLabel)}</span>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : `<div style="padding: 10px 14px; color: #78716c; font-style: italic; font-size: 11px;">Aucun point important (alerte, rappel ou petit mouvement) relevé ce jour.</div>`}
         </td>
       </tr>
     </table>

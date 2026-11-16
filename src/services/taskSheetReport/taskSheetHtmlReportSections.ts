@@ -94,7 +94,8 @@ export function buildTaskSheetHtmlHeaderAndStats(data: TaskSheetReportData, p: P
               <td style="padding: 8px 10px; font-size: 10.5px; line-height: 1.4; font-family: Consolas, monospace;">
                 <div><strong>Horaires :</strong> 08h00 – 17h00</div>
                 <div style="color: ${p.capacityStatus === 'overloaded' ? '#dc2626' : '#64748b'};">Pause : 12h00 – 13h00</div>
-                <div style="font-weight: 800; color: #2A7B76;">${p.totalTasks} sous-tâche(s) (${Math.round(p.plannedMinutes / 60)}h)</div>
+                <div style="font-weight: 800; color: #2A7B76;">${p.totalTasks} sous-tâche(s) (${Math.round((p.plannedMinutes / 60) * 10) / 10}h)</div>
+                ${p.importantPointsCount > 0 ? `<div style="font-weight: 700; color: #b45309; font-size: 10px; margin-top: 2px;">${p.importantPointsCount} pt(s) important(s) (${p.importantPointsMinutes}m hors-tâches)</div>` : ''}
               </td>
             </tr>
           </table>

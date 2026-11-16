@@ -1,7 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Subtask, TaskStatus, TaskPriority, Comment, AppUser, Incident } from '../../../types';
+import {
+  Subtask,
+  TaskStatus,
+  TaskPriority,
+  TaskRecurrence,
+  Comment,
+  AppUser,
+  Incident,
+} from '../../../types';
 import { canManageTaskAssignment, isSelfOnlyUser } from '../../../utils/roleUtils';
-import { filterAndSortSubtasks } from '../../../utils/subtaskFilterUtils';
+import {
+  filterAndSortSubtasks,
+  getCurrentWeekBounds,
+  SubtaskFilterPeriod,
+} from '../../../utils/subtaskFilterUtils';
 import {
   buildUpdatedSubtaskPayload,
   createNestedSubtaskItem,
@@ -36,6 +48,9 @@ export function useSubtaskDetailLogic({
     subtask.assignedTo === 'Équipe' ||
     isEmpOrIntern;
 
+  const todayIso = new Date().toISOString().split('T')[0];
+  const currentWeekBounds = useMemo(() => getCurrentWeekBounds(), []);
+
   const [draftTitle, setDraftTitle] = useState(subtask.title);
   const [draftDescription, setDraftDescription] = useState(subtask.description || '');
   const [draftStatus, setDraftStatus] = useState<TaskStatus>(
@@ -43,13 +58,17 @@ export function useSubtaskDetailLogic({
   );
   const [draftPriority, setDraftPriority] = useState<TaskPriority>(subtask.priority || 'medium');
   const [draftAssignedTo, setDraftAssignedTo] = useState(subtask.assignedTo || 'Équipe');
-  const [draftStartDate, setDraftStartDate] = useState(
-    subtask.startDate || new Date().toISOString().split('T')[0]
-  );
-  const [draftDueDate, setDraftDueDate] = useState(
-    subtask.dueDate || subtask.endDate || new Date().toISOString().split('T')[0]
-  );
+  const [draftStartDate, setDraftStartDate] = useState(subtask.startDate || todayIso);
+  const [draftDueDate, setDraftDueDate] = useState(subtask.dueDate || subtask.endDate || todayIso);
+  const [draftTime, setDraftTime] = useState(subtask.time || '09:00');
+  const [draftEstimatedHours, setDraftEstimatedHours] = useState<number>(subtask.estimatedHours ?? 2);
   const [draftActualHours, setDraftActualHours] = useState<number>(subtask.actualHours ?? 0);
+  const [draftTags, setDraftTags] = useState<string[]>(subtask.tags || []);
+  const [draftDependsOnIds, setDraftDependsOnIds] = useState<string[]>(subtask.dependsOnIds || []);
+  const [draftRecurrence, setDraftRecurrence] = useState<TaskRecurrence>(subtask.recurrence || 'none');
+  const [draftFollowerIds, setDraftFollowerIds] = useState<string[]>(subtask.followerIds || []);
+  const [draftCriteria, setDraftCriteria] = useState<string[]>(subtask.acceptanceCriteria || []);
+
   const [incidents, setIncidents] = useState<Incident[]>(subtask.incidents || []);
   const [blockerText, setBlockerText] = useState('');
   const [isBlocked, setIsBlocked] = useState(
@@ -58,26 +77,48 @@ export function useSubtaskDetailLogic({
       (subtask.incidents && subtask.incidents.length > 0)
   );
   const [subtasks, setSubtasks] = useState<Subtask[]>(subtask.subtasks || []);
-  const [subtaskFilterPeriod, setSubtaskFilterPeriod] = useState<'last3days' | 'all'>('last3days');
+  const [subtaskFilterPeriod, setSubtaskFilterPeriod] = useState<SubtaskFilterPeriod>('current_week');
+  const [subtaskFilterDate, setSubtaskFilterDate] = useState<string>(todayIso);
+  const [subtaskRangeStart, setSubtaskRangeStart] = useState<string>(currentWeekBounds.startIso);
+  const [subtaskRangeEnd, setSubtaskRangeEnd] = useState<string>(currentWeekBounds.endIso);
+
   const [comments, setComments] = useState<Comment[]>(subtask.comments || []);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
   const [selectedNestedSubtask, setSelectedNestedSubtask] = useState<Subtask | null>(null);
 
-  const { displayedSubtasks, hiddenCount, totalCount } = useMemo(
-    () => filterAndSortSubtasks(subtasks, subtaskFilterPeriod, draftDueDate),
-    [subtasks, subtaskFilterPeriod, draftDueDate]
+  const { displayedSubtasks, hiddenCount, totalCount, activeRangeLabel } = useMemo(
+    () =>
+      filterAndSortSubtasks(
+        subtasks,
+        {
+          period: subtaskFilterPeriod,
+          specificDate: subtaskFilterDate,
+          startDate: subtaskRangeStart,
+          endDate: subtaskRangeEnd,
+        },
+        draftDueDate
+      ),
+    [subtasks, subtaskFilterPeriod, subtaskFilterDate, subtaskRangeStart, subtaskRangeEnd, draftDueDate]
   );
 
   useEffect(() => {
+    const fallbackToday = new Date().toISOString().split('T')[0];
     setDraftTitle(subtask.title);
     setDraftDescription(subtask.description || '');
     setDraftStatus(subtask.status || (subtask.completed ? 'completed' : 'todo'));
     setDraftPriority(subtask.priority || 'medium');
     setDraftAssignedTo(subtask.assignedTo || 'Équipe');
-    setDraftStartDate(subtask.startDate || new Date().toISOString().split('T')[0]);
-    setDraftDueDate(subtask.dueDate || subtask.endDate || new Date().toISOString().split('T')[0]);
+    setDraftStartDate(subtask.startDate || fallbackToday);
+    setDraftDueDate(subtask.dueDate || subtask.endDate || fallbackToday);
+    setDraftTime(subtask.time || '09:00');
+    setDraftEstimatedHours(subtask.estimatedHours ?? 2);
     setDraftActualHours(subtask.actualHours ?? 0);
+    setDraftTags(subtask.tags || []);
+    setDraftDependsOnIds(subtask.dependsOnIds || []);
+    setDraftRecurrence(subtask.recurrence || 'none');
+    setDraftFollowerIds(subtask.followerIds || []);
+    setDraftCriteria(subtask.acceptanceCriteria || []);
     setIncidents(subtask.incidents || []);
     setIsBlocked(
       subtask.status === 'blocked' ||
@@ -98,7 +139,14 @@ export function useSubtaskDetailLogic({
     draftAssignedTo,
     draftStartDate,
     draftDueDate,
+    draftTime,
+    draftEstimatedHours,
     draftActualHours,
+    draftTags,
+    draftDependsOnIds,
+    draftRecurrence,
+    draftFollowerIds,
+    draftCriteria,
     incidents,
     subtasks,
     comments,
@@ -170,8 +218,14 @@ export function useSubtaskDetailLogic({
 
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
-    setSubtasks([...subtasks, createNestedSubtaskItem(newSubtaskTitle, draftDueDate)]);
+    setSubtasks([createNestedSubtaskItem(newSubtaskTitle, draftDueDate), ...subtasks]);
     setNewSubtaskTitle('');
+  };
+
+  const handleAddRichNestedSubtask = (richSub: Subtask) => {
+    const updated = [richSub, ...subtasks];
+    setSubtasks(updated);
+    onSaveSubtask({ ...subtask, subtasks: updated });
   };
 
   const handleToggleSubtask = (subId: string) => {
@@ -187,18 +241,70 @@ export function useSubtaskDetailLogic({
   };
 
   return {
-    canReassign, isAssignedToCurrentUser,
-    draftTitle, setDraftTitle, draftDescription, setDraftDescription,
-    draftStatus, setDraftStatus, draftPriority, setDraftPriority,
-    draftAssignedTo, setDraftAssignedTo, draftStartDate, setDraftStartDate,
-    draftDueDate, setDraftDueDate, draftActualHours, setDraftActualHours,
-    incidents, blockerText, setBlockerText, isBlocked, setIsBlocked,
-    subtasks, setSubtasks, subtaskFilterPeriod, setSubtaskFilterPeriod,
-    comments, newSubtaskTitle, setNewSubtaskTitle,
-    newCommentText, setNewCommentText,
-    selectedNestedSubtask, setSelectedNestedSubtask,
-    displayedSubtasks, hiddenCount, totalCount,
-    handleSignalBlocker, handleRemoveIncident, handleSave,
-    handleAddSubtask, handleToggleSubtask, handleAddComment,
+    canReassign,
+    isAssignedToCurrentUser,
+    draftTitle,
+    setDraftTitle,
+    draftDescription,
+    setDraftDescription,
+    draftStatus,
+    setDraftStatus,
+    draftPriority,
+    setDraftPriority,
+    draftAssignedTo,
+    setDraftAssignedTo,
+    draftStartDate,
+    setDraftStartDate,
+    draftDueDate,
+    setDraftDueDate,
+    draftTime,
+    setDraftTime,
+    draftEstimatedHours,
+    setDraftEstimatedHours,
+    draftActualHours,
+    setDraftActualHours,
+    draftTags,
+    setDraftTags,
+    draftDependsOnIds,
+    setDraftDependsOnIds,
+    draftRecurrence,
+    setDraftRecurrence,
+    draftFollowerIds,
+    setDraftFollowerIds,
+    draftCriteria,
+    setDraftCriteria,
+    incidents,
+    blockerText,
+    setBlockerText,
+    isBlocked,
+    setIsBlocked,
+    subtasks,
+    setSubtasks,
+    subtaskFilterPeriod,
+    setSubtaskFilterPeriod,
+    subtaskFilterDate,
+    setSubtaskFilterDate,
+    subtaskRangeStart,
+    setSubtaskRangeStart,
+    subtaskRangeEnd,
+    setSubtaskRangeEnd,
+    comments,
+    newSubtaskTitle,
+    setNewSubtaskTitle,
+    newCommentText,
+    setNewCommentText,
+    selectedNestedSubtask,
+    setSelectedNestedSubtask,
+    displayedSubtasks,
+    hiddenCount,
+    totalCount,
+    activeRangeLabel,
+    handleSignalBlocker,
+    handleRemoveIncident,
+    handleSave,
+    handleAddSubtask,
+    handleAddRichNestedSubtask,
+    handleToggleSubtask,
+    handleAddComment,
   };
 }

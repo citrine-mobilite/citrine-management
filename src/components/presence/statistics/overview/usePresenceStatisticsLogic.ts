@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Employee, Presence, Task, AppUser } from '../../../../types';
+import { Employee, NotificationLog, Presence, Task, AppUser, Reminder, StrategicProject } from '../../../../types';
 import { computePresenceStatistics, EmployeeStatRow, StatisticsPeriod } from '../statisticsCalculations';
 import { computeEmployeeRendement } from '../../../../utils/rendementCalculator';
 import { isSelfOnlyUser, findMatchingEmployee, isManagerOrAdminEmployee } from '../../../../utils/roleUtils';
@@ -9,6 +9,9 @@ interface UsePresenceStatisticsLogicProps {
   employees: Employee[];
   presences: Presence[];
   tasks: Task[];
+  reminders?: Reminder[];
+  strategicProjects?: StrategicProject[];
+  notifications?: NotificationLog[];
   currentUser?: AppUser | null;
   currentRole?: string;
 }
@@ -17,6 +20,9 @@ export function usePresenceStatisticsLogic({
   employees,
   presences,
   tasks,
+  reminders = [],
+  strategicProjects = [],
+  notifications = [],
   currentUser,
   currentRole,
 }: UsePresenceStatisticsLogicProps) {
@@ -94,9 +100,13 @@ export function usePresenceStatisticsLogic({
     return trackedEmployees.map((emp) => {
       const statRow = statRowByEmployeeId.get(String(emp.id));
       const empAssiduite = statRow ? safeNum(statRow.assiduiteRate, 100) : 100;
-      return computeEmployeeRendement(emp, tasks, empAssiduite, periodFilter);
+      return computeEmployeeRendement(emp, tasks, empAssiduite, periodFilter, {
+        reminders,
+        strategicProjects,
+        notifications,
+      });
     });
-  }, [trackedEmployees, tasks, statRowByEmployeeId, stats.startStr, stats.endStr, period]);
+  }, [trackedEmployees, tasks, reminders, strategicProjects, notifications, statRowByEmployeeId, stats.startStr, stats.endStr, period]);
 
   const filteredMetricsList = useMemo(() => {
     if (!searchQuery.trim()) return employeeRendementMetricsList;
@@ -190,6 +200,26 @@ export function usePresenceStatisticsLogic({
     () => round1(filteredMetricsList.reduce((sum, m) => sum + safeNum(m.estimatedHoursTotal), 0)),
     [filteredMetricsList]
   );
+  const totalRemindersPeriod = useMemo(
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.remindersCount), 0),
+    [filteredMetricsList]
+  );
+  const totalRemindersResolvedPeriod = useMemo(
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.remindersResolvedCount), 0),
+    [filteredMetricsList]
+  );
+  const totalRemindersHoursPeriod = useMemo(
+    () => round1(filteredMetricsList.reduce((sum, m) => sum + safeNum(m.remindersHoursTotal), 0)),
+    [filteredMetricsList]
+  );
+  const totalImportantPointsPeriod = useMemo(
+    () => filteredMetricsList.reduce((sum, m) => sum + safeNum(m.importantPointsCount), 0),
+    [filteredMetricsList]
+  );
+  const totalImportantPointsHoursPeriod = useMemo(
+    () => round1(filteredMetricsList.reduce((sum, m) => sum + safeNum(m.importantPointsHoursTotal), 0)),
+    [filteredMetricsList]
+  );
 
   const handleOpenTaskSheetModal = (employee: Employee, mode: 'day' | 'month' | 'year' = 'month') => {
     setTaskSheetEmployee(employee);
@@ -230,6 +260,11 @@ export function usePresenceStatisticsLogic({
     totalMilestonesPeriod,
     totalEffectiveHoursPeriod,
     totalEstimatedHoursPeriod,
+    totalRemindersPeriod,
+    totalRemindersResolvedPeriod,
+    totalRemindersHoursPeriod,
+    totalImportantPointsPeriod,
+    totalImportantPointsHoursPeriod,
     handleOpenTaskSheetModal,
   };
 }

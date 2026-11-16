@@ -5,32 +5,45 @@ import {
   DailyTaskSheetTaskItem,
 } from './taskSheetTypes';
 
+import { EmployeeReminderActivity, StrategicMilestoneEntry } from '../reminders/reminderActivityUtils';
+import { TaskSheetImportantPoint } from './importantPointsUtils';
+
 export function buildDailyCapacityMetrics(
   subtaskItems: DailyTaskSheetTaskItem[],
-  sortedParentTasks: Task[]
+  sortedParentTasks: Task[],
+  dayReminders: EmployeeReminderActivity[] = [],
+  projectMilestones: StrategicMilestoneEntry[] = [],
+  importantPoints: TaskSheetImportantPoint[] = []
 ): DailyCapacityMetrics {
   const totalTasks = subtaskItems.length;
   const workMinutesNet = 720;
-  const plannedMinutes = subtaskItems.reduce((sum, s) => sum + s.estimatedMinutes, 0);
-  const activeMilestone = sortedParentTasks.find((t) => t.isMilestone && t.status !== 'completed');
-  const hasMilestone = Boolean(activeMilestone);
+  const pointsMinutes =
+    importantPoints.length > 0
+      ? importantPoints.reduce((sum, p) => sum + (p.durationMinutes || 0), 0)
+      : dayReminders.reduce((sum, r) => sum + (r.durationMinutes || 0), 0);
+  const pointsCount = importantPoints.length > 0 ? importantPoints.length : dayReminders.length;
+  const plannedMinutes = subtaskItems.reduce((sum, s) => sum + s.estimatedMinutes, 0) + pointsMinutes;
+  const activeTaskMilestone = sortedParentTasks.find((t) => t.isMilestone && t.status !== 'completed');
+  const activeProjMilestone = projectMilestones.find((m) => !m.isDone);
+  const hasMilestone = Boolean(activeTaskMilestone || activeProjMilestone);
+  const milestoneTitle = activeTaskMilestone?.title || (activeProjMilestone ? `${activeProjMilestone.projectName} — ${activeProjMilestone.title}` : undefined);
   const maxRecommendedSubtasks = hasMilestone ? 5 : 8;
 
   let capacityStatus: 'optimal' | 'overloaded' | 'available' = 'optimal';
   let capacityAdvice = '';
 
-  if (totalTasks === 0) {
+  if (totalTasks === 0 && pointsCount === 0 && projectMilestones.length === 0) {
     capacityStatus = 'available';
-    capacityAdvice = `ℹ️ Aucune activité opérationnelle enregistrée : le collaborateur n'a rien fait ce jour (aucune sous-tâche en cours ni terminée).`;
+    capacityAdvice = `ℹ️ Aucune activité opérationnelle enregistrée : le collaborateur n'a rien fait ce jour (aucune sous-tâche, jalon ni point important).`;
   } else if (plannedMinutes > 600) {
     capacityStatus = 'overloaded';
-    capacityAdvice = `⚠️ Surcharge détectée : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (seuil de surcharge > 10h, capacité maximale 12h/jour). Risque d'inachèvement : priorisez ou déléguez certaines sous-tâches.`;
+    capacityAdvice = `⚠️ Surcharge détectée : ${Math.round(plannedMinutes / 60)}h planifiées (tâches + ${Math.round((pointsMinutes / 60) * 10) / 10}h de points importants, seuil > 10h). Priorisez ou déléguez certaines actions.`;
   } else if (plannedMinutes >= 420) {
     capacityStatus = 'optimal';
-    capacityAdvice = `✅ Charge équilibrée et réaliste : ${Math.round(plannedMinutes / 60)}h estimées sur les sous-tâches (plage recommandée de 7h à 10h, max 12h).`;
+    capacityAdvice = `✅ Charge équilibrée et réaliste : ${Math.round(plannedMinutes / 60)}h estimées (dont ${pointsCount} point(s) important(s) hors-tâches).`;
   } else {
     capacityStatus = 'available';
-    capacityAdvice = `💡 Capacité disponible : ${Math.round(plannedMinutes / 60)}h planifiées sur les sous-tâches (capacité max : 12h). Vous pouvez traiter des sous-tâches additionnelles.`;
+    capacityAdvice = `💡 Capacité disponible : ${Math.round(plannedMinutes / 60)}h planifiées (sous-tâches${pointsCount > 0 ? ` + ${pointsCount} point(s) important(s)` : ''}, max 12h).`;
   }
 
   return {
@@ -39,7 +52,7 @@ export function buildDailyCapacityMetrics(
     plannedSubtasksCount: totalTasks,
     maxRecommendedSubtasks,
     hasMilestone,
-    milestoneTitle: activeMilestone?.title,
+    milestoneTitle,
     capacityStatus,
     capacityAdvice,
   };
@@ -47,31 +60,70 @@ export function buildDailyCapacityMetrics(
 
 export function buildDailyScheduleSlots(
   totalTasks: number,
-  subtaskItems: DailyTaskSheetTaskItem[]
+  subtaskItems: DailyTaskSheetTaskItem[],
+  dayReminders: EmployeeReminderActivity[] = [],
+  importantPoints: TaskSheetImportantPoint[] = []
 ): DailyTaskSheetData['scheduleSlots'] {
-  if (totalTasks === 0) {
+  const effectivePoints: Array<{ time: string; title: string; durationMinutes: number; statusLabel: string; categoryLabel?: string }> =
+    importantPoints.length > 0
+      ? importantPoints.map((p) => ({
+          time: p.time,
+          title: `[${p.categoryLabel}] ${p.title}`,
+          durationMinutes: p.durationMinutes,
+          statusLabel: p.statusLabel,
+          categoryLabel: p.categoryLabel,
+        }))
+      : dayReminders.map((r) => ({
+          time: r.time,
+          title: r.title,
+          durationMinutes: r.durationMinutes,
+          statusLabel: r.statusLabel,
+        }));
+
+  if (totalTasks === 0 && effectivePoints.length === 0) {
     return [
       {
         timeRange: 'Journée complète (08:00 – 17:00)',
         activity: "N'a rien fait de la journée",
-        resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour',
+        resolutionNote: 'Aucune sous-tâche ni point important en cours ou terminé ce jour',
         statusBadge: 'Inactif',
       },
     ];
   }
 
+  const morningPoints = effectivePoints.filter((r) => r.time < '12:00');
+  const afternoonPoints = effectivePoints.filter((r) => r.time >= '12:00');
+  const formatPointList = (list: typeof effectivePoints) =>
+    list.map((r) => `📌 ${r.time} ${r.title} (${r.durationMinutes} min)`).join(' · ');
+
   return [
     {
       timeRange: '08:00 – 10:00',
-      activity: subtaskItems[0] ? `${subtaskItems[0].title} (${subtaskItems[0].parentTaskTitle})` : "Aucune tâche assignée sur ce créneau",
-      resolutionNote: subtaskItems[0]?.status === 'Fait' ? 'Sous-tâche résolue et clôturée ✓' : (subtaskItems[0] ? 'Traitement opérationnel' : 'Non assigné'),
-      statusBadge: subtaskItems[0]?.status || 'Inactif',
+      activity: subtaskItems[0]
+        ? `${subtaskItems[0].title} (${subtaskItems[0].parentTaskTitle})`
+        : morningPoints[0]
+        ? `📌 ${morningPoints[0].title} (${morningPoints[0].durationMinutes} min)`
+        : 'Suivi points importants / coordination',
+      resolutionNote: morningPoints.length > 0
+        ? formatPointList(morningPoints)
+        : subtaskItems[0]?.status === 'Fait'
+        ? 'Sous-tâche résolue et clôturée ✓'
+        : subtaskItems[0]
+        ? 'Traitement opérationnel'
+        : 'Non assigné',
+      statusBadge: subtaskItems[0]?.status || morningPoints[0]?.statusLabel || 'Inactif',
     },
     {
       timeRange: '10:00 – 12:00',
-      activity: subtaskItems[1] ? `${subtaskItems[1].title} (${subtaskItems[1].parentTaskTitle})` : (subtaskItems[0] ? `Suite résolution : ${subtaskItems[0].title}` : "Aucune tâche assignée"),
-      resolutionNote: subtaskItems[1]?.status === 'Fait' ? 'Sous-tâche validée ✓' : (subtaskItems[1] ? 'Exécution technique' : 'Non assigné'),
-      statusBadge: subtaskItems[1]?.status || subtaskItems[0]?.status || 'Inactif',
+      activity: subtaskItems[1]
+        ? `${subtaskItems[1].title} (${subtaskItems[1].parentTaskTitle})`
+        : subtaskItems[0]
+        ? `Suite résolution : ${subtaskItems[0].title}`
+        : morningPoints.length > 0
+        ? formatPointList(morningPoints)
+        : 'Traitement alertes & rappels matin',
+      resolutionNote: subtaskItems[1]?.status === 'Fait' ? 'Sous-tâche validée ✓' : subtaskItems[1] ? 'Exécution technique' : 'Activité de suivi',
+      statusBadge: subtaskItems[1]?.status || subtaskItems[0]?.status || morningPoints[0]?.statusLabel || 'Planifié',
     },
     {
       timeRange: '12:00 – 13:00',
@@ -83,16 +135,38 @@ export function buildDailyScheduleSlots(
     },
     {
       timeRange: '13:00 – 15:30',
-      activity: subtaskItems[2] ? `${subtaskItems[2].title} (${subtaskItems[2].parentTaskTitle})` : (subtaskItems[1] ? `Suite : ${subtaskItems[1].title}` : (subtaskItems[0] ? `Suite : ${subtaskItems[0].title}` : "Aucune tâche assignée")),
-      resolutionNote: subtaskItems[2]?.status === 'Fait' ? 'Sous-tâche achevée ✓' : (subtaskItems[2] ? 'En cours de réalisation' : 'Non assigné'),
-      statusBadge: subtaskItems[2]?.status || 'En cours',
+      activity: subtaskItems[2]
+        ? `${subtaskItems[2].title} (${subtaskItems[2].parentTaskTitle})`
+        : afternoonPoints[0]
+        ? `📌 ${afternoonPoints[0].title} (${afternoonPoints[0].durationMinutes} min)`
+        : subtaskItems[1]
+        ? `Suite : ${subtaskItems[1].title}`
+        : subtaskItems[0]
+        ? `Suite : ${subtaskItems[0].title}`
+        : 'Suivi dossiers & points importants',
+      resolutionNote: afternoonPoints.length > 0
+        ? formatPointList(afternoonPoints)
+        : subtaskItems[2]?.status === 'Fait'
+        ? 'Sous-tâche achevée ✓'
+        : subtaskItems[2]
+        ? 'En cours de réalisation'
+        : 'Suivi opérationnel',
+      statusBadge: subtaskItems[2]?.status || afternoonPoints[0]?.statusLabel || 'En cours',
     },
     {
       timeRange: '15:30 – 17:00',
-      activity: subtaskItems[3] ? `${subtaskItems[3].title} (${subtaskItems[3].parentTaskTitle})` : (subtaskItems[2] ? `Suite : ${subtaskItems[2].title}` : (subtaskItems[0] ? `Finalisation : ${subtaskItems[0].title}` : "Aucune tâche assignée")),
+      activity: subtaskItems[3]
+        ? `${subtaskItems[3].title} (${subtaskItems[3].parentTaskTitle})`
+        : afternoonPoints[1]
+        ? `📌 ${afternoonPoints[1].title} (${afternoonPoints[1].durationMinutes} min)`
+        : subtaskItems[2]
+        ? `Suite : ${subtaskItems[2].title}`
+        : subtaskItems[0]
+        ? `Finalisation : ${subtaskItems[0].title}`
+        : 'Clôture journée & revue des points importants',
       resolutionNote: subtaskItems[3]?.status === 'Fait' ? 'Sous-tâche achevée ✓' : 'Fin de journée opérationnelle (17h00)',
       isBuffer: false,
-      statusBadge: subtaskItems[3]?.status || 'Bilan',
+      statusBadge: subtaskItems[3]?.status || afternoonPoints[1]?.statusLabel || 'Bilan',
     },
   ];
 }

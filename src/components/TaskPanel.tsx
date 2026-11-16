@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Task, NotificationLog, Employee, TaskPriority, AppUser } from '../types';
+import { Task, NotificationLog, Employee, TaskPriority, AppUser, Reminder, StrategicProject } from '../types';
 import {
   TaskStatsCards,
   TaskKanbanBoard,
@@ -27,6 +27,9 @@ interface TaskPanelProps {
   onAddNotification: (log: NotificationLog) => void;
   currentRole: 'Administrateur' | 'Employé' | 'Responsable' | string;
   employees: Employee[];
+  reminders?: Reminder[];
+  strategicProjects?: StrategicProject[];
+  notifications?: NotificationLog[];
   selectedEmployeeId?: string;
   showToast?: (message: string, type?: 'success' | 'error') => void;
   currentUser?: AppUser | null;
@@ -38,6 +41,9 @@ export default function TaskPanel({
   onAddNotification,
   currentRole,
   employees,
+  reminders = [],
+  strategicProjects = [],
+  notifications = [],
   showToast,
   currentUser,
 }: TaskPanelProps) {
@@ -49,6 +55,8 @@ export default function TaskPanel({
     onAddNotification,
     currentRole,
     employees,
+    reminders,
+    notifications,
     currentUser,
     showToast,
   });
@@ -229,6 +237,9 @@ export default function TaskPanel({
           tasks={logic.filteredTasks}
           employees={logic.visibleEmployees}
           projects={logic.visibleProjects}
+          reminders={reminders}
+          strategicProjects={strategicProjects}
+          notifications={notifications}
           currentUser={currentUser}
           currentRole={currentRole}
         />

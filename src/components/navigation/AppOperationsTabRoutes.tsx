@@ -31,7 +31,7 @@ export const AppOperationsTabRoutes: React.FC<AppTabRouterProps> = ({
   onUpdateNotifications, onUpdateEmployees, onUpdateSalaryDebts, onUpdateSalaryPayments,
   onUpdateFinancialTransactions, onUpdateDocuments, onUpdateDisciplinaryIncidents,
   onUpdateInventoryItems, onUpdatePartners, onUpdateUsers, onUpdateModuleConfig,
-  showToast, onUpdateUser, onLogout,
+  strategicProjects, showToast, onUpdateUser, onLogout,
 }) => {
   return (
     <>
@@ -60,6 +60,9 @@ export const AppOperationsTabRoutes: React.FC<AppTabRouterProps> = ({
           employees={employees}
           presences={presences}
           tasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           salaryPayments={salaryPayments}
           salaryDebts={salaryDebts}
           onUpdateEmployees={onUpdateEmployees}
@@ -88,6 +91,8 @@ export const AppOperationsTabRoutes: React.FC<AppTabRouterProps> = ({
         <DocumentGeneratorPanel
           employees={employees}
           documents={documents}
+          reminders={reminders}
+          notifications={notifications}
           onUpdateDocuments={onUpdateDocuments}
           setDocuments={onUpdateDocuments}
           onAddNotification={onAddNotification}
@@ -122,6 +127,9 @@ export const AppOperationsTabRoutes: React.FC<AppTabRouterProps> = ({
           employees={employees}
           presences={presences}
           tasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           salaryPayments={salaryPayments}
           onUpdateEmployees={onUpdateEmployees}
           showToast={showToast}
@@ -156,6 +164,9 @@ export const AppOperationsTabRoutes: React.FC<AppTabRouterProps> = ({
           employees={employees}
           presences={presences}
           tasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           salaryPayments={salaryPayments}
           onBackToDashboard={() => setActiveTab(currentUser.role === 'employé' ? 'employee_portal' : 'dashboard')}
           onLogout={onLogout} onAddNotification={onAddNotification} showToast={showToast}

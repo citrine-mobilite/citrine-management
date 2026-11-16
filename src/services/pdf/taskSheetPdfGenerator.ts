@@ -287,6 +287,41 @@ export function generateTaskSheetPdf({
     }
     y += 5;
 
+    // Points importants (Alertes, Rappels & Petits mouvements) - hors taches
+    const importantPoints = dailyData.importantPoints || [];
+    if (importantPoints.length > 0) {
+      y = ensureSpace(doc, y, 22);
+      y = drawSectionBanner(
+        doc,
+        y,
+        'POINTS IMPORTANTS (ALERTES, RAPPELS & PETITS MOUVEMENTS) - HORS TACHES',
+        `${importantPoints.length} point(s)`
+      );
+      importantPoints.forEach((pt, idx) => {
+        if (y + 6.5 > BOTTOM_LIMIT) {
+          doc.addPage();
+          y = 14;
+        }
+        doc.setFillColor(...(idx % 2 === 0 ? [255, 255, 255] : ROW_ALT) as [number, number, number]);
+        doc.rect(MARGIN, y, CONTENT_WIDTH, 6, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...SLATE_TEXT);
+        doc.text(cleanPdfText(pt.time), MARGIN + 2.5, y + 4.2);
+        doc.setTextColor(146, 64, 14);
+        doc.text(cleanPdfText(pt.categoryLabel), MARGIN + 18, y + 4.2);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...SLATE_TEXT);
+        doc.text(cleanPdfText(pt.title).slice(0, 48), MARGIN + 48, y + 4.2);
+        doc.setTextColor(...MUTED_TEXT);
+        doc.text(`${pt.durationMinutes}m`, MARGIN + 146, y + 4.2);
+        doc.setFont('helvetica', 'bold');
+        doc.text(cleanPdfText(pt.statusLabel), PAGE_WIDTH - MARGIN - 2.5, y + 4.2, { align: 'right' });
+        y += 6;
+      });
+      y += 5;
+    }
+
     // Plan horaire
     y = ensureSpace(doc, y, 25);
     y = drawSectionBanner(doc, y, 'PLAN HORAIRE (08:00 - 17:00)');
@@ -470,6 +505,28 @@ export function generateTaskSheetPdf({
 
     y += 6;
 
+    if (monthlyData.importantPointsSummary && monthlyData.importantPointsSummary.totalPoints > 0) {
+      const ips = monthlyData.importantPointsSummary;
+      y = ensureSpace(doc, y, 16);
+      y = drawSectionBanner(
+        doc,
+        y,
+        'POINTS IMPORTANTS DU MOIS (HORS TACHES)',
+        `${ips.totalPoints} pt(s) · ${ips.totalHours}h`
+      );
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...SLATE_TEXT);
+      doc.text(
+        cleanPdfText(
+          `Detail : ${ips.alertsCount} alerte(s), ${ips.remindersCount} rappel(s), ${ips.movementsCount} petit(s) mouvement(s) — ${ips.resolvedCount} cloture(s)`
+        ),
+        MARGIN + 3,
+        y + 5.2
+      );
+      y += 10;
+    }
+
     // Releve des taches et sous-taches du mois
     y = ensureSpace(doc, y, 22);
     y = drawSectionBanner(
@@ -553,9 +610,10 @@ export function generateTaskSheetPdf({
     doc.setFontSize(7.5);
     doc.setTextColor(255, 255, 255);
     doc.text('Mois', MARGIN + 3, y + 4.2);
-    doc.text('Jours Travailles', MARGIN + 62, y + 4.2);
-    doc.text('Heures Cumulees', MARGIN + 108, y + 4.2);
-    doc.text('Taches Realisees', MARGIN + 144, y + 4.2);
+    doc.text('Jours Travailles', MARGIN + 48, y + 4.2);
+    doc.text('Heures', MARGIN + 92, y + 4.2);
+    doc.text('Taches', MARGIN + 120, y + 4.2);
+    doc.text('Pt. Imp.', MARGIN + 145, y + 4.2);
     doc.text('Rendement', PAGE_WIDTH - MARGIN - 3, y + 4.2, { align: 'right' });
     y += 6;
 
@@ -569,11 +627,12 @@ export function generateTaskSheetPdf({
       doc.setFont('helvetica', 'normal');
       doc.text(
         `${m.daysWorked}j/${m.workingDays || 22}j${m.weekendDaysWorked > 0 ? ` (+${m.weekendDaysWorked} WE)` : ''}`,
-        MARGIN + 62,
+        MARGIN + 48,
         y + 4.3
       );
-      doc.text(`${m.hoursWorked}h`, MARGIN + 108, y + 4.3);
-      doc.text(`${m.tasksCompleted}`, MARGIN + 144, y + 4.3);
+      doc.text(`${m.hoursWorked}h`, MARGIN + 92, y + 4.3);
+      doc.text(`${m.tasksCompleted}`, MARGIN + 120, y + 4.3);
+      doc.text(`${m.importantPointsCount ?? 0}`, MARGIN + 145, y + 4.3);
       doc.setFont('helvetica', 'bold');
       doc.text(`${m.rendementRate}%`, PAGE_WIDTH - MARGIN - 3, y + 4.3, { align: 'right' });
       y += 6.2;

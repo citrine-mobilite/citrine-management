@@ -18,6 +18,11 @@ import {
   Clock,
   Tag,
   ArrowLeft,
+  ListChecks,
+  Users,
+  CheckCircle2,
+  Briefcase,
+  Flag,
 } from 'lucide-react';
 import {
   AppUser,
@@ -40,8 +45,15 @@ import {
   findSubtaskByPath,
   getUnfinishedBlockers,
   resolveProjectSections,
-  sortSubtasksByOrder,
 } from './logic/asanaTreeEngine';
+import {
+  filterAndSortSubtasks,
+  formatSubtaskRelativeDate,
+  getCurrentWeekBounds,
+  sortSubtasksNewestFirst,
+  SubtaskFilterPeriod,
+} from '../../utils/subtaskFilterUtils';
+import { SubtaskFilterBar } from './shared/SubtaskFilterBar';
 import { SubtaskCreateModal } from './SubtaskCreateModal';
 
 interface TaskDetailDrawerProps {
@@ -147,15 +159,20 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
     [task, subtaskPath, currentProject]
   );
 
+  const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const currentWeekBounds = useMemo(() => getCurrentWeekBounds(), []);
+
   const [draftTitle, setDraftTitle] = useState(activeNode.title || '');
   const [draftDescription, setDraftDescription] = useState(activeNode.description || '');
   const [newSubTitle, setNewSubTitle] = useState('');
   const [newSubDueDate, setNewSubDueDate] = useState(
-    activeNode.dueDate || (!isSubtaskMode ? task.date : '') || new Date().toISOString().split('T')[0]
+    activeNode.dueDate || (!isSubtaskMode ? task.date : '') || todayIso
   );
   const [newCommentText, setNewCommentText] = useState('');
   const [blockerText, setBlockerText] = useState('');
   const [newTagText, setNewTagText] = useState('');
+  const [newCriterionText, setNewCriterionText] = useState('');
+  const [showFollowersDropdown, setShowFollowersDropdown] = useState(false);
   const [showDepPicker, setShowDepPicker] = useState(false);
   const [depSearch, setDepSearch] = useState('');
   const [draggedSubId, setDraggedSubId] = useState<string | null>(null);
@@ -163,13 +180,18 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
   const [isAdvancedSubModalOpen, setIsAdvancedSubModalOpen] = useState(false);
   const [savedIndicator, setSavedIndicator] = useState(false);
 
+  const [subtaskFilterPeriod, setSubtaskFilterPeriod] = useState<SubtaskFilterPeriod>('current_week');
+  const [subtaskFilterDate, setSubtaskFilterDate] = useState<string>(todayIso);
+  const [subtaskRangeStart, setSubtaskRangeStart] = useState<string>(currentWeekBounds.startIso);
+  const [subtaskRangeEnd, setSubtaskRangeEnd] = useState<string>(currentWeekBounds.endIso);
+
   useEffect(() => {
     setDraftTitle(activeNode.title || '');
     setDraftDescription(activeNode.description || '');
     setNewSubDueDate(
-      activeNode.dueDate || (!isSubtaskMode ? task.date : '') || new Date().toISOString().split('T')[0]
+      activeNode.dueDate || (!isSubtaskMode ? task.date : '') || todayIso
     );
-  }, [activeNode.id, activeNode.title, activeNode.description, activeNode.dueDate, isSubtaskMode, task.date]);
+  }, [activeNode.id, activeNode.title, activeNode.description, activeNode.dueDate, isSubtaskMode, task.date, todayIso]);
 
   const flashSaved = () => {
     setSavedIndicator(true);
@@ -278,21 +300,74 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
     });
   };
 
-  const handleAddTag = () => {
-    const clean = newTagText.trim();
-    if (!clean) return;
-    const currentTags = activeNode.tags || [];
-    if (!currentTags.includes(clean)) {
-      commitNodePatch({ tags: [...currentTags, clean] });
+  const DRAWER_SUGGESTED_TAGS = [
+    'Exécution',
+    'Contrôle',
+    'Rédaction',
+    'Design',
+    'Technique',
+    'Client',
+    'Administration',
+    'Urgent',
+  ];
+
+  const handleAddTag = (rawInput?: string) => {
+    const source = rawInput !== undefined ? rawInput : newTagText;
+    const tokens = source
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (tokens.length === 0) {
+      setNewTagText('');
+      return;
+    }
+    const nextTags = [...(activeNode.tags || [])];
+    let changed = false;
+    for (const token of tokens) {
+      if (!nextTags.some((existing) => existing.toLowerCase() === token.toLowerCase())) {
+        nextTags.push(token);
+        changed = true;
+      }
+    }
+    if (changed) {
+      commitNodePatch({ tags: nextTags });
     }
     setNewTagText('');
+  };
+
+  const handleToggleSuggestedTag = (tag: string) => {
+    const currentTags = activeNode.tags || [];
+    const exists = currentTags.some((t) => t.toLowerCase() === tag.toLowerCase());
+    const nextTags = exists
+      ? currentTags.filter((t) => t.toLowerCase() !== tag.toLowerCase())
+      : [...currentTags, tag];
+    commitNodePatch({ tags: nextTags });
+  };
+
+  const handleAddCriterion = () => {
+    const clean = newCriterionText.trim();
+    if (!clean) return;
+    const currentCriteria = activeNode.acceptanceCriteria || [];
+    commitNodePatch({ acceptanceCriteria: [...currentCriteria, clean] });
+    setNewCriterionText('');
+  };
+
+  const handleToggleFollower = (empId: string) => {
+    const current = activeNode.followerIds || [];
+    const next = current.includes(empId)
+      ? current.filter((id) => id !== empId)
+      : [...current, empId];
+    commitNodePatch({ followerIds: next });
   };
 
   const handleAddQuickSubtask = () => {
     const clean = newSubTitle.trim();
     if (!clean) return;
     if (onInlineAddSubtask) {
-      onInlineAddSubtask(task.id, subtaskPath, clean, { dueDate: newSubDueDate, endDate: newSubDueDate });
+      onInlineAddSubtask(task.id, subtaskPath, clean, {
+        dueDate: newSubDueDate,
+        endDate: newSubDueDate,
+      });
       flashSaved();
     }
     setNewSubTitle('');
@@ -366,20 +441,53 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
     return employees;
   }, [currentProject, employees]);
 
-  const childSubtasks = sortSubtasksByOrder(activeNode.subtasks || []);
   const activeStartDate = activeNode.startDate || (!isSubtaskMode ? task.date : '') || '';
   const activeDueDate =
     activeNode.dueDate || (isSubtaskMode ? (activeSubtask?.endDate || '') : task.date) || '';
 
+  const {
+    displayedSubtasks: childSubtasks,
+    hiddenCount: hiddenSubtaskCount,
+    totalCount: totalSubtaskCount,
+    activeRangeLabel,
+  } = useMemo(
+    () =>
+      filterAndSortSubtasks(
+        activeNode.subtasks || [],
+        {
+          period: subtaskFilterPeriod,
+          specificDate: subtaskFilterDate,
+          startDate: subtaskRangeStart,
+          endDate: subtaskRangeEnd,
+        },
+        activeDueDate || task.date
+      ),
+    [
+      activeNode.subtasks,
+      subtaskFilterPeriod,
+      subtaskFilterDate,
+      subtaskRangeStart,
+      subtaskRangeEnd,
+      activeDueDate,
+      task.date,
+    ]
+  );
+
   return (
-    <div
-      className="fixed inset-0 z-50 bg-stone-900/35 backdrop-blur-xs flex justify-end animate-in fade-in"
-      onClick={onClose}
-    >
-      <aside
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full max-w-2xl h-full border-l border-stone-200 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-stone-900/35 backdrop-blur-xs flex justify-end animate-in fade-in"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget && !isAdvancedSubModalOpen) {
+            onClose();
+          }
+        }}
       >
+        <aside
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="bg-white w-full max-w-2xl h-full border-l border-stone-200 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
+        >
         {/* Top Asana Action Toolbar */}
         <div className="px-5 py-3 border-b border-stone-200 flex items-center justify-between gap-2 shrink-0 bg-white">
           <div className="flex items-center gap-2">
@@ -395,6 +503,22 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
               <Check className="h-3.5 w-3.5 stroke-[2.5]" />
               <span>{isCompleted ? 'Terminée' : 'Marquer comme terminée'}</span>
             </button>
+
+            <span
+              className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+                isSubtaskMode
+                  ? 'bg-emerald-50 text-[#2A7B76] border-emerald-200'
+                  : 'bg-stone-100 text-stone-700 border-stone-200'
+              }`}
+              title={
+                isSubtaskMode
+                  ? "Sous-tâche : suit l'évolution de la réalisation liée à la tâche"
+                  : 'Tâche cadre : représente le job description'
+              }
+            >
+              <Briefcase className="h-3 w-3" />
+              <span>{isSubtaskMode ? 'Sous-tâche (Évolution)' : 'Tâche (Job description)'}</span>
+            </span>
 
             {savedIndicator && (
               <span className="text-[11px] font-medium text-emerald-700 tabular-nums">
@@ -587,6 +711,13 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
                 className="px-2 py-1 rounded-lg border border-stone-200 bg-white text-stone-900 font-mono tabular-nums font-semibold cursor-pointer"
                 title="Date d'échéance"
               />
+              <input
+                type="time"
+                value={activeNode.time || '09:00'}
+                onChange={(e) => commitNodePatch({ time: e.target.value })}
+                className="px-2 py-1 rounded-lg border border-stone-200 bg-white text-stone-800 font-mono tabular-nums cursor-pointer"
+                title="Heure limite"
+              />
               <div className="flex items-center gap-1 ml-1 text-stone-500">
                 <Repeat className="h-3.5 w-3.5 text-stone-400" />
                 <select
@@ -633,6 +764,72 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                  <Flag className="h-3.5 w-3.5 text-amber-600" />
+                  <span>Jalon projet</span>
+                </span>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(task.isMilestone)}
+                        onChange={(e) =>
+                          commitNodePatch({
+                            isMilestone: e.target.checked,
+                            milestoneProgress: e.target.checked
+                              ? task.milestoneProgress ?? (isCompleted ? 100 : 0)
+                              : undefined,
+                          })
+                        }
+                        className="rounded border-stone-300 text-amber-600 cursor-pointer"
+                      />
+                      <span className="font-semibold text-stone-800">
+                        {task.isMilestone ? 'Jalon stratégique actif' : 'Marquer comme jalon clé'}
+                      </span>
+                    </label>
+                    {task.isMilestone && (
+                      <div className="flex items-center gap-2 bg-amber-50/70 border border-amber-200 rounded-lg px-2 py-1">
+                        <span className="text-[11px] font-semibold text-amber-900">Avancement :</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={task.milestoneProgress ?? (isCompleted ? 100 : 0)}
+                          onChange={(e) => {
+                            const pct = Number(e.target.value);
+                            commitNodePatch({
+                              milestoneProgress: pct,
+                              ...(pct >= 100 && task.status !== 'completed'
+                                ? { status: 'completed', completedAt: new Date().toISOString() }
+                                : {}),
+                            });
+                          }}
+                          className="w-24 accent-amber-600 cursor-pointer"
+                        />
+                        <span className="font-mono font-bold text-amber-900 tabular-nums w-9 text-right">
+                          {task.milestoneProgress ?? (isCompleted ? 100 : 0)}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {task.isMilestone && (
+                    <input
+                      type="text"
+                      defaultValue={task.milestoneTarget || ''}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val !== (task.milestoneTarget || '')) {
+                          commitNodePatch({ milestoneTarget: val || undefined });
+                        }
+                      }}
+                      placeholder="Livrable ou critère clé du jalon..."
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50/40 focus:bg-white focus:border-amber-500 text-xs text-stone-800 outline-none"
+                    />
+                  )}
                 </div>
               </>
             )}
@@ -769,47 +966,139 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
             </div>
 
             {/* Tags */}
-            <span className="text-stone-500 font-medium flex items-center gap-1.5">
+            <span className="text-stone-500 font-medium flex items-center gap-1.5 self-start pt-1">
               <Tag className="h-3.5 w-3.5 text-stone-400" />
-              <span>Étiquettes</span>
+              <span>Étiquettes ({(activeNode.tags || []).length})</span>
             </span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {(activeNode.tags || []).map((t) => (
-                <span
-                  key={t}
-                  className="inline-flex items-center gap-1 text-xs text-stone-700 bg-stone-100 border border-stone-200 rounded px-2 py-0.5"
-                >
-                  <span>{t}</span>
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(activeNode.tags || []).map((t) => (
+                  <span
+                    key={t}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-[#2A7B76] bg-teal-50 border border-teal-200 rounded px-2 py-0.5"
+                  >
+                    <span>#{t}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        commitNodePatch({ tags: (activeNode.tags || []).filter((x) => x !== t) })
+                      }
+                      className="text-teal-600 hover:text-rose-600 cursor-pointer"
+                      title={`Retirer l'étiquette ${t}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="inline-flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={newTagText}
+                    onChange={(e) => setNewTagText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') {
+                        e.preventDefault();
+                        handleAddTag();
+                      }
+                    }}
+                    onBlur={() => {
+                      if (newTagText.trim()) handleAddTag();
+                    }}
+                    placeholder="+ Étiquettes (Entrée ou virgule)"
+                    className="px-2 py-0.5 text-xs bg-transparent border border-dashed border-stone-300 rounded outline-none focus:border-[#2A7B76] w-44"
+                  />
                   <button
                     type="button"
-                    onClick={() =>
-                      commitNodePatch({ tags: (activeNode.tags || []).filter((x) => x !== t) })
-                    }
-                    className="text-stone-400 hover:text-rose-600 cursor-pointer"
+                    onClick={() => handleAddTag()}
+                    className="px-2 py-0.5 rounded border border-stone-200 bg-white hover:border-[#2A7B76] text-[#2A7B76] text-[11px] font-semibold cursor-pointer"
+                    title="Ajouter les étiquettes saisies"
                   >
-                    <X className="h-3 w-3" />
+                    + Ajouter
                   </button>
-                </span>
-              ))}
-              <input
-                type="text"
-                value={newTagText}
-                onChange={(e) => setNewTagText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddTag();
-                  }
-                }}
-                placeholder="+ Étiquette (Entrée)"
-                className="px-2 py-0.5 text-xs bg-transparent border border-dashed border-stone-300 rounded outline-none focus:border-[#2A7B76] w-32"
-              />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {DRAWER_SUGGESTED_TAGS.map((sug) => {
+                  const selected = (activeNode.tags || []).some(
+                    (t) => t.toLowerCase() === sug.toLowerCase()
+                  );
+                  return (
+                    <button
+                      key={sug}
+                      type="button"
+                      onClick={() => handleToggleSuggestedTag(sug)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium border cursor-pointer transition ${
+                        selected
+                          ? 'bg-[#2A7B76] border-[#2A7B76] text-white'
+                          : 'bg-stone-50 border-dashed border-stone-300 text-stone-600 hover:border-[#2A7B76] hover:text-[#2A7B76]'
+                      }`}
+                    >
+                      {selected ? `✓ ${sug}` : `+ ${sug}`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Collaborateurs abonnés */}
+            <span className="text-stone-500 font-medium flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5 text-stone-400" />
+              <span>Abonnés</span>
+            </span>
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(activeNode.followerIds || []).map((id) => {
+                  const emp = employees.find((e) => e.id === id || e.name === id);
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 text-xs text-stone-700 bg-stone-100 border border-stone-200 rounded px-2 py-0.5"
+                    >
+                      <span>{emp?.name || id}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleFollower(id)}
+                        className="text-stone-400 hover:text-rose-600 cursor-pointer"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setShowFollowersDropdown((v) => !v)}
+                  className="text-xs font-medium text-[#2A7B76] hover:underline cursor-pointer"
+                >
+                  {showFollowersDropdown ? 'Fermer' : '+ Gérer les abonnés'}
+                </button>
+              </div>
+              {showFollowersDropdown && (
+                <div className="max-h-28 overflow-y-auto bg-stone-50 border border-stone-200 rounded-lg p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                  {employees.map((emp) => (
+                    <label
+                      key={emp.id}
+                      className="flex items-center gap-2 text-xs text-stone-700 cursor-pointer px-1.5 py-0.5 rounded hover:bg-white"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={(activeNode.followerIds || []).includes(emp.id)}
+                        onChange={() => handleToggleFollower(emp.id)}
+                        className="rounded border-stone-300 text-[#2A7B76]"
+                      />
+                      <span className="truncate">{emp.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Description */}
           <div className="space-y-1.5">
-            <label className="font-semibold text-stone-800 block">Description</label>
+            <label className="font-semibold text-stone-800 block">
+              {isSubtaskMode ? 'Description & Détails de réalisation' : 'Description (Job description & périmètre)'}
+            </label>
             <textarea
               rows={3}
               value={draftDescription}
@@ -824,27 +1113,149 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
             />
           </div>
 
-          {/* Arborescence des Sous-tâches Asana (Récursive + Drag & Drop + Drill-down) */}
-          <div className="space-y-2.5 border-t border-stone-100 pt-4">
-            <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-stone-900">
-                Sous-tâches ({childSubtasks.filter((s) => s.completed).length}/{childSubtasks.length})
-              </h4>
-              {!isSubtaskMode && (
-                <button
-                  type="button"
-                  onClick={() => setIsAdvancedSubModalOpen(true)}
-                  className="text-xs font-medium text-[#2A7B76] hover:underline cursor-pointer"
-                >
-                  + Formulaire complet
-                </button>
-              )}
+          {/* Critères d'acceptation / validation (Identique Tâche & Sous-tâche) */}
+          <div className="space-y-2 border-t border-stone-100 pt-4">
+            <h4 className="font-semibold text-stone-900 flex items-center gap-1.5">
+              <ListChecks className="h-3.5 w-3.5 text-[#2A7B76]" />
+              <span>Critères d&apos;acceptation ({(activeNode.acceptanceCriteria || []).length})</span>
+            </h4>
+
+            {(activeNode.acceptanceCriteria || []).length > 0 && (
+              <div className="space-y-1.5">
+                {(activeNode.acceptanceCriteria || []).map((crit, idx) => (
+                  <div
+                    key={`${crit}-${idx}`}
+                    className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50/70 text-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-[#2A7B76] shrink-0" />
+                      <span className="text-stone-800 font-medium truncate">{crit}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        commitNodePatch({
+                          acceptanceCriteria: (activeNode.acceptanceCriteria || []).filter(
+                            (_, i) => i !== idx
+                          ),
+                        })
+                      }
+                      className="text-stone-400 hover:text-rose-600 p-0.5 cursor-pointer shrink-0"
+                      title="Retirer ce critère"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Ajouter un critère d'acceptation ou livrable attendu..."
+                value={newCriterionText}
+                onChange={(e) => setNewCriterionText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddCriterion();
+                  }
+                }}
+                className="flex-1 px-3 py-1.5 rounded-lg border border-stone-200 bg-white outline-none focus:border-[#2A7B76]"
+              />
+              <button
+                type="button"
+                onClick={handleAddCriterion}
+                className="px-3 py-1.5 bg-white border border-stone-200 hover:border-[#2A7B76] text-[#2A7B76] rounded-lg font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Ajouter</span>
+              </button>
             </div>
+          </div>
+
+          {/* Arborescence des Sous-tâches : Semaine en cours par défaut + Filtre date/période + Tri plus récentes -> plus anciennes */}
+          <div className="space-y-3 border-t border-stone-100 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="font-semibold text-stone-900 flex items-center gap-2">
+                  <span>
+                    Évolutions &amp; Sous-tâches ({childSubtasks.length}/{totalSubtaskCount})
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+                    {activeRangeLabel}
+                  </span>
+                </h4>
+                {!isSubtaskMode && (
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    Suivi hebdomadaire de l&apos;avancement par rapport au job description · Classées de la plus récente à la plus ancienne.
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAdvancedSubModalOpen(true)}
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold text-[#2A7B76] cursor-pointer whitespace-nowrap"
+              >
+                + Nouvelle sous-tâche complète
+              </button>
+            </div>
+
+            <SubtaskFilterBar
+              period={subtaskFilterPeriod}
+              onChangePeriod={setSubtaskFilterPeriod}
+              specificDate={subtaskFilterDate}
+              onChangeSpecificDate={setSubtaskFilterDate}
+              rangeStart={subtaskRangeStart}
+              onChangeRangeStart={setSubtaskRangeStart}
+              rangeEnd={subtaskRangeEnd}
+              onChangeRangeEnd={setSubtaskRangeEnd}
+              totalCount={totalSubtaskCount}
+            />
+
+            {hiddenSubtaskCount > 0 && (
+              <div className="px-3 py-2 rounded-xl bg-amber-50/90 border border-amber-200 text-[11px] text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <strong>{hiddenSubtaskCount}</strong> sous-tâche{hiddenSubtaskCount > 1 ? 's' : ''} hors de la période affichée.
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSubtaskFilterPeriod('date_range')}
+                    className="font-semibold underline cursor-pointer"
+                  >
+                    Filtrer par période
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSubtaskFilterPeriod('all')}
+                    className="font-bold text-[#2A7B76] underline cursor-pointer"
+                  >
+                    Afficher toutes ({totalSubtaskCount})
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 bg-white">
               {childSubtasks.length === 0 ? (
-                <div className="py-4 text-center text-stone-400">
-                  Aucune sous-tâche. Ajoutez-en une ci-dessous.
+                <div className="py-5 px-4 text-center text-stone-400 space-y-1.5">
+                  <p>
+                    {totalSubtaskCount > 0
+                      ? `Aucune sous-tâche sur cette période (${totalSubtaskCount} enregistrée${totalSubtaskCount > 1 ? 's' : ''} au total).`
+                      : 'Aucune sous-tâche. Ajoutez-en une avec le formulaire complet ou ci-dessous.'}
+                  </p>
+                  {totalSubtaskCount > 0 && subtaskFilterPeriod !== 'all' && (
+                    <button
+                      type="button"
+                      onClick={() => setSubtaskFilterPeriod('all')}
+                      className="text-[#2A7B76] font-semibold hover:underline cursor-pointer"
+                    >
+                      Voir toutes les sous-tâches ({totalSubtaskCount})
+                    </button>
+                  )}
                 </div>
               ) : (
                 childSubtasks.map((sub) => {
@@ -852,6 +1263,8 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
                   const nestedCount = sub.subtasks?.length || 0;
                   const isExpanded = Boolean(expandedNestedIds[sub.id]);
                   const isSubDone = Boolean(sub.completed || sub.status === 'completed');
+                  const relDate = formatSubtaskRelativeDate(sub, activeDueDate || task.date);
+                  const criteriaCount = sub.acceptanceCriteria?.length || 0;
 
                   return (
                     <div key={sub.id} className="bg-white">
@@ -870,7 +1283,7 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
                           }
                           setDraggedSubId(null);
                         }}
-                        className="flex items-center gap-2 px-3 py-2 hover:bg-stone-50 group"
+                        className="flex items-center gap-2 px-3 py-2.5 hover:bg-stone-50 group"
                       >
                         <GripVertical className="h-3.5 w-3.5 text-stone-300 group-hover:text-stone-500 cursor-grab shrink-0" />
                         {nestedCount > 0 ? (
@@ -903,15 +1316,57 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
                           <Check className="h-2.5 w-2.5 stroke-[3]" />
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => onNavigatePath?.(subPath)}
-                          className={`flex-1 text-left truncate font-medium cursor-pointer hover:text-[#2A7B76] ${
-                            isSubDone ? 'line-through text-stone-400' : 'text-stone-800'
-                          }`}
-                        >
-                          {sub.title}
-                        </button>
+                        <div className="flex-1 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => onNavigatePath?.(subPath)}
+                            className={`w-full text-left truncate font-medium cursor-pointer hover:text-[#2A7B76] block ${
+                              isSubDone ? 'line-through text-stone-400' : 'text-stone-800'
+                            }`}
+                          >
+                            {sub.title}
+                          </button>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[10px] text-stone-500">
+                            <span className="font-mono text-stone-600">{relDate}</span>
+                            {sub.priority && (
+                              <span
+                                className={`px-1.5 py-0.2 rounded font-semibold ${
+                                  sub.priority === 'urgent' || sub.priority === 'high'
+                                    ? 'bg-rose-50 text-rose-700'
+                                    : sub.priority === 'medium'
+                                    ? 'bg-amber-50 text-amber-700'
+                                    : 'bg-stone-100 text-stone-600'
+                                }`}
+                              >
+                                {sub.priority === 'urgent'
+                                  ? 'Urgente'
+                                  : sub.priority === 'high'
+                                  ? 'Haute'
+                                  : sub.priority === 'medium'
+                                  ? 'Moyenne'
+                                  : 'Basse'}
+                              </span>
+                            )}
+                            {(sub.estimatedHours || sub.actualHours) ? (
+                              <span className="font-mono text-blue-700 bg-blue-50 px-1.5 rounded">
+                                {sub.actualHours || 0}h/{sub.estimatedHours || 0}h
+                              </span>
+                            ) : null}
+                            {criteriaCount > 0 && (
+                              <span className="text-[#2A7B76] bg-emerald-50 px-1.5 rounded">
+                                ✓ {criteriaCount} critère{criteriaCount > 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {(sub.tags || []).map((t) => (
+                              <span
+                                key={t}
+                                className="bg-teal-50 border border-teal-200 px-1.5 rounded text-[#2A7B76] font-medium"
+                              >
+                                #{t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
 
                         {nestedCount > 0 && (
                           <span className="text-[11px] text-stone-400 tabular-nums shrink-0">
@@ -947,7 +1402,7 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
 
                       {isExpanded && sub.subtasks && sub.subtasks.length > 0 && (
                         <div className="pl-9 pr-3 pb-2 space-y-1 bg-stone-50/50 border-t border-stone-100">
-                          {sortSubtasksByOrder(sub.subtasks).map((grandChild) => {
+                          {sortSubtasksNewestFirst(sub.subtasks, sub.dueDate || sub.endDate).map((grandChild) => {
                             const grandPath = [...subPath, grandChild.id];
                             const isGrandDone = Boolean(
                               grandChild.completed || grandChild.status === 'completed'
@@ -978,6 +1433,18 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
                                 >
                                   {grandChild.title}
                                 </button>
+                                {(grandChild.tags || []).length > 0 && (
+                                  <div className="hidden sm:flex flex-wrap items-center gap-1">
+                                    {(grandChild.tags || []).map((t) => (
+                                      <span
+                                        key={t}
+                                        className="text-[10px] bg-teal-50 border border-teal-200 px-1 rounded text-[#2A7B76]"
+                                      >
+                                        #{t}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                                 <span className="text-[11px] font-mono text-stone-400 tabular-nums">
                                   {grandChild.dueDate || grandChild.endDate || ''}
                                 </span>
@@ -992,11 +1459,11 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
               )}
             </div>
 
-            {/* Inline Quick Subtask Creator */}
+            {/* Inline Quick Subtask Creator + Complete Form trigger */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <input
                 type="text"
-                placeholder="Ajouter une sous-tâche..."
+                placeholder="Ajout rapide d'une sous-tâche..."
                 value={newSubTitle}
                 onChange={(e) => setNewSubTitle(e.target.value)}
                 onKeyDown={(e) => {
@@ -1122,22 +1589,23 @@ const TaskDetailDrawerContent: React.FC<Omit<TaskDetailDrawerProps, 'task'> & { 
             )}
           </div>
         </div>
-      </aside>
+        </aside>
+      </div>
 
-      {!isSubtaskMode && (
-        <SubtaskCreateModal
-          isOpen={isAdvancedSubModalOpen}
-          onClose={() => setIsAdvancedSubModalOpen(false)}
-          onCreateSubtask={(sub) => {
-            onInlineAddSubtask?.(task.id, [], sub.title, sub);
-          }}
-          employees={employees}
-          parentTask={task}
-          projects={projects}
-          currentUser={currentUser}
-          currentRole={currentRole}
-        />
-      )}
-    </div>
+      <SubtaskCreateModal
+        isOpen={isAdvancedSubModalOpen}
+        onClose={() => setIsAdvancedSubModalOpen(false)}
+        onCreateSubtask={(sub) => {
+          onInlineAddSubtask?.(task.id, subtaskPath, sub.title, sub);
+        }}
+        employees={employees}
+        parentTask={task}
+        parentSubtaskTitle={isSubtaskMode ? activeNode.title : undefined}
+        availableTasks={allTasks}
+        projects={projects}
+        currentUser={currentUser}
+        currentRole={currentRole}
+      />
+    </>
   );
 };

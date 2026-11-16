@@ -1,12 +1,12 @@
 import React from 'react';
-import { Bell, CheckCheck, Volume2, VolumeX, Plus, X, Search, LayoutList, LayoutGrid } from 'lucide-react';
+import { Bell, CheckCheck, Volume2, VolumeX, Plus, X, Search, LayoutList, LayoutGrid, Zap } from 'lucide-react';
 import { PersonalAlert } from './employeeAlertsTypes';
 
 interface EmployeeAlertsToolbarProps {
   allAlerts: PersonalAlert[];
   unreadCount: number;
-  filter: 'all' | 'unread' | 'urgent' | 'task' | 'incident' | 'leaves';
-  setFilter: (f: 'all' | 'unread' | 'urgent' | 'task' | 'incident' | 'leaves') => void;
+  filter: 'all' | 'unread' | 'urgent' | 'movement' | 'task' | 'incident' | 'leaves';
+  setFilter: (f: 'all' | 'unread' | 'urgent' | 'movement' | 'task' | 'incident' | 'leaves') => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   viewDensity: 'compact' | 'detailed';
@@ -15,6 +15,7 @@ interface EmployeeAlertsToolbarProps {
   onMarkAllAsRead: () => void;
   onToggleRingtone: () => void;
   onOpenCreateModal: () => void;
+  onToggleMovementForm?: () => void;
 }
 
 export const EmployeeAlertsToolbar: React.FC<EmployeeAlertsToolbarProps> = ({
@@ -30,6 +31,7 @@ export const EmployeeAlertsToolbar: React.FC<EmployeeAlertsToolbarProps> = ({
   onMarkAllAsRead,
   onToggleRingtone,
   onOpenCreateModal,
+  onToggleMovementForm,
 }) => (
   <>
     <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-stone-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -107,6 +109,18 @@ export const EmployeeAlertsToolbar: React.FC<EmployeeAlertsToolbarProps> = ({
           {isRinging ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4 text-amber-600" />}
         </button>
 
+        {onToggleMovementForm && (
+          <button
+            type="button"
+            onClick={onToggleMovementForm}
+            className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95 shrink-0"
+            title="Enregistrer un petit mouvement (point important hors tâches)"
+          >
+            <Zap className="h-4 w-4" />
+            <span>Petit mouvement</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={onOpenCreateModal}
@@ -124,6 +138,7 @@ export const EmployeeAlertsToolbar: React.FC<EmployeeAlertsToolbarProps> = ({
           { id: 'all', label: 'Toutes', count: allAlerts.length },
           { id: 'unread', label: 'Non lues', count: unreadCount },
           { id: 'urgent', label: 'Urgentes', count: allAlerts.filter((a) => a.type === 'urgent').length },
+          { id: 'movement', label: 'Pt. Mouvements', count: allAlerts.filter((a) => a.category === 'Mouvement').length },
           { id: 'task', label: 'Tâches', count: allAlerts.filter((a) => a.category === 'Tâche').length },
           { id: 'incident', label: 'Pointage', count: allAlerts.filter((a) => a.category === 'Pointage').length },
         ].map((item) => (

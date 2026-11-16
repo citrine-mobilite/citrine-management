@@ -1,5 +1,5 @@
 import React from 'react';
-import { Employee, Presence, Task, AttendanceIncident, AppUser } from '../types';
+import { Employee, Presence, Task, AttendanceIncident, AppUser, NotificationLog, Reminder, StrategicProject } from '../types';
 import { StatisticsKPIRibbon } from './presence/statistics/StatisticsKPIRibbon';
 import { StatisticsChartsSection } from './presence/statistics/StatisticsChartsSection';
 import { StatisticsEmployeeRankTable } from './presence/statistics/StatisticsEmployeeRankTable';
@@ -14,6 +14,9 @@ interface PresenceStatisticsViewProps {
   presences: Presence[];
   tasks?: Task[];
   incidents?: AttendanceIncident[];
+  reminders?: Reminder[];
+  strategicProjects?: StrategicProject[];
+  notifications?: NotificationLog[];
   onSelectEmployee?: (id: string) => void;
   onUpdateTask?: (task: Task) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
@@ -26,6 +29,9 @@ export function PresenceStatisticsView({
   presences,
   tasks = [],
   incidents = [],
+  reminders = [],
+  strategicProjects = [],
+  notifications = [],
   onSelectEmployee,
   onUpdateTask,
   showToast,
@@ -36,6 +42,9 @@ export function PresenceStatisticsView({
     employees,
     presences,
     tasks,
+    reminders,
+    strategicProjects,
+    notifications,
     currentUser,
     currentRole,
   });
@@ -51,6 +60,9 @@ export function PresenceStatisticsView({
         assiduiteRate={empAssiduite}
         presences={presences}
         incidents={incidents}
+        reminders={reminders}
+        strategicProjects={strategicProjects}
+        notifications={notifications}
         onBack={() => logic.setSelectedRendementEmployee(null)}
         onUpdateTask={onUpdateTask}
         showToast={showToast}
@@ -107,6 +119,9 @@ export function PresenceStatisticsView({
           totalMilestonesPeriod={logic.totalMilestonesPeriod}
           totalEffectiveHoursPeriod={logic.totalEffectiveHoursPeriod}
           totalEstimatedHoursPeriod={logic.totalEstimatedHoursPeriod}
+          totalRemindersPeriod={logic.totalRemindersPeriod}
+          totalRemindersResolvedPeriod={logic.totalRemindersResolvedPeriod}
+          totalRemindersHoursPeriod={logic.totalRemindersHoursPeriod}
           onSelectRendementEmployee={(emp) => logic.setSelectedRendementEmployee(emp)}
           onOpenTaskSheetModal={logic.handleOpenTaskSheetModal}
           onSelectEmployee={onSelectEmployee}
@@ -121,6 +136,9 @@ export function PresenceStatisticsView({
           allTasks={tasks}
           presences={presences}
           incidents={incidents}
+          reminders={reminders}
+          strategicProjects={strategicProjects}
+          notifications={notifications}
           defaultMode={logic.taskSheetMode}
           currentUser={currentUser}
           currentRole={currentRole}

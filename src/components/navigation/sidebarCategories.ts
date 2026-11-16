@@ -36,6 +36,9 @@ interface GetSidebarCategoriesOptions {
   pendingPresencesRequestsCount: number;
   pendingLeavesCount?: number;
   nonBadgedEmployeesCount?: number;
+  todayTasksCount?: number;
+  todayProjectsCount?: number;
+  pendingDisciplineCount?: number;
 }
 
 export function getSidebarCategories({
@@ -45,6 +48,9 @@ export function getSidebarCategories({
   pendingPresencesRequestsCount,
   pendingLeavesCount = 0,
   nonBadgedEmployeesCount,
+  todayTasksCount = 0,
+  todayProjectsCount = 0,
+  pendingDisciplineCount = 0,
 }: GetSidebarCategoriesOptions): SidebarCategory[] {
   const normalizedRole = normalizeRoleString(userRole);
 
@@ -123,6 +129,7 @@ export function getSidebarCategories({
       label: 'Gestion de Projets',
       description: 'Suivi stratégique des projets et jalons clés',
       icon: Flag,
+      badge: todayProjectsCount > 0 ? todayProjectsCount : undefined,
     });
   }
   if (moduleConfig.enableTasks !== false) {
@@ -131,6 +138,7 @@ export function getSidebarCategories({
       label: 'Gestion des Tâches',
       description: '',
       icon: Calendar,
+      badge: todayTasksCount > 0 ? todayTasksCount : undefined,
     });
   }
   if (moduleConfig.enableReminders !== false) {
@@ -148,6 +156,7 @@ export function getSidebarCategories({
       label: 'Conseil & Discipline',
       description: '',
       icon: Scale,
+      badge: pendingDisciplineCount > 0 ? pendingDisciplineCount : undefined,
     });
   }
 

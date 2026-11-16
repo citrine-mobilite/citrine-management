@@ -2,7 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Task, Employee, TaskStatus, TaskPriority, TaskProject, Subtask, Comment, AppUser, Incident } from '../../../types';
 import { pushNotificationBridgeService } from '../../../services/pushNotificationBridgeService';
 import { canManageTaskAssignment, isSelfOnlyUser } from '../../../utils/roleUtils';
-import { filterAndSortSubtasks } from '../../../utils/subtaskFilterUtils';
+import {
+  filterAndSortSubtasks,
+  getCurrentWeekBounds,
+  SubtaskFilterPeriod,
+} from '../../../utils/subtaskFilterUtils';
 import {
   updateSubtaskDueDateInTree,
   toggleSubtaskInTree,
@@ -57,11 +61,24 @@ export function useTaskDetailLogic({
   const [isSavedRecently, setIsSavedRecently] = useState(false);
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
   const [selectedSubtaskForDetail, setSelectedSubtaskForDetail] = useState<Subtask | null>(null);
-  const [subtaskFilterPeriod, setSubtaskFilterPeriod] = useState<'last3days' | 'all'>('last3days');
+  const currentWeekBounds = useMemo(() => getCurrentWeekBounds(), []);
+  const [subtaskFilterPeriod, setSubtaskFilterPeriod] = useState<SubtaskFilterPeriod>('current_week');
+  const [subtaskFilterDate, setSubtaskFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [subtaskRangeStart, setSubtaskRangeStart] = useState<string>(currentWeekBounds.startIso);
+  const [subtaskRangeEnd, setSubtaskRangeEnd] = useState<string>(currentWeekBounds.endIso);
 
-  const { displayedSubtasks, hiddenCount, totalCount } = useMemo(() => {
-    return filterAndSortSubtasks(subtasks, subtaskFilterPeriod, task.date);
-  }, [subtasks, subtaskFilterPeriod, task.date]);
+  const { displayedSubtasks, hiddenCount, totalCount, activeRangeLabel } = useMemo(() => {
+    return filterAndSortSubtasks(
+      subtasks,
+      {
+        period: subtaskFilterPeriod,
+        specificDate: subtaskFilterDate,
+        startDate: subtaskRangeStart,
+        endDate: subtaskRangeEnd,
+      },
+      task.date
+    );
+  }, [subtasks, subtaskFilterPeriod, subtaskFilterDate, subtaskRangeStart, subtaskRangeEnd, task.date]);
 
   useEffect(() => {
     setDraftTitle(task.title);
@@ -118,7 +135,7 @@ export function useTaskDetailLogic({
   };
 
   const handleCreateSubtask = (newSub: Subtask) => {
-    const updated = [...subtasks, newSub];
+    const updated = [newSub, ...subtasks];
     setSubtasks(updated);
     onSaveTask({ ...task, subtasks: updated });
     showToast?.('Sous-tâche détaillée créée avec succès !', 'success');
@@ -137,7 +154,7 @@ export function useTaskDetailLogic({
       endDate: effectiveDueDate,
       subtasks: [],
     };
-    const updated = [...subtasks, newSub];
+    const updated = [newSub, ...subtasks];
     setSubtasks(updated);
     setNewSubtaskTitle('');
     onSaveTask({ ...task, subtasks: updated });
@@ -250,7 +267,10 @@ export function useTaskDetailLogic({
     isSavedRecently, isSubtaskModalOpen, setIsSubtaskModalOpen,
     selectedSubtaskForDetail, setSelectedSubtaskForDetail,
     subtaskFilterPeriod, setSubtaskFilterPeriod,
-    displayedSubtasks, hiddenCount, totalCount,
+    subtaskFilterDate, setSubtaskFilterDate,
+    subtaskRangeStart, setSubtaskRangeStart,
+    subtaskRangeEnd, setSubtaskRangeEnd,
+    displayedSubtasks, hiddenCount, totalCount, activeRangeLabel,
     handleSaveAll, handleCreateSubtask, handleAddSubtask, handleUpdateSubtaskDueDate,
     handleToggleSubtask, handleDeleteSubtask, handleSaveSubtaskDetail,
     handleAddComment, handleSignalBlocker, handleDeleteBlocker,

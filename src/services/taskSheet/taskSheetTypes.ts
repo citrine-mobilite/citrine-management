@@ -1,4 +1,10 @@
 import { Employee } from '../../types';
+import type {
+  ImportantPointsPeriodSummary,
+  TaskSheetImportantPoint,
+} from './importantPointsUtils';
+
+export type { TaskSheetImportantPoint, ImportantPointsPeriodSummary };
 
 export interface DailyTaskSheetTaskItem {
   id?: string;
@@ -69,6 +75,36 @@ export interface DailyTaskSheetData {
     time: string;
     text: string;
   }[];
+  reminders?: {
+    id: string;
+    title: string;
+    time: string;
+    durationMinutes: number;
+    kind: string;
+    routineType?: string;
+    location?: string;
+    statusLabel: 'Clôturé' | 'En retard' | 'Planifié';
+  }[];
+  remindersMinutesTotal?: number;
+  importantPoints?: TaskSheetImportantPoint[];
+  importantPointsSummary?: {
+    total: number;
+    alertsCount: number;
+    remindersCount: number;
+    movementsCount: number;
+    totalMinutes: number;
+  };
+  projectMilestones?: {
+    projectId: string;
+    projectName: string;
+    milestoneId: string;
+    title: string;
+    status: string;
+    targetDate?: string;
+    isDone: boolean;
+    isBlocked: boolean;
+    isOverdue: boolean;
+  }[];
 }
 
 export interface MonthlyTaskSheetData {
@@ -88,6 +124,26 @@ export interface MonthlyTaskSheetData {
   totalSubtasksCount: number;
   completedSubtasksCount: number;
   completionRate: number;
+  milestonesSummary?: {
+    total: number;
+    completed: number;
+    blocked: number;
+    items: {
+      id: string;
+      title: string;
+      projectName?: string;
+      status: string;
+      targetDate?: string;
+      progress: number;
+    }[];
+  };
+  remindersSummary?: {
+    totalOccurrences: number;
+    resolvedCount: number;
+    overdueCount: number;
+    totalHours: number;
+  };
+  importantPointsSummary?: ImportantPointsPeriodSummary;
   tasksList: {
     id: string;
     title: string;
@@ -109,6 +165,8 @@ export interface MonthlyTaskSheetData {
     hoursWorked: number;
     status: string;
     tasksDoneCount: number;
+    remindersCount?: number;
+    importantPointsCount?: number;
     taskTitles?: string[];
   }[];
 }
@@ -125,6 +183,18 @@ export interface YearlyTaskSheetData {
   totalSubtasksAssigned?: number;
   totalSubtasksCompleted?: number;
   subtaskCompletionRate?: number;
+  milestonesSummary?: {
+    total: number;
+    completed: number;
+    blocked: number;
+  };
+  remindersSummary?: {
+    totalOccurrences: number;
+    resolvedCount: number;
+    overdueCount: number;
+    totalHours: number;
+  };
+  importantPointsSummary?: ImportantPointsPeriodSummary;
   topTimeTasks?: Array<{
     id: string;
     title: string;
@@ -141,6 +211,8 @@ export interface YearlyTaskSheetData {
     hoursWorked: number;
     tasksCompleted: number;
     subtasksTotal?: number;
+    remindersCount?: number;
+    importantPointsCount?: number;
     rendementRate: number;
   }[];
 }

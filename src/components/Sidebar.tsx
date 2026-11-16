@@ -46,6 +46,9 @@ interface SidebarProps {
   pendingPresencesRequestsCount?: number;
   pendingLeavesCount?: number;
   nonBadgedEmployeesCount?: number;
+  todayTasksCount?: number;
+  todayProjectsCount?: number;
+  pendingDisciplineCount?: number;
   mobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
   onCloseMobileMenu?: () => void;
@@ -62,6 +65,9 @@ export default function Sidebar({
   pendingPresencesRequestsCount = 0,
   pendingLeavesCount = 0,
   nonBadgedEmployeesCount,
+  todayTasksCount = 0,
+  todayProjectsCount = 0,
+  pendingDisciplineCount = 0,
   mobileMenuOpen,
   onToggleMobileMenu,
   onCloseMobileMenu,
@@ -77,6 +83,9 @@ export default function Sidebar({
     pendingPresencesRequestsCount,
     pendingLeavesCount,
     nonBadgedEmployeesCount,
+    todayTasksCount,
+    todayProjectsCount,
+    pendingDisciplineCount,
   });
 
   return (

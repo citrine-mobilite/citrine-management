@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
-import { Employee, Task, Subtask, TaskStatus } from '../../../../types';
+import { Employee, NotificationLog, Task, Subtask, TaskStatus, Reminder, StrategicProject } from '../../../../types';
 import { haptic } from '../../../../services/hapticService';
 import { computeEmployeeRendement, getTaskDynamicProgress } from '../../../../utils/rendementCalculator';
 import { computeTaskTimeEntry, round1, safeNum } from '../../../../utils/rendementTaskHelpers';
@@ -22,6 +22,9 @@ interface UseEmployeeRendementLogicParams {
   employee: Employee;
   tasks: Task[];
   assiduiteRate: number;
+  reminders?: Reminder[];
+  strategicProjects?: StrategicProject[];
+  notifications?: NotificationLog[];
   onUpdateTask?: (updatedTask: Task) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
@@ -30,6 +33,9 @@ export function useEmployeeRendementLogic({
   employee,
   tasks,
   assiduiteRate,
+  reminders = [],
+  strategicProjects = [],
+  notifications = [],
   onUpdateTask,
   showToast,
 }: UseEmployeeRendementLogicParams) {
@@ -68,8 +74,12 @@ export function useEmployeeRendementLogic({
   );
 
   const metrics = useMemo(() => {
-    return computeEmployeeRendement(employee, tasks, safeNum(assiduiteRate, 100), periodRange);
-  }, [employee, tasks, assiduiteRate, periodRange]);
+    return computeEmployeeRendement(employee, tasks, safeNum(assiduiteRate, 100), periodRange, {
+      reminders,
+      strategicProjects,
+      notifications,
+    });
+  }, [employee, tasks, assiduiteRate, periodRange, reminders, strategicProjects, notifications]);
 
   const tasksWithDynamicData = useMemo(() => {
     return metrics.assignedTasks.map((t) => {
@@ -164,7 +174,7 @@ export function useEmployeeRendementLogic({
 
   const handleCreateSubtaskFromModal = (newSub: Subtask) => {
     if (!activeModalTask) return;
-    const updatedSubtasks = [...(activeModalTask.subtasks || []), newSub];
+    const updatedSubtasks = [newSub, ...(activeModalTask.subtasks || [])];
     const allCompleted = updatedSubtasks.length > 0 && updatedSubtasks.every((s) => s.completed || s.status === 'completed');
     const newStatus = allCompleted && activeModalTask.status !== 'completed' ? 'completed' : activeModalTask.status;
     onUpdateTask?.({ ...activeModalTask, status: newStatus, subtasks: updatedSubtasks, lastUpdatedTime: new Date().toISOString() });
@@ -200,11 +210,23 @@ export function useEmployeeRendementLogic({
     const title = (newSubtaskTitles[task.id] || '').trim();
     if (!title) return;
     haptic.medium();
+    const nowIso = new Date().toISOString();
     const taskSubDueDate = newSubtaskDueDates[task.id] || todayStr;
-    const newSub: Subtask = { id: `sub-${Date.now()}`, title, completed: false, status: 'todo', dueDate: taskSubDueDate, endDate: taskSubDueDate, estimatedHours: 2 };
-    const updatedSubtasks = [...(task.subtasks || []), newSub];
+    const newSub: Subtask = {
+      id: `sub-${Date.now()}`,
+      title,
+      completed: false,
+      status: 'todo',
+      startDate: todayStr,
+      dueDate: taskSubDueDate,
+      endDate: taskSubDueDate,
+      estimatedHours: 2,
+      createdAt: nowIso,
+      subtasks: [],
+    };
+    const updatedSubtasks = [newSub, ...(task.subtasks || [])];
     const newStatus = task.status === 'completed' ? 'in_progress' : task.status;
-    onUpdateTask?.({ ...task, status: newStatus, subtasks: updatedSubtasks, lastUpdatedTime: new Date().toISOString() });
+    onUpdateTask?.({ ...task, status: newStatus, subtasks: updatedSubtasks, lastUpdatedTime: nowIso });
     setNewSubtaskTitles({ ...newSubtaskTitles, [task.id]: '' });
     showToast?.('Sous-tâche ajoutée et rendement recalculé.', 'success');
   };

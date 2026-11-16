@@ -91,7 +91,21 @@ export const TaskDetailSubtaskRow: React.FC<TaskDetailSubtaskRowProps> = ({
           </span>
         )}
         {sub.assignedTo && <span className="bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-medium">{sub.assignedTo}</span>}
-        {sub.estimatedHours && <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-mono font-bold">{sub.estimatedHours}h</span>}
+        {sub.tags && sub.tags.map((tag) => (
+          <span key={tag} className="bg-teal-50 text-[#2A7B76] border border-teal-200 px-1.5 py-0.5 rounded-md font-bold text-[9px]">
+            #{tag}
+          </span>
+        ))}
+        {sub.acceptanceCriteria && sub.acceptanceCriteria.length > 0 && (
+          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md font-mono font-bold text-[9px]">
+            ✓ {sub.acceptanceCriteria.filter((c) => c.completed).length}/{sub.acceptanceCriteria.length}
+          </span>
+        )}
+        {(sub.estimatedHours !== undefined || sub.actualHours !== undefined) && (
+          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-mono font-bold">
+            {sub.actualHours || 0}h/{sub.estimatedHours || 0}h
+          </span>
+        )}
         {sub.priority && (
           <span
             className={`px-1.5 py-0.5 rounded-md font-bold uppercase text-[9px] ${

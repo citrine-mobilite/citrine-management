@@ -11,7 +11,7 @@ import {
   Pencil,
   Printer,
 } from 'lucide-react';
-import { Employee, Presence, SalaryPayment, Task } from '../../types';
+import { Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../../types';
 import { isTaskAssignedToEmployee } from '../../utils/rendementTaskHelpers';
 import { CollaboratorDetailTab } from './collaboratorConstants';
 import { CollaboratorDetailProfileCard } from './CollaboratorDetailProfileCard';
@@ -23,6 +23,9 @@ interface CollaboratorDetailViewProps {
   presences: Presence[];
   salaryPayments: SalaryPayment[];
   tasks: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
+  strategicProjects?: StrategicProject[];
   activeDetailTab: CollaboratorDetailTab;
   setActiveDetailTab: (tab: CollaboratorDetailTab) => void;
   rhReportMonth: string;
@@ -40,6 +43,9 @@ export const CollaboratorDetailView: React.FC<CollaboratorDetailViewProps> = ({
   presences,
   salaryPayments,
   tasks,
+  reminders = [],
+  notifications = [],
+  strategicProjects = [],
   activeDetailTab,
   setActiveDetailTab,
   rhReportMonth,
@@ -133,6 +139,9 @@ export const CollaboratorDetailView: React.FC<CollaboratorDetailViewProps> = ({
           empPresences={empPresences}
           empTasks={empTasks}
           allTasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           rhReportMonth={rhReportMonth}
           setRhReportMonth={setRhReportMonth}
           isGeneratingRhReport={isGeneratingRhReport}

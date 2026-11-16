@@ -1,6 +1,7 @@
 import React from 'react';
-import { Filter, History } from 'lucide-react';
 import { Subtask } from '../../../types';
+import { SubtaskFilterPeriod } from '../../../utils/subtaskFilterUtils';
+import { SubtaskFilterBar } from '../shared/SubtaskFilterBar';
 import { TaskDetailSubtaskRow } from './TaskDetailSubtaskRow';
 
 interface TaskDetailSubtasksSectionProps {
@@ -8,8 +9,15 @@ interface TaskDetailSubtasksSectionProps {
   displayedSubtasks: Subtask[];
   hiddenCount: number;
   totalCount: number;
-  subtaskFilterPeriod: 'last3days' | 'all';
-  setSubtaskFilterPeriod: (p: 'last3days' | 'all') => void;
+  subtaskFilterPeriod: SubtaskFilterPeriod;
+  setSubtaskFilterPeriod: (p: SubtaskFilterPeriod) => void;
+  subtaskFilterDate: string;
+  setSubtaskFilterDate: (d: string) => void;
+  subtaskRangeStart: string;
+  setSubtaskRangeStart: (d: string) => void;
+  subtaskRangeEnd: string;
+  setSubtaskRangeEnd: (d: string) => void;
+  activeRangeLabel?: string;
   newSubtaskTitle: string;
   setNewSubtaskTitle: (val: string) => void;
   quickSubtaskDueDate: string;
@@ -29,6 +37,13 @@ export const TaskDetailSubtasksSection: React.FC<TaskDetailSubtasksSectionProps>
   totalCount,
   subtaskFilterPeriod,
   setSubtaskFilterPeriod,
+  subtaskFilterDate,
+  setSubtaskFilterDate,
+  subtaskRangeStart,
+  setSubtaskRangeStart,
+  subtaskRangeEnd,
+  setSubtaskRangeEnd,
+  activeRangeLabel,
   newSubtaskTitle,
   setNewSubtaskTitle,
   quickSubtaskDueDate,
@@ -41,60 +56,58 @@ export const TaskDetailSubtasksSection: React.FC<TaskDetailSubtasksSectionProps>
   onAddSubtask,
 }) => (
   <div className="space-y-3 bg-stone-50 p-4 rounded-2xl border border-stone-200/80">
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-stone-200/60">
-      <div className="flex items-center gap-2">
-        <h4 className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
-          <span>📋 Sous-tâches</span>
+    <div className="flex flex-col gap-2 pb-2 border-b border-stone-200/60">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="font-bold text-stone-800 text-xs flex items-center gap-2">
+          <span>📋 Évolutions &amp; Sous-tâches</span>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-200/80 text-stone-700 font-semibold">
             {displayedSubtasks.length}/{totalCount}
           </span>
+          {activeRangeLabel && (
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white text-stone-600 border border-stone-200">
+              {activeRangeLabel}
+            </span>
+          )}
         </h4>
-        <span className="text-[10px] text-stone-400 hidden sm:inline" title="Triées automatiquement de la plus récente à la plus ancienne">
-          • Plus récentes d'abord
-        </span>
       </div>
 
-      <div className="flex items-center gap-1 self-start sm:self-auto bg-stone-200/70 p-0.5 rounded-xl text-[10px] font-bold">
-        <button
-          type="button"
-          onClick={() => setSubtaskFilterPeriod('last3days')}
-          className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
-            subtaskFilterPeriod === 'last3days' ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold' : 'text-stone-600 hover:text-stone-900'
-          }`}
-          title="Afficher uniquement les sous-tâches des 3 derniers jours (glissants)"
-        >
-          <Filter className="h-2.5 w-2.5" />
-          <span>3 derniers jours</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubtaskFilterPeriod('all')}
-          className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
-            subtaskFilterPeriod === 'all' ? 'bg-white text-[#2A7B76] shadow-2xs font-extrabold' : 'text-stone-600 hover:text-stone-900'
-          }`}
-          title="Afficher toutes les sous-tâches sans filtre temporel"
-        >
-          <History className="h-2.5 w-2.5" />
-          <span>Toutes ({totalCount})</span>
-        </button>
-      </div>
+      <SubtaskFilterBar
+        period={subtaskFilterPeriod}
+        onChangePeriod={setSubtaskFilterPeriod}
+        specificDate={subtaskFilterDate}
+        onChangeSpecificDate={setSubtaskFilterDate}
+        rangeStart={subtaskRangeStart}
+        onChangeRangeStart={setSubtaskRangeStart}
+        rangeEnd={subtaskRangeEnd}
+        onChangeRangeEnd={setSubtaskRangeEnd}
+        totalCount={totalCount}
+      />
     </div>
 
-    {subtaskFilterPeriod === 'last3days' && hiddenCount > 0 && (
+    {subtaskFilterPeriod !== 'all' && hiddenCount > 0 && (
       <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl px-3 py-2 text-[11px] text-amber-900 flex items-center justify-between gap-2 animate-in fade-in">
         <span className="flex items-center gap-1.5 truncate">
           <span>💡</span>
           <span className="truncate">
-            <strong>{hiddenCount} sous-tâche{hiddenCount > 1 ? 's' : ''} antérieure{hiddenCount > 1 ? 's' : ''}</strong> (+ de 3 jours) masquée{hiddenCount > 1 ? 's' : ''} pour la lisibilité.
+            <strong>{hiddenCount} sous-tâche{hiddenCount > 1 ? 's' : ''}</strong> hors période affichée (semaine en cours par défaut).
           </span>
         </span>
-        <button
-          type="button"
-          onClick={() => setSubtaskFilterPeriod('all')}
-          className="text-amber-800 hover:text-amber-950 font-bold underline shrink-0 cursor-pointer text-[10px]"
-        >
-          Afficher tout
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSubtaskFilterPeriod('date_range')}
+            className="text-amber-800 hover:text-amber-950 font-semibold underline cursor-pointer text-[10px]"
+          >
+            Filtrer
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubtaskFilterPeriod('all')}
+            className="text-amber-900 hover:text-amber-950 font-bold underline cursor-pointer text-[10px]"
+          >
+            Afficher tout
+          </button>
+        </div>
       </div>
     )}
 
@@ -103,16 +116,16 @@ export const TaskDetailSubtasksSection: React.FC<TaskDetailSubtasksSectionProps>
         <div className="text-center py-6 bg-white rounded-xl border border-dashed border-stone-200 text-stone-400 text-xs space-y-1">
           <p>
             {totalCount > 0
-              ? `Aucune sous-tâche sur les 3 derniers jours (${totalCount} antérieure${totalCount > 1 ? 's' : ''}).`
+              ? `Aucune sous-tâche sur la période sélectionnée (${totalCount} au total).`
               : 'Aucune sous-tâche pour le moment.'}
           </p>
-          {totalCount > 0 && subtaskFilterPeriod === 'last3days' && (
+          {totalCount > 0 && subtaskFilterPeriod !== 'all' && (
             <button
               type="button"
               onClick={() => setSubtaskFilterPeriod('all')}
-              className="text-[#2A7B76] font-bold hover:underline text-xs"
+              className="text-[#2A7B76] font-bold hover:underline text-xs cursor-pointer"
             >
-              Voir les {totalCount} sous-tâches antérieures
+              Voir toutes les sous-tâches ({totalCount})
             </button>
           )}
         </div>
@@ -136,16 +149,16 @@ export const TaskDetailSubtasksSection: React.FC<TaskDetailSubtasksSectionProps>
         type="button"
         onClick={onOpenSubtaskModal}
         className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-[#2A7B76] border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
-        title="Créer une sous-tâche détaillée avec le même procédé stylé que les tâches (style Asana)"
+        title="Créer une sous-tâche détaillée avec toutes les fonctionnalités d'une tâche"
       >
-        <span>+ Nouvelle sous-tâche détaillée (Style Asana)</span>
+        <span>+ Nouvelle sous-tâche complète (tous champs)</span>
       </button>
     </div>
 
     <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
       <input
         type="text"
-        placeholder="Ajouter une sous-tâche..."
+        placeholder="Ajout rapide d'une sous-tâche..."
         value={newSubtaskTitle}
         onChange={(e) => setNewSubtaskTitle(e.target.value)}
         onKeyDown={(e) => {

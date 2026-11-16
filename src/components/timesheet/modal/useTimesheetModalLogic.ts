@@ -9,6 +9,7 @@ import {
 import { exportToExcel } from '../../../services/excelExportService';
 import { exportElementToPdf } from '../../../services/pdfExportService';
 import { haptic } from '../../../services/hapticService';
+import { sortSubtasksNewestFirst } from '../../../utils/subtaskFilterUtils';
 import {
   getTimesheetNotes,
   addTimesheetNote,
@@ -169,7 +170,7 @@ export function useTimesheetModalLogic({
       const rows: any[] = [];
       (monthlyData.tasksList || []).forEach((t) => {
         if (t.subtasks && t.subtasks.length > 0) {
-          t.subtasks.forEach((s) => rows.push([t.title, s.title, t.priority || 'Normal', t.date || selectedMonth, s.completed ? 'Terminée ✓' : (s.status === 'in_progress' ? 'En cours' : 'À faire'), `${t.completionPercentage}%`]));
+          sortSubtasksNewestFirst(t.subtasks, t.date).forEach((s) => rows.push([t.title, s.title, t.priority || 'Normal', t.date || selectedMonth, s.completed ? 'Terminée ✓' : (s.status === 'in_progress' ? 'En cours' : 'À faire'), `${t.completionPercentage}%`]));
         } else {
           rows.push([t.title, '(Tâche unitaire)', t.priority || 'Normal', t.date || selectedMonth, t.status === 'completed' ? 'Terminée ✓' : 'En cours', t.status === 'completed' ? '100%' : '50%']);
         }

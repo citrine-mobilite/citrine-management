@@ -1,6 +1,7 @@
 import React from 'react';
 import { Trophy, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Task, TaskStatus } from '../../../../types';
+import { sortSubtasksNewestFirst } from '../../../../utils/subtaskFilterUtils';
 
 interface EmployeeRendementTaskCardProps {
   task: Task & { estimatedHours: number; dynamicProgress: number };
@@ -37,7 +38,7 @@ export const EmployeeRendementTaskCard: React.FC<EmployeeRendementTaskCardProps>
   onQuickDueDateChange,
   onAddSubtask,
 }) => {
-  const subtasks = task.subtasks || [];
+  const subtasks = sortSubtasksNewestFirst(task.subtasks || [], task.dueDate || task.date);
   const completedSub = subtasks.filter((s) => s.completed || s.status === 'completed').length;
   const isCompleted = task.status === 'completed';
   const progress = task.dynamicProgress;
@@ -154,7 +155,7 @@ export const EmployeeRendementTaskCard: React.FC<EmployeeRendementTaskCardProps>
                 key={sub.id}
                 className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200 hover:border-[#2A7B76]/50 transition shadow-3xs gap-2"
               >
-                <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
+                <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 flex-wrap">
                   <input
                     type="checkbox"
                     checked={sub.completed}
@@ -165,6 +166,14 @@ export const EmployeeRendementTaskCard: React.FC<EmployeeRendementTaskCardProps>
                     {sub.title}
                   </span>
                   {sub.estimatedHours && <span className="text-[10px] text-stone-400 font-mono ml-1">({sub.estimatedHours}h)</span>}
+                  {(sub.tags || []).map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-[9px] px-1.5 py-0.2 rounded bg-teal-50 text-[#2A7B76] border border-teal-200 font-semibold"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
                 </label>
 
                 <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">

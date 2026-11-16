@@ -121,7 +121,12 @@ export function filterTasksForRendementPeriod(
         } else if (isProgressInRange || isDueInRange) {
           if (isProgressInRange) hasActivity = true;
           totalWorkUnits++;
-          if (isDone) completedWorkUnits++;
+          if (isDone) {
+            completedWorkUnits++;
+          } else if (t.isMilestone && typeof t.milestoneProgress === 'number' && Number.isFinite(t.milestoneProgress)) {
+            completedWorkUnits += Math.max(0, Math.min(0.95, t.milestoneProgress / 100));
+            if (t.milestoneProgress > 0) hasActivity = true;
+          }
           relevantTasks.push(t);
         }
       }
@@ -142,6 +147,7 @@ export function aggregateAssignedTaskCounters(assignedTasks: Task[]) {
   let completedSubtasks = 0;
   let milestonesCount = 0;
   let completedMilestones = 0;
+  let blockedMilestones = 0;
   let estimatedHoursTotal = 0;
   let actualHoursTotal = 0;
   let effectiveHoursSpent = 0;
@@ -173,6 +179,8 @@ export function aggregateAssignedTaskCounters(assignedTasks: Task[]) {
       milestonesCount++;
       if (isCompleted || (typeof t.milestoneProgress === 'number' && t.milestoneProgress >= 100)) {
         completedMilestones++;
+      } else if (t.status === 'blocked') {
+        blockedMilestones++;
       }
     }
 
@@ -209,6 +217,7 @@ export function aggregateAssignedTaskCounters(assignedTasks: Task[]) {
     completedSubtasks,
     milestonesCount,
     completedMilestones,
+    blockedMilestones,
     estimatedHoursTotal: round1(estimatedHoursTotal),
     actualHoursTotal: round1(actualHoursTotal),
     effectiveHoursSpent: round1(effectiveHoursSpent),

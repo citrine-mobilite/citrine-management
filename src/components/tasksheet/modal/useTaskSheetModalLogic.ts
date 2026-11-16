@@ -1,5 +1,15 @@
 import { useState, useEffect, useMemo, FormEvent } from 'react';
-import { AttendanceIncident, AppUser, Employee, Presence, Task, TaskProject } from '../../../types';
+import {
+  AttendanceIncident,
+  AppUser,
+  Employee,
+  NotificationLog,
+  Presence,
+  Reminder,
+  StrategicProject,
+  Task,
+  TaskProject,
+} from '../../../types';
 import {
   generateDailyTaskSheet,
   generateMonthlyTaskSheet,
@@ -9,6 +19,7 @@ import {
 import { exportToExcel } from '../../../services/excelExportService';
 import { downloadTaskSheetPdf } from '../../../services/pdfExportService';
 import { haptic } from '../../../services/hapticService';
+import { sortSubtasksNewestFirst } from '../../../utils/subtaskFilterUtils';
 import {
   getTaskSheetNotes,
   addTaskSheetNote,
@@ -18,6 +29,12 @@ import {
   TaskSheetNoteUrgency,
   TASKSHEET_NOTES_UPDATED_EVENT,
 } from '../../../services/taskSheetNotesService';
+import {
+  addQuickSmallMovement,
+  toggleQuickMovementStatus,
+  deleteQuickSmallMovement,
+  TASKSHEET_MOVEMENTS_UPDATED_EVENT,
+} from '../../../services/taskSheetMovementsService';
 import {
   buildTaskSheetHtmlReport,
   buildTaskSheetExcelBase64,
@@ -44,6 +61,9 @@ interface UseTaskSheetModalLogicParams {
   presences: Presence[];
   incidents: AttendanceIncident[];
   projects: TaskProject[];
+  reminders?: Reminder[];
+  strategicProjects?: StrategicProject[];
+  notifications?: NotificationLog[];
   defaultMode?: 'day' | 'month' | 'year';
   defaultDate?: string;
   currentUser?: AppUser | null;
@@ -56,6 +76,9 @@ export function useTaskSheetModalLogic({
   presences,
   incidents,
   projects,
+  reminders = [],
+  strategicProjects = [],
+  notifications = [],
   defaultMode = 'day',
   defaultDate,
   currentUser,
@@ -65,6 +88,7 @@ export function useTaskSheetModalLogic({
   const [selectedDate, setSelectedDate] = useState<string>(defaultDate || todayStr);
   const [selectedMonth, setSelectedMonth] = useState<string>(todayStr.slice(0, 7));
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [movementsTick, setMovementsTick] = useState(0);
 
   const isViewingSelf = Boolean(
     currentUser &&
@@ -78,6 +102,14 @@ export function useTaskSheetModalLogic({
   const [newUnforeseenTime, setNewUnforeseenTime] = useState('14:30');
   const [newUnforeseenSubject, setNewUnforeseenSubject] = useState('');
   const [newUnforeseenLostMin, setNewUnforeseenLostMin] = useState(30);
+
+  const [isAddingMovement, setIsAddingMovement] = useState(false);
+  const [newMovementTitle, setNewMovementTitle] = useState('');
+  const [newMovementTime, setNewMovementTime] = useState('10:30');
+  const [newMovementDuration, setNewMovementDuration] = useState(15);
+  const [newMovementCategory, setNewMovementCategory] = useState('terrain');
+  const [newMovementLocation, setNewMovementLocation] = useState('');
+  const [newMovementNote, setNewMovementNote] = useState('');
 
   const [taskSheetNotes, setTaskSheetNotes] = useState<TaskSheetNote[]>([]);
   const [isAddingNote, setIsAddingNote] = useState(false);
@@ -105,13 +137,32 @@ export function useTaskSheetModalLogic({
     const handleNotesUpdate = () => {
       if (employee?.id) setTaskSheetNotes(getTaskSheetNotes(employee.id, selectedDate));
     };
+    const handleMovementsUpdate = () => {
+      setMovementsTick((t) => t + 1);
+    };
     window.addEventListener(TASKSHEET_NOTES_UPDATED_EVENT, handleNotesUpdate);
-    return () => window.removeEventListener(TASKSHEET_NOTES_UPDATED_EVENT, handleNotesUpdate);
+    window.addEventListener(TASKSHEET_MOVEMENTS_UPDATED_EVENT, handleMovementsUpdate);
+    return () => {
+      window.removeEventListener(TASKSHEET_NOTES_UPDATED_EVENT, handleNotesUpdate);
+      window.removeEventListener(TASKSHEET_MOVEMENTS_UPDATED_EVENT, handleMovementsUpdate);
+    };
   }, [employee?.id, selectedDate]);
 
   const rawDailyData = useMemo(
-    () => generateDailyTaskSheet(employee, selectedDate, allTasks, presences, incidents, projects),
-    [employee, selectedDate, allTasks, presences, incidents, projects]
+    () =>
+      generateDailyTaskSheet(
+        employee,
+        selectedDate,
+        allTasks,
+        presences,
+        incidents,
+        projects,
+        reminders,
+        strategicProjects,
+        notifications
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [employee, selectedDate, allTasks, presences, incidents, projects, reminders, strategicProjects, notifications, movementsTick]
   );
 
   const dailyData = useMemo(() => ({
@@ -123,13 +174,33 @@ export function useTaskSheetModalLogic({
   }), [rawDailyData, customUnforeseenList]);
 
   const monthlyData = useMemo(
-    () => generateMonthlyTaskSheet(employee, selectedMonth, allTasks, presences),
-    [employee, selectedMonth, allTasks, presences]
+    () =>
+      generateMonthlyTaskSheet(
+        employee,
+        selectedMonth,
+        allTasks,
+        presences,
+        reminders,
+        strategicProjects,
+        notifications
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [employee, selectedMonth, allTasks, presences, reminders, strategicProjects, notifications, movementsTick]
   );
 
   const yearlyData = useMemo(
-    () => generateYearlyTaskSheet(employee, selectedYear, allTasks, presences),
-    [employee, selectedYear, allTasks, presences]
+    () =>
+      generateYearlyTaskSheet(
+        employee,
+        selectedYear,
+        allTasks,
+        presences,
+        reminders,
+        strategicProjects,
+        notifications
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [employee, selectedYear, allTasks, presences, reminders, strategicProjects, notifications, movementsTick]
   );
 
   const handleAddTaskSheetNote = (e: FormEvent) => {
@@ -153,6 +224,39 @@ export function useTaskSheetModalLogic({
   const handleRemoveNote = (id: string) => {
     haptic.light();
     deleteTaskSheetNote(id);
+  };
+
+  const handleAddQuickMovement = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newMovementTitle.trim() || !employee?.id) return;
+    haptic.medium();
+    await addQuickSmallMovement({
+      employeeId: String(employee.id),
+      employeeName: employee.name,
+      date: selectedDate,
+      time: newMovementTime,
+      title: newMovementTitle.trim(),
+      note: newMovementNote.trim() || undefined,
+      durationMinutes: Number(newMovementDuration) || 15,
+      location: newMovementLocation.trim() || undefined,
+      movementCategory: newMovementCategory,
+      isResolved: true,
+      authorName: currentUser?.name || employee.name,
+    });
+    setNewMovementTitle('');
+    setNewMovementLocation('');
+    setNewMovementNote('');
+    setIsAddingMovement(false);
+  };
+
+  const handleToggleMovementStatus = async (id: string) => {
+    haptic.light();
+    await toggleQuickMovementStatus(id, reminders);
+  };
+
+  const handleDeleteMovement = async (id: string) => {
+    haptic.light();
+    await deleteQuickSmallMovement(id);
   };
 
   const handleAddCustomUnforeseen = (e: FormEvent) => {
@@ -183,15 +287,22 @@ export function useTaskSheetModalLogic({
       const rows: any[] = [];
       (monthlyData.tasksList || []).forEach((t) => {
         if (t.subtasks && t.subtasks.length > 0) {
-          t.subtasks.forEach((s) => rows.push([t.title, s.title, t.priority || 'Normal', t.date || selectedMonth, s.completed ? 'Terminée ✓' : (s.status === 'in_progress' ? 'En cours' : 'À faire'), `${t.completionPercentage}%`]));
+          sortSubtasksNewestFirst(t.subtasks, t.date).forEach((s) => rows.push([t.title, s.title, t.priority || 'Normal', t.date || selectedMonth, s.completed ? 'Terminée ✓' : (s.status === 'in_progress' ? 'En cours' : 'À faire'), `${t.completionPercentage}%`]));
         } else {
           rows.push([t.title, '(Tâche unitaire)', t.priority || 'Normal', t.date || selectedMonth, t.status === 'completed' ? 'Terminée ✓' : 'En cours', t.status === 'completed' ? '100%' : '50%']);
         }
       });
       exportToExcel(`tasksheet_mensuel_${employee.name}_${selectedMonth}.xls`, `TaskSheet Mensuel - ${monthlyData.monthName}`, headers, rows);
     } else {
-      const headers = ['Mois', 'Jours Travaillés', 'Heures Cumulées', 'Sous-Tâches Achevées', 'Taux de Rendement'];
-      const rows = yearlyData.monthlyBreakdown.map((m) => [m.monthName, m.daysWorked, `${m.hoursWorked}h`, m.tasksCompleted, `${m.rendementRate}%`]);
+      const headers = ['Mois', 'Jours Travaillés', 'Heures Cumulées', 'Sous-Tâches Achevées', 'Points Importants (Hors tâches)', 'Taux de Rendement'];
+      const rows = yearlyData.monthlyBreakdown.map((m) => [
+        m.monthName,
+        m.daysWorked,
+        `${m.hoursWorked}h`,
+        m.tasksCompleted,
+        m.importantPointsCount ?? m.remindersCount ?? 0,
+        `${m.rendementRate}%`,
+      ]);
       exportToExcel(`tasksheet_annuel_${employee.name}_${selectedYear}.xls`, `Bilan Annuel TaskSheet ${selectedYear} - ${employee.name}`, headers, rows);
     }
   };
@@ -264,6 +375,7 @@ export function useTaskSheetModalLogic({
             actualHours: 0,
             isBlocked: t.status === 'Bloqué',
           })),
+          importantPoints: dailyData.importantPoints || [],
           blockers: dailyData.unforeseenEvents.map((u) => ({
             sourceTask: u.sourceTask || 'Journée',
             reason: u.subject,
@@ -347,9 +459,14 @@ export function useTaskSheetModalLogic({
     mode, setMode, selectedDate, setSelectedDate, selectedMonth, setSelectedMonth, selectedYear, setSelectedYear,
     isViewingSelf, isAddingUnforeseen, setIsAddingUnforeseen, newUnforeseenTime, setNewUnforeseenTime,
     newUnforeseenSubject, setNewUnforeseenSubject, newUnforeseenLostMin, setNewUnforeseenLostMin,
+    isAddingMovement, setIsAddingMovement, newMovementTitle, setNewMovementTitle,
+    newMovementTime, setNewMovementTime, newMovementDuration, setNewMovementDuration,
+    newMovementCategory, setNewMovementCategory, newMovementLocation, setNewMovementLocation,
+    newMovementNote, setNewMovementNote,
     taskSheetNotes, isAddingNote, setIsAddingNote, newNoteContent, setNewNoteContent,
     newNoteCategory, setNewNoteCategory, newNoteUrgency, setNewNoteUrgency, newNoteTarget, setNewNoteTarget,
     dailyData, monthlyData, yearlyData, handleAddTaskSheetNote, handleRemoveNote,
+    handleAddQuickMovement, handleToggleMovementStatus, handleDeleteMovement,
     handleAddCustomUnforeseen, handleRemoveCustomUnforeseen, handleExportExcel, handleExportPdf,
     handleSendEmail, isSendingEmail, emailFeedback, setEmailFeedback,
   };

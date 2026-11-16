@@ -19,8 +19,8 @@ interface SubtaskDetailCoreFieldsProps {
   setDraftStartDate: (v: string) => void;
   draftDueDate: string;
   setDraftDueDate: (v: string) => void;
-  draftActualHours: number;
-  setDraftActualHours: (v: number) => void;
+  draftTime: string;
+  setDraftTime: (v: string) => void;
   draftAssignedTo: string;
   setDraftAssignedTo: (v: string) => void;
 }
@@ -42,8 +42,8 @@ export const SubtaskDetailCoreFields: React.FC<SubtaskDetailCoreFieldsProps> = (
   setDraftStartDate,
   draftDueDate,
   setDraftDueDate,
-  draftActualHours,
-  setDraftActualHours,
+  draftTime,
+  setDraftTime,
   draftAssignedTo,
   setDraftAssignedTo,
 }) => {
@@ -67,7 +67,7 @@ export const SubtaskDetailCoreFields: React.FC<SubtaskDetailCoreFieldsProps> = (
       </div>
 
       <div>
-        <label className="block text-stone-700 font-bold mb-1">Description & Spécifications</label>
+        <label className="block text-stone-700 font-bold mb-1">Description &amp; Spécifications</label>
         <textarea
           rows={3}
           value={draftDescription}
@@ -77,7 +77,7 @@ export const SubtaskDetailCoreFields: React.FC<SubtaskDetailCoreFieldsProps> = (
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80">
         <div>
           <label className="block text-stone-600 font-bold mb-1 text-[11px]">Statut</label>
           <select
@@ -89,11 +89,12 @@ export const SubtaskDetailCoreFields: React.FC<SubtaskDetailCoreFieldsProps> = (
             }}
             className="w-full px-2.5 py-2 rounded-lg border border-stone-200 bg-white font-bold text-stone-800 text-[11px] cursor-pointer"
           >
+            <option value="idea">💡 Idée</option>
             <option value="todo">📌 À faire</option>
             <option value="in_progress">⚡ En cours</option>
+            <option value="pending_validation">⏳ En validation</option>
             <option value="blocked">🚨 Bloquée</option>
             <option value="completed">✅ Terminée</option>
-            <option value="pending_validation">⏳ En attente de validation</option>
           </select>
         </div>
 
@@ -112,9 +113,33 @@ export const SubtaskDetailCoreFields: React.FC<SubtaskDetailCoreFieldsProps> = (
             <option value="urgent">⚡ Urgente</option>
           </select>
         </div>
+
+        <div>
+          <label className="block text-stone-600 font-bold mb-1 text-[11px] flex items-center gap-1">
+            <User className="h-3 w-3 text-[#2A7B76]" /> Assigné à
+          </label>
+          {canReassign ? (
+            <select
+              value={draftAssignedTo}
+              onChange={(e) => setDraftAssignedTo(e.target.value)}
+              className="w-full px-2.5 py-2 rounded-lg border border-stone-200 bg-white font-medium text-stone-800 text-[11px]"
+            >
+              <option value="Équipe">Toute l&apos;équipe</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.name}>
+                  {emp.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="w-full px-2.5 py-2 rounded-lg border border-stone-200 bg-stone-100 text-stone-700 font-medium text-[11px] flex items-center justify-between">
+              <span className="font-bold text-stone-800 truncate">{subtask.assignedTo || 'Équipe'}</span>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 bg-stone-50 p-3.5 rounded-2xl border border-stone-200/85">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50 p-3.5 rounded-2xl border border-stone-200/85">
         <div>
           <label className="block text-stone-600 font-bold mb-1 text-[11px] flex items-center gap-1">
             <Calendar className="h-3 w-3 text-[#2A7B76]" /> Date de début
@@ -129,7 +154,7 @@ export const SubtaskDetailCoreFields: React.FC<SubtaskDetailCoreFieldsProps> = (
 
         <div>
           <label className="block text-stone-600 font-bold mb-1 text-[11px] flex items-center gap-1">
-            <Calendar className="h-3 w-3 text-rose-600" /> Date de fin (Échéance)
+            <Calendar className="h-3 w-3 text-rose-600" /> Échéance
           </label>
           <input
             type="date"
@@ -138,48 +163,17 @@ export const SubtaskDetailCoreFields: React.FC<SubtaskDetailCoreFieldsProps> = (
             className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white font-medium text-stone-800"
           />
         </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-3 bg-stone-50 p-3.5 rounded-2xl border border-stone-200/85">
         <div>
           <label className="block text-stone-600 font-bold mb-1 text-[11px] flex items-center gap-1">
-            <Clock className="h-3 w-3 text-[#2A7B76]" /> Temps passé (Heures)
+            <Clock className="h-3 w-3 text-[#2A7B76]" /> Heure limite
           </label>
           <input
-            type="number"
-            min={0}
-            max={200}
-            step={0.5}
-            value={draftActualHours}
-            onChange={(e) => setDraftActualHours(Number(e.target.value))}
-            placeholder="0h"
-            className="w-full px-3 py-1.5 rounded-lg border border-stone-200 bg-white font-mono font-bold text-stone-800"
+            type="time"
+            value={draftTime}
+            onChange={(e) => setDraftTime(e.target.value)}
+            className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white font-mono font-medium text-stone-800"
           />
-        </div>
-
-        <div>
-          <label className="block text-stone-600 font-bold mb-1 text-[11px] flex items-center gap-1">
-            <User className="h-3 w-3 text-[#2A7B76]" /> Assigné à
-          </label>
-          {canReassign ? (
-            <select
-              value={draftAssignedTo}
-              onChange={(e) => setDraftAssignedTo(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white font-medium text-stone-800 text-[11px]"
-            >
-              <option value="Équipe">Toute l'équipe</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.name}>
-                  {emp.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 bg-stone-100 text-stone-700 font-medium text-[11px] flex items-center justify-between">
-              <span className="font-bold text-stone-800">{subtask.assignedTo || 'Équipe'}</span>
-              <span className="text-[10px] text-stone-400 italic">Fixe (non réassignable)</span>
-            </div>
-          )}
         </div>
       </div>
     </>

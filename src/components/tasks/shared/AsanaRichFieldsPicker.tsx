@@ -96,12 +96,30 @@ export const AsanaRichFieldsPicker: React.FC<AsanaRichFieldsPickerProps> = ({
   }, [depCandidates, dependsOnIds, depSearch]);
 
   const handleAddTag = (raw: string) => {
-    const clean = raw.trim();
-    if (!clean) return;
-    if (!tags.includes(clean)) {
-      setTags([...tags, clean]);
+    const tokens = raw
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (tokens.length === 0) {
+      setNewTagInput('');
+      return;
     }
+    const next = [...tags];
+    for (const token of tokens) {
+      if (!next.some((existing) => existing.toLowerCase() === token.toLowerCase())) {
+        next.push(token);
+      }
+    }
+    setTags(next);
     setNewTagInput('');
+  };
+
+  const handleToggleTag = (tag: string) => {
+    if (tags.some((t) => t.toLowerCase() === tag.toLowerCase())) {
+      setTags(tags.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
+    } else {
+      setTags([...tags, tag]);
+    }
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
@@ -218,10 +236,13 @@ export const AsanaRichFieldsPicker: React.FC<AsanaRichFieldsPickerProps> = ({
 
       {/* Étiquettes (Multi-tags Asana) */}
       <div className="p-3.5 rounded-2xl bg-stone-50/80 border border-stone-200 space-y-2.5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <span className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
             <Tag className="h-3.5 w-3.5 text-[#2A7B76]" />
             Étiquettes ({tags.length})
+          </span>
+          <span className="text-[10px] text-stone-500">
+            Plusieurs étiquettes possibles (Entrée, virgule ou clics)
           </span>
         </div>
 
@@ -230,13 +251,14 @@ export const AsanaRichFieldsPicker: React.FC<AsanaRichFieldsPickerProps> = ({
             {tags.map((tag) => (
               <span
                 key={tag}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-stone-300 text-xs font-semibold text-stone-800"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200 text-xs font-semibold text-[#2A7B76]"
               >
-                <span>{tag}</span>
+                <span>#{tag}</span>
                 <button
                   type="button"
                   onClick={() => handleRemoveTag(tag)}
-                  className="text-stone-400 hover:text-rose-600 cursor-pointer"
+                  className="text-teal-600 hover:text-rose-600 cursor-pointer"
+                  title={`Retirer l'étiquette ${tag}`}
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -251,18 +273,23 @@ export const AsanaRichFieldsPicker: React.FC<AsanaRichFieldsPickerProps> = ({
             value={newTagInput}
             onChange={(e) => setNewTagInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' || e.key === ',') {
                 e.preventDefault();
                 handleAddTag(newTagInput);
               }
             }}
-            placeholder="Ajouter une étiquette personnalisée (Entrée)..."
+            onBlur={() => {
+              if (newTagInput.trim()) {
+                handleAddTag(newTagInput);
+              }
+            }}
+            placeholder="Ajouter une ou plusieurs étiquettes (ex: Client, Urgent)..."
             className="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-xs outline-none focus:border-[#2A7B76]"
           />
           <button
             type="button"
             onClick={() => handleAddTag(newTagInput)}
-            className="px-3 py-1.5 rounded-xl bg-white border border-stone-200 hover:border-[#2A7B76] text-[#2A7B76] text-xs font-bold cursor-pointer flex items-center gap-1"
+            className="px-3 py-1.5 rounded-xl bg-white border border-stone-200 hover:border-[#2A7B76] text-[#2A7B76] text-xs font-bold cursor-pointer flex items-center gap-1 shrink-0"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Ajouter</span>
@@ -270,16 +297,23 @@ export const AsanaRichFieldsPicker: React.FC<AsanaRichFieldsPickerProps> = ({
         </div>
 
         <div className="flex flex-wrap gap-1.5 pt-0.5">
-          {SUGGESTED_TAGS.filter((t) => !tags.includes(t)).map((sug) => (
-            <button
-              key={sug}
-              type="button"
-              onClick={() => handleAddTag(sug)}
-              className="px-2 py-0.5 rounded-md border border-dashed border-stone-300 bg-white/70 hover:border-[#2A7B76] hover:text-[#2A7B76] text-[11px] font-medium text-stone-600 cursor-pointer transition"
-            >
-              + {sug}
-            </button>
-          ))}
+          {SUGGESTED_TAGS.map((sug) => {
+            const isSelected = tags.some((t) => t.toLowerCase() === sug.toLowerCase());
+            return (
+              <button
+                key={sug}
+                type="button"
+                onClick={() => handleToggleTag(sug)}
+                className={`px-2 py-0.5 rounded-md border text-[11px] font-medium cursor-pointer transition ${
+                  isSelected
+                    ? 'border-[#2A7B76] bg-[#2A7B76] text-white'
+                    : 'border-dashed border-stone-300 bg-white/70 hover:border-[#2A7B76] hover:text-[#2A7B76] text-stone-600'
+                }`}
+              >
+                {isSelected ? `✓ ${sug}` : `+ ${sug}`}
+              </button>
+            );
+          })}
         </div>
       </div>
 

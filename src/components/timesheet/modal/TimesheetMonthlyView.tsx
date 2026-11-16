@@ -1,5 +1,6 @@
 import React from 'react';
 import { MonthlyTimesheetData } from '../../../services/timesheetService';
+import { sortSubtasksNewestFirst } from '../../../utils/subtaskFilterUtils';
 
 interface TimesheetMonthlyViewProps {
   monthlyData: MonthlyTimesheetData;
@@ -99,18 +100,26 @@ export const TimesheetMonthlyView: React.FC<TimesheetMonthlyViewProps> = ({ mont
 
                 {t.subtasks && t.subtasks.length > 0 && (
                   <div className="pl-3 sm:pl-5 space-y-1.5 border-l-2 border-[#2A7B76]/30">
-                    {t.subtasks.map((s) => (
+                    {sortSubtasksNewestFirst(t.subtasks, t.date).map((s) => (
                       <div
                         key={s.id}
                         className="flex items-center justify-between gap-2 text-xs py-1 px-2.5 rounded-lg bg-stone-50 border border-stone-200/60"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
                           <span className={s.completed ? 'text-emerald-600 font-bold' : 'text-stone-400'}>
                             {s.completed ? '✓' : '○'}
                           </span>
                           <span className={`truncate ${s.completed ? 'line-through text-stone-400' : 'text-stone-800 font-medium'}`}>
                             {s.title}
                           </span>
+                          {(s.tags || []).map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-[9px] px-1.5 py-0.2 rounded bg-teal-50 text-[#2A7B76] border border-teal-200 font-semibold"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
                         </div>
                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
                           s.completed

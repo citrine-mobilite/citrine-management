@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Task, Employee, TaskProject, AppUser } from '../../types';
+import { Task, Employee, TaskProject, AppUser, NotificationLog, Reminder, StrategicProject } from '../../types';
 import { isSelfOnlyUser, findMatchingEmployee } from '../../utils/roleUtils';
 import { computeTaskAnalyticsMetrics } from './analytics/rendementAnalyticsUtils';
 import { AnalyticsBannerAndKpis } from './analytics/AnalyticsBannerAndKpis';
@@ -13,6 +13,9 @@ interface TaskRendementAnalyticsViewProps {
   tasks: Task[];
   employees: Employee[];
   projects?: TaskProject[];
+  reminders?: Reminder[];
+  strategicProjects?: StrategicProject[];
+  notifications?: NotificationLog[];
   currentUser?: AppUser | null;
   currentRole?: string;
 }
@@ -21,6 +24,9 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
   tasks,
   employees,
   projects = [],
+  reminders = [],
+  strategicProjects = [],
+  notifications = [],
   currentUser,
   currentRole,
 }) => {
@@ -45,8 +51,8 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
   }, [tasks, selectedProjectId]);
 
   const metrics = useMemo(
-    () => computeTaskAnalyticsMetrics(filteredTasks, effectiveEmployees),
-    [filteredTasks, effectiveEmployees]
+    () => computeTaskAnalyticsMetrics(filteredTasks, effectiveEmployees, reminders, strategicProjects, notifications),
+    [filteredTasks, effectiveEmployees, reminders, strategicProjects, notifications]
   );
 
   const displayedWorkload = useMemo(() => {
@@ -66,7 +72,7 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
         overloadedCount={overloadedCount}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        milestonesCount={metrics.milestones.length}
+        milestonesCount={metrics.totalMilestonesCount}
         selectedProjectId={selectedProjectId}
         setSelectedProjectId={setSelectedProjectId}
         projects={projects}
@@ -95,7 +101,9 @@ export const TaskRendementAnalyticsView: React.FC<TaskRendementAnalyticsViewProp
       {activeTab === 'milestones' && (
         <AnalyticsMilestonesTab
           milestones={metrics.milestones}
+          strategicMilestones={metrics.strategicMilestones}
           completedMilestones={metrics.completedMilestones}
+          totalMilestonesCount={metrics.totalMilestonesCount}
         />
       )}
 

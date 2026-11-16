@@ -32,6 +32,12 @@ interface AdminDashboardOverviewProps {
   onUpdateStrategicProjects?: (projects: StrategicProject[]) => void;
   moduleConfig?: CompanyModuleConfig;
   showToast?: (msg: string, type?: 'success' | 'error') => void;
+  todayTasksCount?: number;
+  todayProjectsCount?: number;
+  pendingDisciplineCount?: number;
+  pendingLeavesCount?: number;
+  unreadNotificationsCount?: number;
+  pendingPresencesRequestsCount?: number;
 }
 
 export default function AdminDashboardOverview({
@@ -47,6 +53,12 @@ export default function AdminDashboardOverview({
   onUpdateStrategicProjects,
   moduleConfig,
   showToast,
+  todayTasksCount = 0,
+  todayProjectsCount = 0,
+  pendingDisciplineCount = 0,
+  pendingLeavesCount = 0,
+  unreadNotificationsCount = 0,
+  pendingPresencesRequestsCount = 0,
 }: AdminDashboardOverviewProps) {
   const logic = useAdminDashboardLogic({
     employees,
@@ -101,23 +113,17 @@ export default function AdminDashboardOverview({
         </div>
       </div>
 
-      {moduleConfig?.enableReminders !== false && (
-        <HomeExpirationAlertsBanner
-          reminders={reminders}
-          employees={employees}
-          onRenewOrResolve={onUpdateReminders ? logic.handleRenewOrResolveFromHome : undefined}
-          onOpenRemindersModule={() => onSelectTab('reminders')}
-        />
-      )}
-
       <AdminDashboardKpiGrid
         presentCount={logic.presentCount}
         employeesCount={employees.length}
         attendanceRate={logic.attendanceRate}
         lateCount={logic.lateCount}
-        pendingTasksCount={logic.pendingTasks.length}
+        todayTasksCount={todayTasksCount}
+        todayProjectsCount={todayProjectsCount}
         activeRemindersCount={logic.activeRemindersCount}
-        totalRemindersCount={logic.totalDeadlineRemindersCount}
+        pendingDisciplineCount={pendingDisciplineCount}
+        pendingLeavesCount={pendingLeavesCount}
+        unreadNotificationsCount={unreadNotificationsCount}
         onSelectTab={onSelectTab}
       />
 

@@ -1,4 +1,4 @@
-import { Task, NotificationLog, Employee, AppUser } from '../../../types';
+import { Task, NotificationLog, Employee, AppUser, Reminder } from '../../../types';
 import { clientMailService } from '../../../services/clientMailService';
 import { logSystemAudit } from '../../../services/adminAuditService';
 import {
@@ -10,16 +10,27 @@ import {
   TaskSheetManagerPoint,
 } from '../../../services/taskSheetReportService';
 import { getTaskSheetNotes } from '../../../services/taskSheetNotesService';
+import { buildDailyImportantPoints } from '../../../services/taskSheet/importantPointsUtils';
 import { isSubtaskInLast3Days, sortSubtasksNewestFirst } from '../../../utils/subtaskFilterUtils';
 
 export async function executeSendManualTaskSheet(params: {
   tasks: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
   currentUser?: AppUser | null;
   currentEmployee?: Employee | null;
   onAddNotification: (log: NotificationLog) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }): Promise<void> {
-  const { tasks, currentUser, currentEmployee, onAddNotification, showToast } = params;
+  const {
+    tasks,
+    reminders = [],
+    notifications = [],
+    currentUser,
+    currentEmployee,
+    onAddNotification,
+    showToast,
+  } = params;
 
   try {
     if (showToast) showToast("Génération et envoi de votre TaskSheet...", 'success');
@@ -157,8 +168,28 @@ export async function executeSendManualTaskSheet(params: {
       // Notes locales facultatives
     }
 
-    const totalEstimated = items.reduce((sum, i) => sum + i.estimatedHours, 0);
-    const totalActual = items.reduce((sum, i) => sum + i.actualHours, 0);
+    const empRef: Employee = currentEmployee || {
+      id: String(myId),
+      name: myName,
+      email: myEmail,
+      department,
+      roleType: 'employé',
+      position: 'Collaborateur',
+      phone: '',
+      status: 'en_poste',
+      avatarUrl: currentUser?.avatarUrl || '',
+    };
+
+    const importantPoints = buildDailyImportantPoints({
+      employee: empRef,
+      dateIso: doualaTime.dayIso,
+      reminders,
+      notifications,
+    });
+
+    const pointsEstimatedHours = importantPoints.reduce((sum, pt) => sum + (pt.durationMinutes || 0) / 60, 0);
+    const totalEstimated = Math.round((items.reduce((sum, i) => sum + i.estimatedHours, 0) + pointsEstimatedHours) * 10) / 10;
+    const totalActual = Math.round(items.reduce((sum, i) => sum + i.actualHours, 0) * 10) / 10;
 
     const topPriorities =
       items.length === 0
@@ -183,6 +214,7 @@ export async function executeSendManualTaskSheet(params: {
       items,
       blockers,
       managerPoints,
+      importantPoints,
       totalEstimatedHours: totalEstimated,
       totalActualHours: totalActual,
       topPriorities,

@@ -236,6 +236,18 @@ export function buildMonthlyTaskSheetHtmlReport(data: MonthlyTaskSheetData): str
           </tr>
         </table>
 
+        ${data.importantPointsSummary ? `
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#fffbeb" style="width: 100%; background-color: #fffbeb; border: 1px solid #fcd34d; margin-bottom: 16px;">
+          <tr>
+            <td style="padding: 10px 14px; font-size: 11px; color: #78350f;">
+              <strong style="text-transform: uppercase; font-size: 10px; letter-spacing: 0.4px; color: #92400e;">Points Importants (Hors tâches) :</strong>
+              <strong style="font-size: 12.5px; color: #78350f; margin-left: 6px;">${data.importantPointsSummary.totalPoints} point(s)</strong>
+              <span style="margin-left: 8px; color: #92400e;">(${data.importantPointsSummary.alertsCount} alerte(s) · ${data.importantPointsSummary.remindersCount} rappel(s) · ${data.importantPointsSummary.movementsCount} petit(s) mouvement(s) · ${data.importantPointsSummary.totalHours}h)</span>
+            </td>
+          </tr>
+        </table>
+        ` : ''}
+
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; border: 1px solid #cbd5e1; margin-bottom: 16px;">
           <tr>
             <td bgcolor="#164e4b" style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
@@ -321,6 +333,42 @@ export function buildMonthlyTaskSheetHtmlReport(data: MonthlyTaskSheetData): str
           ${tasksHtml}
         </table>
 
+        ${data.importantPointsSummary && data.importantPointsSummary.recentItems.length > 0 ? `
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; border: 1px solid #fcd34d; margin-bottom: 12px;">
+          <tr>
+            <td bgcolor="#92400e" style="background-color: #92400e; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
+              POINTS IMPORTANTS DU MOIS — Alertes, Rappels &amp; Petits mouvements (${data.importantPointsSummary.totalPoints})
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; font-size: 11px;">
+                <thead>
+                  <tr bgcolor="#b45309" style="background-color: #b45309; color: #ffffff;">
+                    <th align="left" style="padding: 6px 8px;">Date</th>
+                    <th align="left" style="padding: 6px 8px;">Catégorie</th>
+                    <th align="left" style="padding: 6px 8px;">Sujet</th>
+                    <th align="right" style="padding: 6px 8px;">Durée</th>
+                    <th align="center" style="padding: 6px 8px;">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${data.importantPointsSummary.recentItems.map((pt, idx) => `
+                    <tr bgcolor="${idx % 2 === 0 ? '#ffffff' : '#fffbeb'}">
+                      <td style="padding: 6px 8px; font-family: Consolas, monospace; border-bottom: 1px solid #fde68a;">${esc(pt.date)} ${esc(pt.time)}</td>
+                      <td style="padding: 6px 8px; font-weight: 700; color: #92400e; border-bottom: 1px solid #fde68a;">${esc(pt.categoryLabel)}</td>
+                      <td style="padding: 6px 8px; color: #1c1917; border-bottom: 1px solid #fde68a;">${esc(pt.title)}</td>
+                      <td align="right" style="padding: 6px 8px; font-family: Consolas, monospace; border-bottom: 1px solid #fde68a;">${pt.durationMinutes}m</td>
+                      <td align="center" style="padding: 6px 8px; font-weight: 700; border-bottom: 1px solid #fde68a;">${esc(pt.statusLabel)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </table>
+        ` : ''}
+
         ${buildOfficialEmailCompanyFooterHtml(
           'Le classeur officiel Microsoft Excel (.xlsx) complet de la synthèse mensuelle est joint à ce message.'
         )}
@@ -379,6 +427,18 @@ export function buildYearlyTaskSheetHtmlReport(data: YearlyTaskSheetData): strin
           </tr>
         </table>
 
+        ${data.importantPointsSummary ? `
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#fffbeb" style="width: 100%; background-color: #fffbeb; border: 1px solid #fcd34d; margin-bottom: 16px;">
+          <tr>
+            <td style="padding: 10px 14px; font-size: 11px; color: #78350f;">
+              <strong style="text-transform: uppercase; font-size: 10px; letter-spacing: 0.4px; color: #92400e;">Points Importants Annuels (Hors tâches) :</strong>
+              <strong style="font-size: 12.5px; color: #78350f; margin-left: 6px;">${data.importantPointsSummary.totalPoints} point(s)</strong>
+              <span style="margin-left: 8px; color: #92400e;">(${data.importantPointsSummary.alertsCount} alerte(s) · ${data.importantPointsSummary.remindersCount} rappel(s) · ${data.importantPointsSummary.movementsCount} petit(s) mouvement(s) · ${data.importantPointsSummary.totalHours}h)</span>
+            </td>
+          </tr>
+        </table>
+        ` : ''}
+
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; border: 1px solid #cbd5e1; margin-bottom: 16px;">
           <tr>
             <td bgcolor="#164e4b" style="background-color: #164e4b; color: #ffffff; padding: 8px 12px; font-weight: 800; font-size: 12px;">
@@ -394,6 +454,7 @@ export function buildYearlyTaskSheetHtmlReport(data: YearlyTaskSheetData): strin
                     <th align="center" style="padding: 7px 8px;">Jours Travaillés</th>
                     <th align="right" style="padding: 7px 8px;">Heures Cumulées</th>
                     <th align="center" style="padding: 7px 8px;">Sous-Tâches Réalisées</th>
+                    <th align="center" style="padding: 7px 8px;">Pt. Importants</th>
                     <th align="right" style="padding: 7px 10px;">Rendement</th>
                   </tr>
                 </thead>
@@ -406,6 +467,7 @@ export function buildYearlyTaskSheetHtmlReport(data: YearlyTaskSheetData): strin
                         <td align="center" style="padding: 7px 8px; font-family: Consolas, monospace; border-bottom: 1px solid #e2e8f0;">${m.daysWorked}j/${m.workingDays || 22}j${m.weekendDaysWorked > 0 ? ` (+${m.weekendDaysWorked} WE)` : ''}</td>
                         <td align="right" style="padding: 7px 8px; font-family: Consolas, monospace; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${m.hoursWorked}h</td>
                         <td align="center" style="padding: 7px 8px; font-family: Consolas, monospace; font-weight: 700; color: #059669; border-bottom: 1px solid #e2e8f0;">${m.tasksCompleted}${m.subtasksTotal ? ` / ${m.subtasksTotal}` : ''}</td>
+                        <td align="center" style="padding: 7px 8px; font-family: Consolas, monospace; font-weight: 700; color: #b45309; border-bottom: 1px solid #e2e8f0;">${m.importantPointsCount ?? 0}</td>
                         <td align="right" style="padding: 7px 10px; font-family: Consolas, monospace; font-weight: 800; color: #164e4b; border-bottom: 1px solid #e2e8f0;">${m.rendementRate}%</td>
                       </tr>
                     `

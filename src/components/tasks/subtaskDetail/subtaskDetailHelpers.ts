@@ -1,4 +1,4 @@
-import { Comment, Incident, Subtask, TaskPriority, TaskStatus } from '../../../types';
+import { Comment, Incident, Subtask, TaskPriority, TaskRecurrence, TaskStatus } from '../../../types';
 
 export interface SubtaskDraftParams {
   subtask: Subtask;
@@ -10,7 +10,14 @@ export interface SubtaskDraftParams {
   draftAssignedTo: string;
   draftStartDate: string;
   draftDueDate: string;
+  draftTime: string;
+  draftEstimatedHours: number;
   draftActualHours: number;
+  draftTags: string[];
+  draftDependsOnIds: string[];
+  draftRecurrence: TaskRecurrence;
+  draftFollowerIds: string[];
+  draftCriteria: string[];
   incidents: Incident[];
   subtasks: Subtask[];
   comments: Comment[];
@@ -35,7 +42,14 @@ export function buildUpdatedSubtaskPayload(
     draftAssignedTo,
     draftStartDate,
     draftDueDate,
+    draftTime,
+    draftEstimatedHours,
     draftActualHours,
+    draftTags,
+    draftDependsOnIds,
+    draftRecurrence,
+    draftFollowerIds,
+    draftCriteria,
     subtasks,
     comments,
   } = params;
@@ -52,7 +66,14 @@ export function buildUpdatedSubtaskPayload(
     startDate: draftStartDate,
     dueDate: draftDueDate,
     endDate: draftDueDate,
+    time: draftTime || '09:00',
+    estimatedHours: Number(draftEstimatedHours) || 0,
     actualHours: Number(draftActualHours) || 0,
+    tags: draftTags.length > 0 ? draftTags : undefined,
+    dependsOnIds: draftDependsOnIds.length > 0 ? draftDependsOnIds : undefined,
+    recurrence: draftRecurrence,
+    followerIds: draftFollowerIds.length > 0 ? draftFollowerIds : undefined,
+    acceptanceCriteria: draftCriteria.length > 0 ? draftCriteria : undefined,
     incidents: overrides.incidents,
     isBlocked: overrides.isBlocked,
     blockerReason: overrides.blockerReason,
@@ -100,6 +121,8 @@ export function createNestedSubtaskItem(title: string, dueDate: string): Subtask
     status: 'todo',
     startDate: nowIso.split('T')[0],
     dueDate,
+    endDate: dueDate,
+    time: '09:00',
     createdAt: nowIso,
     subtasks: [],
   };

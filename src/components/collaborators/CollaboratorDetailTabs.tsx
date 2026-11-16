@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
-import { Employee, Presence, SalaryPayment, Task } from '../../types';
+import { Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../../types';
 import { downloadPayslipPdf } from '../../services/pdfExportService';
 import { CollaboratorPresenceMap } from '../CollaboratorPresenceMap';
 import { UserStatisticsSummaryPanel } from '../presence/statistics/UserStatisticsSummaryPanel';
@@ -17,6 +17,9 @@ interface CollaboratorDetailTabsProps {
   empPresences: Presence[];
   empTasks: Task[];
   allTasks?: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
+  strategicProjects?: StrategicProject[];
   rhReportMonth: string;
   setRhReportMonth: (m: string) => void;
   isGeneratingRhReport: boolean;
@@ -30,6 +33,9 @@ export const CollaboratorDetailTabs: React.FC<CollaboratorDetailTabsProps> = ({
   empPresences,
   empTasks,
   allTasks = [],
+  reminders = [],
+  notifications = [],
+  strategicProjects = [],
   rhReportMonth,
   setRhReportMonth,
   isGeneratingRhReport,
@@ -55,6 +61,9 @@ export const CollaboratorDetailTabs: React.FC<CollaboratorDetailTabsProps> = ({
           employee={emp}
           presences={empPresences}
           tasks={tasksSource}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           salaryPayments={empPayslips}
           onOpenTaskSheet={(targetEmp, mode) => setTaskSheetState({ employee: targetEmp, mode })}
           onOpenFullRendement={(targetEmp) => setRendementModalEmployee(targetEmp)}
@@ -195,6 +204,9 @@ export const CollaboratorDetailTabs: React.FC<CollaboratorDetailTabsProps> = ({
           employee={taskSheetState.employee}
           allTasks={tasksSource}
           presences={empPresences}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           defaultMode={taskSheetState.mode}
         />
       )}

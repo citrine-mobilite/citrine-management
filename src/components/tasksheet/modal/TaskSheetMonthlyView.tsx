@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, ListFilter } from 'lucide-react';
+import { CalendarDays, ListFilter, Flag, Bell } from 'lucide-react';
 import { MonthlyTaskSheetData } from '../../../services/taskSheetService';
+import { sortSubtasksNewestFirst } from '../../../utils/subtaskFilterUtils';
 
 interface TaskSheetMonthlyViewProps {
   monthlyData: MonthlyTaskSheetData;
@@ -57,9 +58,14 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
     const absentCount =
       monthlyData.absentDays ?? days.filter((d) => d.status === 'Absent').length;
     const activeDays = days.filter(
-      (d) => d.status !== '-' || d.hoursWorked > 0 || d.tasksDoneCount > 0
+      (d) =>
+        d.status !== '-' ||
+        d.hoursWorked > 0 ||
+        d.tasksDoneCount > 0 ||
+        (d.importantPointsCount ?? 0) > 0
     );
     const totalTasksDoneInDays = days.reduce((acc, d) => acc + (d.tasksDoneCount || 0), 0);
+    const totalPointsInDays = days.reduce((acc, d) => acc + (d.importantPointsCount || 0), 0);
 
     let leadingEmptySlots = 0;
     if (days.length > 0) {
@@ -78,10 +84,23 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
       absentCount,
       activeDays,
       totalTasksDoneInDays,
+      totalPointsInDays,
       leadingEmptySlots,
       completedParentCount,
     };
   }, [monthlyData]);
+
+  const ptsSummary = monthlyData.importantPointsSummary || {
+    totalPoints: monthlyData.remindersSummary?.totalOccurrences ?? 0,
+    alertsCount: 0,
+    remindersCount: monthlyData.remindersSummary?.totalOccurrences ?? 0,
+    movementsCount: 0,
+    resolvedCount: monthlyData.remindersSummary?.resolvedCount ?? 0,
+    overdueCount: monthlyData.remindersSummary?.overdueCount ?? 0,
+    totalMinutes: Math.round((monthlyData.remindersSummary?.totalHours ?? 0) * 60),
+    totalHours: monthlyData.remindersSummary?.totalHours ?? 0,
+    recentItems: [],
+  };
 
   const subtasksDone = monthlyData.completedSubtasksCount || monthlyData.totalTasksCompleted;
   const subtasksTotal = monthlyData.totalSubtasksCount || monthlyData.totalTasksAssigned;
@@ -124,15 +143,87 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
         </div>
 
         <div className="p-3.5">
-          <span className="text-[11px] font-semibold text-stone-500 block">Missions Achevé(es)</span>
+          <span className="text-[11px] font-semibold text-stone-500 block">Jalons &amp; Points Importants</span>
           <strong className="block text-xl font-bold font-serif text-amber-700 mt-0.5 tabular-nums">
-            {summary.completedParentCount} / {(monthlyData.tasksList || []).length}
+            {monthlyData.milestonesSummary?.completed ?? summary.completedParentCount}/
+            {monthlyData.milestonesSummary?.total ?? (monthlyData.tasksList || []).filter((t) => t.isMilestone).length} jalons
           </strong>
           <span className="text-[11px] text-stone-500 tabular-nums">
-            {(monthlyData.tasksList || []).filter((t) => t.isMilestone).length} jalon(s)
+            {ptsSummary.totalPoints} pt(s) imp. ({ptsSummary.totalHours}h hors tâches)
           </span>
         </div>
       </div>
+
+      {((monthlyData.milestonesSummary && monthlyData.milestonesSummary.total > 0) ||
+        ptsSummary.totalPoints > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-stone-200 bg-white p-3.5 space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold text-[#164e4b]">
+              <span className="flex items-center gap-1.5">
+                <Flag className="w-3.5 h-3.5 text-amber-600" />
+                <span>Jalons Projets &amp; Missions Clés</span>
+              </span>
+              <span className="font-mono">
+                {monthlyData.milestonesSummary?.completed ?? 0}/{monthlyData.milestonesSummary?.total ?? 0} franchis
+              </span>
+            </div>
+            {(monthlyData.milestonesSummary?.items || []).slice(0, 4).map((m) => (
+              <div key={m.id} className="flex items-center justify-between gap-2 text-[11px] py-1 border-t border-stone-100">
+                <span className="truncate font-semibold text-stone-800">
+                  {m.projectName ? `${m.projectName} · ` : ''}
+                  {m.title}
+                </span>
+                <span className="font-mono font-bold text-[#2A7B76] shrink-0">{m.progress}%</span>
+              </div>
+            ))}
+            {(!monthlyData.milestonesSummary || monthlyData.milestonesSummary.items.length === 0) && (
+              <div className="text-[11px] text-stone-400 italic">Aucun jalon ciblé ce mois.</div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-white p-3.5 space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold text-amber-950">
+              <span className="flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5 text-amber-600" />
+                <span>Points Importants (Hors tâches)</span>
+              </span>
+              <span className="font-mono text-amber-800">{ptsSummary.totalHours}h · {ptsSummary.totalPoints} pt(s)</span>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5 pt-0.5 text-center tabular-nums">
+              <div className="bg-amber-50/70 rounded-xl p-1.5 border border-amber-200/70">
+                <div className="text-[9.5px] text-amber-800">Alertes</div>
+                <div className="text-xs font-bold text-rose-700">{ptsSummary.alertsCount}</div>
+              </div>
+              <div className="bg-indigo-50/70 rounded-xl p-1.5 border border-indigo-200/70">
+                <div className="text-[9.5px] text-indigo-800">Rappels</div>
+                <div className="text-xs font-bold text-indigo-800">{ptsSummary.remindersCount}</div>
+              </div>
+              <div className="bg-emerald-50/70 rounded-xl p-1.5 border border-emerald-200/70">
+                <div className="text-[9.5px] text-emerald-800">Mouv.</div>
+                <div className="text-xs font-bold text-emerald-800">{ptsSummary.movementsCount}</div>
+              </div>
+              <div className="bg-stone-50 rounded-xl p-1.5 border border-stone-200/70">
+                <div className="text-[9.5px] text-stone-600">Traités</div>
+                <div className="text-xs font-bold text-stone-900">{ptsSummary.resolvedCount}</div>
+              </div>
+            </div>
+            {ptsSummary.recentItems && ptsSummary.recentItems.length > 0 && (
+              <div className="pt-1 space-y-1 border-t border-stone-100">
+                {ptsSummary.recentItems.slice(0, 3).map((pt) => (
+                  <div key={`${pt.id}-${pt.date}`} className="flex items-center justify-between gap-2 text-[10.5px]">
+                    <span className="truncate text-stone-700">
+                      <strong className="text-amber-800">{pt.categoryLabel}</strong> · {pt.title}
+                    </span>
+                    <span className="font-mono text-stone-500 shrink-0">
+                      {pt.date.slice(5)} · {pt.durationMinutes}m
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Synthèse Journalière des Présences — Optimal Calendar + Active Ledger */}
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
@@ -238,6 +329,11 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
                           {d.tasksDoneCount} t.
                         </div>
                       )}
+                      {(d.importantPointsCount ?? 0) > 0 && (
+                        <div className="font-bold text-amber-700">
+                          {d.importantPointsCount} pt.
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -258,6 +354,7 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
                 <th className="py-2.5 px-3 text-right">Heures</th>
                 <th className="py-2.5 px-3 text-center">Statut</th>
                 <th className="py-2.5 px-3 text-right">Sous-tâches</th>
+                <th className="py-2.5 px-3 text-right">Pt. Imp.</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 font-medium">
@@ -265,7 +362,7 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
                 <tr
                   key={d.date}
                   className={
-                    d.hoursWorked > 0 || d.tasksDoneCount > 0
+                    d.hoursWorked > 0 || d.tasksDoneCount > 0 || (d.importantPointsCount ?? 0) > 0
                       ? 'bg-white hover:bg-stone-50/70'
                       : 'bg-stone-50/40 text-stone-400'
                   }
@@ -273,7 +370,7 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
                   <td className="py-2 px-3 font-mono text-stone-800">{d.date}</td>
                   <td className="py-2 px-2 text-center uppercase font-bold text-[10px]">
                     <span>{d.dayName}</span>
-                    {d.isWeekend && (d.hoursWorked > 0 || d.tasksDoneCount > 0 || d.status !== '-') && (
+                    {d.isWeekend && (d.hoursWorked > 0 || d.tasksDoneCount > 0 || (d.importantPointsCount ?? 0) > 0 || d.status !== '-') && (
                       <span className="ml-1 px-1 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px]">WE</span>
                     )}
                   </td>
@@ -306,12 +403,15 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
                   <td className="py-2 px-3 text-right font-mono font-bold text-[#164e4b]">
                     {d.tasksDoneCount > 0 ? `${d.tasksDoneCount}` : '-'}
                   </td>
+                  <td className="py-2 px-3 text-right font-mono font-bold text-amber-700">
+                    {(d.importantPointsCount ?? 0) > 0 ? `${d.importantPointsCount}` : '-'}
+                  </td>
                 </tr>
               ))}
 
               {displayedDailyRows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-stone-400 italic">
+                  <td colSpan={8} className="py-6 text-center text-stone-400 italic">
                     Aucun pointage ni activité enregistrée pour ce mois.
                   </td>
                 </tr>
@@ -331,6 +431,9 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
                 </td>
                 <td className="py-2.5 px-3 text-right font-mono text-[#164e4b]">
                   {summary.totalTasksDoneInDays}
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono text-amber-700">
+                  {summary.totalPointsInDays}
                 </td>
               </tr>
             </tfoot>
@@ -389,18 +492,28 @@ export const TaskSheetMonthlyView: React.FC<TaskSheetMonthlyViewProps> = ({ mont
 
                 {t.subtasks && t.subtasks.length > 0 && (
                   <div className="pl-3 space-y-1">
-                    {t.subtasks.map((s) => (
+                    {sortSubtasksNewestFirst(t.subtasks, t.date).map((s) => (
                       <div
                         key={s.id}
                         className="flex items-center justify-between gap-2 text-xs py-1.5 px-2.5 rounded-lg bg-stone-50 border border-stone-200/70"
                       >
-                        <span
-                          className={`truncate ${
-                            s.completed ? 'line-through text-stone-400' : 'text-stone-800 font-medium'
-                          }`}
-                        >
-                          {s.title}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                          <span
+                            className={`truncate ${
+                              s.completed ? 'line-through text-stone-400' : 'text-stone-800 font-medium'
+                            }`}
+                          >
+                            {s.title}
+                          </span>
+                          {(s.tags || []).map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-[9px] px-1.5 py-0.2 rounded bg-teal-50 text-[#2A7B76] border border-teal-200 font-semibold"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
                         <span
                           className={`text-[10px] font-bold shrink-0 ${
                             s.completed ? 'text-emerald-700' : 'text-amber-700'

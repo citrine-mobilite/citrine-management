@@ -1,5 +1,5 @@
 import React from 'react';
-import { Employee, Task, Presence, AttendanceIncident, AppUser } from '../../../types';
+import { Employee, Task, Presence, AttendanceIncident, AppUser, NotificationLog, Reminder, StrategicProject } from '../../../types';
 import { SubtaskCreateModal } from '../../tasks/SubtaskCreateModal';
 import { TaskSheetModal } from '../../tasksheet/TaskSheetModal';
 import { TaskTimeSpentHistogram } from './TaskTimeSpentHistogram';
@@ -16,6 +16,9 @@ interface EmployeeRendementPageProps {
   assiduiteRate: number;
   presences?: Presence[];
   incidents?: AttendanceIncident[];
+  reminders?: Reminder[];
+  strategicProjects?: StrategicProject[];
+  notifications?: NotificationLog[];
   onBack: () => void;
   onUpdateTask?: (updatedTask: Task) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
@@ -29,13 +32,25 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
   assiduiteRate,
   presences = [],
   incidents = [],
+  reminders = [],
+  strategicProjects = [],
+  notifications = [],
   onBack,
   onUpdateTask,
   showToast,
   currentUser,
   currentRole,
 }) => {
-  const logic = useEmployeeRendementLogic({ employee, tasks, assiduiteRate, onUpdateTask, showToast });
+  const logic = useEmployeeRendementLogic({
+    employee,
+    tasks,
+    assiduiteRate,
+    reminders,
+    strategicProjects,
+    notifications,
+    onUpdateTask,
+    showToast,
+  });
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-in fade-in duration-300">
@@ -145,6 +160,9 @@ export const EmployeeRendementPage: React.FC<EmployeeRendementPageProps> = ({
           allTasks={tasks}
           presences={presences}
           incidents={incidents}
+          reminders={reminders}
+          strategicProjects={strategicProjects}
+          notifications={notifications}
           defaultMode={logic.taskSheetMode}
           currentUser={currentUser}
           currentRole={currentRole}

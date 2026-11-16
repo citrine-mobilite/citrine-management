@@ -114,6 +114,31 @@ export async function buildMonthlyTaskSheetXlsxWorkbook(data: MonthlyTaskSheetDa
     applyCellBox(row.getCell(7), { bg, align: 'right', bold: true, color: CITRINE_XLSX_COLORS.emeraldDark });
   });
   r++;
+
+  if (data.importantPointsSummary) {
+    styleSectionHeaderRow(ws1, r++, 7, 'POINTS IMPORTANTS (ALERTES, RAPPELS & PETITS MOUVEMENTS) — HORS TÂCHES');
+    const ptsRow = ws1.getRow(r++);
+    ptsRow.values = [
+      `Total : ${data.importantPointsSummary.totalPoints}`,
+      '',
+      `Alertes : ${data.importantPointsSummary.alertsCount}`,
+      `Rappels : ${data.importantPointsSummary.remindersCount}`,
+      `Mouvements : ${data.importantPointsSummary.movementsCount}`,
+      `Temps : ${data.importantPointsSummary.totalHours}h`,
+      `Clôturés : ${data.importantPointsSummary.resolvedCount}`,
+    ];
+    ws1.mergeCells(ptsRow.number, 1, ptsRow.number, 2);
+    for (let c = 1; c <= 7; c++) {
+      applyCellBox(ptsRow.getCell(c), {
+        bg: CITRINE_XLSX_COLORS.amberBg,
+        color: CITRINE_XLSX_COLORS.amberText,
+        bold: true,
+        align: 'center',
+      });
+    }
+    r++;
+  }
+
   styleOfficialFooterRow(ws1, r++, 7);
 
   const ws2 = wb.addWorksheet('Tâches & Sous-Tâches', {
@@ -199,24 +224,25 @@ export async function buildYearlyTaskSheetXlsxWorkbook(data: YearlyTaskSheetData
   wb.created = new Date();
 
   const ws1 = wb.addWorksheet('Bilan Annuel', { views: [{ showGridLines: true }] });
-  ws1.columns = [{ width: 18 }, { width: 18 }, { width: 18 }, { width: 22 }, { width: 16 }];
+  ws1.columns = [{ width: 18 }, { width: 18 }, { width: 16 }, { width: 20 }, { width: 16 }, { width: 14 }];
 
   let r = 1;
   applyOfficialExcelHeaderFooter(ws1);
-  styleBannerRow(ws1, r++, 5, 'CITRINE SARL — Société à Responsabilité Limitée · République du Cameroun (Document Officiel)', false);
-  styleBannerRow(ws1, r++, 5, `BILAN ANNUEL DES TÂCHES — ${data.year} (${empName.toUpperCase()})`, true);
+  styleBannerRow(ws1, r++, 6, 'CITRINE SARL — Société à Responsabilité Limitée · République du Cameroun (Document Officiel)', false);
+  styleBannerRow(ws1, r++, 6, `BILAN ANNUEL DES TÂCHES — ${data.year} (${empName.toUpperCase()})`, true);
   r++;
 
-  styleSectionHeaderRow(ws1, r++, 5, 'SYNTHÈSE ANNUELLE');
+  styleSectionHeaderRow(ws1, r++, 6, 'SYNTHÈSE ANNUELLE');
   const kpi = ws1.getRow(r++);
   kpi.values = [
     `Jours : ${data.totalDaysPresent}j/${data.totalWorkingDays || 260}j${data.totalWeekendDaysWorked > 0 ? ` (+${data.totalWeekendDaysWorked} WE)` : ''}`,
     `Heures : ${data.totalHoursWorked}h`,
     `Tâches finies : ${data.totalTasksCompleted}`,
     `Sous-tâches : ${data.totalSubtasksCompleted ?? 0}/${data.totalSubtasksAssigned ?? 0}`,
+    `Pt. Importants : ${data.importantPointsSummary?.totalPoints ?? 0}`,
     `Rendement : ${data.avgCompletionRate}%`,
   ];
-  for (let c = 1; c <= 5; c++) {
+  for (let c = 1; c <= 6; c++) {
     applyCellBox(kpi.getCell(c), {
       bg: CITRINE_XLSX_COLORS.emeraldTint,
       color: CITRINE_XLSX_COLORS.emeraldDark,
@@ -226,12 +252,12 @@ export async function buildYearlyTaskSheetXlsxWorkbook(data: YearlyTaskSheetData
   }
   r++;
 
-  styleSectionHeaderRow(ws1, r++, 5, 'DÉTAIL PAR MOIS');
+  styleSectionHeaderRow(ws1, r++, 6, 'DÉTAIL PAR MOIS');
   styleColumnHeadersRow(
     ws1,
     r++,
-    ['Mois', 'Jours Travaillés', 'Heures Cumulées', 'Sous-Tâches Validées', 'Rendement'],
-    ['left', 'center', 'right', 'center', 'right']
+    ['Mois', 'Jours Travaillés', 'Heures Cumulées', 'Sous-Tâches Validées', 'Pt. Importants', 'Rendement'],
+    ['left', 'center', 'right', 'center', 'center', 'right']
   );
 
   data.monthlyBreakdown.forEach((m, idx) => {
@@ -241,6 +267,7 @@ export async function buildYearlyTaskSheetXlsxWorkbook(data: YearlyTaskSheetData
       `${m.daysWorked}j/${m.workingDays || 22}j${m.weekendDaysWorked > 0 ? ` (+${m.weekendDaysWorked} WE)` : ''}`,
       `${m.hoursWorked}h`,
       m.subtasksTotal ? `${m.tasksCompleted}/${m.subtasksTotal}` : m.tasksCompleted,
+      m.importantPointsCount ?? 0,
       `${m.rendementRate}%`,
     ];
     const bg = idx % 2 === 1 ? CITRINE_XLSX_COLORS.slateZebra : CITRINE_XLSX_COLORS.white;
@@ -248,10 +275,11 @@ export async function buildYearlyTaskSheetXlsxWorkbook(data: YearlyTaskSheetData
     applyCellBox(row.getCell(2), { bg, align: 'center' });
     applyCellBox(row.getCell(3), { bg, align: 'right', bold: true });
     applyCellBox(row.getCell(4), { bg, align: 'center', bold: true, color: CITRINE_XLSX_COLORS.emeraldText });
-    applyCellBox(row.getCell(5), { bg, align: 'right', bold: true, color: CITRINE_XLSX_COLORS.emeraldDark });
+    applyCellBox(row.getCell(5), { bg, align: 'center', bold: true, color: CITRINE_XLSX_COLORS.amberText });
+    applyCellBox(row.getCell(6), { bg, align: 'right', bold: true, color: CITRINE_XLSX_COLORS.emeraldDark });
   });
   r++;
-  styleOfficialFooterRow(ws1, r++, 5);
+  styleOfficialFooterRow(ws1, r++, 6);
 
   if (data.topTimeTasks && data.topTimeTasks.length > 0) {
     const ws2 = wb.addWorksheet('Top Missions & Sous-Tâches', { views: [{ showGridLines: true }] });

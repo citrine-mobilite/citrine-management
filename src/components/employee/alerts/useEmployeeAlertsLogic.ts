@@ -4,6 +4,11 @@ import { soundService } from '../../../services/soundService';
 import { saveDocument, deleteDocument, COLLECTIONS } from '../../../services/dataService';
 import { executeDeleteWithSweetAlert, executeOperationWithLoading } from '../../../utils/sweetAlert';
 import {
+  addQuickSmallMovement,
+  deleteQuickSmallMovement,
+  TASKSHEET_MOVEMENTS_UPDATED_EVENT,
+} from '../../../services/taskSheetMovementsService';
+import {
   PersonalAlert,
   matchesEmployeeIdentifier,
   addAlertIdVariants,
@@ -31,15 +36,27 @@ export function useEmployeeAlertsLogic({
   onUpdateNotifications,
   onAlertsReadChange,
 }: UseEmployeeAlertsLogicParams) {
-  const [filter, setFilter] = useState<'all' | 'unread' | 'urgent' | 'task' | 'incident' | 'leaves'>('all');
+  const [filter, setFilter] = useState<'all' | 'unread' | 'urgent' | 'movement' | 'task' | 'incident' | 'leaves'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewDensity, setViewDensity] = useState<'compact' | 'detailed'>('compact');
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
   const [isRinging, setIsRinging] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showMovementForm, setShowMovementForm] = useState(false);
+  const [movementTitle, setMovementTitle] = useState('');
+  const [movementDuration, setMovementDuration] = useState(15);
+  const [movementLocation, setMovementLocation] = useState('');
+  const [movementNote, setMovementNote] = useState('');
   const [selectedAlertModal, setSelectedAlertModal] = useState<PersonalAlert | null>(null);
   const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => new Set<string>());
   const [deletedAlertIds, setDeletedAlertIds] = useState<Set<string>>(() => new Set<string>());
+  const [movementsTick, setMovementsTick] = useState(0);
+
+  useEffect(() => {
+    const onMovUpdated = () => setMovementsTick((t) => t + 1);
+    window.addEventListener(TASKSHEET_MOVEMENTS_UPDATED_EVENT, onMovUpdated);
+    return () => window.removeEventListener(TASKSHEET_MOVEMENTS_UPDATED_EVENT, onMovUpdated);
+  }, []);
 
   const allAlerts = useMemo(
     () =>
@@ -51,7 +68,8 @@ export function useEmployeeAlertsLogic({
         readAlertIds,
         deletedAlertIds,
       }),
-    [reminders, notifications, employeeProfile, currentUser, readAlertIds, deletedAlertIds]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reminders, notifications, employeeProfile, currentUser, readAlertIds, deletedAlertIds, movementsTick]
   );
 
   const unreadCount = useMemo(() => allAlerts.filter((a) => !a.read).length, [allAlerts]);
@@ -127,7 +145,10 @@ export function useEmployeeAlertsLogic({
         nextDeleted.add(id);
         setDeletedAlertIds(nextDeleted);
 
-        if (id.startsWith('rem-') || reminders.some((r) => r.id === id)) {
+        if (id.startsWith('mov-')) {
+          await deleteQuickSmallMovement(id);
+          onUpdateReminders?.(reminders.filter((r) => r.id !== id));
+        } else if (id.startsWith('rem-') || reminders.some((r) => r.id === id)) {
           await deleteDocument(COLLECTIONS.REMINDERS, id);
           onUpdateReminders?.(reminders.filter((r) => r.id !== id));
         }
@@ -142,6 +163,30 @@ export function useEmployeeAlertsLogic({
       successTitle: 'Alerte supprimée !',
       successMessage: "L'élément a été retiré de votre fil d'alertes.",
     });
+  };
+
+  const handleCreateQuickMovement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!movementTitle.trim()) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const saved = await addQuickSmallMovement({
+      employeeId: String(employeeProfile.id),
+      employeeName: employeeProfile.name,
+      date: todayStr,
+      title: movementTitle.trim(),
+      durationMinutes: Number(movementDuration) || 15,
+      location: movementLocation.trim() || undefined,
+      note: movementNote.trim() || undefined,
+      isResolved: true,
+      authorName: currentUser?.name || employeeProfile.name,
+    });
+    if (onUpdateReminders) {
+      onUpdateReminders([saved, ...reminders.filter((r) => r.id !== saved.id)]);
+    }
+    setMovementTitle('');
+    setMovementLocation('');
+    setMovementNote('');
+    setShowMovementForm(false);
   };
 
   const handleCreateAlertFromModal = async (alertData: {
@@ -213,6 +258,7 @@ export function useEmployeeAlertsLogic({
     return allAlerts.filter((a) => {
       if (filter === 'unread' && a.read) return false;
       if (filter === 'urgent' && a.type !== 'urgent') return false;
+      if (filter === 'movement' && a.category !== 'Mouvement') return false;
       if (filter === 'task' && a.category !== 'Tâche') return false;
       if (filter === 'incident' && a.category !== 'Pointage') return false;
 
@@ -233,6 +279,9 @@ export function useEmployeeAlertsLogic({
   return {
     filter, setFilter, searchQuery, setSearchQuery, viewDensity, setViewDensity,
     expandedAlertId, isRinging, showCreateModal, setShowCreateModal,
+    showMovementForm, setShowMovementForm, movementTitle, setMovementTitle,
+    movementDuration, setMovementDuration, movementLocation, setMovementLocation,
+    movementNote, setMovementNote, handleCreateQuickMovement,
     selectedAlertModal, setSelectedAlertModal, allAlerts, unreadCount, filteredAlerts,
     handleSelectAlert, handleMarkAllAsRead, handleDeleteAlert, handleCreateAlertFromModal, toggleRingtone,
   };

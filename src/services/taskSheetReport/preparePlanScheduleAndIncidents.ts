@@ -23,12 +23,50 @@ export function buildCleanedScheduleSlots(
   topPriorities: TaskSheetPriority[],
   totalTasks: number
 ): TaskSheetScheduleSlot[] {
-  if (totalTasks === 0) {
+  const points = data.importantPoints || [];
+  if (totalTasks === 0 && points.length === 0) {
     return [
       {
         timeRange: 'Journée complète (08:00 – 17:00)',
         activity: "N'a rien fait de la journée",
-        resolutionNote: 'Aucune sous-tâche en cours ni terminée ce jour',
+        resolutionNote: 'Aucune sous-tâche ni point important en cours ou terminé ce jour',
+      },
+    ];
+  }
+
+  if (totalTasks === 0 && points.length > 0 && (!data.scheduleSlots || data.scheduleSlots.length === 0)) {
+    const morning = points.filter((pt) => (pt.time || '09:00') < '12:00');
+    const afternoon = points.filter((pt) => (pt.time || '09:00') >= '12:00');
+    const fmt = (pt: typeof points[number]) => `[${pt.categoryLabel}] ${pt.title} (${pt.durationMinutes} min)`;
+    return [
+      {
+        timeRange: '08:00 – 10:00',
+        activity: morning[0] ? fmt(morning[0]) : 'Suivi points importants / coordination',
+        resolutionNote: morning[0]?.statusLabel || 'Point important suivi',
+      },
+      {
+        timeRange: '10:00 – 12:00',
+        activity: morning[1] ? fmt(morning[1]) : (morning[0] ? `Suite & suivi : ${morning[0].title}` : 'Traitement alertes & rappels matin'),
+        resolutionNote: morning[1]?.statusLabel || 'Activité de suivi',
+      },
+      {
+        timeRange: '12:00 – 13:00',
+        activity: 'Pause Déjeuner (12h00 – 13h00)',
+        isBreak: true,
+        isBuffer: false,
+        resolutionNote: 'Pause obligatoire 12h–13h respectée',
+      },
+      {
+        timeRange: '13:00 – 15:30',
+        activity: afternoon[0] ? fmt(afternoon[0]) : 'Suivi dossiers & points importants',
+        resolutionNote: afternoon[0]?.statusLabel || 'Suivi opérationnel',
+      },
+      {
+        timeRange: '15:30 – 17:00',
+        activity: afternoon[1] ? fmt(afternoon[1]) : 'Clôture journée & revue des points importants',
+        isBreak: false,
+        isBuffer: false,
+        resolutionNote: 'Fin de journée opérationnelle',
       },
     ];
   }

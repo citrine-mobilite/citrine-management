@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { X, Mail, Phone, Building2, Shield, Calendar, UserCheck, Edit3 } from 'lucide-react';
-import { AppUser, Employee, Presence, SalaryPayment, Task } from '../../types';
+import { AppUser, Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../../types';
 import { findMatchingEmployee } from '../../utils/roleUtils';
 import { ModalPortal } from '../common/ModalPortal';
 import { UserStatisticsSummaryPanel } from '../presence/statistics/UserStatisticsSummaryPanel';
@@ -15,6 +15,9 @@ interface UserDetailStatsModalProps {
   employees: Employee[];
   presences: Presence[];
   tasks: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
+  strategicProjects?: StrategicProject[];
   salaryPayments?: SalaryPayment[];
   onEditUser?: (user: AppUser) => void;
 }
@@ -26,6 +29,9 @@ export const UserDetailStatsModal: React.FC<UserDetailStatsModalProps> = ({
   employees,
   presences,
   tasks,
+  reminders = [],
+  notifications = [],
+  strategicProjects = [],
   salaryPayments = [],
   onEditUser,
 }) => {
@@ -155,6 +161,9 @@ export const UserDetailStatsModal: React.FC<UserDetailStatsModalProps> = ({
               employees={employees}
               presences={presences}
               tasks={tasks}
+              reminders={reminders}
+              notifications={notifications}
+              strategicProjects={strategicProjects}
               salaryPayments={salaryPayments}
               onOpenTaskSheet={(targetEmp, mode) => setTaskSheetState({ employee: targetEmp, mode })}
               onOpenFullRendement={(targetEmp) => setRendementModalEmployee(targetEmp)}
@@ -170,6 +179,9 @@ export const UserDetailStatsModal: React.FC<UserDetailStatsModalProps> = ({
           employee={taskSheetState.employee}
           allTasks={tasks}
           presences={presences}
+          reminders={reminders}
+          notifications={notifications}
+          strategicProjects={strategicProjects}
           defaultMode={taskSheetState.mode}
           currentUser={user}
           currentRole={user.role}
