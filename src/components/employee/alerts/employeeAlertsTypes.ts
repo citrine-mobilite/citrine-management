@@ -1,4 +1,9 @@
 import { Employee, AppUser, NotificationLog, Reminder } from '../../../types';
+import {
+  formatNextOccurrenceBadge,
+  formatRoutineRecurrenceLabel,
+  isRoutineReminder,
+} from '../../../services/reminderService';
 
 export interface PersonalAlert {
   id: string;
@@ -108,10 +113,29 @@ export function buildPersonalAlertsList(params: {
         ? r.triggerPeriods.map((p) => periodsLabels[p] || p).join(', ')
         : "À l'heure exacte";
 
+    if (isRoutineReminder(r)) {
+      const scheduleText = formatRoutineRecurrenceLabel(r);
+      const nextOccurrence = formatNextOccurrenceBadge(r);
+      const locationText = r.location ? ` • Lieu : ${r.location}` : '';
+      const noteText = r.note || r.description || 'Rappel récurrent';
+
+      list.push({
+        id: r.id,
+        title: r.title || 'Rappel récurrent',
+        message: `${scheduleText}${locationText} • ${noteText} • Rappels : ${periodsText}`,
+        type: 'info',
+        timestamp: r.stopped ? 'En pause' : nextOccurrence.label,
+        read: readAlertIds.has(r.id) || !!r.stopped,
+        actionUrl: '#employee/alerts',
+        category: 'Alerte',
+      });
+      return;
+    }
+
     list.push({
       id: r.id,
       title: r.title || 'Alerte Programmée',
-      message: `${r.note || 'Alerte'}${r.date && r.time ? ` • Prévue le ${r.date} à ${r.time}` : ''} • Périodes: ${periodsText}`,
+      message: `${r.note || r.description || 'Alerte'}${r.date && r.time ? ` • Prévue le ${r.date} à ${r.time}` : ''} • Périodes: ${periodsText}`,
       type: 'warning',
       timestamp: r.date && r.time ? `${r.date} ${r.time}` : r.createdAt ? r.createdAt.slice(0, 10) : 'Programmé',
       read: readAlertIds.has(r.id) || !!r.stopped,

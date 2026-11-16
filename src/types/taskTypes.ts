@@ -153,11 +153,15 @@ export interface Task {
 
 export type ReminderTrigger = '5m' | '15m' | '30m' | '1h' | '1d' | 'none';
 
-export type ReminderKind = 'deadline' | 'alarm';
+export type ReminderKind = 'deadline' | 'routine' | 'alarm';
 
 export type ReminderCategory = 'vehicule' | 'fiscalite' | 'administratif' | 'rh' | 'autre';
 
 export type ReminderRenewalCycle = 'none' | 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+
+export type ReminderRecurrenceMode = 'once' | 'daily' | 'weekdays' | 'weekly_days' | 'monthly';
+
+export type ReminderRoutineType = 'reunion' | 'brief' | 'appel' | 'suivi' | 'personnel' | 'autre';
 
 export interface Reminder {
   id: string;
@@ -178,6 +182,12 @@ export interface Reminder {
   employeeIds?: string[];
   allEmployees?: boolean;
   recurrence?: 'once' | 'daily' | 'weekdays' | 'weekends';
+  recurrenceMode?: ReminderRecurrenceMode;
+  recurrenceDays?: number[]; // 0=Dimanche .. 6=Samedi (ex: [1, 3, 5] pour Lun/Mer/Ven)
+  routineType?: ReminderRoutineType;
+  sendPushNotification?: boolean;
+  enableSoundAlarm?: boolean;
+  lastTriggeredKey?: string;
   kind?: ReminderKind;
   category?: ReminderCategory;
   entityName?: string;

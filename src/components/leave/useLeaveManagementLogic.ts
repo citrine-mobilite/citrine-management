@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { LeaveRequest, LeaveStatus, LEAVE_TYPE_LABELS } from '../../types/leaveTypes';
+import { useState, useMemo, useEffect } from 'react';
+import { LeaveRequest, LeaveStatus, LeaveType, LEAVE_TYPE_LABELS } from '../../types/leaveTypes';
 import { Employee } from '../../types/employeeTypes';
 import { AppUser } from '../../types/userTypes';
 import { NotificationLog, CompanyModuleConfig } from '../../types/businessTypes';
@@ -8,6 +8,8 @@ import { terminateMission } from '../../services/missionLifecycleService';
 import { clientMailService } from '../../services/clientMailService';
 import { confirmActionAlert, executeOperationWithLoading } from '../../utils/sweetAlert';
 import { useLeaveAdminCreate } from './useLeaveAdminCreate';
+
+export type LeaveSortOption = 'pending_first' | 'recent' | 'start_desc' | 'duration_desc';
 
 interface UseLeaveManagementLogicParams {
   leaveRequests: LeaveRequest[];
@@ -36,8 +38,16 @@ export function useLeaveManagementLogic({
 }: UseLeaveManagementLogicParams) {
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'missions' | 'leaves'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | LeaveStatus>('all');
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState<'all' | LeaveType>('all');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<LeaveSortOption>('pending_first');
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
 
+  const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'modify' | null>(null);
 
@@ -48,6 +58,27 @@ export function useLeaveManagementLogic({
   const [isProcessing, setIsProcessing] = useState(false);
 
   const adminCreate = useLeaveAdminCreate({ employees, currentUser, onAddNotification, showToast });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, statusFilter, leaveTypeFilter, departmentFilter, monthFilter, sortBy, searchQuery, pageSize]);
+
+  const availableDepartments = useMemo(() => {
+    const depts = new Set<string>();
+    leaveRequests.forEach((l) => {
+      if (l.department && l.department.trim()) depts.add(l.department.trim());
+    });
+    return Array.from(depts).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [leaveRequests]);
+
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>();
+    leaveRequests.forEach((l) => {
+      const m = (l.startDate || l.createdAt || '').slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(m)) months.add(m);
+    });
+    return Array.from(months).sort((a, b) => b.localeCompare(a));
+  }, [leaveRequests]);
 
   const stats = useMemo(() => {
     const missions = leaveRequests.filter((l) => l.type === 'mission_professionnelle').length;
@@ -66,21 +97,126 @@ export function useLeaveManagementLogic({
   }, [leaveRequests]);
 
   const filteredRequests = useMemo(() => {
-    return leaveRequests.filter((l) => {
+    const filtered = leaveRequests.filter((l) => {
       if (categoryFilter === 'missions' && l.type !== 'mission_professionnelle') return false;
       if (categoryFilter === 'leaves' && l.type === 'mission_professionnelle') return false;
       if (statusFilter !== 'all' && l.status !== statusFilter) return false;
+      if (leaveTypeFilter !== 'all' && l.type !== leaveTypeFilter) return false;
+      if (departmentFilter !== 'all' && (l.department || 'Opérations').trim() !== departmentFilter) return false;
+      if (monthFilter !== 'all') {
+        const startM = (l.startDate || '').slice(0, 7);
+        const createdM = (l.createdAt || '').slice(0, 7);
+        if (startM !== monthFilter && createdM !== monthFilter) return false;
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = l.employeeName.toLowerCase().includes(q);
         const matchDept = (l.department || '').toLowerCase().includes(q);
         const matchReason = l.reason.toLowerCase().includes(q);
         const matchType = (LEAVE_TYPE_LABELS[l.type]?.label || '').toLowerCase().includes(q);
-        if (!matchName && !matchDept && !matchReason && !matchType) return false;
+        const matchComment = (l.managerComment || '').toLowerCase().includes(q);
+        if (!matchName && !matchDept && !matchReason && !matchType && !matchComment) return false;
       }
       return true;
     });
-  }, [leaveRequests, categoryFilter, statusFilter, searchQuery]);
+
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'pending_first') {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      if (sortBy === 'start_desc') {
+        return (b.startDate || '').localeCompare(a.startDate || '');
+      }
+      if (sortBy === 'duration_desc') {
+        const dA = a.approvedDaysCount ?? a.daysCount;
+        const dB = b.approvedDaysCount ?? b.daysCount;
+        return dB - dA;
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [
+    leaveRequests,
+    categoryFilter,
+    statusFilter,
+    leaveTypeFilter,
+    departmentFilter,
+    monthFilter,
+    searchQuery,
+    sortBy,
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const paginatedRequests = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredRequests.slice(start, start + pageSize);
+  }, [filteredRequests, safeCurrentPage, pageSize]);
+
+  const hasActiveFilters =
+    categoryFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    leaveTypeFilter !== 'all' ||
+    departmentFilter !== 'all' ||
+    monthFilter !== 'all' ||
+    searchQuery.trim().length > 0;
+
+  const resetFilters = () => {
+    setCategoryFilter('all');
+    setStatusFilter('all');
+    setLeaveTypeFilter('all');
+    setDepartmentFilter('all');
+    setMonthFilter('all');
+    setSearchQuery('');
+    setCurrentPage(1);
+  };
+
+  const exportFilteredCsv = () => {
+    if (filteredRequests.length === 0) {
+      showToast?.('Export impossible', 'Aucune demande à exporter pour les filtres actuels.', 'warning');
+      return;
+    }
+    const headers = [
+      'Collaborateur',
+      'Service',
+      'Type',
+      'Statut',
+      'Date début',
+      'Date fin',
+      'Jours demandés',
+      'Jours accordés',
+      'Motif',
+      'Observation RH',
+      'Arbitré par',
+      'Créée le',
+    ];
+    const escapeCell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+    const rows = filteredRequests.map((r) => [
+      r.employeeName,
+      r.department || 'Opérations',
+      LEAVE_TYPE_LABELS[r.type]?.label || r.type,
+      r.status,
+      r.approvedStartDate || r.startDate,
+      r.approvedEndDate || r.endDate,
+      r.daysCount,
+      r.approvedDaysCount ?? (r.status === 'rejected' ? 0 : r.daysCount),
+      r.reason,
+      r.managerComment || '',
+      r.decidedBy || '',
+      (r.createdAt || '').slice(0, 10),
+    ]);
+    const csv = '\uFEFF' + [headers.map(escapeCell).join(';'), ...rows.map((r) => r.map(escapeCell).join(';'))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `conges-permissions-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast?.('Export généré', `${filteredRequests.length} demande(s) exportée(s) au format CSV.`, 'success');
+  };
 
   const handleTerminateMission = async (req: LeaveRequest) => {
     const isConfirmed = await confirmActionAlert({
@@ -114,9 +250,9 @@ export function useLeaveManagementLogic({
     setActionType(action);
     setManagerComment('');
     if (action === 'modify') {
-      setModifiedStartDate(req.startDate);
-      setModifiedEndDate(req.endDate);
-      setModifiedDaysCount(req.daysCount);
+      setModifiedStartDate(req.approvedStartDate || req.startDate);
+      setModifiedEndDate(req.approvedEndDate || req.endDate);
+      setModifiedDaysCount(req.approvedDaysCount ?? req.daysCount);
     }
   };
 
@@ -194,7 +330,7 @@ export function useLeaveManagementLogic({
           }
 
           if (emp) {
-            const leaveLabel = LEAVE_TYPE_LABELS[selectedRequest.type] || selectedRequest.type;
+            const leaveLabel = LEAVE_TYPE_LABELS[selectedRequest.type]?.label || selectedRequest.type;
             clientMailService.notifyLeaveDecision({
               employeeName: emp.name || selectedRequest.employeeName,
               employeeEmail: emp.email || selectedRequest.employeeEmail,
@@ -222,11 +358,24 @@ export function useLeaveManagementLogic({
   };
 
   return {
-    categoryFilter, setCategoryFilter, statusFilter, setStatusFilter, searchQuery, setSearchQuery,
+    categoryFilter, setCategoryFilter,
+    statusFilter, setStatusFilter,
+    leaveTypeFilter, setLeaveTypeFilter,
+    departmentFilter, setDepartmentFilter,
+    monthFilter, setMonthFilter,
+    sortBy, setSortBy,
+    viewMode, setViewMode,
+    searchQuery, setSearchQuery,
+    currentPage: safeCurrentPage, setCurrentPage,
+    pageSize, setPageSize,
+    totalPages,
+    availableDepartments, availableMonths,
+    hasActiveFilters, resetFilters, exportFilteredCsv,
+    detailRequest, setDetailRequest,
     selectedRequest, actionType, managerComment, setManagerComment, modifiedStartDate, setModifiedStartDate,
     modifiedEndDate, setModifiedEndDate, modifiedDaysCount, setModifiedDaysCount, isProcessing,
     ...adminCreate,
-    stats, filteredRequests, handleTerminateMission, openActionModal, closeModal,
-    handleConfirmDecision,
+    stats, filteredRequests, paginatedRequests,
+    handleTerminateMission, openActionModal, closeModal, handleConfirmDecision,
   };
 }

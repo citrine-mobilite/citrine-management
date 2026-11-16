@@ -45,7 +45,7 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
   });
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-300 max-w-5xl mx-auto pb-10">
+    <div className="space-y-4 animate-in fade-in duration-300 max-w-6xl mx-auto pb-10">
       <EmployeeLeaveToolbar
         stats={logic.stats}
         viewDensity={logic.viewDensity}
@@ -54,6 +54,10 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
         onChangeCategory={logic.setCategoryFilter}
         filter={logic.filter}
         onChangeFilter={logic.setFilter}
+        leaveTypeFilter={logic.leaveTypeFilter}
+        onChangeLeaveType={logic.setLeaveTypeFilter}
+        sortBy={logic.sortBy}
+        onChangeSort={logic.setSortBy}
         searchQuery={logic.searchQuery}
         onChangeSearch={logic.setSearchQuery}
         onOpenMissionModal={logic.handleOpenMissionModal}
@@ -61,7 +65,13 @@ export const EmployeeLeaveTab: React.FC<EmployeeLeaveTabProps> = ({
       />
 
       <EmployeeLeaveList
-        filteredLeaves={logic.filteredLeaves}
+        filteredLeaves={logic.paginatedLeaves}
+        totalFilteredCount={logic.filteredLeaves.length}
+        currentPage={logic.currentPage}
+        totalPages={logic.totalPages}
+        pageSize={logic.pageSize}
+        onPageChange={logic.setCurrentPage}
+        onPageSizeChange={logic.setPageSize}
         viewDensity={logic.viewDensity}
         searchQuery={logic.searchQuery}
         filter={logic.filter}

@@ -5,8 +5,16 @@ import {
   ReminderCategory,
   ReminderKind,
   ReminderRenewalCycle,
+  ReminderRecurrenceMode,
+  ReminderRoutineType,
 } from '../../../types';
-import { DEADLINE_TEMPLATES } from '../../../services/reminderService';
+import {
+  DEADLINE_TEMPLATES,
+  ROUTINE_PRESETS,
+  isRoutineReminder,
+  resolveRecurrenceMode,
+  getActiveWeekdays,
+} from '../../../services/reminderService';
 
 export const AVAILABLE_PERIODS = [
   { id: 'exact', label: "À l'heure exacte" },
@@ -21,6 +29,7 @@ interface UseReminderModalLogicProps {
   onClose: () => void;
   onSaveReminder: (reminderData: Omit<Reminder, 'id' | 'createdAt'> & { id?: string }) => void;
   initialReminder?: Reminder | null;
+  defaultMode?: 'deadline' | 'routine';
   employees: Employee[];
   isEmployee: boolean;
   currentEmployee: Employee | null;
@@ -31,11 +40,12 @@ export function useReminderModalLogic({
   onClose,
   onSaveReminder,
   initialReminder,
+  defaultMode = 'deadline',
   employees,
   isEmployee,
   currentEmployee,
 }: UseReminderModalLogicProps) {
-  const [kind, setKind] = useState<ReminderKind>('deadline');
+  const [kind, setKind] = useState<ReminderKind>(defaultMode);
   const [category, setCategory] = useState<ReminderCategory>('vehicule');
   const [title, setTitle] = useState('');
   const [entityName, setEntityName] = useState('');
@@ -53,35 +63,48 @@ export function useReminderModalLogic({
   const [lastTemplateNote, setLastTemplateNote] = useState<string>('');
   const [lastTemplateEntity, setLastTemplateEntity] = useState<string>('');
 
+  // Champs spécifiques aux Rituels & Rappels Récurrents (non-documentaires)
+  const [routineType, setRoutineType] = useState<ReminderRoutineType>('reunion');
+  const [recurrenceMode, setRecurrenceMode] = useState<ReminderRecurrenceMode>('weekly_days');
+  const [recurrenceDays, setRecurrenceDays] = useState<number[]>([1, 3, 5]);
+  const [location, setLocation] = useState('');
+  const [sendPushNotification, setSendPushNotification] = useState(true);
+  const [selectedRoutinePresetId, setSelectedRoutinePresetId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
 
     setSelectedTemplateId(null);
+    setSelectedRoutinePresetId(null);
     setLastTemplateNote('');
     setLastTemplateEntity('');
 
     if (initialReminder) {
-      const detectedKind: ReminderKind =
-        initialReminder.kind ||
-        (initialReminder.category || initialReminder.expirationDate || initialReminder.renewalCycle
-          ? 'deadline'
-          : 'alarm');
+      const routineFlag = isRoutineReminder(initialReminder);
+      const detectedKind: ReminderKind = routineFlag ? 'routine' : 'deadline';
 
       setKind(detectedKind);
-      setCategory(initialReminder.category || (detectedKind === 'alarm' ? 'autre' : 'vehicule'));
+      setCategory(initialReminder.category || (routineFlag ? 'autre' : 'vehicule'));
       setTitle(initialReminder.title || initialReminder.note || '');
       setEntityName(initialReminder.entityName || initialReminder.location || '');
       setDocumentRef(initialReminder.documentRef || '');
       setNote(initialReminder.note || '');
       setDate(
-        (initialReminder.expirationDate || initialReminder.date || new Date().toISOString().split('T')[0]).split('T')[0]
+        (
+          initialReminder.expirationDate ||
+          initialReminder.date ||
+          new Date().toISOString().split('T')[0]
+        ).split('T')[0]
       );
       setRenewalCycle(initialReminder.renewalCycle || 'none');
       setAlertLeadDays(
         typeof initialReminder.alertLeadDays === 'number' ? initialReminder.alertLeadDays : 14
       );
-      const hasSound = Boolean(initialReminder.time && initialReminder.time.trim().length > 0);
-      setEnableSoundAlarm(detectedKind === 'alarm' || hasSound);
+      setEnableSoundAlarm(
+        routineFlag
+          ? initialReminder.enableSoundAlarm !== false
+          : Boolean(initialReminder.time && initialReminder.time.trim().length > 0)
+      );
       setTime(initialReminder.time || '09:00');
       setSelectedPeriods(
         initialReminder.triggerPeriods && initialReminder.triggerPeriods.length > 0
@@ -90,9 +113,19 @@ export function useReminderModalLogic({
       );
       setAllEmployees(initialReminder.allEmployees ?? true);
       setSelectedEmployeeIds(initialReminder.employeeIds || []);
+
+      // Routine state
+      setRoutineType(initialReminder.routineType || 'reunion');
+      const mode = resolveRecurrenceMode(initialReminder);
+      setRecurrenceMode(mode);
+      const days = getActiveWeekdays(initialReminder);
+      setRecurrenceDays(days.length > 0 ? days : [1, 3, 5]);
+      setLocation(initialReminder.location || initialReminder.entityName || '');
+      setSendPushNotification(initialReminder.sendPushNotification !== false);
     } else {
-      setKind('deadline');
-      setCategory('vehicule');
+      const startKind: ReminderKind = defaultMode === 'routine' ? 'routine' : 'deadline';
+      setKind(startKind);
+      setCategory(startKind === 'routine' ? 'autre' : 'vehicule');
       setTitle('');
       setEntityName('');
       setDocumentRef('');
@@ -100,9 +133,15 @@ export function useReminderModalLogic({
       setDate(new Date().toISOString().split('T')[0]);
       setRenewalCycle('annual');
       setAlertLeadDays(14);
-      setEnableSoundAlarm(false);
+      setEnableSoundAlarm(startKind === 'routine');
       setTime('09:00');
-      setSelectedPeriods(['exact']);
+      setSelectedPeriods(startKind === 'routine' ? ['15m', 'exact'] : ['exact']);
+      setRoutineType('reunion');
+      setRecurrenceMode('weekly_days');
+      setRecurrenceDays([1, 3, 5]);
+      setLocation('');
+      setSendPushNotification(true);
+
       if (isEmployee && currentEmployee) {
         setSelectedEmployeeIds([currentEmployee.id]);
         setAllEmployees(false);
@@ -111,7 +150,7 @@ export function useReminderModalLogic({
         setAllEmployees(true);
       }
     }
-  }, [initialReminder, isOpen, isEmployee, currentEmployee]);
+  }, [initialReminder, isOpen, isEmployee, currentEmployee, defaultMode]);
 
   const isEditing = Boolean(initialReminder && initialReminder.id);
 
@@ -162,9 +201,34 @@ export function useReminderModalLogic({
     }
   };
 
+  const handleApplyRoutinePreset = (presetId: string) => {
+    const preset = ROUTINE_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setSelectedRoutinePresetId(preset.id);
+    setKind('routine');
+    setRoutineType(preset.routineType);
+    setTitle(preset.title);
+    setRecurrenceMode(preset.recurrenceMode);
+    setRecurrenceDays(preset.recurrenceDays);
+    setTime(preset.time);
+    setSelectedPeriods(preset.triggerPeriods);
+    setNote(preset.note);
+  };
+
+  const handleToggleRecurrenceDay = (day: number) => {
+    setRecurrenceMode('weekly_days');
+    if (recurrenceDays.includes(day)) {
+      const remaining = recurrenceDays.filter((d) => d !== day);
+      setRecurrenceDays(remaining.length > 0 ? remaining : [day]);
+    } else {
+      setRecurrenceDays([...recurrenceDays, day]);
+    }
+  };
+
   const handleTogglePeriod = (periodId: string) => {
     if (selectedPeriods.includes(periodId)) {
-      setSelectedPeriods(selectedPeriods.filter((p) => p !== periodId));
+      const remaining = selectedPeriods.filter((p) => p !== periodId);
+      setSelectedPeriods(remaining.length > 0 ? remaining : ['exact']);
     } else {
       setSelectedPeriods([...selectedPeriods, periodId]);
     }
@@ -197,12 +261,55 @@ export function useReminderModalLogic({
       ? employees.map((emp) => emp.id)
       : selectedEmployeeIds;
 
-    const useAlarmTime = kind === 'alarm' || enableSoundAlarm;
+    const isRoutine = kind === 'routine' || kind === 'alarm';
+
+    if (isRoutine) {
+      const finalDays =
+        recurrenceMode === 'weekly_days'
+          ? recurrenceDays.length > 0
+            ? recurrenceDays
+            : [1]
+          : recurrenceMode === 'weekdays'
+          ? [1, 2, 3, 4, 5]
+          : recurrenceMode === 'daily'
+          ? [0, 1, 2, 3, 4, 5, 6]
+          : [];
+
+      onSaveReminder({
+        ...(initialReminder ? { id: initialReminder.id } : {}),
+        kind: 'routine',
+        routineType,
+        category: 'autre',
+        title: title.trim(),
+        location: location.trim() || undefined,
+        entityName: location.trim() || undefined,
+        note: note.trim(),
+        recurrenceMode,
+        recurrenceDays: finalDays,
+        date: recurrenceMode === 'once' || recurrenceMode === 'monthly' ? date : undefined,
+        expirationDate: undefined,
+        renewalCycle: 'none',
+        time: time || '09:00',
+        triggerPeriods: selectedPeriods.length > 0 ? selectedPeriods : ['exact'],
+        sendPushNotification,
+        enableSoundAlarm,
+        allEmployees: finalAllEmployees,
+        employeeIds: finalEmployeeIds,
+        triggeredPeriods: initialReminder?.triggeredPeriods || [],
+        lastTriggeredKey: initialReminder?.lastTriggeredKey,
+        isResolved: false,
+        stopped: initialReminder?.stopped ?? false,
+      });
+      onClose();
+      return;
+    }
+
+    const useAlarmTime = enableSoundAlarm;
 
     onSaveReminder({
       ...(initialReminder ? { id: initialReminder.id } : {}),
-      kind,
-      category: kind === 'deadline' ? category : category || 'autre',
+      kind: 'deadline',
+      category,
       title: title.trim(),
       entityName: entityName.trim() || undefined,
       location: entityName.trim() || undefined,
@@ -211,13 +318,14 @@ export function useReminderModalLogic({
       date,
       expirationDate: date,
       alertLeadDays: Math.max(0, Number(alertLeadDays) || 14),
-      renewalCycle: kind === 'deadline' ? renewalCycle : 'none',
+      renewalCycle,
       time: useAlarmTime ? time : '',
       triggerPeriods: useAlarmTime
         ? selectedPeriods.length > 0
           ? selectedPeriods
           : ['exact']
         : [],
+      enableSoundAlarm: useAlarmTime,
       allEmployees: finalAllEmployees,
       employeeIds: finalEmployeeIds,
       triggeredPeriods: initialReminder?.triggeredPeriods || [],
@@ -228,13 +336,50 @@ export function useReminderModalLogic({
   };
 
   return {
-    kind, setKind, category, setCategory, title, setTitle,
-    entityName, setEntityName, documentRef, setDocumentRef,
-    note, setNote, date, setDate, renewalCycle, setRenewalCycle,
-    alertLeadDays, setAlertLeadDays, enableSoundAlarm, setEnableSoundAlarm,
-    time, setTime, selectedPeriods, selectedEmployeeIds, allEmployees,
+    kind,
+    setKind,
+    category,
+    setCategory,
+    title,
+    setTitle,
+    entityName,
+    setEntityName,
+    documentRef,
+    setDocumentRef,
+    note,
+    setNote,
+    date,
+    setDate,
+    renewalCycle,
+    setRenewalCycle,
+    alertLeadDays,
+    setAlertLeadDays,
+    enableSoundAlarm,
+    setEnableSoundAlarm,
+    time,
+    setTime,
+    selectedPeriods,
+    selectedEmployeeIds,
+    allEmployees,
     selectedTemplateId,
-    isEditing, handleApplyTemplate, handleTogglePeriod,
-    handleToggleEmployee, handleToggleAllEmployees, handleSubmit,
+    routineType,
+    setRoutineType,
+    recurrenceMode,
+    setRecurrenceMode,
+    recurrenceDays,
+    setRecurrenceDays,
+    location,
+    setLocation,
+    sendPushNotification,
+    setSendPushNotification,
+    selectedRoutinePresetId,
+    isEditing,
+    handleApplyTemplate,
+    handleApplyRoutinePreset,
+    handleToggleRecurrenceDay,
+    handleTogglePeriod,
+    handleToggleEmployee,
+    handleToggleAllEmployees,
+    handleSubmit,
   };
 }

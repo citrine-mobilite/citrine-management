@@ -11,6 +11,7 @@ import {
 } from '../../services/weeklyAttendanceReportService';
 import { executeDailyTaskSheetDispatch } from '../../services/dailyTaskSheetCronService';
 import { sendMondayGreetingToAllEmployees } from '../../services/mondayGreetingMailService';
+import { executeDueRoutineRemindersDispatch } from '../../services/routineReminderCronService';
 
 export async function handleMailAndCronRoutes(
   urlPath: string,
@@ -209,6 +210,17 @@ export async function handleMailAndCronRoutes(
       res.status(result.success ? 200 : 500).json(result);
     } catch (error: any) {
       console.error('[API /cron/monday-greeting Error]:', error);
+      res.status(500).json({ success: false, error: error.message || String(error) });
+    }
+    return true;
+  }
+
+  if (urlPath === '/cron/routine-reminders' || urlPath === '/api/cron/routine-reminders') {
+    try {
+      const result = await executeDueRoutineRemindersDispatch();
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (error: any) {
+      console.error('[API /cron/routine-reminders Error]:', error);
       res.status(500).json({ success: false, error: error.message || String(error) });
     }
     return true;

@@ -9,6 +9,7 @@ import {
   sendSingleEmployeeTaskSheetEmail,
 } from '../services/periodicTaskSheetCronService';
 import { sendMondayGreetingToAllEmployees } from '../services/mondayGreetingMailService';
+import { executeDueRoutineRemindersDispatch } from '../services/routineReminderCronService';
 
 export function registerMailAndCronRoutes(app: express.Express): void {
   app.get('/api/mail/config', async (_req: express.Request, res: express.Response) => {
@@ -202,6 +203,16 @@ export function registerMailAndCronRoutes(app: express.Express): void {
       res.status(result.success ? 200 : 500).json(result);
     } catch (err: any) {
       console.error('[API /api/reports/tasksheet/send Error]:', err);
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  app.all('/api/cron/routine-reminders', async (_req: express.Request, res: express.Response) => {
+    try {
+      const result = await executeDueRoutineRemindersDispatch();
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (err: any) {
+      console.error('[API /api/cron/routine-reminders Error]:', err);
       res.status(500).json({ success: false, error: err?.message || String(err) });
     }
   });

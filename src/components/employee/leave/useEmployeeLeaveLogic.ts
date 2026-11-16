@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Employee, AppUser, LeaveRequest, LeaveType, NotificationLog, LEAVE_TYPE_LABELS } from '../../../types';
 import { createLeaveRequest, deleteLeaveRequest, calculateDaysBetween } from '../../../services/leaveService';
 import { terminateMission } from '../../../services/missionLifecycleService';
 import { confirmActionAlert, executeDeleteWithSweetAlert, executeOperationWithLoading } from '../../../utils/sweetAlert';
+
+export type EmployeeLeaveSort = 'pending_first' | 'recent' | 'start_desc';
 
 interface UseEmployeeLeaveLogicParams {
   employeeProfile: Employee;
@@ -37,7 +39,11 @@ export function useEmployeeLeaveLogic({
   const [viewDensity, setViewDensity] = useState<'compact' | 'detailed'>('compact');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'missions' | 'leaves'>('all');
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'modified' | 'terminee' | 'rejected'>('all');
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState<'all' | LeaveType>('all');
+  const [sortBy, setSortBy] = useState<EmployeeLeaveSort>('pending_first');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const [leaveType, setLeaveType] = useState<LeaveType>('mission_professionnelle');
   const [missionLocation, setMissionLocation] = useState('');
@@ -53,6 +59,10 @@ export function useEmployeeLeaveLogic({
   });
   const [reason, setReason] = useState('');
   const [attachmentName, setAttachmentName] = useState('');
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, filter, leaveTypeFilter, sortBy, searchQuery, pageSize]);
 
   const handleOpenMissionModal = () => {
     setModalMode('mission');
@@ -89,10 +99,11 @@ export function useEmployeeLeaveLogic({
   }, [myLeaves]);
 
   const filteredLeaves = useMemo(() => {
-    return myLeaves.filter((leave) => {
+    const filtered = myLeaves.filter((leave) => {
       if (categoryFilter === 'missions' && leave.type !== 'mission_professionnelle') return false;
       if (categoryFilter === 'leaves' && leave.type === 'mission_professionnelle') return false;
       if (filter !== 'all' && leave.status !== filter) return false;
+      if (leaveTypeFilter !== 'all' && leave.type !== leaveTypeFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const typeLabel = (LEAVE_TYPE_LABELS[leave.type]?.label || '').toLowerCase();
@@ -103,7 +114,25 @@ export function useEmployeeLeaveLogic({
       }
       return true;
     });
-  }, [myLeaves, categoryFilter, filter, searchQuery]);
+
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'pending_first') {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+      } else if (sortBy === 'start_desc') {
+        return (b.startDate || '').localeCompare(a.startDate || '');
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [myLeaves, categoryFilter, filter, leaveTypeFilter, sortBy, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLeaves.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const paginatedLeaves = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredLeaves.slice(start, start + pageSize);
+  }, [filteredLeaves, safeCurrentPage, pageSize]);
 
   const handleTerminateMyMission = async (leaveId: string) => {
     const isConfirmed = await confirmActionAlert({
@@ -221,10 +250,13 @@ export function useEmployeeLeaveLogic({
   return {
     showModal, setShowModal, modalMode, selectedLeaveModal, setSelectedLeaveModal,
     isSubmitting, isTerminating, viewDensity, setViewDensity, categoryFilter, setCategoryFilter,
-    filter, setFilter, searchQuery, setSearchQuery, leaveType, setLeaveType,
+    filter, setFilter, leaveTypeFilter, setLeaveTypeFilter, sortBy, setSortBy,
+    searchQuery, setSearchQuery, currentPage: safeCurrentPage, setCurrentPage,
+    pageSize, setPageSize, totalPages,
+    leaveType, setLeaveType,
     missionLocation, setMissionLocation, startDate, setStartDate, endDate, setEndDate,
     reason, setReason, attachmentName, setAttachmentName,
-    stats, filteredLeaves, currentDurationDays,
+    stats, filteredLeaves, paginatedLeaves, currentDurationDays,
     handleOpenMissionModal, handleOpenLeaveModal, handleTerminateMyMission, handleSubmit, handleCancelRequest,
   };
 }

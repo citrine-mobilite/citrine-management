@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { Employee, Presence, Task, Reminder } from '../../types';
 import { isEmployeeOnlyRole } from '../../utils/roleUtils';
 import {
+  computeNextRoutineOccurrence,
   formatDeadlineFrenchDate,
   getHomeUrgentReminders,
+  isRoutineReminder,
   sortRemindersByUrgency,
 } from '../../services/reminderService';
 import { executeOperationWithLoading } from '../../utils/sweetAlert';
@@ -59,8 +61,20 @@ export function useAdminDashboardLogic({
   const lateCount = todayPresences.filter((p) => p.status === 'late' && p.arrivalTime).length;
 
   const pendingTasks = tasks.filter((t) => t.status !== 'completed');
-  const urgentReminders = useMemo(() => getHomeUrgentReminders(reminders), [reminders]);
-  const sortedReminders = useMemo(() => sortRemindersByUrgency(reminders), [reminders]);
+  const deadlineReminders = useMemo(
+    () => reminders.filter((r) => !isRoutineReminder(r)),
+    [reminders]
+  );
+  const urgentReminders = useMemo(() => getHomeUrgentReminders(deadlineReminders), [deadlineReminders]);
+  const sortedReminders = useMemo(() => sortRemindersByUrgency(deadlineReminders), [deadlineReminders]);
+  const upcomingRoutines = useMemo(() => {
+    return reminders
+      .filter((r) => isRoutineReminder(r) && !r.stopped && r.status !== 'completed')
+      .map((r) => ({ reminder: r, nextAt: computeNextRoutineOccurrence(r) }))
+      .filter((item) => item.nextAt !== null)
+      .sort((a, b) => (a.nextAt!.getTime() - b.nextAt!.getTime()))
+      .map((item) => item.reminder);
+  }, [reminders]);
   const activeRemindersCount = urgentReminders.length;
 
   const handleRenewOrResolveFromHome = async (renewedReminder: Reminder) => {
@@ -90,7 +104,9 @@ export function useAdminDashboardLogic({
     lateCount,
     pendingTasks,
     sortedReminders,
+    upcomingRoutines,
     activeRemindersCount,
+    totalDeadlineRemindersCount: deadlineReminders.length,
     attendanceRate,
     handleRenewOrResolveFromHome,
   };

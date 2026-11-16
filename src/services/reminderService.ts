@@ -14,6 +14,19 @@ import {
   DEADLINE_TEMPLATE_GROUPS,
 } from './reminders/reminderConstants';
 
+import {
+  isRoutineReminder,
+  WEEKDAY_OPTIONS,
+  ROUTINE_TYPE_META,
+  ROUTINE_PRESETS,
+  resolveRecurrenceMode,
+  getActiveWeekdays,
+  formatRoutineRecurrenceLabel,
+  computeNextRoutineOccurrence,
+  formatNextOccurrenceBadge,
+  doesRoutineMatchMoment,
+} from './reminders/routineSchedulerHelpers';
+
 export type { ReminderUrgencyLevel, ReminderUrgencyInfo, DeadlineTemplate };
 export {
   REMINDER_CATEGORY_META,
@@ -21,6 +34,16 @@ export {
   ALERT_LEAD_OPTIONS,
   DEADLINE_TEMPLATES,
   DEADLINE_TEMPLATE_GROUPS,
+  isRoutineReminder,
+  WEEKDAY_OPTIONS,
+  ROUTINE_TYPE_META,
+  ROUTINE_PRESETS,
+  resolveRecurrenceMode,
+  getActiveWeekdays,
+  formatRoutineRecurrenceLabel,
+  computeNextRoutineOccurrence,
+  formatNextOccurrenceBadge,
+  doesRoutineMatchMoment,
 };
 
 function startOfDay(date: Date): Date {
@@ -162,7 +185,9 @@ export function getHomeUrgentReminders(
   reminders: Reminder[],
   referenceDate: Date = new Date()
 ): Reminder[] {
-  const urgent = (reminders || []).filter((r) => computeReminderUrgency(r, referenceDate).isActionNeeded);
+  const urgent = (reminders || []).filter(
+    (r) => !isRoutineReminder(r) && computeReminderUrgency(r, referenceDate).isActionNeeded
+  );
   return sortRemindersByUrgency(urgent);
 }
 

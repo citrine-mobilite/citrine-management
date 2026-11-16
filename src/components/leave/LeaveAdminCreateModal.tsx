@@ -86,14 +86,14 @@ export const LeaveAdminCreateModal: React.FC<LeaveAdminCreateModalProps> = ({
           <div className="space-y-1">
             <label className="font-bold text-stone-700">Type de congé ou d'absence *</label>
             <select value={createLeaveType} onChange={(e) => onChangeLeaveType(e.target.value as LeaveType)} className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-[#2A7B76]">
-              <option value="conge_paye">🌴 Congé Payé Annuel</option>
-              <option value="permission_exceptionnelle">📄 Permission Exceptionnelle d'absence</option>
-              <option value="conge_maladie">🏥 Congé Maladie (justifié)</option>
-              <option value="maternite_paternite">👶 Congé Maternité / Paternité</option>
-              <option value="evenement_familial">💍 Événement Familial (mariage, décès, etc.)</option>
-              <option value="recuperation">⏱️ Récupération / Repos compensateur</option>
-              <option value="teletravail">💻 Télétravail Exceptionnel</option>
-              <option value="autre">✨ Autre motif d'absence</option>
+              <option value="conge_annuel">Congé annuel payé</option>
+              <option value="permission_exceptionnelle">Permission exceptionnelle (Famille / Événement)</option>
+              <option value="maladie">Arrêt maladie (justifié)</option>
+              <option value="sans_solde">Congé sans solde</option>
+              <option value="maternite_paternite">Congé Maternité / Paternité</option>
+              <option value="recuperation">Repos compensateur / Récupération</option>
+              <option value="mission_professionnelle">Mission professionnelle / Déplacement</option>
+              <option value="autre">Autre motif d'absence</option>
             </select>
           </div>
 

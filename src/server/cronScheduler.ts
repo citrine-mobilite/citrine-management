@@ -2,6 +2,7 @@ import { executeDailyTaskSheetDispatch } from '../services/dailyTaskSheetCronSer
 import { executeMonthlyTaskSheetDispatch } from '../services/periodicTaskSheetCronService';
 import { sendWeeklyConsolidatedReport } from '../services/weeklyAttendanceReportService';
 import { sendMondayGreetingToAllEmployees } from '../services/mondayGreetingMailService';
+import { executeDueRoutineRemindersDispatch } from '../services/routineReminderCronService';
 
 export function startScheduledCronJobs(): NodeJS.Timeout {
   return setInterval(async () => {
@@ -26,6 +27,12 @@ export function startScheduledCronJobs(): NodeJS.Timeout {
       .toLowerCase();
     const isWeekday = weekdayName !== 'saturday' && weekdayName !== 'sunday';
     const todayStr = now.toISOString().split('T')[0];
+
+    try {
+      await executeDueRoutineRemindersDispatch();
+    } catch (routineErr) {
+      console.error('[CRON RAPPELS RÉCURRENTS Error]:', routineErr);
+    }
 
     const mondayGreetingKey = `monday_greeting_cron_sent_${todayStr}`;
     if (weekdayName === 'monday' && hour === 8 && minute === 0 && !(global as any)[mondayGreetingKey]) {

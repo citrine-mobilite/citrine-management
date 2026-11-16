@@ -1,10 +1,11 @@
 import React from 'react';
-import { X, Save, Bell, FileText } from 'lucide-react';
+import { X, Save, Repeat, FileText } from 'lucide-react';
 import { Reminder, Employee } from '../../types';
 import { DEADLINE_TEMPLATES } from '../../services/reminderService';
 import { DEADLINE_TEMPLATE_GROUPS } from '../../services/reminders/reminderConstants';
 import { useReminderModalLogic } from './modal/useReminderModalLogic';
 import { ReminderDeadlineAndScheduleFields } from './modal/ReminderDeadlineAndScheduleFields';
+import { ReminderRoutineFields } from './modal/ReminderRoutineFields';
 import { ReminderRecipientsSection } from './modal/ReminderRecipientsSection';
 
 interface ReminderModalProps {
@@ -12,6 +13,7 @@ interface ReminderModalProps {
   onClose: () => void;
   onSaveReminder: (reminderData: Omit<Reminder, 'id' | 'createdAt'> & { id?: string }) => void;
   initialReminder?: Reminder | null;
+  defaultMode?: 'deadline' | 'routine';
   employees: Employee[];
   isEmployee?: boolean;
   currentEmployee?: Employee | null;
@@ -22,6 +24,7 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
   onClose,
   onSaveReminder,
   initialReminder,
+  defaultMode = 'deadline' as 'deadline' | 'routine',
   employees,
   isEmployee = false,
   currentEmployee = null,
@@ -31,6 +34,7 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
     onClose,
     onSaveReminder,
     initialReminder,
+    defaultMode,
     employees,
     isEmployee,
     currentEmployee,
@@ -38,24 +42,34 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
 
   if (!isOpen) return null;
 
+  const isRoutineMode = logic.kind === 'routine' || logic.kind === 'alarm';
+
   return (
     <div className="fixed inset-0 z-50 bg-stone-900/45 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
       <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl border border-stone-200 space-y-5">
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#2A7B76] border border-emerald-200/70 flex items-center justify-center">
-              {logic.kind === 'deadline' ? (
-                <FileText className="h-4.5 w-4.5" />
+              {isRoutineMode ? (
+                <Repeat className="h-4.5 w-4.5" />
               ) : (
-                <Bell className="h-4.5 w-4.5" />
+                <FileText className="h-4.5 w-4.5" />
               )}
             </div>
             <div>
               <h3 className="font-serif font-bold text-base text-stone-950">
-                {logic.isEditing ? "Modifier l'échéance ou le rappel" : 'Nouvelle échéance ou alerte'}
+                {logic.isEditing
+                  ? isRoutineMode
+                    ? 'Modifier le rappel récurrent'
+                    : "Modifier l'échéance administrative"
+                  : isRoutineMode
+                  ? 'Nouveau rituel ou rappel récurrent'
+                  : 'Nouvelle échéance administrative'}
               </h3>
               <p className="text-[11px] text-stone-500">
-                Documents véhicules, impôts périodiques ou rappels horaires avec alerte anticipée.
+                {isRoutineMode
+                  ? 'Réunions récurrentes (ex: Lun · Mer · Ven à 09h), briefs ou alertes d’équipe.'
+                  : 'Documents véhicules, impôts périodiques, salaires ou contrats avec alerte anticipée.'}
               </p>
             </div>
           </div>
@@ -73,7 +87,7 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
             type="button"
             onClick={() => logic.setKind('deadline')}
             className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-              logic.kind === 'deadline'
+              !isRoutineMode
                 ? 'bg-white text-stone-900 shadow-2xs'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
@@ -83,19 +97,19 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => logic.setKind('alarm')}
+            onClick={() => logic.setKind('routine')}
             className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-              logic.kind === 'alarm'
+              isRoutineMode
                 ? 'bg-white text-stone-900 shadow-2xs'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            <Bell className="h-3.5 w-3.5 text-[#2A7B76]" />
-            <span>Rappel horaire (sonnerie)</span>
+            <Repeat className="h-3.5 w-3.5 text-[#2A7B76]" />
+            <span>Rappel récurrent / Réunion</span>
           </button>
         </div>
 
-        {logic.kind === 'deadline' && !logic.isEditing && (
+        {!isRoutineMode && !logic.isEditing && (
           <div className="space-y-2.5 p-3 rounded-2xl bg-stone-50/90 border border-stone-200/80">
             <div className="text-[11px] font-bold text-stone-600 uppercase tracking-wide">
               Modèles rapides d&apos;entreprise
@@ -136,31 +150,62 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
         )}
 
         <form onSubmit={logic.handleSubmit} className="space-y-4 text-xs">
-          <ReminderDeadlineAndScheduleFields
-            kind={logic.kind}
-            category={logic.category}
-            setCategory={logic.setCategory}
-            title={logic.title}
-            setTitle={logic.setTitle}
-            entityName={logic.entityName}
-            setEntityName={logic.setEntityName}
-            documentRef={logic.documentRef}
-            setDocumentRef={logic.setDocumentRef}
-            date={logic.date}
-            setDate={logic.setDate}
-            renewalCycle={logic.renewalCycle}
-            setRenewalCycle={logic.setRenewalCycle}
-            alertLeadDays={logic.alertLeadDays}
-            setAlertLeadDays={logic.setAlertLeadDays}
-            note={logic.note}
-            setNote={logic.setNote}
-            enableSoundAlarm={logic.enableSoundAlarm}
-            setEnableSoundAlarm={logic.setEnableSoundAlarm}
-            time={logic.time}
-            setTime={logic.setTime}
-            selectedPeriods={logic.selectedPeriods}
-            onTogglePeriod={logic.handleTogglePeriod}
-          />
+          {isRoutineMode ? (
+            <ReminderRoutineFields
+              isEditing={logic.isEditing}
+              routineType={logic.routineType}
+              setRoutineType={logic.setRoutineType}
+              title={logic.title}
+              setTitle={logic.setTitle}
+              location={logic.location}
+              setLocation={logic.setLocation}
+              recurrenceMode={logic.recurrenceMode}
+              setRecurrenceMode={logic.setRecurrenceMode}
+              recurrenceDays={logic.recurrenceDays}
+              setRecurrenceDays={logic.setRecurrenceDays}
+              onToggleRecurrenceDay={logic.handleToggleRecurrenceDay}
+              date={logic.date}
+              setDate={logic.setDate}
+              time={logic.time}
+              setTime={logic.setTime}
+              note={logic.note}
+              setNote={logic.setNote}
+              selectedPeriods={logic.selectedPeriods}
+              onTogglePeriod={logic.handleTogglePeriod}
+              sendPushNotification={logic.sendPushNotification}
+              setSendPushNotification={logic.setSendPushNotification}
+              enableSoundAlarm={logic.enableSoundAlarm}
+              setEnableSoundAlarm={logic.setEnableSoundAlarm}
+              selectedRoutinePresetId={logic.selectedRoutinePresetId}
+              onApplyRoutinePreset={logic.handleApplyRoutinePreset}
+            />
+          ) : (
+            <ReminderDeadlineAndScheduleFields
+              kind={logic.kind}
+              category={logic.category}
+              setCategory={logic.setCategory}
+              title={logic.title}
+              setTitle={logic.setTitle}
+              entityName={logic.entityName}
+              setEntityName={logic.setEntityName}
+              documentRef={logic.documentRef}
+              setDocumentRef={logic.setDocumentRef}
+              date={logic.date}
+              setDate={logic.setDate}
+              renewalCycle={logic.renewalCycle}
+              setRenewalCycle={logic.setRenewalCycle}
+              alertLeadDays={logic.alertLeadDays}
+              setAlertLeadDays={logic.setAlertLeadDays}
+              note={logic.note}
+              setNote={logic.setNote}
+              enableSoundAlarm={logic.enableSoundAlarm}
+              setEnableSoundAlarm={logic.setEnableSoundAlarm}
+              time={logic.time}
+              setTime={logic.setTime}
+              selectedPeriods={logic.selectedPeriods}
+              onTogglePeriod={logic.handleTogglePeriod}
+            />
+          )}
 
           <ReminderRecipientsSection
             isEmployee={isEmployee}
@@ -185,7 +230,13 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
               className="px-5 py-2.5 rounded-xl bg-[#2A7B76] text-white hover:bg-[#226763] font-bold flex items-center gap-2 shadow-xs transition cursor-pointer"
             >
               <Save className="h-4 w-4" />
-              <span>{logic.isEditing ? 'Enregistrer' : "Enregistrer l'échéance"}</span>
+              <span>
+                {logic.isEditing
+                  ? 'Enregistrer les modifications'
+                  : isRoutineMode
+                  ? 'Enregistrer le rappel'
+                  : "Enregistrer l'échéance"}
+              </span>
             </button>
           </div>
         </form>

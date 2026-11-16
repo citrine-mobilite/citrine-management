@@ -117,7 +117,7 @@ export default function AdminDashboardOverview({
         lateCount={logic.lateCount}
         pendingTasksCount={logic.pendingTasks.length}
         activeRemindersCount={logic.activeRemindersCount}
-        totalRemindersCount={reminders.length}
+        totalRemindersCount={logic.totalDeadlineRemindersCount}
         onSelectTab={onSelectTab}
       />
 
@@ -143,6 +143,7 @@ export default function AdminDashboardOverview({
 
         <AdminDashboardBottomWidgets
           sortedReminders={logic.sortedReminders}
+          upcomingRoutines={logic.upcomingRoutines}
           activeRemindersCount={logic.activeRemindersCount}
           pendingTasks={logic.pendingTasks}
           onSelectTab={onSelectTab}

@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Reminder } from '../../types';
 import { soundService } from '../../services/soundService';
+import {
+  doesRoutineMatchMoment,
+  isRoutineReminder,
+} from '../../services/reminders/routineSchedulerHelpers';
 
 export function useReminderAlarmScheduler(
   reminders: Reminder[],
@@ -51,13 +55,48 @@ export function useReminderAlarmScheduler(
   useEffect(() => {
     const checkSchedule = () => {
       const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const dayOfMonth = now.getDate();
+      const todayStr = `${year}-${String(month).padStart(2, '0')}-${String(dayOfMonth).padStart(2, '0')}`;
       const currentTotalMin = now.getHours() * 60 + now.getMinutes();
 
       for (const r of reminders) {
         if (r.stopped || r.isResolved) continue;
+
+        if (isRoutineReminder(r)) {
+          // Rituels & rappels récurrents (multi-jours, quotidien, hebdo, mensuel, ponctuel)
+          if (r.enableSoundAlarm === false) continue;
+
+          const match = doesRoutineMatchMoment(r, {
+            dateStr: todayStr,
+            dayOfMonth,
+            dayOfWeek: now.getDay(),
+            hour: now.getHours(),
+            minute: now.getMinutes(),
+          });
+
+          if (match) {
+            const triggered = r.triggeredPeriods || [];
+            if (r.lastTriggeredKey === match.triggerKey || triggered.includes(match.triggerKey)) {
+              continue;
+            }
+            const nextPeriods = Array.from(new Set([...triggered.slice(-20), match.triggerKey]));
+            const updated = reminders.map((rem) =>
+              rem.id === r.id
+                ? { ...rem, lastTriggeredKey: match.triggerKey, triggeredPeriods: nextPeriods }
+                : rem
+            );
+            onUpdateReminders(updated);
+            handleStartAlarm(r);
+            break;
+          }
+          continue;
+        }
+
+        // Échéances documentaires avec sonnerie optionnelle le jour J
         if (!r.date || !r.time) continue;
-        if (r.date !== todayStr) continue;
+        if (r.date.split('T')[0] !== todayStr) continue;
 
         const [rH, rM] = r.time.split(':').map(Number);
         if (isNaN(rH) || isNaN(rM)) continue;
@@ -68,7 +107,8 @@ export function useReminderAlarmScheduler(
         const triggered = r.triggeredPeriods || [];
 
         for (const period of periods) {
-          if (triggered.includes(period)) continue;
+          const periodKey = `${todayStr}_${period}`;
+          if (triggered.includes(period) || triggered.includes(periodKey)) continue;
 
           let shouldRing = false;
           if (period === 'exact' && currentTotalMin === targetTotalMin) shouldRing = true;
@@ -80,7 +120,7 @@ export function useReminderAlarmScheduler(
           if (shouldRing) {
             const updated = reminders.map((rem) =>
               rem.id === r.id
-                ? { ...rem, triggeredPeriods: [...(rem.triggeredPeriods || []), period] }
+                ? { ...rem, triggeredPeriods: [...(rem.triggeredPeriods || []), periodKey] }
                 : rem
             );
             onUpdateReminders(updated);

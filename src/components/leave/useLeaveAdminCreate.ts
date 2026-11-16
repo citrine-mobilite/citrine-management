@@ -21,7 +21,7 @@ export function useLeaveAdminCreate({
 }: UseLeaveAdminCreateParams) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createEmployeeId, setCreateEmployeeId] = useState('');
-  const [createLeaveType, setCreateLeaveType] = useState<LeaveType>('conge_paye');
+  const [createLeaveType, setCreateLeaveType] = useState<LeaveType>('conge_annuel');
   const [createStartDate, setCreateStartDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [createEndDate, setCreateEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [createDaysCount, setCreateDaysCount] = useState<number>(1);

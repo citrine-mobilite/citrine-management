@@ -1,12 +1,18 @@
 import React from 'react';
-import { Users, Clock, CheckSquare, Bell, Settings } from 'lucide-react';
+import { Users, Clock, CheckSquare, Bell, Settings, Repeat } from 'lucide-react';
 import { Reminder, Task } from '../../types';
 import { TabType } from '../Sidebar';
 import { HumaanRelaxedState } from '../illustrations/HumaanIllustrations';
-import { computeReminderUrgency, formatDeadlineFrenchDate } from '../../services/reminderService';
+import {
+  computeReminderUrgency,
+  formatDeadlineFrenchDate,
+  formatNextOccurrenceBadge,
+  formatRoutineRecurrenceLabel,
+} from '../../services/reminderService';
 
 interface AdminDashboardBottomWidgetsProps {
   sortedReminders: Reminder[];
+  upcomingRoutines?: Reminder[];
   activeRemindersCount: number;
   pendingTasks: Task[];
   onSelectTab: (tab: TabType) => void;
@@ -14,10 +20,13 @@ interface AdminDashboardBottomWidgetsProps {
 
 export const AdminDashboardBottomWidgets: React.FC<AdminDashboardBottomWidgetsProps> = ({
   sortedReminders,
+  upcomingRoutines = [],
   activeRemindersCount,
   pendingTasks,
   onSelectTab,
 }) => {
+  const unresolvedDeadlines = sortedReminders.filter((r) => computeReminderUrgency(r).level !== 'resolved');
+
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -25,53 +34,78 @@ export const AdminDashboardBottomWidgets: React.FC<AdminDashboardBottomWidgetsPr
           <div className="flex items-center justify-between border-b border-stone-200/60 pb-2">
             <h4 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
               <Bell className="h-4 w-4 text-[#2A7B76]" />
-              Échéances & Rappels
+              Échéances & Rituels
             </h4>
-            <span className="text-[10px] font-mono tabular-nums bg-stone-100 text-stone-700 font-bold px-2 py-0.5 rounded-lg border border-stone-200/70">
-              {activeRemindersCount} urgente{activeRemindersCount > 1 ? 's' : ''}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {upcomingRoutines.length > 0 && (
+                <span className="text-[10px] font-mono tabular-nums bg-emerald-50 text-[#2A7B76] font-bold px-2 py-0.5 rounded-lg border border-emerald-200/70">
+                  {upcomingRoutines.length} rituel{upcomingRoutines.length > 1 ? 's' : ''}
+                </span>
+              )}
+              <span className="text-[10px] font-mono tabular-nums bg-stone-100 text-stone-700 font-bold px-2 py-0.5 rounded-lg border border-stone-200/70">
+                {activeRemindersCount} urgente{activeRemindersCount > 1 ? 's' : ''}
+              </span>
+            </div>
           </div>
 
           <div className="py-2 text-center flex flex-col items-center justify-center">
-            {sortedReminders.filter((r) => computeReminderUrgency(r).level !== 'resolved').length === 0 ? (
+            {unresolvedDeadlines.length === 0 && upcomingRoutines.length === 0 ? (
               <div className="flex flex-col items-center py-2 space-y-1">
                 <HumaanRelaxedState className="w-20 h-20" />
                 <p className="text-stone-600 font-bold text-xs">Tout est sous contrôle !</p>
-                <p className="text-stone-400 text-[10px]">Aucun document ni impôt proche de l&apos;échéance.</p>
+                <p className="text-stone-400 text-[10px]">Aucune échéance urgente ni réunion planifiée.</p>
               </div>
             ) : (
-              <div className="w-full text-left space-y-2 max-h-40 overflow-y-auto">
-                {sortedReminders
-                  .filter((r) => computeReminderUrgency(r).level !== 'resolved')
-                  .slice(0, 3)
-                  .map((r) => {
-                    const u = computeReminderUrgency(r);
-                    return (
-                      <div
-                        key={r.id}
-                        className="p-2.5 glass-chip rounded-xl flex items-center justify-between gap-2 text-[11px]"
-                      >
-                        <div className="min-w-0">
-                          <p className="font-bold text-stone-900 truncate">{r.title}</p>
-                          <p className="text-[10px] text-stone-500 truncate">
-                            {r.entityName ? `${r.entityName} · ` : ''}
-                            {formatDeadlineFrenchDate(u.targetDateStr)}
-                          </p>
-                        </div>
-                        <span
-                          className={`font-mono tabular-nums font-bold text-[10px] shrink-0 ${
-                            u.level === 'expired' || u.level === 'critical'
-                              ? 'text-rose-700'
-                              : u.level === 'warning'
-                              ? 'text-amber-700'
-                              : 'text-[#2A7B76]'
-                          }`}
-                        >
-                          {u.shortCountdown}
-                        </span>
+              <div className="w-full text-left space-y-2 max-h-44 overflow-y-auto">
+                {unresolvedDeadlines.slice(0, 2).map((r) => {
+                  const u = computeReminderUrgency(r);
+                  return (
+                    <div
+                      key={r.id}
+                      className="p-2.5 glass-chip rounded-xl flex items-center justify-between gap-2 text-[11px]"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-bold text-stone-900 truncate">{r.title}</p>
+                        <p className="text-[10px] text-stone-500 truncate">
+                          {r.entityName ? `${r.entityName} · ` : ''}
+                          {formatDeadlineFrenchDate(u.targetDateStr)}
+                        </p>
                       </div>
-                    );
-                  })}
+                      <span
+                        className={`font-mono tabular-nums font-bold text-[10px] shrink-0 ${
+                          u.level === 'expired' || u.level === 'critical'
+                            ? 'text-rose-700'
+                            : u.level === 'warning'
+                            ? 'text-amber-700'
+                            : 'text-[#2A7B76]'
+                        }`}
+                      >
+                        {u.shortCountdown}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {upcomingRoutines.slice(0, unresolvedDeadlines.length > 0 ? 2 : 3).map((r) => (
+                  <div
+                    key={r.id}
+                    className="p-2.5 bg-emerald-50/50 border border-emerald-200/60 rounded-xl flex items-center justify-between gap-2 text-[11px]"
+                  >
+                    <div className="min-w-0 flex items-center gap-2">
+                      <Repeat className="h-3.5 w-3.5 text-[#2A7B76] shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-bold text-stone-900 truncate">{r.title}</p>
+                        <p className="text-[10px] text-stone-500 truncate">
+                          {formatRoutineRecurrenceLabel(r)}
+                          {r.location ? ` · ${r.location}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-mono tabular-nums font-bold text-[10px] text-[#2A7B76] shrink-0">
+                      {formatNextOccurrenceBadge(r).label}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -80,7 +114,7 @@ export const AdminDashboardBottomWidgets: React.FC<AdminDashboardBottomWidgetsPr
             onClick={() => onSelectTab('reminders')}
             className="w-full py-2 glass-chip text-stone-700 hover:text-stone-900 font-bold rounded-xl text-[10px] transition cursor-pointer text-center"
           >
-            Ouvrir Échéances & Alertes &gt;
+            Ouvrir Échéances & Rappels &gt;
           </button>
         </div>
 
