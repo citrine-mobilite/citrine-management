@@ -32,6 +32,16 @@ class PushNotificationBridgeService {
 
   constructor() {
     if (typeof window !== 'undefined') {
+      const unlock = () => {
+        soundService.unlockAudio();
+        window.removeEventListener('click', unlock);
+        window.removeEventListener('touchstart', unlock);
+        window.removeEventListener('keydown', unlock);
+      };
+      window.addEventListener('click', unlock, { once: true });
+      window.addEventListener('touchstart', unlock, { once: true });
+      window.addEventListener('keydown', unlock, { once: true });
+
       try {
         if (typeof BroadcastChannel !== 'undefined') {
           this.bc = new BroadcastChannel('citrine_push_bridge_channel');
