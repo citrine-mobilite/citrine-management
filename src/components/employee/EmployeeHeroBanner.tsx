@@ -1,7 +1,6 @@
 import React from 'react';
 import { Briefcase, Mail, Phone, Calendar, Award, Pencil, ShieldCheck, Clock, CheckCircle2, Coffee } from 'lucide-react';
 import { Employee, AppUser, Presence } from '../../types';
-import { PWAInstallButton } from '../pwa/PWAInstallButton';
 import { HumaanRelaxedState } from '../illustrations/HumaanIllustrations';
 
 interface EmployeeHeroBannerProps {
@@ -120,8 +119,6 @@ export const EmployeeHeroBanner: React.FC<EmployeeHeroBannerProps> = ({
               <span>Gérer Mon Profil</span>
             </button>
           )}
-
-          <PWAInstallButton />
 
           <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-black/20 border border-white/10 text-xs text-white/80">
             <Briefcase className="h-3.5 w-3.5 text-[#F3D079]" />
