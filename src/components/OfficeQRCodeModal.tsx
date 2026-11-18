@@ -15,7 +15,7 @@ interface OfficeQRCodeModalProps {
 export default function OfficeQRCodeModal({
   isOpen,
   onClose,
-  qrSecret = 'CITRINE_HQ_NOVEMBRE_2026',
+  qrSecret = '',
   companyName = 'Citrine Management',
   managerName = 'Responsable',
 }: OfficeQRCodeModalProps) {
@@ -47,6 +47,8 @@ export default function OfficeQRCodeModal({
 
   useEffect(() => {
     if (!isOpen) return;
+
+    if (!qrSecret.trim()) { setQrToken(''); setQrSecondsLeft(0); return; }
 
     // Set initial token
     const updateToken = () => {
@@ -83,6 +85,7 @@ export default function OfficeQRCodeModal({
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(currentQrSecret)}`;
 
   const handleCopySecret = () => {
+    if (!currentQrSecret) return;
     navigator.clipboard.writeText(currentQrSecret);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -134,11 +137,17 @@ export default function OfficeQRCodeModal({
                 Expire dans {qrSecondsLeft}s
               </span>
               <div className="inline-block p-2.5 bg-white rounded-2xl border border-stone-200 shadow-xs">
-                <img
-                  src={qrImageUrl}
-                  alt="QR Code de Présence"
-                  className="w-40 h-40 mx-auto object-contain rounded-lg"
-                />
+                {qrSecret ? (
+                  <img
+                    src={qrImageUrl}
+                    alt="QR Code de Présence"
+                    className="w-40 h-40 mx-auto object-contain rounded-lg"
+                  />
+                ) : (
+                  <div className="w-40 h-40 flex items-center justify-center text-xs text-stone-500 text-center">
+                    QR non configuré. Un administrateur doit définir le jeton officiel.
+                  </div>
+                )}
               </div>
               <button
                 onClick={handleCopySecret}
@@ -201,13 +210,14 @@ export default function OfficeQRCodeModal({
           {/* Action buttons */}
           <div className="pt-2">
             <button
-              onClick={() => generateAndDownloadQrPoster(qrSecret, {
+              disabled={!qrSecret.trim()}
+              onClick={() => qrSecret.trim() && generateAndDownloadQrPoster(qrSecret, {
                 companyName,
                 siteName: 'Borne Officielle d’Entrée',
                 title: 'BORNE OFFICIELLE DE POINTAGE',
                 subtitle: 'Affiche permanente à imprimer et fixer à la porte d’entrée.',
               })}
-              className="w-full py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-2.5 bg-[#2A7B76] hover:bg-[#20635F] disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
             >
               <Download className="h-4 w-4" />
               <span>Télécharger l'Affiche de Pointage Permanente (HD)</span>
