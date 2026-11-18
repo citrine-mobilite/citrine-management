@@ -35,6 +35,9 @@ export function broadcastRealtimeEvent(event: string, data: any): void {
       if (event === 'presence_update' && !['administrateur', 'responsable'].includes(client.role)) {
         if (!targetEmployeeId || !client.employeeIds.has(targetEmployeeId)) continue;
       }
+      if (event === 'collection_update' && safeData?.collection === 'dynamic_qr_sessions' && !['administrateur', 'responsable'].includes(client.role)) {
+        continue;
+      }
       client.res.write(payload);
     } catch {
       sseClients.delete(id);
