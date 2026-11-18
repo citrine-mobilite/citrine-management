@@ -1,5 +1,5 @@
 import { Employee, EmployeeStatus, AppUser, NotificationLog } from '../../types';
-import { supabaseService } from '../supabaseService';
+import { supabaseService } from '../mariaDbService';
 
 export const EMPLOYEES_COLLECTION = 'employees';
 
