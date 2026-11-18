@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { randomBytes, pbkdf2Sync } from 'node:crypto';
 import { Client } from 'pg';
 
 const TABLES = [
@@ -30,6 +31,26 @@ function mapSqlRow(row: any): Record<string, any> {
   item.docId = row.doc_id || raw.docId || item.id;
   item.uid = row.uid || raw.uid;
   item._dbId = row.id;
+  return item;
+}
+
+function hashLegacyPassword(password: string): string {
+  const salt = randomBytes(16);
+  const hash = pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+  return `pbkdf2:${salt.toString('hex')}:${hash.toString('hex')}`;
+}
+
+function normalizeExportUser(user: Record<string, any>): Record<string, any> {
+  const item = { ...user };
+  const legacyPassword = String(item.passwordHash || item.password_hash || item.password || item.initialPassword || '');
+  if (legacyPassword) {
+    item.passwordHash = legacyPassword.startsWith('pbkdf2:') || /^\$2[aby]\$/.test(legacyPassword)
+      ? legacyPassword
+      : hashLegacyPassword(legacyPassword);
+  }
+  delete item.password_hash;
+  delete item.password;
+  delete item.initialPassword;
   return item;
 }
 
@@ -86,6 +107,7 @@ async function main() {
       }
 
       collections[table] = result.rows.map(mapSqlRow);
+      if (table === 'users') collections[table] = collections[table].map(normalizeExportUser);
     }
 
     await client.query('SAVEPOINT auth_export');
