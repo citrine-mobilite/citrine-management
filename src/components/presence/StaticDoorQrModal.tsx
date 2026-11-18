@@ -33,6 +33,7 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
   moduleConfig,
   onUpdateConfig,
   onUpdateModuleConfig,
+  showToast,
 }) => {
   const persistConfig = onUpdateConfig || onUpdateModuleConfig;
   const [copied, setCopied] = useState(false);
@@ -40,7 +41,7 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
   const [isInvalidated, setIsInvalidated] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const defaultToken = moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026';
+  const defaultToken = moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || '';
 
   useEffect(() => {
     if (isOpen) {
@@ -55,13 +56,16 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
   const currentToken = tokenInput.trim() || defaultToken;
 
   const handleCopyToken = () => {
+    if (!currentToken) return;
     navigator.clipboard.writeText(currentToken);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
   const handleRegenerateToken = async () => {
-    const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const randomBytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(randomBytes);
+    const randomSuffix = Array.from(randomBytes, value => value.toString(16).padStart(2, '0')).join('').toUpperCase();
     const newToken = `CITRINE_DOOR_${Date.now().toString(36).toUpperCase()}_${randomSuffix}`;
     const oldToken = currentToken;
     const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens) ? moduleConfig.revokedDoorTokens : [];
@@ -94,6 +98,7 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
   };
 
   const handleSaveToken = async () => {
+    if (tokenInput.trim().length < 16) { showToast?.('Le jeton doit contenir au moins 16 caractères.', 'error'); return; }
     const res = await executeOperationWithLoading({
       loadingTitle: 'Enregistrement du jeton...',
       loadingText: 'Veuillez patienter pendant la sauvegarde en base...',
@@ -150,6 +155,7 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
   };
 
   const handleDownloadQR = () => {
+    if (!currentToken) { showToast?.('Générez ou configurez un jeton QR avant le téléchargement.', 'error'); return; }
     generateAndDownloadQrPoster(currentToken, {
       companyName: moduleConfig?.companyName || 'Citrine SARL',
       siteName: moduleConfig?.doorQrSiteName || 'Entrée Principale (HQ Siège)',
@@ -187,6 +193,10 @@ export const StaticDoorQrModal: React.FC<StaticDoorQrModalProps> = ({
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
+
+          {!currentToken && (
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl">Aucun jeton QR officiel n’est configuré. Générez un nouveau jeton avant d’imprimer le QR.</div>
+          )}
 
           {successMsg && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl flex items-center space-x-2 animate-fadeIn">
