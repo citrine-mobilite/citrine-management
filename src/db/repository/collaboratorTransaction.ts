@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID, pbkdf2Sync } from 'node:crypto';
 import { withMariaDbTransaction } from '../mariadb';
-import type { CreateCollaboratorTransactionInput } from './collaboratorTransactionHelpers';
+import type { CreateCollaboratorTransactionInput } from './collaboratorTransactionTypes';
 
 export type { CreateCollaboratorTransactionInput };
 
