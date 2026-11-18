@@ -12,6 +12,7 @@ import { savePresenceAtomic } from '../../services/dataService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { realtimeSyncService } from '../../services/realtimeSyncService';
 import { executeOperationWithLoading } from '../../utils/sweetAlert';
+import { getDoualaTimeString } from '../../utils/doualaTime';
 import {
   ClockActionType,
   isSameClockEmployee,
@@ -83,8 +84,7 @@ export function useClockingActions({
           throw new Error('Signal GPS requis pour enregistrer votre pointage.');
         }
 
-        const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const timeStr = getDoualaTimeString();
         recordedTimeStr = timeStr;
         const lateThreshold = moduleConfig?.lateThresholdTime || '08:30';
         const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
