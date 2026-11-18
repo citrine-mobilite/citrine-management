@@ -155,8 +155,9 @@ async function main() {
           `SELECT id FROM \x60${table}\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
         );
         if (savedRows[0] && legacyId) {
-          legacyIds[collection] ||= new Map<string, number>();
-          legacyIds[collection].set(legacyId, Number(savedRows[0].id));
+          const mapKey = table === 'inventory' ? 'inventory' : collection;
+          legacyIds[mapKey] ||= new Map<string, number>();
+          legacyIds[mapKey].set(legacyId, Number(savedRows[0].id));
         }
       }
       count++;
