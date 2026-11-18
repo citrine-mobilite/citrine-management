@@ -188,6 +188,14 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
         });
       }
 
+      if (collection === 'presences') {
+        data = data.map((item: any) => {
+          const safe = { ...item };
+          delete safe.qrCodeToken;
+          return safe;
+        });
+      }
+
       if (collection === 'company_settings') {
         data = data.map((item: any) => ({
           ...item,
