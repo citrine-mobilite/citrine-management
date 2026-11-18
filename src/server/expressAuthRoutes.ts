@@ -89,6 +89,7 @@ export function registerAuthRoutes(app: Express): void {
         await pool.execute('UPDATE users SET raw_data = ?, updated_at = NOW(3) WHERE id = ?', [JSON.stringify(raw), row.id]);
       }
 
+      await pool.execute('DELETE FROM auth_sessions WHERE expires_at < NOW(3) OR revoked_at < DATE_SUB(NOW(3), INTERVAL 30 DAY)');
       const token = randomBytes(32).toString('base64url');
       const tokenHash = createHash('sha256').update(token).digest('hex');
       const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
@@ -111,7 +112,9 @@ export function registerAuthRoutes(app: Express): void {
     try {
       const hash = createHash('sha256').update(token).digest('hex');
       const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
-        `SELECT u.* FROM auth_sessions s JOIN users u ON u.id = s.user_id
+        `SELECT u.*, r.code AS role_code FROM auth_sessions s
+         JOIN users u ON u.id = s.user_id
+         LEFT JOIN roles r ON r.id = u.role_id
          WHERE s.token_hash = ? AND s.expires_at > NOW(3) AND s.revoked_at IS NULL LIMIT 1`,
         [hash]
       );
