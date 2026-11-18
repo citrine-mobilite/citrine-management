@@ -1,4 +1,4 @@
-import { validateTotpQrCode, DEFAULT_COMPANY_SECRET } from './totpQrService';
+import { validateTotpQrCode } from './totpQrService';
 
 export interface GeolocationResult {
   latitude: number;
