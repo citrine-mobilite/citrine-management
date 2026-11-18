@@ -20,8 +20,8 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
   if (initialPassword.length < 10) throw new Error('Le mot de passe initial doit contenir au moins 10 caractères.');
 
   const roleText = String(input.roleType || input.userRole || '').toLowerCase();
-  const roleCode = roleText.includes('admin') ? 'ADMIN' : roleText.includes('responsable') ? 'MANAGER' : 'EMPLOYEE';
-  const roleName = roleCode === 'ADMIN' ? 'Administrateur' : roleCode === 'MANAGER' ? 'Responsable' : 'Employé';
+  const roleCode = roleText.includes('admin') ? 'SUPER_ADMIN' : roleText.includes('responsable') ? 'RESPONSABLE' : 'EMPLOYE';
+  const roleName = roleCode === 'SUPER_ADMIN' ? 'Super Administrateur' : roleCode === 'RESPONSABLE' ? 'Responsable d’Unité' : 'Collaborateur / Employé';
   const department = String(input.department || 'Direction Générale').trim();
   const empDocId = `emp-${randomUUID()}`;
   const userDocId = `user-${randomUUID()}`;
@@ -120,7 +120,7 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
     };
     const user = {
       id: String(userDbId), doc_id: userDocId, uid: userUid, name, email,
-      role: roleCode === 'ADMIN' ? 'administrateur' : roleCode === 'MANAGER' ? 'responsable' : 'employé',
+      role: roleCode === 'SUPER_ADMIN' ? 'administrateur' : roleCode === 'RESPONSABLE' ? 'responsable' : 'employé',
       roleId, status: 'actif', department, phone: input.phone || '', employeeId: empDocId,
       avatarUrl: photoUrl, team: input.team, teams: input.teams, managerId: input.managerId,
       allowEarlyDeparture15_17: Boolean(input.allowEarlyDeparture15_17),
