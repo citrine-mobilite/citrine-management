@@ -3,7 +3,7 @@ import {
   getEffectiveSmtpConfig,
   parseEmailList,
 } from '../../services/serverMailService';
-import { supabaseAdmin } from '../../lib/supabase';
+import { getCollectionData, saveDocumentData } from '../../db/repository';
 import { Resend } from 'resend';
 import {
   sendWeeklyConsolidatedReport,
@@ -46,14 +46,13 @@ export async function handleMailAndCronRoutes(
 
     let existing: any = {};
     try {
-      const { data } = await supabaseAdmin.from('company_settings').select('*');
-      if (data && Array.isArray(data) && data.length > 0) {
-        const found = data.find((s: any) => s.id === 'main_config' || s.doc_id === 'main_config') || data[0];
-        const raw = found.raw_data && typeof found.raw_data === 'object' ? found.raw_data : found.setting_value && typeof found.setting_value === 'object' ? found.setting_value : found;
-        existing = { ...found, ...raw };
+      const data = await getCollectionData('company_settings');
+      if (data && data.length > 0) {
+        const found = data.find((s: any) => s.id === 'main_config' || s.docId === 'main_config' || s.doc_id === 'main_config') || data[0];
+        existing = { ...found };
       }
-    } catch (e) {
-      console.warn('⚠️ Impossible de lire les réglages existants:', e);
+    } catch (error) {
+      console.warn('Impossible de lire les réglages SMTP MariaDB:', error);
     }
 
     const updatedDoc = {
@@ -72,13 +71,7 @@ export async function handleMailAndCronRoutes(
       updatedAt: new Date().toISOString(),
     };
 
-    await supabaseAdmin.from('company_settings').upsert({
-      id: 'main_config',
-      doc_id: 'main_config',
-      raw_data: updatedDoc,
-      setting_value: updatedDoc,
-      updated_at: new Date().toISOString(),
-    });
+    await saveDocumentData('company_settings', updatedDoc);
 
     res.status(200).json({
       success: true,
