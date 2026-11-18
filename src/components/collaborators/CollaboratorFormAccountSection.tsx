@@ -3,6 +3,7 @@ import { Camera, KeyRound } from 'lucide-react';
 import { AppUser, Employee, UserRole } from '../../types';
 import { CollaboratorFormData } from './collaboratorConstants';
 import { CollaboratorAccountEditBlock } from './CollaboratorAccountEditBlock';
+import { generateStrongPassword } from '../../utils/cryptoUtils';
 
 interface CollaboratorFormAccountSectionProps {
   editingEmployee: Employee | null;
@@ -41,7 +42,7 @@ export const CollaboratorFormAccountSection: React.FC<CollaboratorFormAccountSec
                   required
                   value={formData.userPassword}
                   onChange={(e) => setFormData({ ...formData, userPassword: e.target.value })}
-                  placeholder="Ex: Collab@2026"
+                  placeholder="12 caractères minimum"
                   className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-mono font-bold text-stone-800 focus:ring-2 focus:ring-[#2A7B76] outline-none"
                 />
                 <button
@@ -49,7 +50,7 @@ export const CollaboratorFormAccountSection: React.FC<CollaboratorFormAccountSec
                   onClick={() =>
                     setFormData({
                       ...formData,
-                      userPassword: `Collab@${Math.floor(1000 + Math.random() * 9000)}`,
+                      userPassword: generateStrongPassword(18),
                     })
                   }
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#2A7B76] font-bold hover:underline"
