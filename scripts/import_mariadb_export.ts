@@ -14,20 +14,25 @@ function hashLegacyPassword(value: string): string {
 }
 function normalizeUser(row: any, roleIds: Record<string, number>) {
   const raw = { ...row };
-  const role = String(row.role || row.roleCode || '').toUpperCase();
+  const role = String(row.role || row.roleCode || row.role_type || '').toUpperCase();
   const roleCode = role.includes('ADMIN') ? 'SUPER_ADMIN' : role.includes('RESPONSABLE') ? 'RESPONSABLE' : 'EMPLOYE';
-  raw.roleId = Number(row.roleId || row.role_id || roleIds[roleCode] || 0) || null;
-  if (typeof raw.passwordHash === 'string' && raw.passwordHash && !raw.passwordHash.startsWith('pbkdf2:')) {
-    raw.passwordHash = hashLegacyPassword(raw.passwordHash);
+  raw.roleId = Number(roleIds[roleCode] || row.roleId || row.role_id || 0) || null;
+  const legacyPassword = String(raw.passwordHash || raw.password_hash || raw.password || raw.initialPassword || '');
+  if (legacyPassword) {
+    raw.passwordHash = legacyPassword.startsWith('pbkdf2:') || /^\$2[aby]\$/.test(legacyPassword)
+      ? legacyPassword
+      : hashLegacyPassword(legacyPassword);
   }
   delete raw.password_hash;
+  delete raw.password;
+  delete raw.initialPassword;
   return raw;
 }
 function normalizeEmployee(row: any, roleIds: Record<string, number>) {
   const raw = { ...row };
-  const role = String(row.roleType || row.role || '').toUpperCase();
+  const role = String(row.roleType || row.role || row.role_type || '').toUpperCase();
   const roleCode = role.includes('ADMIN') ? 'SUPER_ADMIN' : role.includes('RESPONSABLE') ? 'RESPONSABLE' : 'EMPLOYE';
-  raw.roleId = Number(row.roleId || row.role_id || roleIds[roleCode] || 0) || null;
+  raw.roleId = Number(roleIds[roleCode] || row.roleId || row.role_id || 0) || null;
   raw.userId = null; // Re-linked by email after all users and employees are imported.
   return raw;
 }
@@ -84,18 +89,43 @@ async function main() {
 
   const imported: Record<string, number> = {};
   const legacyIds: Record<string, Map<string, number>> = {};
-  for (const [collection, rows] of entries) {
-    let count = 0;
+  for (const [sourceCollection, rows] of entries) {
     for (const original of rows) {
       if (!original || typeof original !== 'object') continue;
-      const row = collection === 'users'
-        ? normalizeUser(original, roleIds)
+
+      let collection = sourceCollection;
+      let sourceRow: any = original;
+      if (sourceCollection === 'generic_collections') {
+        collection = String(original.collection || '').trim();
+        if (!collection) continue;
+        const genericData = typeof original.data === 'string'
+          ? (() => { try { return JSON.parse(original.data); } catch { return {}; } })()
+          : (original.data || {});
+        sourceRow = {
+          ...genericData,
+          id: original.doc_id || genericData.id || original.id,
+          docId: original.doc_id || genericData.docId || original.id,
+          uid: original.uid || genericData.uid,
+        };
+      }
+
+      const raw = sourceRow.raw_data && typeof sourceRow.raw_data === 'string'
+        ? (() => { try { return JSON.parse(sourceRow.raw_data); } catch { return {}; } })()
+        : (sourceRow.raw_data || {});
+      const flattened = { ...raw, ...sourceRow };
+      delete flattened.raw_data;
+      let row = collection === 'users'
+        ? normalizeUser(flattened, roleIds)
         : collection === 'employees'
-          ? normalizeEmployee(original, roleIds)
-          : { ...original };
+          ? normalizeEmployee(flattened, roleIds)
+          : flattened;
+
       const legacyId = String(row.legacyId || row._dbId || row.id || row.docId || row.doc_id || '').trim();
-      const stableDocId = String(row.docId || row.doc_id || (legacyId && /^\\d+$/.test(legacyId) ? collection + '-' + legacyId : legacyId) ||
-        ('import-' + collection + '-' + createHash('sha256').update(JSON.stringify(row)).digest('hex').slice(0,24)));
+      const stableDocId = String(
+        row.docId || row.doc_id ||
+        (legacyId && /^\d+$/.test(legacyId) ? collection + '-' + legacyId : legacyId) ||
+        ('import-' + collection + '-' + createHash('sha256').update(JSON.stringify(row)).digest('hex').slice(0,24))
+      );
       row.legacyId = legacyId || null;
       row.id = stableDocId;
       row.docId = stableDocId;
@@ -109,7 +139,10 @@ async function main() {
       const notificationMap = legacyIds.notifications || new Map<string, number>();
       const inventoryMap = legacyIds.inventory || new Map<string, number>();
 
-      if (collection === 'employees') row.userId = null;
+      if (collection === 'employees') {
+        row.userId = null;
+        row.user_id = null;
+      }
       if (collection !== 'employees' && collection !== 'users') {
         if (row.employeeId !== undefined || row.employee_id !== undefined) {
           const value = row.employeeId ?? row.employee_id;
@@ -119,34 +152,57 @@ async function main() {
         if (row.userId !== undefined || row.user_id !== undefined) {
           const value = row.userId ?? row.user_id;
           row.userId = await resolveLegacyReference('users', value, userMap);
+          row.user_id = row.userId;
         }
         if (row.projectId !== undefined || row.project_id !== undefined) {
           const value = row.projectId ?? row.project_id;
           row.projectId = await resolveLegacyReference('task_projects', value, projectMap);
+          row.project_id = row.projectId;
         }
         if (row.presenceId !== undefined || row.presence_id !== undefined) {
           const value = row.presenceId ?? row.presence_id;
           row.presenceId = await resolveLegacyReference('presences', value, presenceMap);
+          row.presence_id = row.presenceId;
         }
         if (row.taskId !== undefined || row.task_id !== undefined) {
           const value = row.taskId ?? row.task_id;
           row.taskId = await resolveLegacyReference('tasks', value, taskMap);
+          row.task_id = row.taskId;
         }
         if (row.reminderId !== undefined || row.reminder_id !== undefined) {
           const value = row.reminderId ?? row.reminder_id;
           row.reminderId = await resolveLegacyReference('reminders', value, reminderMap);
+          row.reminder_id = row.reminderId;
         }
         if (row.notificationId !== undefined || row.notification_id !== undefined) {
           const value = row.notificationId ?? row.notification_id;
           row.notificationId = await resolveLegacyReference('notifications', value, notificationMap);
+          row.notification_id = row.notificationId;
         }
         if (row.inventoryId !== undefined || row.inventory_id !== undefined) {
           const value = row.inventoryId ?? row.inventory_id;
           row.inventoryId = await resolveLegacyReference('inventory', value, inventoryMap);
+          row.inventory_id = row.inventoryId;
         }
         if (row.targetUserId !== undefined || row.target_user_id !== undefined) {
           const value = row.targetUserId ?? row.target_user_id;
           row.targetUserId = await resolveLegacyReference('users', value, userMap);
+          row.target_user_id = row.targetUserId;
+        }
+        if (row.callerId !== undefined || row.caller_id !== undefined) {
+          const value = row.callerId ?? row.caller_id;
+          row.callerId = await resolveLegacyReference('users', value, userMap);
+          row.caller_id = row.callerId;
+        }
+        if (row.receiverId !== undefined || row.receiver_id !== undefined) {
+          const value = row.receiverId ?? row.receiver_id;
+          row.receiverId = await resolveLegacyReference('users', value, userMap);
+          row.receiver_id = row.receiverId;
+        }
+        if (Array.isArray(row.targetEmployeeIds)) {
+          row.targetEmployeeIds = await Promise.all(row.targetEmployeeIds.map((value: any) =>
+            resolveLegacyReference('employees', value, employeeMap)
+          ));
         }
       }
 
@@ -154,7 +210,7 @@ async function main() {
       const table = mapCollectionToMariaDbTable(collection);
       if (table !== 'generic_collections') {
         const [savedRows] = await pool.execute<any[]>(
-          `SELECT id FROM \x60${table}\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
+          `SELECT id FROM \\x60${table}\\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
         );
         if (savedRows[0] && legacyId) {
           const mapKey = table === 'inventory' ? 'inventory' : collection;
@@ -162,9 +218,10 @@ async function main() {
           legacyIds[mapKey].set(legacyId, Number(savedRows[0].id));
         }
       }
-      count++;
+      imported[collection] = (imported[collection] || 0) + 1;
     }
-    imported[collection] = count;
+  }
+  for (const [collection, count] of Object.entries(imported)) {
     console.log(`[OK] ${collection}: ${count} document(s)`);
   }
 
