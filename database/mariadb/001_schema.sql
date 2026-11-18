@@ -91,10 +91,10 @@ CREATE TABLE IF NOT EXISTS task_project_members (
     role_in_project LONGTEXT DEFAULT 'membre',
     added_at DATETIME(3) DEFAULT NOW(),
     raw_data JSON,
+    updated_at DATETIME(3) DEFAULT NOW(3),
     CONSTRAINT fk_task_project_members_project_id FOREIGN KEY (project_id) REFERENCES task_projects(id) ON DELETE CASCADE,
     CONSTRAINT fk_task_project_members_employee_id FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-,
-    updated_at DATETIME(3) DEFAULT NOW(3)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Table: tasks
 CREATE TABLE IF NOT EXISTS tasks (
@@ -131,10 +131,10 @@ CREATE TABLE IF NOT EXISTS task_assignees (
     role_in_task LONGTEXT DEFAULT 'contributeur',
     assigned_at DATETIME(3) DEFAULT NOW(),
     raw_data JSON,
+    updated_at DATETIME(3) DEFAULT NOW(3),
     CONSTRAINT fk_task_assignees_task_id FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
     CONSTRAINT fk_task_assignees_employee_id FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-,
-    updated_at DATETIME(3) DEFAULT NOW(3)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Table: reminders
 CREATE TABLE IF NOT EXISTS reminders (
@@ -167,10 +167,10 @@ CREATE TABLE IF NOT EXISTS reminder_recipients (
     acknowledged TINYINT(1) DEFAULT FALSE,
     acknowledged_at DATETIME(3),
     raw_data JSON,
+    updated_at DATETIME(3) DEFAULT NOW(3),
     CONSTRAINT fk_reminder_recipients_reminder_id FOREIGN KEY (reminder_id) REFERENCES reminders(id) ON DELETE CASCADE,
     CONSTRAINT fk_reminder_recipients_employee_id FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-,
-    updated_at DATETIME(3) DEFAULT NOW(3)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Table: notifications
 CREATE TABLE IF NOT EXISTS notifications (
@@ -199,10 +199,10 @@ CREATE TABLE IF NOT EXISTS notification_recipients (
     user_id BIGINT NULL,
     is_read TINYINT(1) DEFAULT FALSE,
     raw_data JSON,
+    updated_at DATETIME(3) DEFAULT NOW(3),
     CONSTRAINT fk_notification_recipients_notification_id FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
     CONSTRAINT fk_notification_recipients_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-,
-    updated_at DATETIME(3) DEFAULT NOW(3)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Table: presences
 CREATE TABLE IF NOT EXISTS presences (
@@ -240,9 +240,9 @@ CREATE TABLE IF NOT EXISTS presence_pauses (
     duration_minutes INTEGER DEFAULT 0,
     motif LONGTEXT,
     raw_data JSON,
+    updated_at DATETIME(3) DEFAULT NOW(3),
     CONSTRAINT fk_presence_pauses_presence_id FOREIGN KEY (presence_id) REFERENCES presences(id) ON DELETE CASCADE
-,
-    updated_at DATETIME(3) DEFAULT NOW(3)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Table: attendance_incidents
 CREATE TABLE IF NOT EXISTS attendance_incidents (
@@ -325,10 +325,10 @@ CREATE TABLE IF NOT EXISTS inventory_assignments (
     returned_at DATETIME(3),
     `condition` LONGTEXT DEFAULT 'bon_etat',
     raw_data JSON,
+    updated_at DATETIME(3) DEFAULT NOW(3),
     CONSTRAINT fk_inventory_assignments_inventory_id FOREIGN KEY (inventory_id) REFERENCES inventory(id) ON DELETE CASCADE,
     CONSTRAINT fk_inventory_assignments_employee_id FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-,
-    updated_at DATETIME(3) DEFAULT NOW(3)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Table: disciplinary_incidents
 CREATE TABLE IF NOT EXISTS disciplinary_incidents (
