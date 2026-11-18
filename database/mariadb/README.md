@@ -40,3 +40,16 @@ npx tsx scripts/import_mariadb_export.ts /chemin/prive/export.json
 Le script refuse par défaut d'importer si des utilisateurs ou employés existent déjà. `--merge` est une option explicite pour fusionner des données, à réserver aux imports contrôlés. Le script n'efface aucune ligne et peut être relancé pour reprendre un import partiel.
 
 Ordre recommandé des migrations SQL : `001_schema.sql`, `002_auth_sessions.sql`, `003_seed_reference_data.sql`, `004_call_signals.sql`.
+
+
+## Export des données Supabase (avant bascule)
+
+Le script `scripts/export_supabase_export.ts` lit les 40 tables du schéma PostgreSQL du dépôt dans une transaction en lecture seule. Il aplatit `raw_data`, transforme les lignes de `generic_collections` en collections logiques et tente de récupérer les hashes bcrypt de `auth.users` pour préserver les mots de passe Supabase.
+
+1. Depuis une machine de confiance, configure temporairement `SUPABASE_DATABASE_URL` avec la chaîne PostgreSQL du projet Supabase (Settings → Database). N'enregistre jamais cette chaîne dans Git.
+2. Installe les dépendances de développement puis lance `npm run export:supabase -- ./citrine-supabase-export.json`.
+3. Conserve le JSON en lieu sûr : il contient des hashes de mots de passe. Le fichier est ignoré par Git et créé avec des permissions privées.
+4. Vérifie le nombre d'utilisateurs sans hash. Ceux-ci devront réinitialiser leur mot de passe.
+5. Exécute d'abord l'import avec `--dry-run`, puis importe vers une base MariaDB de test vide.
+
+Le script essaie aussi de lire `auth.users.encrypted_password`. Si Supabase refuse cette lecture, le rapport l'indique et les comptes sans hash devront être réinitialisés. Le script n'efface et ne modifie aucune donnée Supabase.
