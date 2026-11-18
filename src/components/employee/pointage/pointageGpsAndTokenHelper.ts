@@ -25,7 +25,7 @@ export function extractCleanTokenFromScan(scannedRaw: string): string {
 
 export async function captureGpsWithTimeout(
   officialSiteName: string,
-  _requireGpsStrict: boolean,
+  requireGpsStrict: boolean,
   fallbackSuffix: string,
   withTimeoutMs?: number
 ): Promise<GpsCaptureResult> {
@@ -51,6 +51,14 @@ export async function captureGpsWithTimeout(
     return { ok: true, latitude: locResult.latitude, longitude: locResult.longitude, locationLabel };
   } catch (gpsErr: any) {
     const reason = gpsErr?.message || 'Signal GPS introuvable ou accès refusé.';
-    return { ok: false, reason };
+    if (requireGpsStrict) {
+      return { ok: false, reason };
+    }
+    return {
+      ok: true,
+      latitude: 4.0511,
+      longitude: 9.7679,
+      locationLabel: `${officialSiteName} ${fallbackSuffix}`,
+    };
   }
 }
