@@ -299,7 +299,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
       }
       const targetEmployee = input.presence.employeeId || input.presence.employee_id || input.presence.employeeEmail;
       if (!(await authorizeClockingTarget(req, targetEmployee, res))) return;
-      const result = await executeAtomicClockingTransaction(input);
+      const result = await executeAtomicClockingTransaction({ ...input, actor: { id: String(req.user?.id), role: String(req.user?.role || '') } });
       if (result.success) {
         broadcastRealtimeEvent('presence_update', {
           presence: result.presence,
