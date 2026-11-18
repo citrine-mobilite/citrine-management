@@ -50,6 +50,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     try {
       const { collection } = req.params;
       const saved = await saveDocumentData(collection, req.body);
+      broadcastRealtimeEvent('collection_update', { collection, id: saved?.id, action: 'upsert' });
       res.json({ success: true, data: saved });
     } catch (error: any) {
       console.error(`Error saving to collection ${req.params.collection}:`, error);
@@ -61,6 +62,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     try {
       const { collection, id } = req.params;
       await deleteDocumentData(collection, id);
+      broadcastRealtimeEvent('collection_update', { collection, id, action: 'delete' });
       res.json({ success: true });
     } catch (error: any) {
       console.error(`Error deleting from collection ${req.params.collection}:`, error);
@@ -82,7 +84,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/collaborators/transactional', async (req: express.Request, res: express.Response) => {
+  app.post('/api/collaborators/transactional', requireAuth, async (req: express.Request, res: express.Response) => {
     try {
       const input = req.body;
       if (!input?.name || !input?.email) {
@@ -96,7 +98,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/clocking/atomic', async (req: express.Request, res: express.Response) => {
+  app.post('/api/clocking/atomic', requireAuth, async (req: express.Request, res: express.Response) => {
     try {
       const input = req.body;
       if (!input?.presence) {
@@ -139,7 +141,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     });
   });
 
-  app.post('/api/push/beams/publish', async (req: express.Request, res: express.Response) => {
+  app.post('/api/push/beams/publish', requireAuth, async (req: express.Request, res: express.Response) => {
     try {
       const {
         title,
@@ -183,7 +185,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.get('/api/clocking/eligibility', async (req: express.Request, res: express.Response) => {
+  app.get('/api/clocking/eligibility', requireAuth, async (req: express.Request, res: express.Response) => {
     try {
       const result = await checkClockingEligibilityBackend({
         employeeId: req.query.employeeId as string | undefined,
