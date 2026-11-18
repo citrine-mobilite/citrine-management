@@ -76,6 +76,24 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       [employeeId, date]
     );
     const oldRaw = parseRaw(oldPresence[0]?.raw_data);
+    const privilegedActor = ['administrateur', 'responsable'].includes(String(input.actor?.role || '').toLowerCase());
+    if (!privilegedActor) {
+      if (action === 'arrival' && oldRaw.arrivalTime) {
+        throw new Error('Pointage rejeté : une arrivée est déjà enregistrée pour aujourd’hui.');
+      }
+      if (action !== 'arrival' && !oldRaw.arrivalTime) {
+        throw new Error('Pointage rejeté : enregistrez d’abord votre arrivée.');
+      }
+      if (oldRaw.departureTime && action !== 'arrival') {
+        throw new Error('Pointage rejeté : votre départ est déjà enregistré pour aujourd’hui.');
+      }
+      if (action === 'pauseEnd' && !oldRaw.pauseStart) {
+        throw new Error('Pointage rejeté : aucune pause en cours à clôturer.');
+      }
+      if (action === 'sortieProEnd' && !oldRaw.sortieProStart) {
+        throw new Error('Pointage rejeté : aucune sortie professionnelle en cours.');
+      }
+    }
     const requestedTime = String(presence[actionField] || '').trim();
     const isAdminOverride = method === 'admin_on_behalf';
     const actionTime = isAdminOverride && /^([01]\d|2[0-3]):[0-5]\d$/.test(requestedTime)
