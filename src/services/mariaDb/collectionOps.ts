@@ -1,6 +1,7 @@
 import { offlineService } from '../offlineService';
 import { getApiToken, clearSecureSession } from '../sessionService';
 import { clearIdbUserDataStores } from '../../lib/idb';
+import { clearStoredModuleConfig } from '../../hooks/initialData/moduleConfigStorage';
 
 function authHeaders(): Record<string, string> {
   const token = getApiToken();
@@ -13,6 +14,7 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
     const result = await response.json().catch(() => ({}));
     if (response.status === 401) {
       await clearIdbUserDataStores();
+      clearStoredModuleConfig();
       clearSecureSession();
       return [];
     }
