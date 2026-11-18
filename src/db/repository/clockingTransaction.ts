@@ -3,7 +3,7 @@ import { withMariaDbTransaction } from '../mariadb';
 import { resolveEmployeeDbId, resolveUserDbId } from './tableHelpers';
 import { resolveClockingDerogations, verifyDoorQrTokenOnServer } from './clockingTransactionHelpers';
 
-export interface AtomicClockingTransactionInput { presence: any; incident?: any | null; notification?: any | null; }
+export interface AtomicClockingTransactionInput { presence: any; incident?: any | null; notification?: any | null; actor?: { id: string; role: string }; action?: string; }
 
 function parseRaw(value: any): any {
   if (value && typeof value === 'object') return value;
@@ -22,7 +22,8 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
   if (!employeeId) throw new Error('Pointage rejeté : collaborateur introuvable ou non rattaché.');
   const derogations = await resolveClockingDerogations(employeeId, presence.employeeEmail);
   const method = presence.clockingMethod || presence.method || 'qr_code_door';
-  await verifyDoorQrTokenOnServer(method, presence.qrCodeToken);
+  const safePresence = { ...presence };
+  delete safePresence.qrCodeToken;
 
   const arrival = String(presence.arrivalTime || '');
   const departure = String(presence.departureTime || '');
@@ -35,8 +36,18 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
   const now = new Date();
 
   return withMariaDbTransaction(async connection => {
+    await verifyDoorQrTokenOnServer(method, presence.qrCodeToken, {
+      employeeId,
+      employeeName: presence.employeeName || presence.employee_name,
+      latitude: typeof presence.latitude === 'number' ? presence.latitude : presence.gpsLat,
+      longitude: typeof presence.longitude === 'number' ? presence.longitude : presence.gpsLng,
+      action: input.action || presence.action || presence.clockAction || presence.lastAction || 'arrival',
+      badgedByAdminId: presence.badgedByAdminId,
+      adminBadgeReason: presence.adminBadgeReason,
+    }, input.actor, connection);
+
     const [oldPresence] = await connection.execute<any[]>('SELECT id, uid, raw_data FROM presences WHERE doc_id = ? LIMIT 1', [presenceDocId]);
-    const presenceRaw = { ...presence, id: presenceDocId, status: effectiveStatus, lateMinutes: effectiveLate, qrCodeToken: presence.qrCodeToken || null };
+    const presenceRaw = { ...safePresence, id: presenceDocId, status: effectiveStatus, lateMinutes: effectiveLate, credentialVerified: true };
     const pFields = {
       employee_id: employeeId, employee_name: presence.employeeName || presence.employee_name || null,
       date, arrival_time: presence.arrivalTime || null, departure_time: presence.departureTime || null,
@@ -117,7 +128,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
 
     return {
       success: true,
-      presence: { ...presence, id: presenceDocId, _dbId: presenceDbId, status: effectiveStatus, lateMinutes: effectiveLate },
+      presence: { ...safePresence, id: presenceDocId, _dbId: presenceDbId, status: effectiveStatus, lateMinutes: effectiveLate, credentialVerified: true },
       incident: savedIncident,
       notification: savedNotification,
     };
