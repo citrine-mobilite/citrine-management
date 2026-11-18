@@ -14,8 +14,7 @@ export function useDoorQrSettingsActions({
   onUpdateModuleConfig,
   showToast,
 }: UseDoorQrSettingsActionsParams) {
-  const currentToken =
-    moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || 'CITRINE_DOOR_HQ_MAIN_2026';
+  const currentToken = moduleConfig?.doorQrCodeToken || moduleConfig?.qrCodeSecret || '';
   const currentSiteName =
     moduleConfig?.doorQrSiteName || moduleConfig?.hqName || 'Entrée Principale (HQ Siège)';
   const generatedAt = moduleConfig?.doorQrCodeGeneratedAt
@@ -26,7 +25,7 @@ export function useDoorQrSettingsActions({
         hour: '2-digit',
         minute: '2-digit',
       })
-    : 'Configuré par défaut';
+    : 'Non configuré';
 
   const [siteName, setSiteName] = useState(currentSiteName);
   const [requireGps, setRequireGps] = useState<boolean>(moduleConfig?.doorQrRequireGps ?? false);
@@ -41,9 +40,10 @@ export function useDoorQrSettingsActions({
 
   const handleGenerateNewDoorQr = async () => {
     setIsGenerating(true);
-    const randomHex = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const timestampHex = Date.now().toString(36).toUpperCase();
-    const newToken = `CITRINE_DOOR_${randomHex}_${timestampHex}`;
+    const randomBytes = new Uint8Array(20);
+    globalThis.crypto.getRandomValues(randomBytes);
+    const randomHex = Array.from(randomBytes, value => value.toString(16).padStart(2, '0')).join('').toUpperCase();
+    const newToken = `CITRINE_DOOR_${randomHex}`;
     const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens)
       ? moduleConfig.revokedDoorTokens
       : [];
@@ -80,7 +80,8 @@ export function useDoorQrSettingsActions({
   };
 
   const handleApplyToken = async () => {
-    const newToken = tokenInput.trim() || 'CITRINE_DOOR_HQ_MAIN_2026';
+    const newToken = tokenInput.trim();
+    if (newToken.length < 16) { showToast?.('Le jeton doit contenir au moins 16 caractères.', 'error'); return; }
     const existingRevoked = Array.isArray(moduleConfig?.revokedDoorTokens)
       ? moduleConfig.revokedDoorTokens
       : [];
@@ -126,7 +127,9 @@ export function useDoorQrSettingsActions({
       currentToken && !existingRevoked.includes(currentToken)
         ? [...existingRevoked, currentToken]
         : existingRevoked;
-    const revokedToken = `CITRINE_REVOKED_${Math.random().toString(36).substring(2, 8).toUpperCase()}_${Date.now()}`;
+    const revokeBytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(revokeBytes);
+    const revokedToken = `CITRINE_REVOKED_${Array.from(revokeBytes, value => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
 
     const res = await executeOperationWithLoading({
       loadingTitle: 'Révocation du QR Code...',
@@ -169,12 +172,14 @@ export function useDoorQrSettingsActions({
   };
 
   const handleCopyToken = () => {
+    if (!(tokenInput || currentToken)) return;
     navigator.clipboard.writeText(tokenInput || currentToken);
     setCopiedToken(true);
     setTimeout(() => setCopiedToken(false), 2000);
   };
 
   const handleCopyDirectBadgeLink = () => {
+    if (!(tokenInput || currentToken)) return;
     const directUrl = `${window.location.origin}/#clocking?token=${encodeURIComponent(tokenInput || currentToken)}`;
     navigator.clipboard.writeText(directUrl);
     setCopiedLink(true);
@@ -182,6 +187,7 @@ export function useDoorQrSettingsActions({
   };
 
   const handleDownloadPoster = () => {
+    if (!(tokenInput || currentToken)) { showToast?.('Générez un jeton QR avant de télécharger l’affiche.', 'error'); return; }
     generateAndDownloadQrPoster(tokenInput || currentToken, {
       companyName: moduleConfig?.companyName || 'Citrine SARL',
       siteName: siteName.trim() || 'Entrée Principale (HQ Siège)',
