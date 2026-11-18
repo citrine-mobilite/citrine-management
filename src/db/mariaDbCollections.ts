@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getMariaDbPool } from './mariadb';
+import { mariaDbRowToItem } from '../services/mariaDb/rowToItem';
 
 const TABLES: Record<string, string> = {
   roles: 'roles', inventory_assignments: 'inventory_assignments',
@@ -124,12 +125,9 @@ export async function getMariaDbCollection(collection: string): Promise<any[]> {
     `SELECT * FROM \x60${table}\x60 ORDER BY id DESC LIMIT 10000`
   );
   return rows.map(row => {
-    const raw = parseJson(row.raw_data);
-    const safeRaw = table === 'users' ? safeUserRaw(raw) : raw;
-    const legacyId = ['users','employees'].includes(table)
-      ? String(row.id)
-      : (raw.id || row.doc_id || String(row.id));
-    return { ...safeRaw, ...row, id: legacyId, docId: row.doc_id, _dbId: row.id, raw_data: undefined };
+    const item = mariaDbRowToItem(collection, row) || {};
+    const safeItem = table === 'users' ? safeUserRaw(item) : item;
+    return { ...safeItem, _dbId: row.id, raw_data: undefined };
   });
 }
 
