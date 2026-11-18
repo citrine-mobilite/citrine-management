@@ -3,14 +3,26 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getMariaDbPool } from '../db/mariadb';
 import type { RowDataPacket } from 'mysql2/promise';
 
-const sseClients: Map<string, express.Response> = new Map();
+type SseClient = {
+  res: express.Response;
+  role: string;
+  employeeIds: Set<string>;
+};
+const sseClients: Map<string, SseClient> = new Map();
 
 export function broadcastRealtimeEvent(event: string, data: any): void {
+  const targetEmployeeId = String(data?.presence?.employeeId || data?.presence?.employee_id || '');
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const [id, clientRes] of sseClients.entries()) {
+  for (const [id, client] of sseClients.entries()) {
     try {
-      if (!clientRes.writableEnded && !clientRes.destroyed) clientRes.write(payload);
-      else sseClients.delete(id);
+      if (client.res.writableEnded || client.res.destroyed) {
+        sseClients.delete(id);
+        continue;
+      }
+      if (event === 'presence_update' && !['administrateur', 'responsable'].includes(client.role)) {
+        if (!targetEmployeeId || !client.employeeIds.has(targetEmployeeId)) continue;
+      }
+      client.res.write(payload);
     } catch {
       sseClients.delete(id);
     }
@@ -18,7 +30,25 @@ export function broadcastRealtimeEvent(event: string, data: any): void {
 }
 
 export function registerRealtimeRoutes(app: express.Express): void {
-  app.get('/api/realtime/events', requireAuth, (req: AuthRequest, res: express.Response) => {
+  app.get('/api/realtime/events', requireAuth, async (req: AuthRequest, res: express.Response) => {
+    const role = String(req.user?.role || '').toLowerCase();
+    const employeeIds = new Set<string>();
+    if (!['administrateur', 'responsable'].includes(role)) {
+      try {
+        const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
+          'SELECT id, doc_id, uid, email FROM employees WHERE user_id = ? LIMIT 1',
+          [Number(req.user?.id)]
+        );
+        const employee = rows[0];
+        if (employee) {
+          [employee.id, employee.doc_id, employee.uid, employee.email]
+            .filter(Boolean).forEach(value => employeeIds.add(String(value)));
+        }
+      } catch {
+        return res.status(503).json({ success: false, error: 'Canal temps réel indisponible.' });
+      }
+    }
+
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -26,7 +56,7 @@ export function registerRealtimeRoutes(app: express.Express): void {
     res.flushHeaders?.();
 
     const clientId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    sseClients.set(clientId, res);
+    sseClients.set(clientId, { res, role, employeeIds });
     res.write(`event: connected\ndata: ${JSON.stringify({ clientId, timestamp: Date.now() })}\n\n`);
 
     const keepAlive = setInterval(() => {
