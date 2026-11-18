@@ -327,7 +327,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
              LEFT JOIN roles r ON r.id = COALESCE(u.role_id, e.role_id)
              WHERE e.id = ? OR e.doc_id = ? OR e.uid = ? OR LOWER(e.email) = ?
              LIMIT 1`,
-            [/^\\d+$/.test(targetKey) ? Number(targetKey) : -1, targetKey, targetKey, targetKey.toLowerCase()]
+            [/^\d+$/.test(targetKey) ? Number(targetKey) : -1, targetKey, targetKey, targetKey.toLowerCase()]
           );
           const targetRole = String(targetRows[0]?.role_code || '').toUpperCase();
           if (Number(targetRows[0]?.role_id) === 1 || targetRole.includes('ADMIN')) {
