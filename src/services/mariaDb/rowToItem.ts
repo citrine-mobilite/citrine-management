@@ -1,4 +1,4 @@
-import { mapCollectionToTable } from './tableMapper';
+import { mapCollectionToTable } from '../../db/repository/tableHelpers';
 import { mapModuleMariaDbRowToItem } from './rowToItemModules';
 
 export function mariaDbRowToItem(collectionName: string, row: any): any {
