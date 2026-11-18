@@ -6,6 +6,7 @@ import {
   deleteDocumentData,
   getOrCreateUserRecord,
   executeCollaboratorCreationTransaction,
+  executeCollaboratorUpdateTransaction,
   executeAtomicClockingTransaction,
   checkClockingEligibilityBackend,
 } from '../db/repository';
@@ -95,6 +96,19 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     } catch (error: any) {
       console.error('[API Collaborator Transaction Error]:', error);
       res.status(500).json({ success: false, error: error.message || 'Échec de la transaction.' });
+    }
+  });
+
+  app.post('/api/collaborators/update-transactional', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.body?.employee) return res.status(400).json({ success: false, error: 'Données collaborateur manquantes.' });
+      const result = await executeCollaboratorUpdateTransaction(req.body);
+      broadcastRealtimeEvent('collection_update', { collection: 'employees', action: 'upsert', id: result.employee?.id });
+      broadcastRealtimeEvent('collection_update', { collection: 'users', action: 'upsert', id: result.user?.id });
+      return res.json(result);
+    } catch (error: any) {
+      console.error('[API Collaborator Update Transaction Error]:', error);
+      return res.status(500).json({ success: false, error: error.message || 'Échec de la mise à jour du collaborateur.' });
     }
   });
 
