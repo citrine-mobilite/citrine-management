@@ -11,8 +11,21 @@ type SseClient = {
 const sseClients: Map<string, SseClient> = new Map();
 
 export function broadcastRealtimeEvent(event: string, data: any): void {
-  const targetEmployeeId = String(data?.presence?.employeeId || data?.presence?.employee_id || '');
-  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  const safeData = data && typeof data === 'object' ? JSON.parse(JSON.stringify(data)) : data;
+  if (safeData?.presence && typeof safeData.presence === 'object') {
+    delete safeData.presence.qrCodeToken;
+    delete safeData.presence.qr_token;
+    if (safeData.presence.clockLocations && typeof safeData.presence.clockLocations === 'object') {
+      for (const value of Object.values(safeData.presence.clockLocations) as any[]) {
+        if (value && typeof value === 'object') {
+          delete value.qrCodeToken;
+          delete value.qr_token;
+        }
+      }
+    }
+  }
+  const targetEmployeeId = String(safeData?.presence?.employeeId || safeData?.presence?.employee_id || '');
+  const payload = `event: ${event}\\ndata: ${JSON.stringify(safeData)}\\n\\n`;
   for (const [id, client] of sseClients.entries()) {
     try {
       if (client.res.writableEnded || client.res.destroyed) {
