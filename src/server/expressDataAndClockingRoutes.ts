@@ -413,7 +413,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     try {
       const { collection } = req.params;
       if (!isSupportedMariaDbCollection(collection)) return res.status(404).json({ success: false, error: 'Collection inconnue ou non autorisée.' });
-      if (isGenericMariaDbCollection(collection) && !isPrivileged(req.user)) return res.status(403).json({ success: false, error: 'Accès réservé aux responsables.' });
+      if (isGenericMariaDbCollection(collection) && collection !== 'absences' && !isPrivileged(req.user)) return res.status(403).json({ success: false, error: 'Accès réservé aux responsables.' });
       if (ADMIN_READ_COLLECTIONS.has(collection) && !isAdmin(req.user)) {
         return res.status(403).json({ success: false, error: 'Accès réservé à l’administrateur.' });
       }
