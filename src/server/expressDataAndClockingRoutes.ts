@@ -328,18 +328,41 @@ function authorizeCollectionDelete(req: AuthRequest, res: express.Response, next
 async function authorizeOwnEmployeeRecord(req: AuthRequest, res: express.Response, next: express.NextFunction) {
   if (isPrivileged(req.user)) return next();
   try {
-    const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
-      'SELECT id, doc_id, uid, email FROM employees WHERE user_id = ? LIMIT 1',
-      [Number(req.user?.id)]
-    );
-    const employee = rows[0];
+    const employee = await getOwnEmployeeScope(req);
+    if (!employee) return res.status(403).json({ success: false, error: 'Compte collaborateur introuvable.' });
+    const allowed = employeeScopeIds(employee);
     const body = req.body || {};
     const target = String(body.employeeId || body.employee_id || body.employeeDocId || body.email || '');
-    const allowed = employee
-      ? [employee.id, employee.doc_id, employee.uid, employee.email].filter(Boolean).map(String)
-      : [];
-    if (!target || !allowed.includes(target)) {
+    if (!target || !allowed.has(target)) {
       return res.status(403).json({ success: false, error: 'Tu ne peux modifier que tes propres demandes.' });
+    }
+    const collection = String(req.params.collection || '');
+    const recordId = String(body.id || body.docId || body.doc_id || '').trim();
+    const found = recordId ? await findCollectionRecord(collection, recordId) : null;
+    if (recordId && !found) return res.status(404).json({ success: false, error: 'Demande introuvable.' });
+    const protectedFields = [
+      'status', 'approvedBy', 'approvedAt', 'validatedBy', 'validatedAt',
+      'rejectionReason', 'decision', 'decisionBy', 'managerComment',
+      'paymentStatus', 'reimbursedAt', 'paidAt', 'approved', 'isApproved',
+    ];
+    if (found) {
+      const existingEmployeeId = String(found.row.employee_id || found.raw.employeeId || '');
+      if (!allowed.has(existingEmployeeId)) return res.status(403).json({ success: false, error: 'Cette demande ne t’appartient pas.' });
+      const existingStatus = String(found.row.status || found.raw.status || 'pending').toLowerCase();
+      if (!['pending', 'soumise', 'submitted', 'draft', 'en_attente'].includes(existingStatus)) {
+        return res.status(403).json({ success: false, error: 'Une demande déjà traitée ne peut plus être modifiée.' });
+      }
+      const safeRecord = { ...found.raw, ...body, employeeId: String(employee.id) };
+      for (const field of protectedFields) {
+        if (Object.prototype.hasOwnProperty.call(found.raw, field)) safeRecord[field] = found.raw[field];
+        else delete safeRecord[field];
+      }
+      safeRecord.status = found.row.status || found.raw.status || 'pending';
+      req.body = safeRecord;
+    } else {
+      const safeRecord = { ...body, employeeId: String(employee.id), status: 'pending' };
+      for (const field of protectedFields) if (field !== 'status') delete safeRecord[field];
+      req.body = safeRecord;
     }
     return next();
   } catch {
