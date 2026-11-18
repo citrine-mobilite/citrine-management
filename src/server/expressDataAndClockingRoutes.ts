@@ -1,4 +1,5 @@
 import express from 'express';
+import { pingMariaDb } from '../db/mariadb';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import {
   getCollectionData,
@@ -18,21 +19,19 @@ import {
 } from './services/pusherBeamsService';
 
 export function registerCoreDataAndClockingRoutes(app: express.Express): void {
-  app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok' });
-  });
-
   app.get('/api/database/status', async (_req, res) => {
     try {
-      const isSql = Boolean(process.env.SQL_HOST || process.env.DATABASE_URL);
+      const database = await pingMariaDb();
       res.json({
-        success: true,
-        isSqlConfigured: isSql,
-        localPersistence: true,
-        message: isSql ? 'Base de données SQL active' : 'Persistance disque locale active',
+        success: true, isSqlConfigured: true, localPersistence: true,
+        database: database.database, version: database.version,
+        message: 'MariaDB opérationnelle',
       });
-    } catch (e: any) {
-      res.status(500).json({ success: false, error: e.message });
+    } catch (error: any) {
+      res.status(503).json({
+        success: false, isSqlConfigured: false, localPersistence: true,
+        message: 'Base MariaDB indisponible', error: error?.message || 'Connexion impossible',
+      });
     }
   });
 
