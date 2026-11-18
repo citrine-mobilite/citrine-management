@@ -37,7 +37,10 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
       (oldEmail && String(row.email || '').toLowerCase() === oldEmail) ||
       String(row.email || '').toLowerCase() === cleanUser.email
     );
-    const roleId = cleanUser.role === 'administrateur' ? 1 : cleanUser.role === 'responsable' ? 2 : 3;
+    const roleCode = cleanUser.role === 'administrateur' ? 'SUPER_ADMIN' : cleanUser.role === 'responsable' ? 'RESPONSABLE' : 'EMPLOYE';
+    const roleRows = await mariaDbService.fetchCollection<any>('roles');
+    const roleId = Number(roleRows.find((row: any) => String(row.code || '').toUpperCase() === roleCode)?._dbId) ||
+      (cleanUser.role === 'administrateur' ? 1 : cleanUser.role === 'responsable' ? 2 : 3);
     const payload: any = {
       ...(existing || {}), ...cleanUser,
       id: existing?.id || cleanUser.id || `user-${Date.now()}`,
