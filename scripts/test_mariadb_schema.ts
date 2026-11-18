@@ -42,8 +42,22 @@ async function main() {
     const updated = (await getMariaDbCollection('users')).find(row => row.email === email);
     if (updated?.name !== 'CI MariaDB Updated') throw new Error('Échec du test UPDATE users.');
     await deleteMariaDbDocument('users', String(updated.id));
-    console.log('[OK] MariaDB CRUD et masquage des mots de passe');
-    console.log('[OK] ' + Number(tables[0].total) + ' tables, rôles de référence et table call_signals');
+    const genericId = 'ci-generic-' + suffix;
+    await saveMariaDbDocument('ci_custom_collection', { id: genericId, label: 'CI generic document', enabled: true });
+    const genericRows = await getMariaDbCollection('ci_custom_collection');
+    if (!genericRows.some(row => row.id === genericId && row.label === 'CI generic document')) {
+      throw new Error('Échec du test CRUD generic_collections.');
+    }
+    await deleteMariaDbDocument('ci_custom_collection', genericId);
+
+    const [requiredTables] = await connection.query<any[]>(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('auth_sessions','call_signals','generic_collections')"
+    );
+    if (requiredTables.length !== 3) throw new Error('Tables de session, signalisation ou collections génériques manquantes.');
+
+    console.log('[OK] MariaDB CRUD users et generic_collections');
+    console.log('[OK] Masquage passwordHash');
+    console.log('[OK] ' + Number(tables[0].total) + ' tables, rôles, auth_sessions et call_signals');
   } finally {
     await connection.end();
     await closeMariaDbPool().catch(() => {});
