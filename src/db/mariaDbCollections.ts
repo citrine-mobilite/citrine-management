@@ -115,7 +115,10 @@ export async function getMariaDbCollection(collection: string): Promise<any[]> {
   return rows.map(row => {
     const raw = parseJson(row.raw_data);
     const safeRaw = table === 'users' ? safeUserRaw(raw) : raw;
-    return { ...safeRaw, ...row, id: row.doc_id || String(row.id), docId: row.doc_id, _dbId: row.id, raw_data: undefined };
+    const legacyId = ['users','employees'].includes(table)
+      ? String(row.id)
+      : (raw.id || row.doc_id || String(row.id));
+    return { ...safeRaw, ...row, id: legacyId, docId: row.doc_id, _dbId: row.id, raw_data: undefined };
   });
 }
 
@@ -162,6 +165,10 @@ export async function saveMariaDbDocument(collection: string, item: any): Promis
   if (existing) {
     const oldRaw = parseJson(existing.raw_data);
     const newRaw = { ...oldRaw, ...item, id: docId, updatedAt: new Date().toISOString() };
+    if (table === 'users' && !item.passwordHash && !item.password_hash) {
+      if (oldRaw.passwordHash) newRaw.passwordHash = oldRaw.passwordHash;
+      else if (oldRaw.password_hash) newRaw.password_hash = oldRaw.password_hash;
+    }
     data.raw_data = jsonValue(newRaw);
     delete data.uid; delete data.doc_id;
     const columns = Object.keys(data).filter(key => key !== 'id');
