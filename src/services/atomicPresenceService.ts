@@ -39,11 +39,11 @@ export async function savePresenceAtomic(
       if (!response.ok || !result.success) throw new Error(result.error || `Erreur serveur (${response.status})`);
 
       await offlineService.cacheLocally(COLLECTIONS.PRESENCES, result.presence || cleanedPresence);
-      if (result.incident || cleanedIncident) await offlineService.cacheLocally(COLLECTIONS.ATTENDANCE_INCIDENTS, result.incident || cleanedIncident);
-      if (result.notification || cleanedNotification) await offlineService.cacheLocally(COLLECTIONS.NOTIFICATIONS, result.notification || cleanedNotification);
+      if (result.incident) await offlineService.cacheLocally(COLLECTIONS.ATTENDANCE_INCIDENTS, result.incident);
+      if (result.notification) await offlineService.cacheLocally(COLLECTIONS.NOTIFICATIONS, result.notification);
 
       if (typeof window !== 'undefined') {
-        const payload = { presence: result.presence || cleanedPresence, incident: result.incident || cleanedIncident, notification: result.notification || cleanedNotification, timestamp: new Date().toISOString() };
+        const payload = { presence: result.presence || cleanedPresence, incident: result.incident || null, notification: result.notification || null, timestamp: new Date().toISOString() };
         window.dispatchEvent(new CustomEvent('citrine:realtime_presence_badge', { detail: payload }));
         window.dispatchEvent(new CustomEvent('citrine:presence_updated', { detail: payload }));
       }
