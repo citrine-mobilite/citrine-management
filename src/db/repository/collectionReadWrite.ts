@@ -14,7 +14,7 @@ export async function deleteDocumentData(collectionName: string, id: string): Pr
 export async function getOrCreateUserRecord(uid: string, email: string, name?: string, role?: string) {
   const pool = getMariaDbPool();
   const [rows] = await pool.execute<RowDataPacket[]>('SELECT * FROM users WHERE uid = ? OR LOWER(email) = ? LIMIT 1', [uid, email.trim().toLowerCase()]);
-  if (rows[0]) return rows[0];
+  if (rows[0]) { const safe = { ...rows[0] } as any; delete safe.raw_data; return safe; }
   const roleId = role?.toLowerCase().includes('admin') ? 1 : role?.toLowerCase().includes('responsable') ? 2 : 3;
   const docId = uid || randomUUID();
   await pool.execute(
@@ -22,5 +22,8 @@ export async function getOrCreateUserRecord(uid: string, email: string, name?: s
     [uid || randomUUID(), docId, email.trim().toLowerCase(), name || null, roleId, JSON.stringify({ uid, email, name, role })]
   );
   const [created] = await pool.execute<RowDataPacket[]>('SELECT * FROM users WHERE doc_id = ? LIMIT 1', [docId]);
-  return created[0] || null;
+  if (!created[0]) return null;
+  const safe = { ...created[0] } as any;
+  delete safe.raw_data;
+  return safe;
 }
