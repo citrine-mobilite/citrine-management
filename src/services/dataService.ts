@@ -6,6 +6,7 @@ import {
   getDatabaseHealth, checkDatabaseHealth,
 } from './dataNormalizationAndHealth';
 import { savePresenceAtomic } from './atomicPresenceService';
+import { loadSecureSession } from './sessionService';
 
 export { COLLECTIONS, getDatabaseHealth, checkDatabaseHealth, savePresenceAtomic };
 export type { DatabaseHealthStatus };
@@ -53,8 +54,10 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
       const offline = !offlineService.isOnline() || error instanceof TypeError ||
         /fetch|network|indisponible|timeout/i.test(String(error?.message || ''));
       if (!offline) throw error;
+      const owner = await loadSecureSession();
+      if (!owner?.id) throw error;
       await offlineService.cacheLocally(collectionName, cleanedItem);
-      await offlineService.enqueueAction(collectionName, 'save', cleanedItem);
+      await offlineService.enqueueAction(collectionName, 'save', cleanedItem, String(owner.id));
       return cleanedItem;
     }
   });
@@ -70,8 +73,10 @@ export async function deleteDocument(collectionName: string, id: string): Promis
       const offline = !offlineService.isOnline() || error instanceof TypeError ||
         /fetch|network|indisponible|timeout/i.test(String(error?.message || ''));
       if (!offline) throw error;
+      const owner = await loadSecureSession();
+      if (!owner?.id) throw error;
       await offlineService.deleteCachedItem(collectionName, id);
-      await offlineService.enqueueAction(collectionName, 'delete', id);
+      await offlineService.enqueueAction(collectionName, 'delete', id, String(owner.id));
       return true;
     }
   });
