@@ -78,9 +78,10 @@ export const DynamicQrManagerModal: React.FC<DynamicQrManagerModalProps> = ({
 
     const unsub = dynamicQrService.subscribeToSession(currentSession.id, (updated) => {
       if (!updated) return;
-      if (updated.status === 'used') {
-        const empName = updated.usedByEmployeeName || 'Collaborateur';
-        const timeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const consumedAt = (updated as any).lastConsumedAt;
+      if (consumedAt) {
+        const empName = (updated as any).lastUsedByEmployeeName || updated.usedByEmployeeName || 'Collaborateur';
+        const timeStr = new Date(consumedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setUsedNotification({ employeeName: empName, time: timeStr });
         if (onSessionUsed) {
           onSessionUsed(empName);
@@ -187,7 +188,7 @@ export const DynamicQrManagerModal: React.FC<DynamicQrManagerModalProps> = ({
                   Présentez cet écran au collaborateur
                 </h4>
                 <p className="text-xs text-stone-500">
-                  L'employé scanne ce code avec son téléphone. Aucune géolocalisation n'est demandée car vous attestez de sa présence sur place.
+                  Le collaborateur scanne ce code avec son téléphone. Sa position GPS est enregistrée pour confirmer le lieu du pointage.
                 </p>
               </div>
 
