@@ -24,7 +24,8 @@ export async function persistCreatedCollaborator({
   const userEmail = formData.email.trim()
     ? formData.email.trim()
     : `collab_${Date.now()}@citrinemgmt.cm`;
-  const initialPassword = formData.userPassword.trim() || 'Collab@2026';
+  const initialPassword = formData.userPassword.trim();
+  if (initialPassword.length < 12) throw new Error('Le mot de passe initial doit contenir au moins 12 caractères.');
 
   const resolvedTeams =
     formData.teams?.length > 0
