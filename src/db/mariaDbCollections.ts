@@ -21,6 +21,16 @@ const TABLES: Record<string, string> = {
   reminder_recipients: 'reminder_recipients', notification_recipients: 'notification_recipients',
   presence_pauses: 'presence_pauses', leave_requests: 'leave_requests', };
 
+const GENERIC_COLLECTION_ALLOWLIST = new Set(['building_supervisors', 'strategic_projects']);
+
+export function isSupportedMariaDbCollection(collection: string): boolean {
+  return Object.prototype.hasOwnProperty.call(TABLES, collection) || GENERIC_COLLECTION_ALLOWLIST.has(collection);
+}
+
+export function isGenericMariaDbCollection(collection: string): boolean {
+  return GENERIC_COLLECTION_ALLOWLIST.has(collection);
+}
+
 const ALLOWED = new Set([
   'roles','users','employees','task_projects','task_project_members','tasks','task_assignees',
   'reminders','reminder_recipients','notifications','notification_recipients','presences',
