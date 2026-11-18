@@ -37,10 +37,12 @@ async function resolveLegacyReference(table: string, value: any, legacyMap: Map<
   const key = String(value);
   if (legacyMap.has(key)) return legacyMap.get(key)!;
   const pool = getMariaDbPool();
-  const [rows] = await pool.execute<any[]>(
-    `SELECT id FROM \x60${table}\x60 WHERE doc_id = ? OR uid = ? OR LOWER(email) = ? LIMIT 1`,
-    [key, key, key.toLowerCase()]
-  );
+  const emailLookup = table === 'users' || table === 'employees';
+  const sql = emailLookup
+    ? `SELECT id FROM \x60${table}\x60 WHERE doc_id = ? OR uid = ? OR LOWER(email) = ? LIMIT 1`
+    : `SELECT id FROM \x60${table}\x60 WHERE doc_id = ? OR uid = ? LIMIT 1`;
+  const params = emailLookup ? [key, key, key.toLowerCase()] : [key, key];
+  const [rows] = await pool.execute<any[]>(sql, params);
   return rows[0]?.id ? Number(rows[0].id) : null;
 }
 
