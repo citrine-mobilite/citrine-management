@@ -47,8 +47,10 @@ let memoryKioskPinCode = "";
 
 export function generateKioskPinCode(): string {
   const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // High legibility, no 0/O/1/I
-  const chunk = () => Array.from({ length: 4 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join("");
-  const newPin = `${chunk(0)}-${chunk(4)}-${chunk(8)}-${chunk(12)}`;
+  const values = new Uint32Array(16);
+  globalThis.crypto.getRandomValues(values);
+  const raw = Array.from(values, value => chars[value % chars.length]).join("");
+  const newPin = `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
   memoryKioskPinCode = newPin;
   if (typeof window !== "undefined") {
     try {
@@ -75,8 +77,6 @@ export function validateKioskPinCode(inputPin: string, dbKioskPin?: string): boo
 
   const activePin = getActiveKioskPinCode().replace(/[\s-]/g, "").toUpperCase();
   if (cleanedInput === activePin) return true;
-
-  if (cleanedInput === "CITRINE2026HQPIN") return true;
 
   return false;
 }
