@@ -1,11 +1,22 @@
 import { mapCollectionToTable } from '../../db/repository/tableHelpers';
 import { mapModuleMariaDbRowToItem } from './rowToItemModules';
 
+function parseRowJson(value: any): Record<string, any> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch { return {}; }
+  }
+  return {};
+}
+
 export function mariaDbRowToItem(collectionName: string, row: any): any {
   if (!row) return null;
 
   if (row.collection && row.data) {
-    const dataObj = typeof row.data === 'object' ? row.data : {};
+    const dataObj = parseRowJson(row.data);
     return {
       ...dataObj,
       id: row.doc_id || dataObj.id || String(row.id),
@@ -17,7 +28,7 @@ export function mariaDbRowToItem(collectionName: string, row: any): any {
 
   const table = mapCollectionToTable(collectionName);
   if (table === 'employees') {
-    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    const raw = parseRowJson(row.raw_data);
     return {
       ...raw,
       id: String(row.id),
@@ -146,8 +157,8 @@ export function mariaDbRowToItem(collectionName: string, row: any): any {
   const moduleMapped = mapModuleMariaDbRowToItem(table, row);
   if (moduleMapped) return moduleMapped;
 
-  if (row.raw_data && typeof row.raw_data === 'object') {
-    const raw = row.raw_data;
+  const raw = parseRowJson(row.raw_data);
+  if (Object.keys(raw).length > 0) {
     return {
       ...raw,
       id: raw.id || row.doc_id || String(row.id),
