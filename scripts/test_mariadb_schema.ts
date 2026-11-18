@@ -26,6 +26,8 @@ async function main() {
       await connection.query(sql);
       console.log('[OK] Migration ' + file);
     }
+    const [timezoneRows] = await getMariaDbPool().query<any[]>('SELECT @@session.time_zone AS time_zone');
+    if (String(timezoneRows[0]?.time_zone) !== '+00:00') throw new Error('Les connexions applicatives MariaDB doivent utiliser UTC.');
     const [tables] = await connection.query<any[]>('SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema = DATABASE()');
     if (Number(tables[0]?.total) < 42) throw new Error('Schéma incomplet : au moins 42 tables attendues.');
     const [presenceIndexes] = await connection.query<any[]>("SELECT index_name FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'presences' AND index_name = 'idx_presences_employee_date'");
