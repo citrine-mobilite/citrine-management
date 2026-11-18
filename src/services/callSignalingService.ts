@@ -1,7 +1,7 @@
 import { VoIPCall, CallType, AppUser } from '../types';
 import { webRTCService } from './webRTCService';
 import { soundService } from './soundService';
-import { listenToCandidates, listenToSignals, sendSignal } from './calls/signalingSupabase';
+import { listenToCandidates, listenToSignals, sendSignal } from './calls/signalingMariaDb';
 import { CallEventCallbacks } from './calls/callTypes';
 import { broadcastCallRoomEvent, buildOutgoingCallPayload, setupCallWebRtcCallbacks } from './calls/callChannelHelpers';
 import { getApiToken } from './sessionService';
