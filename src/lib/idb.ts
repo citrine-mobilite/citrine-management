@@ -40,6 +40,7 @@ export interface ProcessFlowDBSchema extends DBSchema {
       actionType: 'save' | 'delete';
       payload: any;
       timestamp: string;
+      ownerUserId?: string;
     };
   };
 }
