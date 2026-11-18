@@ -11,7 +11,7 @@ export const MARIADB_TABLES = [
   'company_settings', 'leave_requests', 'calls', 'user_presences', 'job_offers',
   'job_applications', 'expense_claims', 'hse_incidents', 'visitor_logs',
   'idea_suggestions', 'enterprise_surveys', 'generic_collections', 'connection_logs',
-  'admin_audit_logs',
+  'admin_audit_logs', 'absences',
 ] as const;
 
 export type MariaDbTable = typeof MARIADB_TABLES[number];
