@@ -2,6 +2,7 @@ import { AppUser } from '../../types';
 import { recordConnectionLog } from '../connectionLogService';
 import { storeSecureSession, clearSecureSession, loadSecureSession, storeApiToken, getApiToken } from '../sessionService';
 import { clearIdbUserDataStores } from '../../lib/idb';
+import { offlineService } from '../offlineService';
 
 export interface LoginResult { success: boolean; user?: AppUser; error?: string; }
 
@@ -23,6 +24,7 @@ export const authService = {
       await clearIdbUserDataStores();
       storeApiToken(result.token);
       await storeSecureSession(user);
+      void offlineService.syncOfflineQueue().catch(error => console.warn('[Offline] Synchronisation après connexion :', error));
       await recordConnectionLog({
         userId: user.id, userName: user.name, userEmail: user.email,
         authMethod: 'password', status: 'success',
