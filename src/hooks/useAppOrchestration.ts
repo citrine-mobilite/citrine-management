@@ -5,12 +5,11 @@ import { loadSecureSession, storeSecureSession, clearSecureSession, canAccessTab
 import { safeStorage } from '../utils/safeStorage';
 import { subscribeToUsers } from '../services/userService';
 import { authService } from '../services/auth/authService';
-import { supabase } from '../lib/supabase';
 import { getDefaultPortalForUser } from '../utils/roleUtils';
 import { TabType } from '../components/Sidebar';
 import { resolveToastPayload } from '../utils/toastTitleUtils';
 import { computeUnreadNotificationsCount, computeNonBadgedEmployeesCount } from '../utils/appBadgeCounters';
-import { registerGlobalErrorHandlers, clearSupabaseAuthStorage, hasUserProfileChanged } from '../utils/appLifecycleHelpers';
+import { registerGlobalErrorHandlers, hasUserProfileChanged } from '../utils/appLifecycleHelpers';
 import { logSystemEvent } from '../services/adminAuditService';
 import { pusherBeamsClientService } from '../services/pusherBeamsClientService';
 
@@ -183,17 +182,10 @@ export function useAppOrchestration({
 
   const handleLogout = async () => {
     const loggedOutUser = currentUser;
-    clearSecureSession();
     safeStorage.removeItem('citrine_active_tab');
     pusherBeamsClientService.unsubscribeAll().catch(() => {});
-    try {
-      await authService.logout();
-    } catch {
-      try {
-        await supabase.auth.signOut();
-      } catch {}
-    }
-    clearSupabaseAuthStorage();
+    try { await authService.logout(); } catch {}
+    clearSecureSession();
     if (loggedOutUser) {
       logSystemEvent({
         authorName: loggedOutUser.name,
