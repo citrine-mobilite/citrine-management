@@ -10,7 +10,10 @@ Exemple de directives à intégrer dans le VirtualHost Apache par l'administrate
 
 ```apache
 ProxyPreserveHost On
-ProxyPass / http://127.0.0.1:3000/
+ProxyTimeout 3600
+ProxyPass /api/realtime/events http://127.0.0.1:3000/api/realtime/events timeout=3600
+ProxyPassReverse /api/realtime/events http://127.0.0.1:3000/api/realtime/events
+ProxyPass / http://127.0.0.1:3000/ timeout=300
 ProxyPassReverse / http://127.0.0.1:3000/
 ```
 
@@ -23,7 +26,7 @@ Depuis le compte cPanel :
 ```bash
 cd ~/repositories/citrine-management
 git checkout migration/mariadb
-npm install --no-audit --no-fund
+npm install --include=dev --no-audit --no-fund
 npm run build
 ```
 
@@ -68,7 +71,7 @@ Les scripts fournis utilisent le compte cPanel, sans privilèges root :
 - `scripts/ovh_management_start.sh` : démarrage manuel.
 - `scripts/ovh_management_watchdog.sh` : contrôle de santé et redémarrage si nécessaire.
 
-Après avoir testé le démarrage manuel et vérifié `https://management.citrine-mobilite.com/api/health`, créer cette tâche Cron cPanel (une fois par minute) :
+Après avoir testé le démarrage manuel, vérifier `https://management.citrine-mobilite.com/api/health` (processus actif) et `https://management.citrine-mobilite.com/api/ready` (MariaDB accessible), puis créer cette tâche Cron cPanel (une fois par minute) :
 
 ```cron
 * * * * * /bin/bash /home/citrinemobilite/repositories/citrine-management/scripts/ovh_management_watchdog.sh >/dev/null 2>&1
@@ -82,6 +85,7 @@ Le script écrit les logs dans `~/logs/management.log`. Le PID est conservé dan
 
 ```bash
 curl -i http://127.0.0.1:3000/api/health
+curl -i http://127.0.0.1:3000/api/ready
 tail -n 100 ~/logs/management.log
 ```
 
