@@ -18,41 +18,13 @@ export {
 };
 export type { DatabaseHealthStatus };
 
-// Subscribe to a single document in real-time via Supabase Realtime (strictly from database)
+// Subscribe to a single document in real-time via MariaDB Server-Sent Events (strictly from database)
 export function subscribeToDocument<T>(
   collectionName: string,
   docId: string,
   callback: (data: T | null) => void
 ) {
   let isCancelled = false;
-
-  const table = mapCollectionToTable(collectionName);
-  const channelName = `doc_sub_${table}_${docId}_${Date.now()}`;
-
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(docId);
-  const filter = isUuid ? `uid=eq.${docId}` : (/^\d+$/.test(docId) ? `id=eq.${docId}` : undefined);
-
-  (async () => {
-    try {
-      const supaList = await supabaseService.fetchCollection<T>(collectionName);
-      if (!isCancelled && Array.isArray(supaList) && supaList.length > 0) {
-        const found = supaList.find((item: any) => item.id === docId || item.docId === docId);
-        if (found) {
-          callback(found);
-          return;
-        }
-      }
-
-      const serverList = await cloudSqlService.fetchCollection<T>(collectionName);
-      if (!isCancelled && Array.isArray(serverList) && serverList.length > 0) {
-        const found = serverList.find((item: any) => item.id === docId || item.docId === docId);
-        if (found) {
-          callback(found);
-        }
-      }
-    } catch {}
-  })();
-
   const unsubscribe = subscribeToCollection<T>(collectionName, (items) => {
     if (isCancelled) return;
     const found = items.find((item: any) => String(item.id) === String(docId) || String(item.docId) === String(docId));
@@ -95,7 +67,7 @@ export async function fetchOlderRecords<T>(
   }
 }
 
-// Fetch an entire collection directly from database (Supabase -> Server API)
+// Fetch an entire collection directement depuis l'API MariaDB
 export async function getCollection<T>(collectionName: string): Promise<T[]> {
   try {
     return await supabaseService.fetchCollection<T>(collectionName);
