@@ -101,7 +101,9 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       : serverTime;
     const arrivalTime = action === 'arrival' ? actionTime : String(oldRaw.arrivalTime || '');
     const departureTime = action === 'departure' ? actionTime : String(oldRaw.departureTime || '');
-    const lateThreshold = String(settings.lateThresholdTime || settings.lateThreshold || '08:30');
+    const configuredLateThreshold = String(settings.lateThresholdTime || settings.lateThreshold || '08:30');
+    const lateThreshold = /^([01]\d|2[0-3]):[0-5]\d$/.test(configuredLateThreshold) ? configuredLateThreshold : '08:30';
+    const plannedDeparture = String(settings.plannedDepartureTime || settings.plannedDeparture || '17:00');
     const exemptLate = derogations.allowLateArrival8_930 && arrivalTime >= '08:00' && arrivalTime <= '09:30';
     const lateMinutes = action === 'arrival'
       ? (exemptLate ? 0 : minutesBetweenClocks(lateThreshold, actionTime))
@@ -223,7 +225,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       } else {
         const reason = action === 'arrival'
           ? `Retard automatique constaté à ${actionTime} (seuil: ${lateThreshold})`
-          : `Sortie prématurée constatée à ${actionTime}`;
+          : `Sortie prématurée constatée à ${actionTime} avant ${plannedDeparture}`;
         raw = {
           id: incidentId,
           employeeId: String(employeeId),
