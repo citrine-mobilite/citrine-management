@@ -76,6 +76,7 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
           latitude: userLocation?.latitude,
           longitude: userLocation?.longitude,
           locationName: 'Bureau (Validé par Clé 16 Caractères)',
+          qrCodeToken: potential16,
         });
         return;
       }
@@ -123,6 +124,7 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
           latitude: dynGps.latitude,
           longitude: dynGps.longitude,
           locationName: `Validé par Responsable (${result.session?.generatedBy || 'Sur place'}) • ${dynGps.locationLabel}`,
+          qrCodeToken: cleanToken,
         });
         return;
       } else if (currentStep === 'scan_dynamic') {
