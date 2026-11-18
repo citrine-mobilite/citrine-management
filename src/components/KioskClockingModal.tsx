@@ -38,7 +38,7 @@ export default function KioskClockingModal({
 
   if (!isOpen) return null;
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getDoualaDateString();
 
   const filteredEmployees = employees.filter(
     (emp) =>
