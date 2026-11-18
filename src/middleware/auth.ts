@@ -7,7 +7,7 @@ export interface AuthRequest extends Request { user?: any; }
 
 export function getRequestAuthToken(req: Request): string {
   const authHeader = req.headers.authorization || '';
-  if (authHeader.startsWith('Bearer ')) return authHeader.slice(7).trim();
+  if (authHeader.startsWith('Bearer ')) { const bearer = authHeader.slice(7).trim(); if (bearer) return bearer; }
   const cookieHeader = String(req.headers.cookie || '');
   for (const part of cookieHeader.split(';')) {
     const separator = part.indexOf('=');
