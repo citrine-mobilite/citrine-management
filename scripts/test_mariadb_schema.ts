@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
+import { verifyAndMaybeUpgrade } from '../src/server/expressAuthRoutes';
 import { saveMariaDbDocument, getMariaDbCollection, deleteMariaDbDocument } from '../src/db/mariaDbCollections';
 import { closeMariaDbPool } from '../src/db/mariadb';
 
@@ -25,6 +27,16 @@ async function main() {
     const [roles] = await connection.query<any[]>('SELECT code FROM roles ORDER BY id');
     const codes = new Set(roles.map(row => row.code));
     for (const code of ['SUPER_ADMIN','RESPONSABLE','EMPLOYE']) if (!codes.has(code)) throw new Error('Rôle de référence manquant : ' + code);
+
+    const bcryptPassword = 'MariaDB-CI-Password-2026!';
+    const bcryptHash = bcrypt.hashSync(bcryptPassword, 4);
+    const upgradedPassword = verifyAndMaybeUpgrade(bcryptPassword, bcryptHash);
+    if (!upgradedPassword.valid || !upgradedPassword.upgraded?.startsWith('pbkdf2:')) {
+      throw new Error('Échec de compatibilité des hashes bcrypt Supabase.');
+    }
+    if (!verifyAndMaybeUpgrade(bcryptPassword, upgradedPassword.upgraded).valid) {
+      throw new Error('Le hash PBKDF2 migré ne peut pas être vérifié.');
+    }
 
     const suffix = randomUUID();
     const userId = 'ci-user-' + suffix;
@@ -50,6 +62,14 @@ async function main() {
     }
     await deleteMariaDbDocument('ci_custom_collection', genericId);
 
+    const absenceId = 'ci-absence-' + suffix;
+    await saveMariaDbDocument('absences', { id: absenceId, label: 'CI absence generic fallback' });
+    const absenceRows = await getMariaDbCollection('absences');
+    if (!absenceRows.some(row => row.id === absenceId && row.label === 'CI absence generic fallback')) {
+      throw new Error('La collection absences doit être conservée dans generic_collections.');
+    }
+    await deleteMariaDbDocument('absences', absenceId);
+
     const [requiredTables] = await connection.query<any[]>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('auth_sessions','call_signals','generic_collections')"
     );
@@ -57,6 +77,7 @@ async function main() {
 
     console.log('[OK] MariaDB CRUD users et generic_collections');
     console.log('[OK] Masquage passwordHash');
+    console.log('[OK] Compatibilité bcrypt Supabase → PBKDF2 et collection absences');
     console.log('[OK] ' + Number(tables[0].total) + ' tables, rôles, auth_sessions et call_signals');
   } finally {
     await connection.end();
