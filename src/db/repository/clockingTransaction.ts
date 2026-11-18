@@ -186,18 +186,19 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
 
     let savedIncident: any = null;
     const exemptEarly = derogations.allowEarlyDeparture15_17 && departureTime >= '15:00' && departureTime <= '17:00';
-    const skipIncident = (incident?.type === 'retard' && exemptLate) ||
-      (['sortie_prematuree','depart_anticipe'].includes(incident?.type) && exemptEarly);
-    if (incident && !skipIncident) {
-      const incidentId = String(incident.id || incident.docId || `inc-${randomUUID()}`);
-      const allowedIncidentTypes = action === 'arrival'
+    const expectedIncidentType = action === 'arrival' && lateMinutes > 0
+      ? 'retard'
+      : action === 'departure' && departureTime < plannedDeparture && !exemptEarly
+        ? 'sortie_prematuree'
+        : null;
+    if (expectedIncidentType) {
+      const allowedIncidentTypes = expectedIncidentType === 'retard'
         ? ['retard']
-        : action === 'departure'
-          ? ['sortie_prematuree', 'depart_anticipe']
-          : [];
-      if (!allowedIncidentTypes.includes(String(incident.type || ''))) {
+        : ['sortie_prematuree', 'depart_anticipe'];
+      if (incident?.type && !allowedIncidentTypes.includes(String(incident.type))) {
         throw new Error('Incident de pointage rejeté : type incohérent avec l’action enregistrée.');
       }
+      const incidentId = String(incident?.id || incident?.docId || `inc-${randomUUID()}`);
       const [existing] = await connection.execute<any[]>(
         'SELECT id, employee_id, raw_data FROM attendance_incidents WHERE doc_id = ? LIMIT 1',
         [incidentId]
@@ -223,7 +224,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
             : (existingRaw.reason || 'Incident automatique de pointage'),
         };
       } else {
-        const reason = action === 'arrival'
+        const reason = expectedIncidentType === 'retard'
           ? `Retard automatique constaté à ${actionTime} (seuil: ${lateThreshold})`
           : `Sortie prématurée constatée à ${actionTime} avant ${plannedDeparture}`;
         raw = {
@@ -232,7 +233,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
           employeeName,
           date,
           timeString: actionTime,
-          type: incident.type,
+          type: expectedIncidentType,
           origin: 'automatique_pointage',
           reason,
           description: reason,
@@ -245,7 +246,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       const fields = {
         employee_id: employeeId,
         date,
-        type: raw.type,
+        type: raw.type || expectedIncidentType,
         description: raw.reason || 'Incident de présence',
         status: raw.status || 'automatique',
         raw_data: JSON.stringify(raw),
@@ -260,7 +261,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       } else {
         const keys = Object.keys(fields);
         await connection.execute(
-          `INSERT INTO attendance_incidents (uid, doc_id, ${keys.map(k => `\x60${k}\x60`).join(', ')}, created_at)
+          `INSERT INTO attendance_incidents (uid, doc_id, ${keys.map(k => `\x60${k}\\60`).join(', ')}, created_at)
            VALUES (?, ?, ${keys.map(() => '?').join(', ')}, NOW(3))`,
           [randomUUID(), incidentId, ...keys.map(k => (fields as any)[k])]
         );
