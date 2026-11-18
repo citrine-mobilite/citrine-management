@@ -1,5 +1,5 @@
 import { dbPromise } from '../lib/idb';
-import { supabaseService } from './supabaseService';
+import { mariaDbService } from './mariaDbService';
 import { sendBatchedOfflineWhatsappNotifications } from './notificationSender';
 import { NotificationLog } from '../types';
 
@@ -155,7 +155,7 @@ export const offlineService = {
     }
   },
 
-  // Process the queued offline actions to sync with Supabase
+  // Process the queued offline actions to sync with MariaDB
   async syncOfflineQueue(): Promise<{ success: boolean; syncedCount: number; errors: number }> {
     if (!this.isOnline()) {
       return { success: false, syncedCount: 0, errors: 0 };
@@ -175,7 +175,7 @@ export const offlineService = {
         if (action.actionType === 'save') {
           const docId = action.payload.id || action.payload.employeeId;
           if (docId) {
-            await supabaseService.saveDocument(action.collectionName, action.payload);
+            await mariaDbService.saveDocument(action.collectionName, action.payload);
           }
           if (action.collectionName === 'notifications' && action.payload && action.payload.type === 'whatsapp') {
             queuedNotificationsToBatch.push(action.payload as NotificationLog);
@@ -183,10 +183,10 @@ export const offlineService = {
         } else if (action.actionType === 'delete') {
           const docId = typeof action.payload === 'string' ? action.payload : action.payload.id;
           if (docId) {
-            await supabaseService.deleteDocument(action.collectionName, docId);
+            await mariaDbService.deleteDocument(action.collectionName, docId);
           }
         }
-        // Successfully synced to Supabase, remove from queue
+        // Successfully synced to MariaDB, remove from queue
         await this.removeQueueAction(action.id);
         syncedCount++;
       } catch (err) {
