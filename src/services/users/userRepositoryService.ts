@@ -1,6 +1,6 @@
 import { AppUser } from '../../types';
 import { hashPassword } from '../../utils/cryptoUtils';
-import { supabaseService } from '../supabaseService';
+import { mariaDbService } from '../mariaDbService';
 import { asyncActionTrackerService } from '../asyncActionTrackerService';
 import { mapDbUserRow } from './userMapperHelpers';
 import { syncUserToEmployeeTable } from './userEmployeeSyncHelper';
@@ -10,13 +10,13 @@ export const INITIAL_DEFAULT_USERS: AppUser[] = [];
 export function getStoredUsers(): AppUser[] { return []; }
 
 export async function syncUsersFromDatabase(): Promise<AppUser[]> {
-  try { return (await supabaseService.fetchCollection<any>(USERS_COLLECTION)).map(mapDbUserRow); }
+  try { return (await mariaDbService.fetchCollection<any>(USERS_COLLECTION)).map(mapDbUserRow); }
   catch (error) { console.warn('[userService] Lecture utilisateurs MariaDB :', error); return []; }
 }
 export const seedUsersIfEmpty = syncUsersFromDatabase;
 
 export function subscribeToUsers(callback: (users: AppUser[]) => void) {
-  return supabaseService.subscribeToCollection<any>(USERS_COLLECTION, rows => callback(rows.map(mapDbUserRow)));
+  return mariaDbService.subscribeToCollection<any>(USERS_COLLECTION, rows => callback(rows.map(mapDbUserRow)));
 }
 
 export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<AppUser> {
@@ -29,7 +29,7 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
       cleanUser.passwordHash = await hashPassword(cleanUser.passwordHash);
     }
 
-    const existingRows = await supabaseService.fetchCollection<any>(USERS_COLLECTION);
+    const existingRows = await mariaDbService.fetchCollection<any>(USERS_COLLECTION);
     const oldEmail = String(previousUser?.email || '').trim().toLowerCase();
     const existing = existingRows.find((row: any) =>
       String(row.id) === String(cleanUser.id) ||
@@ -50,7 +50,7 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
     // Ne jamais remplacer le hash existant par une valeur vide/non fournie.
     if (!cleanUser.passwordHash) delete payload.passwordHash;
 
-    const saved = await supabaseService.saveDocument(USERS_COLLECTION, payload);
+    const saved = await mariaDbService.saveDocument(USERS_COLLECTION, payload);
     const resolved: AppUser = {
       ...payload, ...(saved || {}),
       id: String((saved as any)?.id || payload.id),
