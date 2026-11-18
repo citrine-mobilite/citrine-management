@@ -1,102 +1,74 @@
-import { supabase, supabaseAdmin } from '../../lib/supabase';
 import { offlineService } from '../offlineService';
-import { getSupabaseClient, isUuid, mapCollectionToTable } from './tableMapper';
-import { supabaseRowToItem } from './rowToItem';
+import { getApiToken } from '../sessionService';
+
+function authHeaders(): Record<string, string> {
+  const token = getApiToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
   try {
-    const table = mapCollectionToTable(collectionName);
-    const client = getSupabaseClient();
-    let query = client.from(table).select('*');
-
-    if (table === 'generic_collections') {
-      query = query.eq('collection', collectionName);
-    }
-
-    const { data, error } = await query;
-    if (error) {
-      console.warn(`[Supabase Notice] Table ${table} not yet queryable, falling back to local store:`, error.message);
-      return [];
-    }
-
-    return (data || []).map((row) => supabaseRowToItem(collectionName, row) as T);
-  } catch (err) {
-    console.warn(`[Supabase] Erreur de récupération pour ${collectionName}:`, err);
+    const response = await fetch(`/api/data/${encodeURIComponent(collectionName)}`, { headers: authHeaders() });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) throw new Error(result.error || `API MariaDB indisponible (${response.status})`);
+    return Array.isArray(result.data) ? result.data as T[] : [];
+  } catch (error) {
+    console.warn(`[MariaDB] Lecture impossible pour ${collectionName}:`, error);
     return [];
   }
 }
 
 export async function deleteDocument(collectionName: string, id: string): Promise<boolean> {
-  try {
-    const table = mapCollectionToTable(collectionName);
-    const client = supabaseAdmin || getSupabaseClient();
-    const strId = String(id).trim();
+  const response = await fetch(`/api/data/${encodeURIComponent(collectionName)}/${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.success) throw new Error(result.error || 'Suppression MariaDB impossible.');
+  return true;
+}
 
-    if (table === 'generic_collections') {
-      const { error } = await client
-        .from('generic_collections')
-        .delete()
-        .eq('collection', collectionName)
-        .eq('doc_id', strId);
-      if (error) {
-        console.error(`[deleteDocument generic_collections error for ${collectionName}:${strId}]:`, error);
-        throw error;
-      }
-      return true;
-    }
-
-    if (table === 'visitor_logs') {
-      const { error } = await client
-        .from('visitor_logs')
-        .delete()
-        .eq('doc_id', strId);
-      if (error) {
-        console.error(`[deleteDocument visitor_logs error for ${strId}]:`, error);
-        throw error;
-      }
-      return true;
-    }
-
-    if (/^\d+$/.test(strId)) {
-      const { error } = await client.from(table).delete().eq('id', Number(strId));
-      if (error) throw error;
-    } else if (isUuid(strId)) {
-      const { error } = await client.from(table).delete().eq('uid', strId);
-      if (error) throw error;
-    } else {
-      const { error } = await client.from(table).delete().eq('doc_id', strId);
-      if (error) throw error;
-    }
-    return true;
-  } catch (err: any) {
-    console.error(`[Supabase Delete] Exception deleting from ${collectionName}:`, err);
-    throw err;
-  }
+export async function saveDocument<T extends { id: string }>(collectionName: string, item: T): Promise<T> {
+  const response = await fetch(`/api/data/${encodeURIComponent(collectionName)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(item),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.success) throw new Error(result.error || 'Enregistrement MariaDB impossible.');
+  return (result.data || item) as T;
 }
 
 export function subscribeToCollection<T>(collectionName: string, callback: (data: T[]) => void) {
-  const table = mapCollectionToTable(collectionName);
-
-  fetchCollection<T>(collectionName).then((items) => {
-    offlineService.cacheListLocally(collectionName, items as any);
+  let active = true;
+  const refresh = async () => {
+    const items = await fetchCollection<T>(collectionName);
+    if (!active) return;
+    await offlineService.cacheListLocally(collectionName, items as any).catch(() => {});
     callback(items);
-  });
+  };
+  void refresh();
 
-  const channelName = `realtime_${table}_${collectionName}_${Date.now()}_${Math.random()}`;
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table },
-      async () => {
-        const updated = await fetchCollection<T>(collectionName);
-        offlineService.cacheListLocally(collectionName, updated as any);
-        callback(updated);
+  let source: EventSource | null = null;
+  if (typeof window !== 'undefined' && typeof EventSource !== 'undefined') {
+    try {
+      source = new EventSource('/api/realtime/events');
+      const onUpdate = (event: MessageEvent) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (!payload.collection || payload.collection === collectionName) void refresh();
+        } catch { void refresh(); }
+      };
+      source.addEventListener('collection_update', onUpdate as EventListener);
+      if (['presences','attendance_incidents','notifications'].includes(collectionName)) {
+        source.addEventListener('presence_update', () => void refresh());
       }
-    )
-    .subscribe();
+    } catch (error) {
+      console.warn('[MariaDB realtime] SSE indisponible:', error);
+    }
+  }
 
   return () => {
-    supabase.removeChannel(channel);
+    active = false;
+    source?.close();
   };
 }
