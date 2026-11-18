@@ -274,7 +274,14 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       const notifId = String(notification.id || notification.docId || `notif-clock-${randomUUID()}`);
       const userId = Number(employee.user_id || 0) || null;
       const message = notification.message || notification.content || notification.description || notification.title || 'Pointage validé';
-      const raw = { ...notification, id: notifId, message };
+      const raw = {
+        ...notification,
+        id: notifId,
+        message,
+        targetUserId: userId,
+        targetUserIds: userId ? [userId] : [],
+        targetEmployeeIds: [employeeId],
+      };
       const [existing] = await connection.execute<any[]>(
         'SELECT id FROM notifications WHERE doc_id = ? LIMIT 1',
         [notifId]
@@ -285,6 +292,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
         type: notification.type || 'system',
         is_read: Boolean(notification.isRead ?? notification.read ?? false),
         target_user_id: userId,
+        target_user_ids: JSON.stringify(userId ? [userId] : []),
         target_employee_ids: JSON.stringify([employeeId]),
         raw_data: JSON.stringify(raw),
         updated_at: now,
@@ -303,7 +311,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
           [randomUUID(), notifId, ...keys.map(k => (fields as any)[k])]
         );
       }
-      savedNotification = { ...notification, id: notifId, message };
+      savedNotification = { ...raw, id: notifId, message };
     }
 
     return {
