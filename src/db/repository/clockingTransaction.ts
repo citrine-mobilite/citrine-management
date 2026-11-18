@@ -10,9 +10,12 @@ function parseRaw(value: any): any {
   if (typeof value === 'string') { try { return JSON.parse(value); } catch {} }
   return {};
 }
-function dateOnly(value: any): string {
-  const date = value ? new Date(value) : new Date();
-  return Number.isNaN(date.getTime()) ? new Date().toISOString().slice(0,10) : date.toISOString().slice(0,10);
+function minutesBetweenClocks(from: string, to: string): number {
+  const parse = (value: string) => {
+    const match = value.match(/^(\\d{2}):(\\d{2})$/);
+    return match ? Number(match[1]) * 60 + Number(match[2]) : 0;
+  };
+  return Math.max(0, parse(to) - parse(from));
 }
 
 export async function executeAtomicClockingTransaction(input: AtomicClockingTransactionInput) {
