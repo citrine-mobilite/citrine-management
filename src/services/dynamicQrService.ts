@@ -1,14 +1,17 @@
 import { DynamicQrSession } from '../types';
-import { COLLECTIONS, saveDocument, subscribeToDocument, subscribeToCollection, deleteDocument, getCollection } from './dataService';
-import { offlineService } from './offlineService';
+import { COLLECTIONS, saveDocument, subscribeToDocument, deleteDocument } from './dataService';
 
 export class DynamicQrService {
   private activeSessionsCache: DynamicQrSession[] = [];
 
   constructor() {
-    subscribeToCollection<DynamicQrSession>(COLLECTIONS.DYNAMIC_QR_SESSIONS, (sessions) => {
-      this.activeSessionsCache = sessions || [];
-    });
+    // Les sessions actives ne sont chargées que dans l'écran responsable.
+  }
+
+  private generateRandomSecret(): string {
+    const bytes = new Uint8Array(20);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('').toUpperCase();
   }
 
   public clearCache(): void {
@@ -17,8 +20,8 @@ export class DynamicQrService {
 
   // Create an active 30s dynamic QR session for the on-site manager
   public async createSession(managerId: string, managerName: string): Promise<DynamicQrSession> {
-    const sessionId = `dynqr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const randomSecret = Math.random().toString(36).substring(2, 9).toUpperCase();
+    const sessionId = `dynqr-${globalThis.crypto.randomUUID()}`;
+    const randomSecret = this.generateRandomSecret();
     const token = `CITRINE-DYN-30S-${sessionId}-${randomSecret}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 30000).toISOString();
@@ -44,7 +47,7 @@ export class DynamicQrService {
     const existing = this.activeSessionsCache.find((s) => s.id === sessionId);
     if (!existing || existing.status !== 'active') return null;
 
-    const randomSecret = Math.random().toString(36).substring(2, 9).toUpperCase();
+    const randomSecret = this.generateRandomSecret();
     const newToken = `CITRINE-DYN-30S-${sessionId}-${randomSecret}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 30000).toISOString();
@@ -65,94 +68,44 @@ export class DynamicQrService {
 
   // Real-time listener for the manager's open modal
   public subscribeToSession(sessionId: string, callback: (session: DynamicQrSession | null) => void) {
-    return subscribeToDocument<DynamicQrSession>(COLLECTIONS.DYNAMIC_QR_SESSIONS, sessionId, callback);
+    return subscribeToDocument<DynamicQrSession>(COLLECTIONS.DYNAMIC_QR_SESSIONS, sessionId, (session) => {
+      if (session) {
+        const index = this.activeSessionsCache.findIndex(item => item.id === session.id);
+        if (index >= 0) this.activeSessionsCache[index] = session;
+        else this.activeSessionsCache.push(session);
+      } else {
+        this.activeSessionsCache = this.activeSessionsCache.filter(item => item.id !== sessionId);
+      }
+      callback(session);
+    });
   }
 
-  // Validate and consume the dynamic QR token when employee scans it
+  // Prévalidation du format uniquement : le serveur vérifie l'expiration et consomme le jeton atomiquement.
   public async validateAndConsumeDynamicQr(
     scannedToken: string,
-    employeeId: string,
-    employeeName: string,
-    action?: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure'
+    _employeeId: string,
+    _employeeName: string,
+    _action?: 'arrival' | 'pauseStart' | 'pauseEnd' | 'departure'
   ): Promise<{ success: boolean; error?: string; session?: DynamicQrSession }> {
     const cleanedToken = (scannedToken || '').trim();
-
-    // Check if it conforms to dynamic QR format
-    if (!cleanedToken.startsWith('CITRINE-DYN-30S-')) {
+    if (!cleanedToken.startsWith('CITRINE-DYN-30S-') || cleanedToken.length < 32) {
       return {
         success: false,
-        error: "Ce QR code n'est pas un QR code dynamique officiel de responsable Citrine."
+        error: "Ce QR code n'est pas un QR code dynamique officiel de responsable Citrine.",
       };
     }
-
-    // 1. Recherche dans le cache local mémoire
-    let match = this.activeSessionsCache.find((s) => s.token === cleanedToken);
-
-    // 2. Recherche dans la collection MariaDB distante
-    if (!match) {
-      try {
-        const remoteSessions = await getCollection<DynamicQrSession>(COLLECTIONS.DYNAMIC_QR_SESSIONS);
-        if (Array.isArray(remoteSessions) && remoteSessions.length > 0) {
-          this.activeSessionsCache = remoteSessions;
-          match = remoteSessions.find((s) => s.token === cleanedToken);
-        }
-      } catch (err) {
-        console.warn('[DynamicQrService] Error fetching collection:', err);
-      }
-    }
-
-    // 4. Repli IndexedDB local
-    if (!match) {
-      const offlineList = (await offlineService.getCachedCollection<DynamicQrSession>(COLLECTIONS.DYNAMIC_QR_SESSIONS)) || [];
-      match = offlineList.find((s) => s.token === cleanedToken);
-    }
-
-    if (!match) {
-      return {
-        success: false,
-        error: "Ce QR Code dynamique est invalide ou a déjà expiré. Veuillez demander au responsable d'afficher son écran à nouveau."
-      };
-    }
-
-    if (match.status === 'used') {
-      return {
-        success: false,
-        error: `Ce QR Code dynamique a déjà été utilisé par ${match.usedByEmployeeName || 'un autre collaborateur'}. Un QR Code ne peut servir qu'une seule fois.`
-      };
-    }
-
-    // Check expiration (with a 4-second safety buffer for camera scan & network trip)
-    const expirationTime = new Date(match.expiresAt).getTime();
-    const now = Date.now();
-    if (now > expirationTime + 4000) {
-      return {
-        success: false,
-        error: "Ce QR Code dynamique a expiré (validité de 30 secondes dépassée). Veuillez scanner le code actuellement visible sur l'écran du responsable."
-      };
-    }
-
-    // Mark as consumed by employee
-    const consumedSession: DynamicQrSession = {
-      ...match,
-      status: 'used',
-      usedByEmployeeId: employeeId,
-      usedByEmployeeName: employeeName,
-      usedAt: new Date().toISOString(),
-      action: action || 'arrival'
-    };
-
-    await saveDocument(COLLECTIONS.DYNAMIC_QR_SESSIONS, consumedSession);
-
-    const idx = this.activeSessionsCache.findIndex((s) => s.id === consumedSession.id);
-    if (idx >= 0) {
-      this.activeSessionsCache[idx] = consumedSession;
-    } else {
-      this.activeSessionsCache.push(consumedSession);
-    }
-
     return {
       success: true,
-      session: consumedSession
+      session: {
+        id: 'pending-server-validation',
+        sessionId: 'pending-server-validation',
+        token: cleanedToken,
+        generatedBy: 'Responsable',
+        managerId: '',
+        createdAt: new Date().toISOString(),
+        expiresAt: '',
+        status: 'active',
+      },
     };
   }
 
