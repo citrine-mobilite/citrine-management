@@ -1,5 +1,5 @@
 import { ClockingMethod, Employee } from '../../../types';
-import { getCurrentUserLocation } from '../../../utils/geolocation';
+import { getCurrentUserLocation, COMPANY_HQ_LOCATION } from '../../../utils/geolocation';
 import { badgeCodeService } from '../../../services/badgeCodeService';
 
 export interface ValidateCode16Params {
