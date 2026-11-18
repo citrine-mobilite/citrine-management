@@ -7,6 +7,7 @@
 - CRON_SECRET doit contenir au moins 32 caractères aléatoires. Les routes /api/cron/* exigent l'en-tête x-cron-secret.
 - Le dépôt public a historiquement contenu une clé Supabase service_role dans un ancien bundle API généré. Le bundle a été retiré de la branche de migration, mais cela ne révoque pas la clé : elle doit être révoquée et renouvelée dans Supabase. La réécriture de l'historique Git ne remplace jamais cette rotation.
 - Les anciennes valeurs QR par défaut ont été supprimées. Configurer un nouveau secret et un nouveau jeton QR dans les paramètres de l'entreprise avant de réactiver le pointage, puis remplacer le QR physique.
+- Si le contrôle GPS est activé dans les paramètres du QR, renseigner OFFICE_LATITUDE, OFFICE_LONGITUDE et OFFICE_GPS_RADIUS_METERS avec les coordonnées et le rayon autorisés.
 
 ## Authentification et accès
 
