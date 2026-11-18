@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { getMariaDbPool } from '../mariadb';
 import { resolveEmployeeDbId } from './tableHelpers';
 import type { PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
@@ -84,10 +85,10 @@ export async function verifyDoorQrTokenOnServer(
     if (cfg.doorQrCodeRevoked === true || revokedList.includes(candidate) || candidate.includes('REVOKED') || candidate.includes('INVALIDE')) {
       throw new Error("Pointage rejeté : ce QR Code d'entrée a été révoqué.");
     }
-    const timedSuffix = candidate.match(/-(\\d{6,})$/);
+    const timedSuffix = candidate.match(/-(\d{6,})$/);
     if (timedSuffix) {
       const candidateBase = candidate.slice(0, -timedSuffix[0].length);
-      const officialBase = official.replace(/-\\d{6,}$/, '');
+      const officialBase = official.replace(/-\d{6,}$/, '');
       const scannedSlot = Number(timedSuffix[1]);
       const currentSlot = Math.floor(Date.now() / 30000);
       if (candidateBase !== official && candidateBase !== officialBase) {
@@ -117,22 +118,24 @@ export async function verifyDoorQrTokenOnServer(
     const session = rows[0];
     if (!session) throw new Error('Pointage rejeté : QR dynamique expiré, déjà utilisé ou inconnu.');
     const raw = parseJson(session.raw_data);
-    if (String(raw.status || '').toLowerCase() === 'used') {
-      throw new Error('Pointage rejeté : ce QR dynamique a déjà été utilisé.');
+    const tokenHash = createHash('sha256').update(candidate).digest('hex');
+    if (String(raw.lastConsumedTokenHash || '') === tokenHash) {
+      throw new Error('Pointage rejeté : ce QR dynamique a déjà été utilisé. Attendez le renouvellement du code par le responsable.');
     }
     const updatedRaw = {
       ...raw,
-      status: 'used',
-      usedByEmployeeId: String(context.employeeId),
-      usedByEmployeeName: context.employeeName || '',
-      usedAt: new Date().toISOString(),
-      action: context.action || 'arrival',
+      status: 'active',
+      lastConsumedTokenHash: tokenHash,
+      lastConsumedAt: new Date().toISOString(),
+      lastUsedByEmployeeId: String(context.employeeId),
+      lastUsedByEmployeeName: context.employeeName || '',
+      lastAction: context.action || 'arrival',
     };
     const [result] = await connection.execute<ResultSetHeader>(
-      'UPDATE dynamic_qr_sessions SET is_active = 0, raw_data = ?, updated_at = NOW(3) WHERE id = ? AND is_active = 1 AND expires_at > NOW(3)',
-      [JSON.stringify(updatedRaw), session.id]
+      "UPDATE dynamic_qr_sessions SET raw_data = ?, updated_at = NOW(3) WHERE id = ? AND is_active = 1 AND expires_at > NOW(3) AND JSON_UNQUOTE(JSON_EXTRACT(raw_data, '$.token')) = ?",
+      [JSON.stringify(updatedRaw), session.id, candidate]
     );
-    if (result.affectedRows !== 1) throw new Error('Pointage rejeté : ce QR dynamique vient d’être consommé ou a expiré.');
+    if (result.affectedRows !== 1) throw new Error('Pointage rejeté : ce QR dynamique vient d’être renouvelé, consommé ou a expiré.');
     return;
   }
 
