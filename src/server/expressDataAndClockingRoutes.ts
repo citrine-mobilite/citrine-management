@@ -187,7 +187,7 @@ async function authorizeTaskWrite(req: AuthRequest, res: express.Response, next:
       'completedAt', 'milestoneProgress', 'progress', 'personalBucket', 'orderIndex',
       'timeSpent', 'actualStartTime', 'actualEndTime',
     ];
-    const safeTask = { ...found.raw, id: found.raw.id || recordId, docId: found.row.doc_id || found.raw.docId };
+    const safeTask: Record<string, any> = { ...found.raw, id: found.raw.id || recordId, docId: found.row.doc_id || found.raw.docId };
     for (const field of mutableFields) {
       if (Object.prototype.hasOwnProperty.call(body, field)) safeTask[field] = body[field];
     }
