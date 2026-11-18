@@ -243,8 +243,8 @@ async function authorizeIdeaWrite(req: AuthRequest, res: express.Response, next:
         authorId: body.isAnonymous ? undefined : String(req.user?.id || ''),
         authorName: body.isAnonymous ? undefined : String(req.user?.name || ''),
         status: 'soumise',
-        likesCount: 1,
-        likedUserIds: [String(req.user?.id || '')],
+        likesCount: 0,
+        likedUserIds: [],
         managementResponse: undefined,
       };
       return next();
