@@ -143,7 +143,7 @@ export function mariaDbRowToItem(collectionName: string, row: any): any {
     };
   }
 
-  const moduleMapped = mapModuleSupabaseRowToItem(table, row);
+  const moduleMapped = mapModuleMariaDbRowToItem(table, row);
   if (moduleMapped) return moduleMapped;
 
   if (row.raw_data && typeof row.raw_data === 'object') {
