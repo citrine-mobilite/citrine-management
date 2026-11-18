@@ -27,6 +27,8 @@ npm install --no-audit --no-fund
 npm run build
 ```
 
+Les scripts d'export/import utilisent également les variables d'environnement. L'importeur charge automatiquement le fichier `.env` du dépôt.
+
 Créer le fichier privé `~/repositories/citrine-management/.env` à partir de `.env.example`, renseigner les identifiants MariaDB et les secrets SMTP/Pusher, puis :
 
 ```bash
@@ -34,6 +36,30 @@ chmod 600 .env
 ```
 
 Ne jamais copier le contenu de ce fichier dans GitHub ou dans une conversation.
+
+## Création du schéma et import des données
+
+Sur une base MariaDB vide, appliquer les fichiers dans cet ordre, via phpMyAdmin (onglet SQL/import) ou le client MariaDB :
+
+1. `database/mariadb/001_schema.sql`
+2. `database/mariadb/002_auth_sessions.sql`
+3. `database/mariadb/003_seed_reference_data.sql`
+4. `database/mariadb/004_call_signals.sql`
+
+Faire d'abord une sauvegarde de toute base qui contient déjà des données. Ne pas appliquer ces fichiers sur une base de production existante sans vérifier son contenu et ses versions.
+
+L'export PostgreSQL se fait depuis une machine de confiance, avec `SUPABASE_DATABASE_URL` définie temporairement et le script `npm run export:supabase -- ./citrine-supabase-export.json`. Le fichier exporté contient des hashes de mots de passe : ne pas le committer.
+
+Transférer le fichier JSON sur le serveur par SCP, puis depuis le dépôt OVH :
+
+```bash
+npx tsx scripts/import_mariadb_export.ts ./citrine-supabase-export.json --dry-run
+npx tsx scripts/import_mariadb_export.ts ./citrine-supabase-export.json
+```
+
+L'import initial refuse de s'exécuter si la base contient déjà des utilisateurs ou collaborateurs. L'option `--merge` ne doit être utilisée que pour une fusion volontaire et après sauvegarde. L'import ne supprime aucune ligne. En cas d'interruption, corriger l'erreur puis relancer avec `--merge` après avoir contrôlé les enregistrements déjà importés.
+
+Si le script d'export ne peut pas lire `auth.users`, les comptes sans hash récupérable devront réinitialiser leur mot de passe. Supprimer le fichier d'export du serveur et de la machine locale après validation.
 
 ## Démarrage et surveillance
 
