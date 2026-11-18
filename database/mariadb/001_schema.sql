@@ -217,7 +217,8 @@ CREATE TABLE IF NOT EXISTS presences (
     raw_data JSON,
     created_at DATETIME(3) DEFAULT NOW(),
     updated_at DATETIME(3) DEFAULT NOW(),
-    CONSTRAINT fk_presences_employee_id FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL
+    CONSTRAINT fk_presences_employee_id FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL,
+    KEY idx_presences_employee_date (employee_id, date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Table: presence_pauses
