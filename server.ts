@@ -15,6 +15,8 @@ dotenv.config();
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1);
   const PORT = Number(process.env.PORT || 3000);
 
   app.use(express.json({ limit: '25mb' }));
@@ -25,6 +27,7 @@ async function startServer() {
   registerCoreDataAndClockingRoutes(app);
   registerRealtimeRoutes(app);
   registerMailAndCronRoutes(app);
+  app.use('/api', (_req, res) => res.status(404).json({ success: false, error: 'Route API introuvable.' }));
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
