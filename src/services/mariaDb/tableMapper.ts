@@ -42,7 +42,7 @@ export function mapCollectionToTable(collectionName: string): string {
     case 'reminder_recipients': return 'reminder_recipients';
     case 'notification_recipients': return 'notification_recipients';
     case 'presence_pauses': return 'presence_pauses';
-    case 'absences': return 'absences';
+    case 'absences': return 'generic_collections';
     case 'leave_requests': return 'leave_requests';
     default: return 'generic_collections';
   }
