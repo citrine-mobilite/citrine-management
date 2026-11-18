@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
-import { supabaseAdmin } from '../../lib/supabase.ts';
+import { getMariaDbPool } from '../../db/mariadb';
 import { SmtpConfig } from './mailTypesAndParsing';
 
 /**
@@ -14,19 +14,17 @@ export async function getEffectiveSmtpConfig(customConfig?: Partial<SmtpConfig>)
 
   let dbSettings: any = null;
   try {
-    const { data } = await Promise.race([
-      supabaseAdmin.from('company_settings').select('*'),
-      new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Supabase timeout')), 3000)),
-    ]);
-    if (data && Array.isArray(data) && data.length > 0) {
-      const match = data.find((s: any) => s.id === 'main_config' || s.doc_id === 'main_config') || data[0];
-      const raw = (match.raw_data && typeof match.raw_data === 'object')
-        ? match.raw_data
-        : (match.setting_value && typeof match.setting_value === 'object' ? match.setting_value : match);
-      dbSettings = { ...match, ...raw };
+    const [rows] = await getMariaDbPool().execute<any[]>(
+      "SELECT raw_data, setting_value FROM company_settings WHERE doc_id = 'main_config' OR setting_key = 'main_config' ORDER BY id DESC LIMIT 1"
+    );
+    if (rows[0]) {
+      const raw = rows[0].raw_data && typeof rows[0].raw_data === 'object'
+        ? rows[0].raw_data
+        : (rows[0].setting_value && typeof rows[0].setting_value === 'object' ? rows[0].setting_value : {});
+      dbSettings = raw;
     }
-  } catch (err) {
-    // Erreur silencieuse de DB, fallback automatique direct sur les variables d'environnement
+  } catch {
+    // Fallback to private environment variables when MariaDB is not yet available.
   }
 
   const rawHost = customConfig?.host || dbSettings?.smtpHost || process.env.SMTP_HOST || '';
