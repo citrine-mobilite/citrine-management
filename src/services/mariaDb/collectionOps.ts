@@ -1,5 +1,6 @@
 import { offlineService } from '../offlineService';
-import { getApiToken } from '../sessionService';
+import { getApiToken, clearSecureSession } from '../sessionService';
+import { clearIdbUserDataStores } from '../../lib/idb';
 
 function authHeaders(): Record<string, string> {
   const token = getApiToken();
@@ -10,6 +11,15 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
   try {
     const response = await fetch(`/api/data/${encodeURIComponent(collectionName)}`, { headers: authHeaders() });
     const result = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      await clearIdbUserDataStores();
+      clearSecureSession();
+      return [];
+    }
+    if (response.status === 403 || response.status === 404) {
+      await offlineService.cacheListLocally(collectionName, []);
+      return [];
+    }
     if (!response.ok || !result.success) throw new Error(result.error || `API MariaDB indisponible (${response.status})`);
     return Array.isArray(result.data) ? result.data as T[] : [];
   } catch (error) {
