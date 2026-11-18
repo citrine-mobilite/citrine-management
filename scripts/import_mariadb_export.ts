@@ -211,11 +211,6 @@ async function main() {
           row.targetUserId = await resolveLegacyReference('users', value, userMap);
           row.target_user_id = row.targetUserId;
         }
-        if (row.targetUserId !== undefined || row.target_user_id !== undefined) {
-          const value = row.targetUserId ?? row.target_user_id;
-          row.targetUserId = await resolveLegacyReference('users', value, userMap);
-          row.target_user_id = row.targetUserId;
-        }
         if (row.callerId !== undefined || row.caller_id !== undefined) {
           const value = row.callerId ?? row.caller_id;
           row.callerId = await resolveLegacyReference('users', value, userMap);
