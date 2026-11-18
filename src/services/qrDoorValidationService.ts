@@ -1,5 +1,4 @@
 import { CompanyModuleConfig } from '../types';
-import { getCollection } from './dataService';
 import { getStoredModuleConfig } from '../hooks/useAppInitialData';
 
 /**
@@ -98,124 +97,45 @@ export async function verifyDoorQrToken(
 }> {
   const cleanToken = extractCleanQrToken(scannedRaw);
   if (!cleanToken) {
-    return {
-      valid: false,
-      cleanToken: '',
-      officialToken: '',
-      isRevoked: false,
-      error: 'Le QR Code scanné est vide ou illisible.',
-    };
+    return { valid: false, cleanToken: '', officialToken: '', isRevoked: false, error: 'Le QR Code scanné est vide ou illisible.' };
   }
 
   const cleanUpper = cleanToken.toUpperCase();
-
-  // Vérification immédiate si le jeton porte une signature de révocation
   if (cleanUpper.includes('REVOKED') || cleanUpper.includes('INVALIDE') || cleanUpper.includes('EXPIRED')) {
     return {
       valid: false,
       cleanToken,
       officialToken: '',
       isRevoked: true,
-      error: "Ce QR Code d'entrée a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle.",
+      error: "Ce QR Code d'entrée a été révoqué par la direction.",
     };
   }
 
-  // 1. Récupération des paramètres en mémoire / configuration locale
-  const localDoorToken = (moduleConfig?.doorQrCodeToken || '').trim();
-  const localSecret = (moduleConfig?.qrCodeSecret || '').trim();
-  const isLocalRevoked = moduleConfig?.doorQrCodeRevoked === true;
-  const localRevokedList: string[] = Array.isArray(moduleConfig?.revokedDoorTokens)
-    ? moduleConfig.revokedDoorTokens.map((t) => String(t).toUpperCase().trim())
-    : [];
-
-  // Si le QR code est explicitement révoqué en local
-  if (isLocalRevoked || localRevokedList.includes(cleanUpper)) {
-    return {
-      valid: false,
-      cleanToken,
-      officialToken: localDoorToken,
-      isRevoked: true,
-      error: "Ce QR Code d'entrée n'est plus valide : il a été révoqué par la direction.",
-    };
-  }
-
-  // 2. Première passe : correspondance stricte avec la configuration en mémoire
-  if (
-    localDoorToken &&
-    (isTokenMatch(cleanToken, localDoorToken) || (localSecret && isTokenMatch(cleanToken, localSecret)))
-  ) {
-    return {
-      valid: true,
-      cleanToken,
-      officialToken: localDoorToken,
-      isRevoked: false,
-    };
-  }
-
-  // 3. Interrogation fraîche de la configuration MariaDB.
-  try {
-    const dbRows = await getCollection<any>('company_settings');
-    if (Array.isArray(dbRows) && dbRows.length > 0) {
-      for (const row of dbRows.slice(0, 3)) {
-        const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : row;
-        const serverDoorToken = String(raw.doorQrCodeToken || raw.qrCodeSecret || '').trim();
-        const serverSecret = String(raw.qrCodeSecret || '').trim();
-        const serverRevoked = raw.doorQrCodeRevoked === true;
-        const serverRevokedList: string[] = Array.isArray(raw.revokedDoorTokens)
-          ? raw.revokedDoorTokens.map((t: string) => String(t).toUpperCase().trim()) : [];
-        if (serverRevoked || serverRevokedList.includes(cleanUpper)) {
-          return { valid: false, cleanToken, officialToken: serverDoorToken, isRevoked: true,
-            error: "Ce QR Code d'entrée n'est plus valide : il a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle." };
-        }
-        if (!serverRevoked && (isTokenMatch(cleanToken, serverDoorToken) || (serverSecret && isTokenMatch(cleanToken, serverSecret)))) {
-          return { valid: true, cleanToken, officialToken: serverDoorToken || cleanToken, isRevoked: false };
-        }
-      }
-    }
-  } catch (error) {
-    console.warn('[verifyDoorQrToken] Lecture MariaDB impossible :', error);
-  }
-
-  // 4. Troisième passe : Vérification avec le stockage persistant local de l'application
-  try {
-    const cachedCfg = getStoredModuleConfig();
-    const cachedDoor = (cachedCfg?.doorQrCodeToken || '').trim();
-    const cachedSec = (cachedCfg?.qrCodeSecret || '').trim();
-    const cachedRevoked = cachedCfg?.doorQrCodeRevoked === true;
-    const cachedRevokedList: string[] = Array.isArray(cachedCfg?.revokedDoorTokens)
-      ? cachedCfg.revokedDoorTokens.map((t) => String(t).toUpperCase().trim())
+  const configs = [moduleConfig, getStoredModuleConfig()].filter(Boolean) as CompanyModuleConfig[];
+  let officialToken = '';
+  for (const config of configs) {
+    const configuredToken = String(config.doorQrCodeToken || config.qrCodeSecret || '').trim();
+    const revokedList = Array.isArray(config.revokedDoorTokens)
+      ? config.revokedDoorTokens.map(value => String(value).trim().toUpperCase())
       : [];
-
-    if (cachedRevoked || cachedRevokedList.includes(cleanUpper)) {
+    if (config.doorQrCodeRevoked === true || revokedList.includes(cleanUpper)) {
       return {
         valid: false,
         cleanToken,
-        officialToken: cachedDoor,
+        officialToken: configuredToken,
         isRevoked: true,
-        error: "Ce QR Code d'entrée a été révoqué par la direction.",
+        error: "Ce QR Code d'entrée n'est plus valide : il a été révoqué par la direction.",
       };
     }
-
-    if (
-      !cachedRevoked &&
-      (isTokenMatch(cleanToken, cachedDoor) || (cachedSec && isTokenMatch(cleanToken, cachedSec)))
-    ) {
-      return {
-        valid: true,
-        cleanToken,
-        officialToken: cachedDoor || cleanToken,
-        isRevoked: false,
-      };
+    if (configuredToken) {
+      officialToken = configuredToken;
+      if (isTokenMatch(cleanToken, configuredToken)) {
+        return { valid: true, cleanToken, officialToken: configuredToken, isRevoked: false };
+      }
     }
-  } catch {}
+  }
 
-  // 5. Tout autre jeton est STRICTEMENT INVALIDE (plus aucun fallback en dur ni acceptation par préfixe)
-  const currentOfficial = localDoorToken || 'QR Code non configuré';
-  return {
-    valid: false,
-    cleanToken,
-    officialToken: currentOfficial,
-    isRevoked: isLocalRevoked,
-    error: `QR Code invalide ou expiré ("${cleanToken.length > 25 ? cleanToken.substring(0, 25) + '...' : cleanToken}"). Seul le QR Code officiel affiché à la porte est accepté.`,
-  };
+  // Le secret n'est plus distribué aux comptes employés. La validation finale est faite
+  // exclusivement par le serveur dans la transaction MariaDB.
+  return { valid: true, cleanToken, officialToken, isRevoked: false };
 }
