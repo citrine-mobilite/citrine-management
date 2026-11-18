@@ -165,22 +165,35 @@ export async function executeKioskClockAction(params: {
         throw new Error(res.error || 'Erreur lors de la transaction atomique sur borne.');
       }
 
-      const clockOpKey = `clock:${targetPresence.id}:${action}:${timeStr}`;
+      const persisted = res.data || {};
+      const persistedPresence = persisted.presence || targetPresence;
+      const persistedIncident = persisted.incident || null;
+      const persistedNotification = persisted.notification || null;
+      const persistedTime = persistedPresence.clockLocations?.[action]?.time ||
+        persistedPresence[action === 'arrival' ? 'arrivalTime' : action === 'departure' ? 'departureTime' : action] || timeStr;
+      const clockOpKey = `clock:${persistedPresence.id}:${action}:${persistedTime}`;
       pushNotificationBridgeService.markOperationDispatched(clockOpKey);
 
-      onUpdatePresences(updatedPresences);
-      if (targetIncident && onAddAttendanceIncident) onAddAttendanceIncident(targetIncident);
-      if (targetNotification && onAddNotification) {
+      const persistedPresences = [...presences];
+      const persistedIndex = persistedPresences.findIndex(p =>
+        String(p.employeeId) === String(persistedPresence.employeeId) && p.date === persistedPresence.date
+      );
+      if (persistedIndex >= 0) persistedPresences[persistedIndex] = persistedPresence;
+      else persistedPresences.push(persistedPresence);
+      onUpdatePresences(persistedPresences);
+
+      if (persistedIncident && onAddAttendanceIncident) onAddAttendanceIncident(persistedIncident);
+      if (persistedNotification && onAddNotification) {
         onAddNotification({
-          ...targetNotification,
+          ...persistedNotification,
           payload: JSON.stringify({
             source: 'kiosk',
             operationKey: clockOpKey,
             employeeId: emp.id,
             employeeName: emp.name,
             action,
-            time: timeStr,
-            date: todayStr,
+            time: persistedTime,
+            date: persistedPresence.date,
           }),
         });
         if (typeof window !== 'undefined') {
@@ -189,9 +202,9 @@ export async function executeKioskClockAction(params: {
       }
 
       realtimeSyncService.broadcastPresencePunch({
-        presence: targetPresence,
-        incident: targetIncident,
-        notification: targetNotification,
+        presence: persistedPresence,
+        incident: persistedIncident,
+        notification: persistedNotification,
       });
       setToastMessage(null);
     },
