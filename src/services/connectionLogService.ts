@@ -1,5 +1,5 @@
 import { ConnectionLog } from '../types';
-import { supabaseService } from './supabaseService';
+import { mariaDbService } from './mariaDbService';
 
 export const CONNECTION_LOGS_COLLECTION = 'connection_logs';
 
@@ -16,13 +16,13 @@ export async function recordConnectionLog(data: {
     status: data.status, userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Navigateur Web',
     details: data.details || (data.status === 'success' ? 'Connexion authentifiée avec succès' : 'Échec de la tentative de connexion'),
   };
-  try { await supabaseService.saveDocument(CONNECTION_LOGS_COLLECTION, log as any); }
+  try { await mariaDbService.saveDocument(CONNECTION_LOGS_COLLECTION, log as any); }
   catch (error) { console.warn('[connectionLogService MariaDB]', error); }
   return log;
 }
 
 export function subscribeToConnectionLogs(callback: (logs: ConnectionLog[]) => void) {
-  return supabaseService.subscribeToCollection<any>(CONNECTION_LOGS_COLLECTION, rows => {
+  return mariaDbService.subscribeToCollection<any>(CONNECTION_LOGS_COLLECTION, rows => {
     callback(rows.slice().sort((a,b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))).slice(0,100));
   });
 }
