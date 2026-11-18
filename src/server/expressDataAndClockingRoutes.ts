@@ -183,7 +183,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.post('/api/collaborators/transactional', requireAuth, requireAdminOrResponsable, async (req: AuthRequest, res: express.Response) => {
     try {
       const input = req.body;
-      if (String(req.user?.role || '').toLowerCase() === 'responsable' && String(input?.userRole || '').toLowerCase().includes('admin') || String(input?.roleType || '').toLowerCase().includes('admin')) {
+      if (String(req.user?.role || '').toLowerCase() === 'responsable' && [input?.userRole, input?.roleType].some((role: any) => String(role || '').toLowerCase().includes('admin'))) {
         return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
       }
       if (!input?.name || !input?.email) {
@@ -200,7 +200,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.post('/api/collaborators/update-transactional', requireAuth, requireAdminOrResponsable, async (req: AuthRequest, res) => {
     try {
       if (!req.body?.employee) return res.status(400).json({ success: false, error: 'Données collaborateur manquantes.' });
-      if (String(req.user?.role || '').toLowerCase() === 'responsable' && String(req.body?.userRole || '').toLowerCase().includes('admin') || String(req.body?.employee?.roleType || '').toLowerCase().includes('admin')) {
+      if (String(req.user?.role || '').toLowerCase() === 'responsable' && [req.body?.userRole, req.body?.employee?.roleType].some((role: any) => String(role || '').toLowerCase().includes('admin'))) {
         return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
       }
       const result = await executeCollaboratorUpdateTransaction(req.body);
