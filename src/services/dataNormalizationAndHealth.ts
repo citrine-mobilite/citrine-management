@@ -1,4 +1,3 @@
-import { supabase } from '../lib/supabase';
 
 export const COLLECTIONS = {
   EMPLOYEES: 'employees',
@@ -99,7 +98,7 @@ export function normalizeDocBeforeSave<T extends { id: string }>(collectionName:
 }
 
 export interface DatabaseHealthStatus {
-  isSupabaseWorking: boolean;
+  isDatabaseWorking: boolean;
   hasPermissionError: boolean;
   errorMessage: string | null;
   serverPersistenceActive: boolean;
@@ -107,7 +106,7 @@ export interface DatabaseHealthStatus {
 }
 
 let lastDbStatus: DatabaseHealthStatus = {
-  isSupabaseWorking: false,
+  isDatabaseWorking: false,
   hasPermissionError: false,
   errorMessage: null,
   serverPersistenceActive: true,
@@ -120,30 +119,20 @@ export function getDatabaseHealth(): DatabaseHealthStatus {
 
 export async function checkDatabaseHealth(): Promise<DatabaseHealthStatus> {
   try {
-    const { error } = await supabase.from('employees').select('id').limit(1);
-    if (error) {
-      const isPermission = error.message.toLowerCase().includes('permission denied') || (error as any).code === '42501';
-      lastDbStatus = {
-        isSupabaseWorking: false,
-        hasPermissionError: isPermission,
-        errorMessage: error.message,
-        serverPersistenceActive: true,
-        lastChecked: Date.now(),
-      };
-    } else {
-      lastDbStatus = {
-        isSupabaseWorking: true,
-        hasPermissionError: false,
-        errorMessage: null,
-        serverPersistenceActive: true,
-        lastChecked: Date.now(),
-      };
-    }
-  } catch (err: any) {
+    const response = await fetch('/api/health');
+    const result = await response.json().catch(() => ({}));
     lastDbStatus = {
-      isSupabaseWorking: false,
-      hasPermissionError: true,
-      errorMessage: err.message || 'Erreur de connexion',
+      isDatabaseWorking: response.ok && result.success === true,
+      hasPermissionError: false,
+      errorMessage: response.ok && result.success ? null : (result.error || 'API MariaDB indisponible'),
+      serverPersistenceActive: true,
+      lastChecked: Date.now(),
+    };
+  } catch (error: any) {
+    lastDbStatus = {
+      isDatabaseWorking: false,
+      hasPermissionError: false,
+      errorMessage: error?.message || 'Erreur de connexion à MariaDB',
       serverPersistenceActive: true,
       lastChecked: Date.now(),
     };
