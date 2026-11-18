@@ -60,7 +60,9 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
       try {
         userLocation = await getCurrentUserLocation();
       } catch {
-        userLocation = { latitude: 4.0511, longitude: 9.7679 };
+        setActionError('Pointage refusé : activez la géolocalisation et réessayez. Aucune position fictive ne sera enregistrée.');
+        setIsProcessingDetection(false);
+        return;
       }
       const res = await badgeCodeService.validateAndConsumeCode(
         potential16,
