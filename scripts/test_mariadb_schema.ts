@@ -9,6 +9,7 @@ import { verifyAndMaybeUpgrade } from '../src/server/expressAuthRoutes';
 import { saveMariaDbDocument, getMariaDbCollection, deleteMariaDbDocument } from '../src/db/mariaDbCollections';
 import { closeMariaDbPool, withMariaDbTransaction } from '../src/db/mariadb';
 import { verifyDoorQrTokenOnServer } from '../src/db/repository/clockingTransactionHelpers';
+import { executeAtomicClockingTransaction } from '../src/db/repository/clockingTransaction';
 
 async function main() {
   const connection = await mysql.createConnection({
@@ -262,6 +263,78 @@ async function main() {
         !targetEmployees?.includes(Number(importedEmployeeRows[0]?.id))) {
       throw new Error('Les destinataires multiples de la notification n’ont pas été remappés.');
     }
+
+    const clockSessionId1 = 'ci-clock-dynamic-1-' + importSuffix;
+    const clockToken1 = 'CITRINE-DYN-30S-CI-CLOCK-1-' + importSuffix.toUpperCase();
+    await saveMariaDbDocument('dynamic_qr_sessions', {
+      id: clockSessionId1, sessionId: clockSessionId1, token: clockToken1,
+      generatedBy: 'CI Responsable', status: 'active',
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    await executeAtomicClockingTransaction({
+      action: 'arrival',
+      presence: {
+        id: 'client-forged-presence-id',
+        employeeId: String(importedEmployeeRows[0].id),
+        date: '2000-01-01',
+        arrivalTime: '00:01',
+        clockingMethod: 'qr_code_dynamic',
+        qrCodeToken: clockToken1,
+        latitude: 4.016246,
+        longitude: 9.8203514,
+        location: 'CI HQ',
+      },
+      actor: { id: String(importedUser.id), role: 'employé' },
+    });
+    const doualaParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Africa/Douala', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date());
+    const expectedDoualaDate = `${doualaParts.find(p => p.type === 'year')?.value}-${doualaParts.find(p => p.type === 'month')?.value}-${doualaParts.find(p => p.type === 'day')?.value}`;
+    const [clockedRows] = await connection.execute<any[]>(
+      'SELECT id, doc_id, date, arrival_time, raw_data FROM presences WHERE employee_id = ? AND date = ?',
+      [importedEmployeeRows[0].id, expectedDoualaDate]
+    );
+    if (!clockedRows[0] || String(clockedRows[0].arrival_time) === '00:01' ||
+        String(clockedRows[0].doc_id) === 'client-forged-presence-id') {
+      throw new Error('Le pointage doit utiliser la date et l’heure du serveur, pas les valeurs du navigateur.');
+    }
+    const clockSessionId2 = 'ci-clock-dynamic-2-' + importSuffix;
+    const clockToken2 = 'CITRINE-DYN-30S-CI-CLOCK-2-' + importSuffix.toUpperCase();
+    await saveMariaDbDocument('dynamic_qr_sessions', {
+      id: clockSessionId2, sessionId: clockSessionId2, token: clockToken2,
+      generatedBy: 'CI Responsable', status: 'active',
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    await executeAtomicClockingTransaction({
+      action: 'pauseStart',
+      presence: {
+        id: 'another-forged-id',
+        employeeId: String(importedEmployeeRows[0].id),
+        date: '2000-01-01',
+        arrivalTime: '00:01',
+        pauseStart: '00:02',
+        clockingMethod: 'qr_code_dynamic',
+        qrCodeToken: clockToken2,
+        latitude: 4.016246,
+        longitude: 9.8203514,
+        location: 'CI HQ',
+      },
+      actor: { id: String(importedUser.id), role: 'employé' },
+    });
+    const [updatedClockRows] = await connection.execute<any[]>(
+      'SELECT doc_id, date, arrival_time, raw_data FROM presences WHERE employee_id = ? AND date = ?',
+      [importedEmployeeRows[0].id, expectedDoualaDate]
+    );
+    const clockRaw = typeof updatedClockRows[0]?.raw_data === 'string'
+      ? JSON.parse(updatedClockRows[0].raw_data) : updatedClockRows[0]?.raw_data;
+    if (String(updatedClockRows[0]?.arrival_time) === '00:01' ||
+        String(clockRaw?.pauseStart || '') === '00:02' ||
+        String(updatedClockRows[0]?.date).slice(0, 10) !== expectedDoualaDate) {
+      throw new Error('Une action de pointage ne doit pas écraser les anciennes heures ni accepter les heures client.');
+    }
+    await connection.execute('DELETE FROM presences WHERE employee_id = ? AND date = ?', [importedEmployeeRows[0].id, expectedDoualaDate]);
+    await deleteMariaDbDocument('dynamic_qr_sessions', clockSessionId1);
+    await deleteMariaDbDocument('dynamic_qr_sessions', clockSessionId2);
     const importedGeneric = await getMariaDbCollection('ci_import_collection');
     if (!importedGeneric.some(row => row.id === 'ci_import_collection-' + legacyGenericId && row.label === 'CI imported generic record')) {
       throw new Error('Import de generic_collections incomplet.');
@@ -284,6 +357,7 @@ async function main() {
 
     console.log('[OK] MariaDB CRUD users et generic_collections');
     console.log('[OK] QR dynamique et codes 16 caractères à usage unique');
+    console.log('[OK] Horodatage serveur Douala et conservation des pointages antérieurs');
     console.log('[OK] Masquage passwordHash');
     console.log('[OK] Compatibilité bcrypt Supabase → PBKDF2 et collection absences');
     console.log('[OK] Import Supabase : utilisateurs, dates historiques, pointages, pauses, notifications multi-destinataires, candidatures, appels et collections génériques');
