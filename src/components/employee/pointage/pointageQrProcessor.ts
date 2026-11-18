@@ -60,7 +60,9 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
       try {
         userLocation = await getCurrentUserLocation();
       } catch {
-        userLocation = { latitude: 4.0511, longitude: 9.7679 };
+        setActionError('Pointage refusé : activez la géolocalisation et réessayez. Aucune position fictive ne sera enregistrée.');
+        setIsProcessingDetection(false);
+        return;
       }
       const res = await badgeCodeService.validateAndConsumeCode(
         potential16,
@@ -76,6 +78,7 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
           latitude: userLocation?.latitude,
           longitude: userLocation?.longitude,
           locationName: 'Bureau (Validé par Clé 16 Caractères)',
+          qrCodeToken: potential16,
         });
         return;
       }
@@ -123,6 +126,7 @@ export async function processScannedQrCode(params: ProcessQrParams): Promise<voi
           latitude: dynGps.latitude,
           longitude: dynGps.longitude,
           locationName: `Validé par Responsable (${result.session?.generatedBy || 'Sur place'}) • ${dynGps.locationLabel}`,
+          qrCodeToken: cleanToken,
         });
         return;
       } else if (currentStep === 'scan_dynamic') {

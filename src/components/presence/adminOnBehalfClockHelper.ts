@@ -171,23 +171,34 @@ export async function executeAdminOnBehalfClocking(
     return { success: false, error: `Erreur denregistrement atomique: ${atomicRes.error}` };
   }
 
+  const persisted = atomicRes.data || {};
+  const persistedPresence = persisted.presence || targetPresence;
+  const persistedIncident = persisted.incident || null;
+  const persistedNotification = persisted.notification || null;
   pushNotificationBridgeService.markOperationDispatched(clockOpKey);
 
-  onUpdatePresences(updatedPresences);
-  if (targetIncident && onAddAttendanceIncident) {
-    onAddAttendanceIncident(targetIncident);
+  const persistedPresences = [...presences];
+  const persistedIndex = persistedPresences.findIndex(p =>
+    String(p.employeeId) === String(persistedPresence.employeeId) && p.date === persistedPresence.date
+  );
+  if (persistedIndex >= 0) persistedPresences[persistedIndex] = persistedPresence;
+  else persistedPresences.unshift(persistedPresence);
+  onUpdatePresences(persistedPresences);
+
+  if (persistedIncident && onAddAttendanceIncident) {
+    onAddAttendanceIncident(persistedIncident);
   }
-  if (targetNotification && onAddNotification) {
-    onAddNotification(targetNotification);
+  if (persistedNotification && onAddNotification) {
+    onAddNotification(persistedNotification);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
     }
   }
 
   realtimeSyncService.broadcastPresencePunch({
-    presence: targetPresence,
-    incident: targetIncident,
-    notification: targetNotification,
+    presence: persistedPresence,
+    incident: persistedIncident,
+    notification: persistedNotification,
   });
 
   return { success: true, adminName };

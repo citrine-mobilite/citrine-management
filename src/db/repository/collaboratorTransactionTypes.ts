@@ -1,0 +1,24 @@
+export interface CreateCollaboratorTransactionInput {
+  name: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  phone?: string;
+  roleType?: string;
+  userRole?: string;
+  department?: string;
+  position?: string;
+  managerId?: string;
+  team?: string;
+  teams?: string[];
+  hireDate?: string;
+  birthDate?: string;
+  salary?: number;
+  status?: string;
+  departureReason?: string;
+  suspensionReason?: string;
+  avatarUrl?: string;
+  userPassword?: string;
+  allowEarlyDeparture15_17?: boolean;
+  allowLateArrival8_930?: boolean;
+};

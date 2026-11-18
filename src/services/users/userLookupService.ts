@@ -1,88 +1,51 @@
 import { AppUser } from '../../types';
-import { supabaseService } from '../supabaseService';
+import { mariaDbService } from '../mariaDbService';
 import { asyncActionTrackerService } from '../asyncActionTrackerService';
-import {
-  getUserClient,
-  mapDbEmployeeOnlyToAppUser,
-  mapDbUserAndEmpToAppUser,
-} from './userMapperHelpers';
+import { mapDbEmployeeOnlyToAppUser, mapDbUserAndEmpToAppUser, mapDbUserRow } from './userMapperHelpers';
 
 export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser | null> {
   if (!email) return null;
   const cleanEmail = email.trim().toLowerCase();
-  const client = getUserClient();
-
   try {
-    const { data: dbUser, error: userErr } = await client
-      .from('users')
-      .select('*')
-      .ilike('email', cleanEmail)
-      .maybeSingle();
-
-    if (!userErr && dbUser) {
-      const { data: dbEmp } = await client
-        .from('employees')
-        .select('*')
-        .or(`email.ilike.${cleanEmail},user_id.eq.${dbUser.id}`)
-        .maybeSingle();
-
-      return mapDbUserAndEmpToAppUser(dbUser, dbEmp, cleanEmail);
-    }
-
-    const { data: dbEmp, error: empErr } = await client
-      .from('employees')
-      .select('*')
-      .ilike('email', cleanEmail)
-      .maybeSingle();
-
-    if (!empErr && dbEmp) {
-      return mapDbEmployeeOnlyToAppUser(dbEmp, cleanEmail);
-    }
-
-    return null;
-  } catch (err) {
-    console.error('[fetchDatabaseUserByEmail] Erreur:', err);
+    const [users, employees] = await Promise.all([
+      mariaDbService.fetchCollection<any>('users'),
+      mariaDbService.fetchCollection<any>('employees'),
+    ]);
+    const user = users.find((row: any) => String(row.email || '').trim().toLowerCase() === cleanEmail);
+    const employee = employees.find((row: any) =>
+      String(row.email || '').trim().toLowerCase() === cleanEmail ||
+      (user && String(row.userId || '') === String(user.id))
+    );
+    if (user) return employee ? mapDbUserAndEmpToAppUser(user, employee, cleanEmail) : mapDbUserRow(user);
+    return employee ? mapDbEmployeeOnlyToAppUser(employee, cleanEmail) : null;
+  } catch (error) {
+    console.error('[fetchDatabaseUserByEmail MariaDB]', error);
     return null;
   }
 }
 
 export async function fetchFreshUser(emailOrId: string): Promise<AppUser | null> {
+  const value = String(emailOrId || '').trim();
+  if (!value) return null;
+  if (value.includes('@')) return fetchDatabaseUserByEmail(value);
   try {
-    const norm = emailOrId.trim().toLowerCase();
-    const dbUser = await fetchDatabaseUserByEmail(norm);
-    if (dbUser) return dbUser;
-
-    try {
-      const client = getUserClient();
-      const { data: idUser } = await client
-        .from('users')
-        .select('*')
-        .or(`id.eq.${emailOrId},uid.eq.${emailOrId}`)
-        .maybeSingle();
-      if (idUser && idUser.email) {
-        return fetchDatabaseUserByEmail(idUser.email);
-      }
-    } catch {}
-
-    return null;
-  } catch {
-    return null;
-  }
+    const users = await mariaDbService.fetchCollection<any>('users');
+    const user = users.find((row: any) =>
+      String(row.id) === value || String(row._dbId) === value ||
+      String(row.uid || '') === value || String(row.docId || row.doc_id || '') === value
+    );
+    return user ? mapDbUserRow(user) : null;
+  } catch { return null; }
 }
 
 export async function deleteUser(userId: string): Promise<void> {
   return asyncActionTrackerService.track('Suppression du compte utilisateur...', async () => {
-    try {
-      await supabaseService.deleteDocument('users', userId).catch(() => {});
-    } catch (error) {
-      console.error('Error deleting user:', error);
-    }
+    await mariaDbService.deleteDocument('users', userId);
   });
 }
 
 export function findUserByEmail(users: AppUser[], email?: string | null): AppUser | undefined {
   if (!email) return undefined;
   const normalized = email.trim().toLowerCase();
-  const found = users?.find((u) => (u?.email || '').trim().toLowerCase() === normalized);
-  return found || undefined;
+  return users?.find(u => (u?.email || '').trim().toLowerCase() === normalized);
 }

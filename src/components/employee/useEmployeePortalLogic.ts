@@ -22,6 +22,7 @@ import {
   calculateEmployeeTenure,
 } from './portal/employeeProfileBuilder';
 import { usePortalClockingAndReport } from './portal/usePortalClockingAndReport';
+import { getDoualaDateString } from '../../utils/doualaTime';
 
 interface UseEmployeePortalLogicProps {
   currentUser: AppUser | null;
@@ -129,19 +130,20 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
     };
   }, []);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getDoualaDateString();
   const currentDateStr = new Date().toLocaleDateString('fr-FR', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    timeZone: 'Africa/Douala',
   });
 
   const [liveTimeString, setLiveTimeString] = useState<string>('');
   useEffect(() => {
     const update = () => {
       setLiveTimeString(
-        new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+        new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Africa/Douala' })
       );
     };
     update();

@@ -1,169 +1,324 @@
-import { supabaseAdmin } from '../../lib/supabase';
-import { resolveEmployeeDbId, resolveUserDbId } from './tableHelpers';
-import {
-  resolveClockingDerogations,
-  rollbackAtomicClocking,
-  verifyDoorQrTokenOnServer,
-} from './clockingTransactionHelpers';
+import { randomUUID } from 'node:crypto';
+import { withMariaDbTransaction } from '../mariadb';
+import { resolveEmployeeDbId } from './tableHelpers';
+import { resolveClockingDerogations, verifyDoorQrTokenOnServer } from './clockingTransactionHelpers';
 
-export interface AtomicClockingTransactionInput {
-  presence: any;
-  incident?: any | null;
-  notification?: any | null;
+export interface AtomicClockingTransactionInput { presence: any; incident?: any | null; notification?: any | null; actor?: { id: string; role: string }; action?: string; }
+
+function parseRaw(value: any): any {
+  if (value && typeof value === 'object') return value;
+  if (typeof value === 'string') { try { return JSON.parse(value); } catch {} }
+  return {};
 }
-
-function incidentRowDoc(row: any): string {
-  return row?.doc_id || row?.id || `inc-${Date.now()}`;
-}
-
-function notifRowDoc(row: any): string {
-  return row?.doc_id || row?.id || `notif-${Date.now()}`;
+function minutesBetweenClocks(from: string, to: string): number {
+  const parse = (value: string) => {
+    const match = value.match(/^(\d{2}):(\d{2})$/);
+    return match ? Number(match[1]) * 60 + Number(match[2]) : 0;
+  };
+  return Math.max(0, parse(to) - parse(from));
 }
 
 export async function executeAtomicClockingTransaction(input: AtomicClockingTransactionInput) {
   const { presence, incident, notification } = input;
-  if (!presence) {
-    throw new Error('Données de présence obligatoires pour la transaction atomique.');
-  }
+  if (!presence) throw new Error('Données de présence obligatoires pour la transaction atomique.');
+  const employeeId = await resolveEmployeeDbId(null, presence.employeeId || presence.employee_id);
+  if (!employeeId) throw new Error('Pointage rejeté : collaborateur introuvable ou non rattaché.');
+  const derogations = await resolveClockingDerogations(employeeId, presence.employeeEmail);
+  const method = String(presence.clockingMethod || presence.method || 'qr_code_door').toLowerCase();
+  const action = String(input.action || presence.action || presence.clockAction || presence.lastAction || 'arrival');
+  const actionFields: Record<string, string> = {
+    arrival: 'arrivalTime',
+    pauseStart: 'pauseStart',
+    pauseEnd: 'pauseEnd',
+    departure: 'departureTime',
+    sortieProStart: 'sortieProStart',
+    sortieProEnd: 'sortieProEnd',
+  };
+  const actionField = actionFields[action];
+  if (!actionField) throw new Error('Pointage rejeté : action de pointage inconnue.');
+  const now = new Date();
+  const dateParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Douala', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now);
+  const part = (type: string) => dateParts.find(value => value.type === type)?.value || '';
+  const date = `${part('year')}-${part('month')}-${part('day')}`;
+  const serverTime = `${part('hour')}:${part('minute')}`;
 
-  let presenceCreatedDbId: number | null = null;
-  let incidentCreatedDbId: number | null = null;
-  let notificationCreatedDbId: number | null = null;
+  return withMariaDbTransaction(async connection => {
+    await verifyDoorQrTokenOnServer(method, presence.qrCodeToken, {
+      employeeId,
+      employeeName: presence.employeeName || presence.employee_name,
+      latitude: typeof presence.latitude === 'number' ? presence.latitude : presence.gpsLat,
+      longitude: typeof presence.longitude === 'number' ? presence.longitude : presence.gpsLng,
+      action,
+      badgedByAdminId: presence.badgedByAdminId,
+      adminBadgeReason: presence.adminBadgeReason,
+    }, input.actor, connection);
 
-  try {
-    const empIdVal = presence.employeeId || presence.employee_id;
-    const resolvedEmpDbId = await resolveEmployeeDbId(supabaseAdmin, empIdVal);
+    const [employeeRows] = await connection.execute<any[]>(
+      'SELECT id, user_id, name, first_name, last_name, email FROM employees WHERE id = ? LIMIT 1',
+      [employeeId]
+    );
+    const employee = employeeRows[0];
+    if (!employee) throw new Error('Pointage rejeté : collaborateur introuvable.');
 
-    const { allowEarlyDeparture15_17: dbAllowEarlyDeparture15_17, allowLateArrival8_930: dbAllowLateArrival8_930 } =
-      await resolveClockingDerogations(resolvedEmpDbId, presence.employeeEmail);
+    const [settingsRows] = await connection.execute<any[]>(
+      'SELECT raw_data, setting_value FROM company_settings WHERE doc_id = ? OR setting_key = ? ORDER BY id DESC LIMIT 1',
+      ['main_config', 'main_config']
+    );
+    const settingsRaw = parseRaw(settingsRows[0]?.raw_data);
+    const settingsValue = parseRaw(settingsRows[0]?.setting_value);
+    const settings = { ...settingsValue, ...settingsRaw };
 
-    const clockMethod = presence.clockingMethod || presence.method || 'qr_code_door';
-    await verifyDoorQrTokenOnServer(clockMethod, presence.qrCodeToken);
-
-    const arrivalTimeStr = presence.arrivalTime ? String(presence.arrivalTime) : '';
-    const departureTimeStr = presence.departureTime ? String(presence.departureTime) : '';
-    const isExemptLateBackend = dbAllowLateArrival8_930 && arrivalTimeStr >= '08:00' && arrivalTimeStr <= '09:30';
-    const isExemptEarlyBackend = dbAllowEarlyDeparture15_17 && departureTimeStr >= '15:00' && departureTimeStr <= '17:00';
-
-    const effectivePresenceStatus = isExemptLateBackend && !departureTimeStr ? 'present' : (presence.status || 'present');
-    const effectiveLateMinutes = isExemptLateBackend ? 0 : Number(presence.lateMinutes || 0);
-
-    const presDocId = String(presence.id || presence.docId || `pr-${Date.now()}`);
-    const presenceRow: any = {
-      doc_id: presDocId,
-      employee_id: resolvedEmpDbId || null,
-      employee_name: presence.employeeName || presence.employee_name || null,
-      date: presence.date || new Date().toISOString().split('T')[0],
-      arrival_time: presence.arrivalTime || null,
-      departure_time: presence.departureTime || null,
-      status: effectivePresenceStatus,
-      late_minutes: effectiveLateMinutes,
-      pause_minutes: Number(presence.pauseMinutes || 0),
-      motif: presence.motif || presence.adminBadgeReason || null,
-      signature: presence.signature || null,
-      gps_lat: typeof presence.latitude === 'number' ? presence.latitude : (typeof presence.gpsLat === 'number' ? presence.gpsLat : null),
-      gps_lng: typeof presence.longitude === 'number' ? presence.longitude : (typeof presence.gpsLng === 'number' ? presence.gpsLng : null),
-      method: clockMethod,
-      raw_data: {
-        ...presence,
-        status: effectivePresenceStatus,
-        lateMinutes: effectiveLateMinutes,
-        id: presDocId,
-        qrCodeToken: presence.qrCodeToken || null,
-      },
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data: savedPresence, error: presErr } = await supabaseAdmin
-      .from('presences')
-      .upsert(presenceRow, { onConflict: 'doc_id' })
-      .select()
-      .single();
-
-    if (presErr) {
-      console.error('[Atomic Clocking] Presence upsert error:', presErr.message);
-      throw new Error(`Échec de sauvegarde de la présence: ${presErr.message}`);
+    const [oldPresence] = await connection.execute<any[]>(
+      'SELECT id, uid, doc_id, raw_data FROM presences WHERE employee_id = ? AND date = ? ORDER BY id DESC LIMIT 1 FOR UPDATE',
+      [employeeId, date]
+    );
+    const oldRaw = parseRaw(oldPresence[0]?.raw_data);
+    const privilegedActor = ['administrateur', 'responsable'].includes(String(input.actor?.role || '').toLowerCase());
+    if (!privilegedActor) {
+      if (action === 'arrival' && oldRaw.arrivalTime) {
+        throw new Error('Pointage rejeté : une arrivée est déjà enregistrée pour aujourd’hui.');
+      }
+      if (action !== 'arrival' && !oldRaw.arrivalTime) {
+        throw new Error('Pointage rejeté : enregistrez d’abord votre arrivée.');
+      }
+      if (oldRaw.departureTime && action !== 'arrival') {
+        throw new Error('Pointage rejeté : votre départ est déjà enregistré pour aujourd’hui.');
+      }
+      if (action === 'pauseEnd' && !oldRaw.pauseStart) {
+        throw new Error('Pointage rejeté : aucune pause en cours à clôturer.');
+      }
+      if (action === 'sortieProEnd' && !oldRaw.sortieProStart) {
+        throw new Error('Pointage rejeté : aucune sortie professionnelle en cours.');
+      }
     }
-    presenceCreatedDbId = savedPresence.id;
+    const requestedTime = String(presence[actionField] || '').trim();
+    const isAdminOverride = method === 'admin_on_behalf';
+    const actionTime = isAdminOverride && /^([01]\d|2[0-3]):[0-5]\d$/.test(requestedTime)
+      ? requestedTime
+      : serverTime;
+    const arrivalTime = action === 'arrival' ? actionTime : String(oldRaw.arrivalTime || '');
+    const departureTime = action === 'departure' ? actionTime : String(oldRaw.departureTime || '');
+    const configuredLateThreshold = String(settings.lateThresholdTime || settings.lateThreshold || '08:30');
+    const lateThreshold = /^([01]\d|2[0-3]):[0-5]\d$/.test(configuredLateThreshold) ? configuredLateThreshold : '08:30';
+    const plannedDeparture = String(settings.plannedDepartureTime || settings.plannedDeparture || '17:00');
+    const exemptLate = derogations.allowLateArrival8_930 && arrivalTime >= '08:00' && arrivalTime <= '09:30';
+    const lateMinutes = action === 'arrival'
+      ? (exemptLate ? 0 : minutesBetweenClocks(lateThreshold, actionTime))
+      : Number(oldRaw.lateMinutes || 0);
+    const effectiveStatus = action === 'arrival'
+      ? (lateMinutes > 0 ? 'late' : 'present')
+      : (oldRaw.status || 'present');
+    const presenceDocId = String(oldPresence[0]?.doc_id || oldRaw.id || `pr-${employeeId}-${date}`);
+    const latitude = typeof presence.latitude === 'number' ? presence.latitude : (typeof presence.gpsLat === 'number' ? presence.gpsLat : null);
+    const longitude = typeof presence.longitude === 'number' ? presence.longitude : (typeof presence.gpsLng === 'number' ? presence.gpsLng : null);
+    const employeeName = employee.name || [employee.first_name, employee.last_name].filter(Boolean).join(' ') || 'Collaborateur';
+    const nextPresence = {
+      ...oldRaw,
+      id: presenceDocId,
+      employeeId: String(employeeId),
+      employeeName,
+      employeeEmail: employee.email || '',
+      date,
+      arrivalTime: arrivalTime || null,
+      departureTime: departureTime || null,
+      pauseStart: action === 'pauseStart' ? actionTime : (oldRaw.pauseStart || null),
+      pauseEnd: action === 'pauseEnd' ? actionTime : (oldRaw.pauseEnd || null),
+      sortieProStart: action === 'sortieProStart' ? actionTime : (oldRaw.sortieProStart || null),
+      sortieProEnd: action === 'sortieProEnd' ? actionTime : (oldRaw.sortieProEnd || null),
+      status: effectiveStatus,
+      lateMinutes,
+      pauseMinutes: Number(oldRaw.pauseMinutes || 0),
+      location: String(presence.location || oldRaw.location || ''),
+      latitude,
+      longitude,
+      clockingMethod: method,
+      badgedByAdminId: isAdminOverride ? String(presence.badgedByAdminId || '') : undefined,
+      badgedByAdminName: isAdminOverride ? String(presence.badgedByAdminName || '') : undefined,
+      adminBadgeReason: isAdminOverride ? String(presence.adminBadgeReason || '') : undefined,
+      clockLocations: {
+        ...(oldRaw.clockLocations || {}),
+        [action]: {
+          time: actionTime,
+          latitude,
+          longitude,
+          zoneName: String(presence.location || oldRaw.location || ''),
+          method,
+        },
+      },
+      credentialVerified: true,
+    };
+    const pFields = {
+      employee_id: employeeId,
+      employee_name: employeeName,
+      date,
+      arrival_time: nextPresence.arrivalTime,
+      departure_time: nextPresence.departureTime,
+      status: effectiveStatus,
+      late_minutes: lateMinutes,
+      pause_minutes: Number(nextPresence.pauseMinutes || 0),
+      motif: isAdminOverride ? String(presence.adminBadgeReason || '') : (oldRaw.motif || null),
+      signature: oldRaw.signature || null,
+      gps_lat: latitude,
+      gps_lng: longitude,
+      method,
+      raw_data: JSON.stringify(nextPresence),
+      updated_at: now,
+    };
+    let presenceDbId: number;
+    if (oldPresence[0]) {
+      const columns = Object.keys(pFields);
+      await connection.execute(
+        `UPDATE presences SET ${columns.map(k => `\x60${k}\x60 = ?`).join(', ')} WHERE id = ?`,
+        [...columns.map(k => (pFields as any)[k]), oldPresence[0].id]
+      );
+      presenceDbId = Number(oldPresence[0].id);
+    } else {
+      const [result] = await connection.execute<any>(
+        `INSERT INTO presences (uid, doc_id, ${Object.keys(pFields).map(k => `\x60${k}\x60`).join(', ')}, created_at)
+         VALUES (?, ?, ${Object.keys(pFields).map(() => '?').join(', ')}, NOW(3))`,
+        [randomUUID(), presenceDocId, ...Object.values(pFields)]
+      );
+      presenceDbId = Number(result.insertId);
+    }
 
     let savedIncident: any = null;
-    const shouldSkipIncident =
-      (incident?.type === 'retard' && isExemptLateBackend) ||
-      ((incident?.type === 'sortie_prematuree' || incident?.type === 'depart_anticipe') && isExemptEarlyBackend);
-
-    if (incident && !shouldSkipIncident) {
-      const incDocId = String(incident.id || incident.docId || `inc-${Date.now()}`);
-      const incEmpId = await resolveEmployeeDbId(supabaseAdmin, incident.employeeId || empIdVal);
-      const incidentRow: any = {
-        doc_id: incDocId,
-        employee_id: incEmpId || resolvedEmpDbId || null,
-        date: incident.date || presenceRow.date,
-        type: incident.type || 'retard',
-        description: incident.reason || incident.description || incident.origin || 'Incident de présence',
-        status: incident.status || 'automatique',
-        raw_data: { ...incident, id: incDocId },
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data: incData, error: incErr } = await supabaseAdmin
-        .from('attendance_incidents')
-        .upsert(incidentRow, { onConflict: 'doc_id' })
-        .select()
-        .single();
-
-      if (incErr) {
-        console.error('[Atomic Clocking] Incident upsert error:', incErr.message);
-        throw new Error(`Échec de sauvegarde de l'incident: ${incErr.message}`);
+    const exemptEarly = derogations.allowEarlyDeparture15_17 && departureTime >= '15:00' && departureTime <= '17:00';
+    const expectedIncidentType = action === 'arrival' && lateMinutes > 0
+      ? 'retard'
+      : action === 'departure' && departureTime < plannedDeparture && !exemptEarly
+        ? 'sortie_prematuree'
+        : null;
+    if (expectedIncidentType) {
+      const allowedIncidentTypes = expectedIncidentType === 'retard'
+        ? ['retard']
+        : ['sortie_prematuree', 'depart_anticipe'];
+      if (incident?.type && !allowedIncidentTypes.includes(String(incident.type))) {
+        throw new Error('Incident de pointage rejeté : type incohérent avec l’action enregistrée.');
       }
-      savedIncident = incData;
-      incidentCreatedDbId = incData.id;
+      const incidentId = String(incident?.id || incident?.docId || `inc-${randomUUID()}`);
+      const [existing] = await connection.execute<any[]>(
+        'SELECT id, employee_id, raw_data FROM attendance_incidents WHERE doc_id = ? LIMIT 1',
+        [incidentId]
+      );
+      let raw: any;
+      if (existing[0]) {
+        if (Number(existing[0].employee_id) !== Number(employeeId)) {
+          throw new Error('Incident de pointage rejeté : cet incident appartient à un autre collaborateur.');
+        }
+        const existingRaw = parseRaw(existing[0].raw_data);
+        const declaredInAdvance = Boolean(existingRaw.isDeclaredInAdvance || existingRaw.is_declared_in_advance);
+        raw = {
+          ...existingRaw,
+          id: incidentId,
+          employeeId: String(employeeId),
+          employeeName,
+          date,
+          timeString: actionTime,
+          isJustified: declaredInAdvance ? true : Boolean(existingRaw.isJustified),
+          status: declaredInAdvance ? 'justifie' : (existingRaw.status || 'automatique'),
+          reason: declaredInAdvance
+            ? `${existingRaw.reason || 'Incident déclaré à l’avance'} (Constaté au pointage à ${actionTime})`
+            : (existingRaw.reason || 'Incident automatique de pointage'),
+        };
+      } else {
+        const reason = expectedIncidentType === 'retard'
+          ? `Retard automatique constaté à ${actionTime} (seuil: ${lateThreshold})`
+          : `Sortie prématurée constatée à ${actionTime} avant ${plannedDeparture}`;
+        raw = {
+          id: incidentId,
+          employeeId: String(employeeId),
+          employeeName,
+          date,
+          timeString: actionTime,
+          type: expectedIncidentType,
+          origin: 'automatique_pointage',
+          reason,
+          description: reason,
+          isDeclaredInAdvance: false,
+          isJustified: false,
+          status: 'automatique',
+          createdAt: now.toISOString(),
+        };
+      }
+      const fields = {
+        employee_id: employeeId,
+        date,
+        type: raw.type || expectedIncidentType,
+        description: raw.reason || 'Incident de présence',
+        status: raw.status || 'automatique',
+        raw_data: JSON.stringify(raw),
+        updated_at: now,
+      };
+      if (existing[0]) {
+        const keys = Object.keys(fields);
+        await connection.execute(
+          `UPDATE attendance_incidents SET ${keys.map(k => `\x60${k}\x60 = ?`).join(', ')} WHERE id = ?`,
+          [...keys.map(k => (fields as any)[k]), existing[0].id]
+        );
+      } else {
+        const keys = Object.keys(fields);
+        await connection.execute(
+          `INSERT INTO attendance_incidents (uid, doc_id, ${keys.map(k => `\x60${k}\x60`).join(', ')}, created_at)
+           VALUES (?, ?, ${keys.map(() => '?').join(', ')}, NOW(3))`,
+          [randomUUID(), incidentId, ...keys.map(k => (fields as any)[k])]
+        );
+      }
+      savedIncident = raw;
     }
 
     let savedNotification: any = null;
     if (notification) {
-      const notifDocId = String(notification.id || notification.docId || `notif-clock-${Date.now()}`);
-      const resolvedUserId = await resolveUserDbId(
-        supabaseAdmin,
-        notification.targetUserId || notification.recipient || empIdVal,
-        notification.recipient
+      const notifId = String(notification.id || notification.docId || `notif-clock-${randomUUID()}`);
+      const userId = Number(employee.user_id || 0) || null;
+      const message = notification.message || notification.content || notification.description || notification.title || 'Pointage validé';
+      const raw = {
+        ...notification,
+        id: notifId,
+        message,
+        targetUserId: userId,
+        targetUserIds: userId ? [userId] : [],
+        targetEmployeeIds: [employeeId],
+      };
+      const [existing] = await connection.execute<any[]>(
+        'SELECT id FROM notifications WHERE doc_id = ? LIMIT 1',
+        [notifId]
       );
-
-      const notifText = notification.message || notification.content || notification.description || notification.title || 'Pointage validé';
-      const notificationRow: any = {
-        doc_id: notifDocId,
+      const fields = {
         title: notification.title || 'Pointage enregistré',
-        message: notifText,
+        message,
         type: notification.type || 'system',
         is_read: Boolean(notification.isRead ?? notification.read ?? false),
-        target_user_id: resolvedUserId || null,
-        target_employee_ids: resolvedEmpDbId ? [resolvedEmpDbId] : null,
-        raw_data: { ...notification, id: notifDocId },
-        updated_at: new Date().toISOString(),
+        target_user_id: userId,
+        target_user_ids: JSON.stringify(userId ? [userId] : []),
+        target_employee_ids: JSON.stringify([employeeId]),
+        raw_data: JSON.stringify(raw),
+        updated_at: now,
       };
-
-      const { data: notifData, error: notifErr } = await supabaseAdmin
-        .from('notifications')
-        .upsert(notificationRow, { onConflict: 'doc_id' })
-        .select()
-        .single();
-
-      if (notifErr) {
-        console.error('[Atomic Clocking] Notification upsert error:', notifErr.message);
-        throw new Error(`Échec de sauvegarde de la notification: ${notifErr.message}`);
+      if (existing[0]) {
+        const keys = Object.keys(fields);
+        await connection.execute(
+          `UPDATE notifications SET ${keys.map(k => `\x60${k}\x60 = ?`).join(', ')} WHERE id = ?`,
+          [...keys.map(k => (fields as any)[k]), existing[0].id]
+        );
+      } else {
+        const keys = Object.keys(fields);
+        await connection.execute(
+          `INSERT INTO notifications (uid, doc_id, ${keys.map(k => `\x60${k}\x60`).join(', ')}, created_at)
+           VALUES (?, ?, ${keys.map(() => '?').join(', ')}, NOW(3))`,
+          [randomUUID(), notifId, ...keys.map(k => (fields as any)[k])]
+        );
       }
-      savedNotification = notifData;
-      notificationCreatedDbId = notifData.id;
+      savedNotification = { ...raw, id: notifId, message };
     }
 
     return {
       success: true,
-      presence: { ...presence, id: presDocId, _dbId: presenceCreatedDbId },
-      incident: savedIncident ? { ...incident, id: incidentRowDoc(savedIncident), _dbId: incidentCreatedDbId } : null,
-      notification: savedNotification ? { ...notification, id: notifRowDoc(savedNotification), _dbId: notificationCreatedDbId } : null,
+      presence: { ...nextPresence, id: presenceDocId, _dbId: presenceDbId },
+      incident: savedIncident,
+      notification: savedNotification,
     };
-  } catch (error: any) {
-    console.error(`🚨 [TRANSACTION POINTAGE ÉCHOUÉE - ROLLBACK INTÉGRAL] : ${error?.message || error}`);
-    await rollbackAtomicClocking(notificationCreatedDbId, incidentCreatedDbId, presenceCreatedDbId);
-    throw new Error(`Transaction de pointage atomique annulée : ${error?.message || 'Erreur inconnue'}`);
-  }
+  });
 }

@@ -7,6 +7,7 @@ import { KioskEmployeeCard } from './kiosk/KioskEmployeeCard';
 import { executeKioskClockAction } from './kiosk/kioskClockingAction';
 import { shouldEmployeeClock } from '../utils/roleUtils';
 import { ModalPortal } from './common/ModalPortal';
+import { getDoualaDateString } from '../utils/doualaTime';
 
 interface KioskClockingModalProps {
   isOpen: boolean;
@@ -38,7 +39,7 @@ export default function KioskClockingModal({
 
   if (!isOpen) return null;
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getDoualaDateString();
 
   const filteredEmployees = employees.filter(
     (emp) =>

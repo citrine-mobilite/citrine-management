@@ -7,20 +7,28 @@ import { registerRealtimeRoutes } from './src/server/expressRealtimeHub';
 import { registerCoreDataAndClockingRoutes } from './src/server/expressDataAndClockingRoutes';
 import { registerMailAndCronRoutes } from './src/server/expressMailAndCronRoutes';
 import { startScheduledCronJobs } from './src/server/cronScheduler';
+import { registerAuthRoutes } from './src/server/expressAuthRoutes';
+import { registerCallRoutes } from './src/server/expressCallRoutes';
 
 dotenv.config();
 
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
-  const PORT = 3000;
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1);
+  const PORT = Number(process.env.PORT || 3000);
+  const HOST = process.env.HOST || '127.0.0.1';
 
   app.use(express.json({ limit: '25mb' }));
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
+  registerAuthRoutes(app);
+  registerCallRoutes(app);
   registerCoreDataAndClockingRoutes(app);
   registerRealtimeRoutes(app);
   registerMailAndCronRoutes(app);
+  app.use('/api', (_req, res) => res.status(404).json({ success: false, error: 'Route API introuvable.' }));
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -60,7 +68,7 @@ async function startServer() {
         try {
           server.close();
         } catch {}
-        server.listen(PORT, '0.0.0.0');
+        server.listen(PORT, HOST);
       }, 1000);
     } else {
       console.error('[Server Error]:', err);

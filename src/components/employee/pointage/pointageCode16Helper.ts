@@ -1,5 +1,5 @@
 import { ClockingMethod, Employee } from '../../../types';
-import { getCurrentUserLocation } from '../../../utils/geolocation';
+import { getCurrentUserLocation, COMPANY_HQ_LOCATION } from '../../../utils/geolocation';
 import { badgeCodeService } from '../../../services/badgeCodeService';
 
 export interface ValidateCode16Params {
@@ -90,6 +90,7 @@ export async function validateCode16Attendance(params: ValidateCode16Params): Pr
       locationName: userLocation.zoneName
         ? `${officialSiteName} • ${userLocation.zoneName}`
         : 'Bureau (Validé par Clé 16 Caractères)',
+      qrCodeToken: rawClean,
     });
   } catch (err: any) {
     setActionError(err.message || 'Erreur de validation de la clé.');

@@ -1,0 +1,75 @@
+name: MariaDB migration branch checks
+
+on:
+  push:
+    branches:
+      - migration/mariadb
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'database/mariadb/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mariadb-migration-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: ci-root-password
+          MARIADB_DATABASE: citrine_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      SQL_HOST: 127.0.0.1
+      SQL_PORT: 3306
+      SQL_DB_NAME: citrine_ci
+      SQL_ADMIN_USER: root
+      SQL_ADMIN_PASSWORD: ci-root-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Commit regenerated npm lockfile
+        if: github.event_name == 'push' && github.ref == 'refs/heads/migration/mariadb'
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "chore: sync npm lockfile for MariaDB migration"
+            git push origin HEAD:migration/mariadb
+          fi
+      - name: Validate OVH shell scripts
+        run: bash -n scripts/ovh_management_start.sh scripts/ovh_management_watchdog.sh
+      - name: TypeScript check
+        run: npm run lint
+      - name: Type-check migration scripts
+        run: npx tsc --noEmit -p tsconfig.migration.json
+      - name: Production build
+        run: npm run build
+      - name: Apply MariaDB migrations and test CRUD
+        run: npx tsx scripts/test_mariadb_schema.ts

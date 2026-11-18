@@ -12,6 +12,7 @@ import { savePresenceAtomic } from '../../services/dataService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { realtimeSyncService } from '../../services/realtimeSyncService';
 import { executeOperationWithLoading } from '../../utils/sweetAlert';
+import { getDoualaTimeString } from '../../utils/doualaTime';
 import {
   ClockActionType,
   isSameClockEmployee,
@@ -83,8 +84,7 @@ export function useClockingActions({
           throw new Error('Signal GPS requis pour enregistrer votre pointage.');
         }
 
-        const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const timeStr = getDoualaTimeString();
         recordedTimeStr = timeStr;
         const lateThreshold = moduleConfig?.lateThresholdTime || '08:30';
         const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
@@ -109,7 +109,7 @@ export function useClockingActions({
         });
         lateRecorded = isLateArrival;
 
-        const { updatedPresences, targetPresence } = upsertPresenceForClocking({
+        const { targetPresence } = upsertPresenceForClocking({
           presences,
           employeeProfile,
           todayStr,
@@ -147,24 +147,39 @@ export function useClockingActions({
           throw new Error(atomicResult.error || 'Erreur lors de la transaction atomique de pointage.');
         }
 
-        const clockOpKey = `clock:${targetPresence.id}:${action}:${timeStr}`;
+        const persisted = atomicResult.data || {};
+        const persistedPresence = persisted.presence || targetPresence;
+        const persistedIncident = persisted.incident || null;
+        const persistedNotification = persisted.notification || null;
+        const persistedTime = persistedPresence.clockLocations?.[action]?.time ||
+          persistedPresence[action === 'arrival' ? 'arrivalTime' : action === 'departure' ? 'departureTime' : action] || timeStr;
+        recordedTimeStr = String(persistedTime);
+        lateRecorded = Number(persistedPresence.lateMinutes || 0) > 0;
+        const clockOpKey = `clock:${persistedPresence.id}:${action}:${persistedTime}`;
         pushNotificationBridgeService.markOperationDispatched(clockOpKey);
 
-        await onUpdatePresences(updatedPresences);
-        if (targetIncident && onAddAttendanceIncident) {
-          onAddAttendanceIncident(targetIncident);
+        const persistedPresences = [...presences];
+        const persistedIndex = persistedPresences.findIndex(p =>
+          isSameClockEmployee(p.employeeId, employeeProfile) && p.date === persistedPresence.date
+        );
+        if (persistedIndex >= 0) persistedPresences[persistedIndex] = persistedPresence;
+        else persistedPresences.push(persistedPresence);
+        await onUpdatePresences(persistedPresences);
+
+        if (persistedIncident && onAddAttendanceIncident) {
+          onAddAttendanceIncident(persistedIncident);
         }
-        if (targetNotification && onAddNotification) {
+        if (persistedNotification && onAddNotification) {
           const notifWithKey: NotificationLog = {
-            ...targetNotification,
+            ...persistedNotification,
             payload: JSON.stringify({
               source: 'clocking',
               operationKey: clockOpKey,
-              presenceId: targetPresence.id,
+              presenceId: persistedPresence.id,
               employeeId: employeeProfile.id,
               action,
-              time: timeStr,
-              date: todayStr,
+              time: persistedTime,
+              date: persistedPresence.date,
             }),
           };
           onAddNotification(notifWithKey);
@@ -174,9 +189,9 @@ export function useClockingActions({
         }
 
         realtimeSyncService.broadcastPresencePunch({
-          presence: targetPresence,
-          incident: targetIncident,
-          notification: targetNotification,
+          presence: persistedPresence,
+          incident: persistedIncident,
+          notification: persistedNotification,
         });
 
         onSuccess();

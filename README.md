@@ -61,21 +61,65 @@ L'application propose une architecture modulaire activable à la demande, struct
 
 ---
 
-## 🛠️ Architecture Technique & Sécurité
+## 🛠️ Architecture technique
 
-* **Frontend** : React.js (TypeScript), Tailwind CSS pour une interface responsive et fluide (Zero-Pill design, sobre et moderne).
-* **Backend de Persistance** : Firebase Firestore (Base de données en temps réel) et LocalStorage (mécanisme de cache pour haute résilience hors-ligne).
-* **Sécurité & Confidentialité (PBKDF2)** :
-  * Chiffrement cryptographique fort et salage de tous les mots de passe.
-  * Masquage total des mots de passe dans les tables et interfaces système.
-  * Validation stricte des accès et permissions (RBAC) au niveau de l'Iframe client et des règles de sécurité Firestore.
+- **Frontend** : React, TypeScript, Vite et Tailwind CSS.
+- **Backend** : API Express/Node.js.
+- **Base de données** : MariaDB 10.11 sur l'hébergement OVH, via le pilote `mysql2`.
+- **Persistance** : repositories MariaDB, transactions InnoDB et identifiants UUID.
+- **Authentification** : sessions opaques côté serveur, mots de passe PBKDF2 et contrôle des accès sur les routes protégées.
+- **Temps réel** : événements applicatifs via Server-Sent Events et signalisation WebRTC persistée dans MariaDB.
+- **Notifications push** : Pusher Beams.
+- **Mode hors ligne** : cache IndexedDB isolé par compte et file d’attente des opérations compatibles, synchronisée au retour du réseau ; les pointages transactionnels nécessitent une connexion au serveur MariaDB.
+
+## 🗄️ Installation de la base MariaDB
+
+Le schéma, les rôles de référence, les sessions et la signalisation WebRTC sont documentés dans [database/mariadb/README.md](database/mariadb/README.md).
+
+Ordre des scripts à appliquer sur une base de test :
+
+1. `database/mariadb/001_schema.sql`
+2. `database/mariadb/002_auth_sessions.sql`
+3. `database/mariadb/003_seed_reference_data.sql`
+4. `database/mariadb/004_call_signals.sql`
+5. `database/mariadb/005_presence_employee_date_index.sql`
+6. `database/mariadb/006_relation_raw_data.sql`
+
+Les données réelles doivent être exportées depuis Supabase sur une machine de confiance. Définir temporairement SUPABASE_DATABASE_URL (ne jamais l'ajouter au dépôt), puis lancer :
+
+```bash
+npm install --include=dev
+npm run export:supabase -- ./citrine-supabase-export.json
+```
+
+Le script produit un export JSON privé, importe les hashes de auth.users lorsqu'ils sont accessibles et signale les tables absentes ou supplémentaires du schéma source. Si auth.users est inaccessible ou si des utilisateurs n'ont aucun hash, ces comptes devront réinitialiser leur mot de passe.
+
+Après avoir appliqué les six migrations SQL et configuré les variables MariaDB dans .env, transférer le fichier JSON sur le serveur OVH et lancer :
+
+```bash
+npm run import:mariadb -- ./citrine-supabase-export.json --dry-run
+npm run import:mariadb -- ./citrine-supabase-export.json
+```
+
+L'import initial refuse une base contenant déjà des utilisateurs ou collaborateurs. --merge est réservé à une fusion volontaire après sauvegarde. L'import ne supprime aucune donnée. Ne jamais committer le fichier d'export et le supprimer après validation.
+
+## 🚀 Déploiement OVH
+
+1. Installer les dépendances nécessaires à la compilation et à l'import avec `npm install --include=dev`.
+2. Renseigner les variables privées dans le fichier `.env` du serveur (voir `.env.example`).
+3. Compiler avec `npm run build`.
+4. Démarrer avec `npm start` en définissant `PORT` selon la configuration du proxy Apache.
+5. Configurer le sous-domaine `management.citrine-mobilite.com` en HTTPS et faire pointer Apache vers le port local de l'application.
+
+Le guide détaillé est dans [deploy/OVH-CPANEL.md](deploy/OVH-CPANEL.md). Le proxy Apache et le mécanisme de supervision dépendent des modules activés par l'hébergeur cPanel ; la mise en production attend la validation du reverse proxy et du certificat HTTPS.
+
 
 ---
 
 ## 💻 Installation & Lancement Local
 
 ### Prérequis
-* Node.js (version 18 ou supérieure)
+* Node.js (version 22 ou supérieure)
 
 ### Étapes d'installation
 1. **Cloner et installer les dépendances** :

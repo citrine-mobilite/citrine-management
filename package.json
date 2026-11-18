@@ -5,21 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild src/server/apiHandler.ts --bundle --platform=node --format=esm --target=node18 --outfile=api/index.js --packages=external && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "vercel-build": "vite build && esbuild src/server/apiHandler.ts --bundle --platform=node --format=esm --target=node18 --outfile=api/index.js --packages=external",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "clean": "rm -rf dist server.js api/index.js",
+    "lint": "tsc --noEmit",
+    "export:supabase": "tsx scripts/export_supabase_export.ts",
+    "import:mariadb": "tsx scripts/import_mariadb_export.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@pusher/push-notifications-server": "^1.2.7",
     "@pusher/push-notifications-web": "^1.1.0",
-    "@supabase/supabase-js": "^2.117.3",
     "dotenv": "^17.2.3",
-    "drizzle-kit": "^0.31.11",
-    "drizzle-orm": "^0.45.4",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "html2canvas": "^1.4.1",
@@ -30,14 +28,15 @@
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "nodemailer": "^10.1.7",
-    "pg": "^8.23.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
     "resend": "^6.17.2",
     "sweetalert2": "^11.26.25",
     "sweetalert2-react-content": "^5.1.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "mysql2": "^3.15.3",
+    "bcryptjs": "^3.0.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.14",
@@ -45,7 +44,6 @@
     "@types/leaflet": "^1.9.21",
     "@types/node": "^22.14.0",
     "@types/nodemailer": "^8.0.2",
-    "@types/pg": "^8.23.1",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
@@ -53,6 +51,8 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
-    "vite-plugin-pwa": "^2.0.0"
+    "vite-plugin-pwa": "^2.0.0",
+    "pg": "^8.16.3",
+    "@types/pg": "^8.15.5"
   }
 }

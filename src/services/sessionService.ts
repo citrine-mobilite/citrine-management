@@ -3,6 +3,7 @@ import { createSessionChecksum, verifySessionChecksum } from '../utils/cryptoUti
 import { safeStorage } from '../utils/safeStorage';
 
 const SESSION_USER_KEY = 'citrine_current_user';
+const API_TOKEN_KEY = 'citrine_api_token';
 const SESSION_SIGNATURE_KEY = 'citrine_session_sig';
 const SESSION_EXPIRY_KEY = 'citrine_token_expiry';
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours de session (durée > 1 semaine demandée)
@@ -98,6 +99,7 @@ export async function loadSecureSession(): Promise<AppUser | null> {
  * Supprime proprement tous les jetons et identifiants de session locale
  */
 export function clearSecureSession(): void {
+  safeStorage.removeItem(API_TOKEN_KEY);
   safeStorage.removeItem(SESSION_USER_KEY);
   safeStorage.removeItem(SESSION_SIGNATURE_KEY);
   safeStorage.removeItem(SESSION_EXPIRY_KEY);
@@ -192,4 +194,13 @@ export async function refreshSecureSessionFromDb(emailOrId: string): Promise<App
     console.warn('Erreur refreshSecureSessionFromDb:', err);
     return null;
   }
+}
+
+/** Jeton opaque délivré par le serveur MariaDB. Il ne contient aucun rôle client faisant autorité. */
+export function storeApiToken(token: string): void {
+  if (!token) return;
+  safeStorage.setItem(API_TOKEN_KEY, token);
+}
+export function getApiToken(): string | null {
+  return safeStorage.getItem(API_TOKEN_KEY);
 }

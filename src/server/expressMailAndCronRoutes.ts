@@ -1,4 +1,5 @@
 import express from 'express';
+import { requireAuth, requireAdmin, requireAdminOrResponsable, requireCronSecret } from '../middleware/auth';
 import { getCollectionData, saveDocumentData } from '../db/repository';
 import { sendThreadedEmployeeEmail, getEffectiveSmtpConfig, parseEmailList } from '../services/serverMailService';
 import { sendWeeklyConsolidatedReport, compileWeeklyAttendanceData } from '../services/weeklyAttendanceReportService';
@@ -12,7 +13,7 @@ import { sendMondayGreetingToAllEmployees } from '../services/mondayGreetingMail
 import { executeDueRoutineRemindersDispatch } from '../services/routineReminderCronService';
 
 export function registerMailAndCronRoutes(app: express.Express): void {
-  app.get('/api/mail/config', async (_req: express.Request, res: express.Response) => {
+  app.get('/api/mail/config', requireAuth, requireAdmin, async (_req: express.Request, res: express.Response) => {
     try {
       const config = await getEffectiveSmtpConfig();
       res.json({
@@ -22,7 +23,8 @@ export function registerMailAndCronRoutes(app: express.Express): void {
           smtpPort: config.port || 587,
           smtpSecure: Boolean(config.secure),
           smtpUser: config.user || '',
-          smtpPass: config.pass || '',
+          smtpPass: '',
+          smtpPassConfigured: Boolean(config.pass),
           smtpFrom: config.from || '',
           smtpSenderName: config.senderName || '',
           hrNotificationEmail: config.hrEmail || '',
@@ -34,7 +36,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/mail/config', async (req: express.Request, res: express.Response) => {
+  app.post('/api/mail/config', requireAuth, requireAdmin, async (req: express.Request, res: express.Response) => {
     try {
       const { smtpHost, smtpPort, smtpSecure, smtpUser, smtpPass, smtpFrom, smtpSenderName, hrNotificationEmail, enableEmailNotifications } = req.body;
       const settingsList = await getCollectionData('company_settings');
@@ -49,7 +51,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
         smtpPort: smtpPort !== undefined ? Number(smtpPort) : existing.smtpPort,
         smtpSecure: smtpSecure !== undefined ? Boolean(smtpSecure) : existing.smtpSecure,
         smtpUser: smtpUser !== undefined ? String(smtpUser).trim() : existing.smtpUser,
-        smtpPass: smtpPass !== undefined ? String(smtpPass).trim() : existing.smtpPass,
+        smtpPass: smtpPass !== undefined && String(smtpPass).trim() ? String(smtpPass).trim() : existing.smtpPass,
         smtpFrom: smtpFrom !== undefined ? String(smtpFrom).trim() : existing.smtpFrom,
         smtpSenderName: smtpSenderName !== undefined ? String(smtpSenderName).trim() : existing.smtpSenderName,
         hrNotificationEmail: hrNotificationEmail !== undefined ? String(hrNotificationEmail).trim() : existing.hrNotificationEmail,
@@ -57,14 +59,14 @@ export function registerMailAndCronRoutes(app: express.Express): void {
       };
 
       await saveDocumentData('company_settings', updatedDoc);
-      res.json({ success: true, message: 'Configuration SMTP et RH enregistrée avec succès.', config: updatedDoc });
+      res.json({ success: true, message: 'Configuration SMTP et RH enregistrée avec succès.', config: { ...updatedDoc, smtpPass: '', smtpPassConfigured: Boolean(updatedDoc.smtpPass) } });
     } catch (error: any) {
       console.error('[API Mail Save Config Error]:', error);
       res.status(500).json({ success: false, error: error.message || 'Échec de sauvegarde des paramètres SMTP.' });
     }
   });
 
-  app.post('/api/mail/send-threaded', async (req: express.Request, res: express.Response) => {
+  app.post('/api/mail/send-threaded', requireAuth, requireAdminOrResponsable, async (req: express.Request, res: express.Response) => {
     try {
       const { employeeName, employeeId, eventTitle, htmlContent, attachments, smtpConfig, threadCategory, threadSubject, overrideRecipients } = req.body;
       if (!employeeName || !eventTitle || !htmlContent) {
@@ -86,11 +88,11 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     } catch (error: any) {
       const rawError = error?.message || String(error);
       console.error('[SERVER /api/mail/send-threaded EXCEPTION]:', error);
-      res.status(500).json({ success: false, error: rawError, stack: error?.stack, details: error });
+      res.status(500).json({ success: false, error: 'Erreur interne lors de l’envoi du message.' });
     }
   });
 
-  app.post('/api/mail/test-connection', async (req: express.Request, res: express.Response) => {
+  app.post('/api/mail/test-connection', requireAuth, requireAdmin, async (req: express.Request, res: express.Response) => {
     try {
       const { testRecipient, smtpConfig } = req.body;
       const effective = await getEffectiveSmtpConfig(smtpConfig);
@@ -109,7 +111,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     }
   });
 
-  app.get('/api/attendance/weekly-recap', async (req: express.Request, res: express.Response) => {
+  app.get('/api/attendance/weekly-recap', requireAuth, requireAdminOrResponsable, async (req: express.Request, res: express.Response) => {
     try {
       const data = await compileWeeklyAttendanceData({ manual: req.query.manual === 'true', forceFriday: req.query.forceFriday === 'true' });
       res.json({ success: true, report: data });
@@ -119,7 +121,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/attendance/weekly-recap', async (req: express.Request, res: express.Response) => {
+  app.post('/api/attendance/weekly-recap', requireAuth, requireAdminOrResponsable, async (req: express.Request, res: express.Response) => {
     try {
       const { forceFriday, testRecipient } = req.body || {};
       const result = await sendWeeklyConsolidatedReport({ manual: true, forceFriday: Boolean(forceFriday), testRecipient });
@@ -140,10 +142,10 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     }
   };
 
-  app.all('/api/cron/daily-tasksheet', handleDailyTaskSheetCron);
-  app.all('/api/cron/daily-timesheet', handleDailyTaskSheetCron);
+  app.all('/api/cron/daily-tasksheet', requireCronSecret, handleDailyTaskSheetCron);
+  app.all('/api/cron/daily-timesheet', requireCronSecret, handleDailyTaskSheetCron);
 
-  app.all('/api/cron/weekly-recap', async (_req: express.Request, res: express.Response) => {
+  app.all('/api/cron/weekly-recap', requireCronSecret, async (_req: express.Request, res: express.Response) => {
     try {
       const result = await sendWeeklyConsolidatedReport({ forceFriday: true });
       res.status(result.success ? 200 : 500).json(result);
@@ -153,7 +155,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     }
   });
 
-  app.all('/api/cron/monday-greeting', async (req: express.Request, res: express.Response) => {
+  app.all('/api/cron/monday-greeting', requireCronSecret, async (req: express.Request, res: express.Response) => {
     try {
       const forceMonday = req.query.force === 'true' || req.body?.force === true;
       const testRecipient = (req.query.testRecipient as string) || req.body?.testRecipient;
@@ -165,7 +167,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     }
   });
 
-  app.all('/api/cron/monthly-tasksheet', async (req: express.Request, res: express.Response) => {
+  app.all('/api/cron/monthly-tasksheet', requireCronSecret, async (req: express.Request, res: express.Response) => {
     try {
       const monthStr = (req.query.month as string) || req.body?.month;
       const result = await executeMonthlyTaskSheetDispatch({ monthStr });
@@ -176,7 +178,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     }
   });
 
-  app.all('/api/cron/yearly-tasksheet', async (req: express.Request, res: express.Response) => {
+  app.all('/api/cron/yearly-tasksheet', requireCronSecret, async (req: express.Request, res: express.Response) => {
     try {
       const rawYear = (req.query.year as string) || req.body?.year;
       const year = rawYear ? parseInt(String(rawYear), 10) : undefined;
@@ -188,7 +190,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/reports/tasksheet/send', async (req: express.Request, res: express.Response) => {
+  app.post('/api/reports/tasksheet/send', requireAuth, requireAdminOrResponsable, async (req: express.Request, res: express.Response) => {
     try {
       const { employeeId, mode, period, overrideRecipients } = req.body || {};
       if (!employeeId || !mode) {
@@ -207,7 +209,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
     }
   });
 
-  app.all('/api/cron/routine-reminders', async (_req: express.Request, res: express.Response) => {
+  app.all('/api/cron/routine-reminders', requireCronSecret, async (_req: express.Request, res: express.Response) => {
     try {
       const result = await executeDueRoutineRemindersDispatch();
       res.status(result.success ? 200 : 500).json(result);

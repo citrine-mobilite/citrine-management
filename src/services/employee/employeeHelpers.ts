@@ -1,5 +1,5 @@
 import { Employee, EmployeeStatus, AppUser, NotificationLog } from '../../types';
-import { supabaseService } from '../supabaseService';
+import { mariaDbService } from '../mariaDbService';
 
 export const EMPLOYEES_COLLECTION = 'employees';
 
@@ -63,12 +63,12 @@ export function formatEmployeeFullName(emp: Partial<Employee>): string {
 
 export async function getEmployees(): Promise<Employee[]> {
   try {
-    const list = await supabaseService.fetchCollection<Employee>(EMPLOYEES_COLLECTION);
+    const list = await mariaDbService.fetchCollection<Employee>(EMPLOYEES_COLLECTION);
     if (list && list.length > 0) {
       return list;
     }
   } catch (err) {
-    console.warn('[employeeService] Impossible de récupérer les employés depuis Supabase:', err);
+    console.warn('[employeeService] Impossible de récupérer les employés depuis MariaDB:', err);
   }
   return [];
 }

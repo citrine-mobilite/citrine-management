@@ -1,4 +1,4 @@
-import { getCurrentUserLocation } from '../../../utils/geolocation';
+import { getCurrentUserLocation, COMPANY_HQ_LOCATION } from '../../../utils/geolocation';
 
 export interface GpsCaptureResult {
   ok: boolean;
@@ -56,8 +56,8 @@ export async function captureGpsWithTimeout(
     }
     return {
       ok: true,
-      latitude: 4.0511,
-      longitude: 9.7679,
+      latitude: COMPANY_HQ_LOCATION.latitude,
+      longitude: COMPANY_HQ_LOCATION.longitude,
       locationLabel: `${officialSiteName} ${fallbackSuffix}`,
     };
   }

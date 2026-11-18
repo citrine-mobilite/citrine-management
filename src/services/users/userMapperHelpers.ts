@@ -1,8 +1,4 @@
 import { AppUser, EmployeeStatus } from '../../types';
-import { supabase, supabaseAdmin } from '../../lib/supabase';
-
-export const getUserClient = () => supabaseAdmin || supabase;
-
 export function mapDbUserRow(u: any): AppUser {
   const raw = u.raw_data && typeof u.raw_data === 'object' ? u.raw_data : {};
   const isUserActive =
@@ -56,6 +52,7 @@ export function mapDbUserAndEmpToAppUser(dbUser: any, dbEmp: any, cleanEmail: st
   const raw = dbUser.raw_data && typeof dbUser.raw_data === 'object' ? dbUser.raw_data : {};
   const empStatus: EmployeeStatus =
     dbEmp?.employment_status ||
+    dbEmp?.employmentStatus ||
     raw.employmentStatus ||
     (dbEmp?.status === false ? 'parti' : 'en_poste');
 
@@ -126,7 +123,7 @@ export function mapDbUserAndEmpToAppUser(dbUser: any, dbEmp: any, cleanEmail: st
 
 export function mapDbEmployeeOnlyToAppUser(dbEmp: any, cleanEmail: string): AppUser {
   const raw = dbEmp.raw_data && typeof dbEmp.raw_data === 'object' ? dbEmp.raw_data : {};
-  const empStatus: EmployeeStatus = dbEmp.employment_status || (dbEmp.status ? 'en_poste' : 'parti');
+  const empStatus: EmployeeStatus = dbEmp.employment_status || dbEmp.employmentStatus || (dbEmp.status ? 'en_poste' : 'parti');
   const isBlockedBySituation =
     empStatus === 'renvoye' ||
     empStatus === 'demissionne' ||

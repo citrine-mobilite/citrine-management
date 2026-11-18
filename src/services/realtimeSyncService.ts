@@ -143,19 +143,7 @@ class RealtimeSyncService {
       }
     } catch {}
 
-    // 3. Notification vers le serveur Express pour diffusion SSE à TOUS les autres appareils/sessions (dont le responsable)
-    try {
-      if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-        await fetch('/api/realtime/broadcast', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event: 'presence_update',
-            data: payload,
-          }),
-        }).catch(() => null);
-      }
-    } catch {}
+    // Le serveur diffuse déjà presence_update après validation et commit de /api/clocking/atomic.
   }
 
   public getIsConnected(): boolean {

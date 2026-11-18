@@ -1,4 +1,4 @@
-import { validateTotpQrCode, DEFAULT_COMPANY_SECRET } from './totpQrService';
+import { validateTotpQrCode } from './totpQrService';
 
 export interface GeolocationResult {
   latitude: number;
@@ -47,8 +47,10 @@ let memoryKioskPinCode = "";
 
 export function generateKioskPinCode(): string {
   const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // High legibility, no 0/O/1/I
-  const chunk = () => Array.from({ length: 4 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join("");
-  const newPin = `${chunk()}-${chunk()}-${chunk()}-${chunk()}`;
+  const values = new Uint32Array(16);
+  globalThis.crypto.getRandomValues(values);
+  const raw = Array.from(values, value => chars[value % chars.length]).join("");
+  const newPin = `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
   memoryKioskPinCode = newPin;
   if (typeof window !== "undefined") {
     try {
@@ -76,8 +78,6 @@ export function validateKioskPinCode(inputPin: string, dbKioskPin?: string): boo
   const activePin = getActiveKioskPinCode().replace(/[\s-]/g, "").toUpperCase();
   if (cleanedInput === activePin) return true;
 
-  if (cleanedInput === "CITRINE2026HQPIN") return true;
-
   return false;
 }
 
@@ -86,7 +86,7 @@ export function validateKioskPinCode(inputPin: string, dbKioskPin?: string): boo
  */
 export async function validateCompanyQRCodeAsync(
   scannedInput: string,
-  companySecret: string = DEFAULT_COMPANY_SECRET
+  companySecret: string = ''
 ): Promise<{ valid: boolean; reason?: string; isDynamic: boolean }> {
   return validateTotpQrCode(scannedInput, companySecret);
 }
@@ -97,7 +97,8 @@ export async function validateCompanyQRCodeAsync(
 export function validateCompanyQRCode(scannedInput: string, companySecret: string = ""): boolean {
   if (!scannedInput) return false;
   const cleaned = scannedInput.trim().toUpperCase();
-  const targetSecret = (companySecret || DEFAULT_COMPANY_SECRET).trim().toUpperCase();
+  const targetSecret = String(companySecret || '').trim().toUpperCase();
+  if (!targetSecret) return false;
 
   // Accepte les tokens TOTP dynamiques Citrine ainsi que le format d'entreprise
   if (cleaned.startsWith("CITRINE-TOTP-") || cleaned.startsWith("CITRINE-")) {

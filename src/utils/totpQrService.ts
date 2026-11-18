@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 export const TOTP_INTERVAL_SECONDS = 30;
-export const DEFAULT_COMPANY_SECRET = 'CITRINE-HQ-8829';
+export const DEFAULT_COMPANY_SECRET = '';
 
 /**
  * Calcule l'index de la tranche temporelle actuelle (time slice)
@@ -37,7 +37,8 @@ async function computeSliceHash(secret: string, slice: number): Promise<string> 
 /**
  * Génère le jeton QR Code dynamique TOTP complet pour une tranche donnée
  */
-export async function generateTotpToken(secret: string = DEFAULT_COMPANY_SECRET, slice?: number): Promise<string> {
+export async function generateTotpToken(secret: string = '', slice?: number): Promise<string> {
+  if (!secret.trim()) throw new Error('Le secret TOTP de l’entreprise n’est pas configuré.');
   const activeSlice = slice !== undefined ? slice : getCurrentTimeSlice();
   const hash = await computeSliceHash(secret || DEFAULT_COMPANY_SECRET, activeSlice);
   return `CITRINE-TOTP-${hash}`;
@@ -49,21 +50,22 @@ export async function generateTotpToken(secret: string = DEFAULT_COMPANY_SECRET,
  */
 export async function validateTotpQrCode(
   scannedCode: string,
-  companySecret: string = DEFAULT_COMPANY_SECRET
+  companySecret: string = ''
 ): Promise<{ valid: boolean; reason?: string; isDynamic: boolean }> {
   if (!scannedCode) {
     return { valid: false, reason: 'Aucun code scanné ou saisi.', isDynamic: false };
   }
 
   const cleaned = scannedCode.trim().toUpperCase();
-  const secret = (companySecret || DEFAULT_COMPANY_SECRET).trim().toUpperCase();
+  const secret = String(companySecret || '').trim().toUpperCase();
+  if (!secret) return { valid: false, reason: 'Le secret TOTP de l’entreprise n’est pas configuré.', isDynamic: false };
 
   // 1. Détection format dynamique TOTP Citrine
   if (cleaned.startsWith('CITRINE-TOTP-')) {
     const currentSlice = getCurrentTimeSlice();
 
     // Vérifier la tranche actuelle T, la précédente T-1 (permet 30s de latence), et la suivante T+1
-    const allowedSlices = [currentSlice, currentSlice - 1, currentSlice + 1];
+    const allowedSlices = [currentSlice, currentSlice - 1];
 
     for (const s of allowedSlices) {
       const expectedToken = await generateTotpToken(secret, s);
@@ -106,13 +108,14 @@ export async function validateTotpQrCode(
 /**
  * Hook React pour afficher en temps réel un QR Code TOTP dynamique sur une borne Kiosque
  */
-export function useDynamicQrCode(companySecret: string = DEFAULT_COMPANY_SECRET, intervalSeconds: number = TOTP_INTERVAL_SECONDS) {
-  const [currentToken, setCurrentToken] = useState<string>('CITRINE-TOTP-INIT');
+export function useDynamicQrCode(companySecret: string = '', intervalSeconds: number = TOTP_INTERVAL_SECONDS) {
+  const [currentToken, setCurrentToken] = useState<string>('');
   const [secondsRemaining, setSecondsRemaining] = useState<number>(() => getRemainingSeconds(Date.now(), intervalSeconds));
   const [sliceIndex, setSliceIndex] = useState<number>(() => getCurrentTimeSlice(Date.now(), intervalSeconds));
 
   useEffect(() => {
     let isMounted = true;
+    if (!companySecret.trim()) { setCurrentToken(''); return () => { isMounted = false; }; }
 
     // Mise à jour immédiate du token
     generateTotpToken(companySecret, sliceIndex).then((token) => {
@@ -149,5 +152,6 @@ export function useDynamicQrCode(companySecret: string = DEFAULT_COMPANY_SECRET,
     progressPercent,
     qrImageUrl,
     isExpiringSoon: secondsRemaining <= 5,
+    isConfigured: Boolean(companySecret.trim()),
   };
 }

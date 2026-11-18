@@ -154,7 +154,6 @@ export async function persistEditedCollaborator({
       avatarUrl: formData.avatarUrl || '',
       employeeId: String(editingEmployee.id),
       createdAt: new Date().toISOString(),
-      passwordHash: 'Collab@2026',
     };
     onUpdateUsers?.([createdUserObj, ...users]);
   }

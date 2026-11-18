@@ -14,3 +14,5 @@ export {
   type AtomicClockingTransactionInput,
 } from './repository/clockingTransaction';
 export { checkClockingEligibilityBackend } from './repository/clockingEligibility';
+
+export { executeCollaboratorUpdateTransaction } from './repository/employeeUpdateTransaction';

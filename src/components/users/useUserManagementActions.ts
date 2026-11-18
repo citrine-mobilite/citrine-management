@@ -78,6 +78,12 @@ export function useUserManagementActions({
         : `Création du compte de "${trimmedName}", veuillez patienter...`,
       action: async () => {
         let passwordHash = editingUser?.passwordHash;
+        if (!isEditing && (!data.password || data.password.length < 12)) {
+          throw new Error('Un mot de passe initial de 12 caractères minimum est obligatoire.');
+        }
+        if (data.password && data.password.length < 12) {
+          throw new Error('Le mot de passe doit contenir au moins 12 caractères.');
+        }
         if (data.password) {
           passwordHash = await hashPassword(data.password);
         }

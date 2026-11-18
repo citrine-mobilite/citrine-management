@@ -1,148 +1,51 @@
 import { AppUser, Employee } from '../../types';
-import { getUserClient } from './userMapperHelpers';
+import { mariaDbService } from '../mariaDbService';
 
 export async function syncUserToEmployeeTable(
-  cleanUser: AppUser,
-  resolvedUser: AppUser,
-  resolvedRoleId: number,
-  oldEmail: string
+  cleanUser: AppUser, resolvedUser: AppUser, resolvedRoleId: number, oldEmail: string
 ): Promise<void> {
-  const client = getUserClient();
-  const userEmail = cleanUser.email;
-
   try {
-    const userEmployeeId = cleanUser.employeeId;
-    let matchedEmp: any = null;
+    const employees = await mariaDbService.fetchCollection<Employee>('employees');
+    const employee = employees.find((emp: any) =>
+      (cleanUser.employeeId && [emp.id, emp.docId, emp.doc_id, emp._dbId].some(x => String(x) === String(cleanUser.employeeId))) ||
+      (resolvedUser.id && String(emp.userId) === String(resolvedUser.id)) ||
+      (oldEmail && String(emp.email || '').toLowerCase() === oldEmail) ||
+      String(emp.email || '').toLowerCase() === cleanUser.email.toLowerCase()
+    ) as any;
+    if (!employee) return;
 
-    if (userEmployeeId) {
-      if (/^\d+$/.test(String(userEmployeeId))) {
-        const { data } = await client.from('employees').select('*').eq('id', Number(userEmployeeId)).maybeSingle();
-        matchedEmp = data;
-      }
-      if (!matchedEmp) {
-        const { data } = await client.from('employees').select('*').eq('doc_id', String(userEmployeeId)).maybeSingle();
-        matchedEmp = data;
-      }
-    }
+    let employmentStatus = cleanUser.employmentStatus || employee.employmentStatus || 'en_poste';
+    if (cleanUser.status === 'inactif' && ['en_poste','en_conge','en_permission'].includes(employmentStatus)) employmentStatus = 'suspendu';
+    if (cleanUser.status === 'actif' && employmentStatus === 'suspendu') employmentStatus = 'en_poste';
+    const active = cleanUser.status === 'actif' && !['renvoye','demissionne','suspendu','parti'].includes(employmentStatus);
+    const roleType = cleanUser.role === 'administrateur' ? 'Super Administrateur' :
+      cleanUser.role === 'responsable' ? 'Responsable' : employee.roleType || 'Employé';
 
-    if (!matchedEmp && /^\d+$/.test(String(resolvedUser.id))) {
-      const { data } = await client.from('employees').select('*').eq('user_id', Number(resolvedUser.id)).maybeSingle();
-      matchedEmp = data;
-    }
-
-    if (!matchedEmp && oldEmail) {
-      const { data } = await client.from('employees').select('*').ilike('email', oldEmail).maybeSingle();
-      matchedEmp = data;
-    }
-
-    if (!matchedEmp && userEmail) {
-      const { data } = await client.from('employees').select('*').ilike('email', userEmail).maybeSingle();
-      matchedEmp = data;
-    }
-
-    if (!matchedEmp) return;
-
-    const rawEmp = matchedEmp.raw_data && typeof matchedEmp.raw_data === 'object' ? matchedEmp.raw_data : {};
-
-    let newEmploymentStatus = cleanUser.employmentStatus || matchedEmp.employment_status || rawEmp.employmentStatus || 'en_poste';
-    if (cleanUser.status === 'inactif') {
-      if (newEmploymentStatus === 'en_poste' || newEmploymentStatus === 'en_conge' || newEmploymentStatus === 'en_permission') {
-        newEmploymentStatus = 'suspendu';
-      }
-    } else if (cleanUser.status === 'actif' && newEmploymentStatus === 'suspendu') {
-      newEmploymentStatus = 'en_poste';
-    }
-
-    const isEmpActive =
-      cleanUser.status === 'actif' &&
-      newEmploymentStatus !== 'renvoye' &&
-      newEmploymentStatus !== 'demissionne' &&
-      newEmploymentStatus !== 'suspendu' &&
-      newEmploymentStatus !== 'parti';
-
-    const resolvedRoleType =
-      cleanUser.role === 'administrateur'
-        ? 'Super Administrateur'
-        : cleanUser.role === 'responsable'
-        ? 'Responsable'
-        : matchedEmp.role_type || 'Employé';
-
-    const resolvedEmpAllowEarly =
-      cleanUser.allowEarlyDeparture15_17 !== undefined
-        ? Boolean(cleanUser.allowEarlyDeparture15_17)
-        : Boolean(rawEmp.allowEarlyDeparture15_17);
-    const resolvedEmpAllowLate =
-      cleanUser.allowLateArrival8_930 !== undefined
-        ? Boolean(cleanUser.allowLateArrival8_930)
-        : Boolean(rawEmp.allowLateArrival8_930);
-
-    const updatedEmpRaw = {
-      ...rawEmp,
-      id: String(matchedEmp.id),
-      doc_id: matchedEmp.doc_id || rawEmp.doc_id || `emp_${matchedEmp.id}`,
-      uid: matchedEmp.uid,
-      userId: resolvedUser.id,
-      name: cleanUser.name,
-      email: cleanUser.email,
-      phone: cleanUser.phone || matchedEmp.phone || '',
-      department: cleanUser.department || matchedEmp.department || 'Direction Générale',
-      roleType: resolvedRoleType,
+    const updated: Employee = {
+      ...employee,
+      id: String(employee.id),
+      userId: String(resolvedUser.id),
       roleId: resolvedRoleId,
-      status: isEmpActive,
-      employmentStatus: newEmploymentStatus,
-      avatarUrl: cleanUser.avatarUrl || matchedEmp.photo_url || rawEmp.avatarUrl || '',
-      salary: matchedEmp.salary || 0,
-      hireDate: matchedEmp.hire_date || rawEmp.hireDate || new Date().toISOString().split('T')[0],
-      birthDate: cleanUser.birthDate ?? rawEmp.birthDate ?? null,
-      team: cleanUser.team ?? rawEmp.team ?? null,
-      teams: cleanUser.teams ?? rawEmp.teams ?? null,
-      managerId: cleanUser.managerId ?? rawEmp.managerId ?? null,
-      managerName: cleanUser.managerName ?? rawEmp.managerName ?? null,
-      allowEarlyDeparture15_17: resolvedEmpAllowEarly,
-      allowLateArrival8_930: resolvedEmpAllowLate,
-    };
-
-    const updatedEmp: Employee = { ...updatedEmpRaw, id: String(matchedEmp.id) };
-
-    await client.from('employees').update({
       name: cleanUser.name,
       email: cleanUser.email,
-      phone: cleanUser.phone || matchedEmp.phone || null,
-      department: cleanUser.department || matchedEmp.department || 'Direction Générale',
-      role_type: resolvedRoleType,
-      position: matchedEmp.position || resolvedRoleType,
-      role_id: resolvedRoleId,
-      user_id: /^\d+$/.test(String(resolvedUser.id)) ? Number(resolvedUser.id) : matchedEmp.user_id,
-      status: isEmpActive,
-      photo_url: cleanUser.avatarUrl || matchedEmp.photo_url || null,
-      raw_data: updatedEmpRaw,
-      updated_at: new Date().toISOString(),
-    }).eq('id', matchedEmp.id);
-
-    if (!resolvedUser.employeeId) {
-      resolvedUser.employeeId = String(matchedEmp.id);
-    }
-
-    try {
-      const cachedEmps = localStorage.getItem('citrine_employees');
-      if (cachedEmps) {
-        const eList: Employee[] = JSON.parse(cachedEmps);
-        if (Array.isArray(eList)) {
-          const eIdx = eList.findIndex(
-            (e) =>
-              String(e.id) === String(matchedEmp.id) ||
-              (oldEmail && e.email?.toLowerCase() === oldEmail) ||
-              e.email?.toLowerCase() === cleanUser.email
-          );
-          if (eIdx >= 0) eList[eIdx] = updatedEmp;
-          else eList.push(updatedEmp);
-          localStorage.setItem('citrine_employees', JSON.stringify(eList));
-        }
-      }
-    } catch {}
-
-    window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updatedEmp }));
-  } catch (syncErr) {
-    console.warn('[userService] Notice synchronisation collaborateur associé:', syncErr);
+      phone: cleanUser.phone || employee.phone || '',
+      department: cleanUser.department || employee.department || 'Direction Générale',
+      roleType, role: roleType, position: employee.position || roleType,
+      status: active ? 'en_poste' : employmentStatus,
+      employmentStatus,
+      avatarUrl: cleanUser.avatarUrl || employee.avatarUrl || '',
+      birthDate: cleanUser.birthDate ?? employee.birthDate,
+      team: cleanUser.team ?? employee.team,
+      teams: cleanUser.teams ?? employee.teams,
+      managerId: cleanUser.managerId ?? employee.managerId,
+      managerName: cleanUser.managerName ?? employee.managerName,
+      allowEarlyDeparture15_17: cleanUser.allowEarlyDeparture15_17 ?? employee.allowEarlyDeparture15_17,
+      allowLateArrival8_930: cleanUser.allowLateArrival8_930 ?? employee.allowLateArrival8_930,
+    };
+    await mariaDbService.saveDocument('employees', updated as any);
+    if (!resolvedUser.employeeId) resolvedUser.employeeId = String(employee.docId || employee.id);
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updated }));
+  } catch (error) {
+    console.warn('[userService] Synchronisation employé via MariaDB :', error);
   }
 }

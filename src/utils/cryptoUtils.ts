@@ -18,31 +18,23 @@ function getCrypto(): Crypto {
   throw new Error('Web Crypto API non disponible');
 }
 
-export function generateStrongPassword(length = 12): string {
-  const actualLength = Math.max(10, length);
+export function generateStrongPassword(length = 16): string {
   const uppers = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const lowers = 'abcdefghijkmnopqrstuvwxyz';
   const digits = '23456789';
-  const specials = '!@#$%^&*()_+-=[]{}|;:,.<>?';
-
-  const password = [
-    uppers.charAt(Math.floor(Math.random() * uppers.length)),
-    lowers.charAt(Math.floor(Math.random() * lowers.length)),
-    digits.charAt(Math.floor(Math.random() * digits.length)),
-    specials.charAt(Math.floor(Math.random() * specials.length)),
-    specials.charAt(Math.floor(Math.random() * specials.length))
-  ];
-
+  const specials = '!@#$%&*';
   const allChars = uppers + lowers + digits + specials;
-  while (password.length < actualLength) {
-    password.push(allChars.charAt(Math.floor(Math.random() * allChars.length)));
-  }
-
+  const actualLength = Math.max(12, Math.min(128, Math.floor(length) || 16));
+  const randomValues = new Uint32Array(actualLength * 2 + 8);
+  globalThis.crypto.getRandomValues(randomValues);
+  let cursor = 0;
+  const pick = (chars: string) => chars[randomValues[cursor++] % chars.length];
+  const password = [pick(uppers), pick(lowers), pick(digits), pick(specials)];
+  while (password.length < actualLength) password.push(pick(allChars));
   for (let i = password.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomValues[cursor++] % (i + 1);
     [password[i], password[j]] = [password[j], password[i]];
   }
-
   return password.join('');
 }
 
