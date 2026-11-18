@@ -18,6 +18,7 @@ async function startServer() {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
   const PORT = Number(process.env.PORT || 3000);
+  const HOST = process.env.HOST || '127.0.0.1';
 
   app.use(express.json({ limit: '25mb' }));
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
@@ -67,7 +68,7 @@ async function startServer() {
         try {
           server.close();
         } catch {}
-        server.listen(PORT, '0.0.0.0');
+        server.listen(PORT, HOST);
       }, 1000);
     } else {
       console.error('[Server Error]:', err);
