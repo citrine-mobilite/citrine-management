@@ -1,6 +1,7 @@
 import { AppUser } from '../../types';
 import { recordConnectionLog } from '../connectionLogService';
 import { storeSecureSession, clearSecureSession, loadSecureSession, storeApiToken, getApiToken } from '../sessionService';
+import { clearIdbUserDataStores } from '../../lib/idb';
 
 export interface LoginResult { success: boolean; user?: AppUser; error?: string; }
 
@@ -19,6 +20,7 @@ export const authService = {
         return { success: false, error: result.error || 'Connexion refusée.' };
       }
       const user = result.user as AppUser;
+      await clearIdbUserDataStores();
       storeApiToken(result.token);
       await storeSecureSession(user);
       await recordConnectionLog({
@@ -38,16 +40,17 @@ export const authService = {
     try {
       if (token) await fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     } catch {}
+    await clearIdbUserDataStores();
     clearSecureSession();
   },
 
   async validateCurrentSession(): Promise<AppUser | null> {
     const token = getApiToken();
-    if (!token) { clearSecureSession(); return null; }
+    if (!token) { await clearIdbUserDataStores(); clearSecureSession(); return null; }
     try {
       const response = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.success || !result.user) { clearSecureSession(); return null; }
+      if (!response.ok || !result.success || !result.user) { await clearIdbUserDataStores(); clearSecureSession(); return null; }
       const user = result.user as AppUser;
       await storeSecureSession(user);
       return user;
