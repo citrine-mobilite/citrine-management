@@ -47,6 +47,7 @@ export async function withMariaDbTransaction<T>(
 ): Promise<T> {
   const connection = await getMariaDbPool().getConnection();
   try {
+    await connection.query("SET time_zone = '+00:00'");
     await connection.beginTransaction();
     const result = await work(connection);
     await connection.commit();
