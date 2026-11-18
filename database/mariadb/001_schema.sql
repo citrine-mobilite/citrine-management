@@ -312,7 +312,7 @@ CREATE TABLE IF NOT EXISTS inventory_assignments (
     employee_id BIGINT NULL,
     assigned_at DATETIME(3) DEFAULT NOW(),
     returned_at DATETIME(3),
-    condition LONGTEXT DEFAULT 'bon_etat',
+    `condition` LONGTEXT DEFAULT 'bon_etat',
     CONSTRAINT fk_inventory_assignments_inventory_id FOREIGN KEY (inventory_id) REFERENCES inventory(id) ON DELETE CASCADE,
     CONSTRAINT fk_inventory_assignments_employee_id FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
