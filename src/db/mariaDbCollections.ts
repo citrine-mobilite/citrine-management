@@ -62,7 +62,11 @@ function asDateTime(value: any): string | null {
 function jsonValue(value: any): string { return JSON.stringify(value ?? {}); }
 function safeUserRaw(raw: Record<string, any>) {
   const result = { ...raw };
-  delete result.passwordHash; delete result.password_hash; delete result.initialPassword; delete result.password;
+  for (const key of [
+    'passwordHash', 'password_hash', 'initialPassword', 'password',
+    'smtpPass', 'smtpPassword', 'accessToken', 'refreshToken', 'resetToken',
+    'secretKey', 'serviceRoleKey', 'privateKey', 'apiKey',
+  ]) delete result[key];
   return result;
 }
 function safeUserForStorage(raw: Record<string, any>) {
