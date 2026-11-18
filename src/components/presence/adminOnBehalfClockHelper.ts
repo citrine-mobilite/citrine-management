@@ -175,10 +175,7 @@ export async function executeAdminOnBehalfClocking(
   const persistedPresence = persisted.presence || targetPresence;
   const persistedIncident = persisted.incident || null;
   const persistedNotification = persisted.notification || null;
-  const persistedTime = persistedPresence.clockLocations?.[clockAction]?.time ||
-    persistedPresence[clockAction === 'arrival' ? 'arrivalTime' : clockAction === 'departure' ? 'departureTime' : clockAction] || timeInput;
-  const persistedOperationKey = `clock:${persistedPresence.id}:${clockAction}:${persistedTime}`;
-  pushNotificationBridgeService.markOperationDispatched(persistedOperationKey);
+  pushNotificationBridgeService.markOperationDispatched(clockOpKey);
 
   const persistedPresences = [...presences];
   const persistedIndex = persistedPresences.findIndex(p =>
