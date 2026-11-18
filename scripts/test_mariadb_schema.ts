@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
@@ -70,6 +72,87 @@ async function main() {
     }
     await deleteMariaDbDocument('absences', absenceId);
 
+    const importSuffix = randomUUID();
+    const importUserEmail = `ci-import-${importSuffix}@example.invalid`;
+    const importReceiverEmail = `ci-receiver-${importSuffix}@example.invalid`;
+    const importEmployeeEmail = importUserEmail;
+    const legacyUserId = '910001';
+    const legacyReceiverId = '910002';
+    const legacyEmployeeId = '910003';
+    const legacyTaskId = '910004';
+    const legacyCallId = '910005';
+    const legacyGenericId = '910006';
+    const fixture = {
+      metadata: { exportDate: new Date().toISOString(), source: 'CI fixture' },
+      collections: {
+        users: [
+          { id: legacyUserId, uid: randomUUID(), email: importUserEmail, name: 'CI Imported User', role: 'employé', roleId: 3, passwordHash: 'Import-Password-2026!' },
+          { id: legacyReceiverId, uid: randomUUID(), email: importReceiverEmail, name: 'CI Imported Receiver', role: 'responsable', roleId: 2, passwordHash: 'Receiver-Password-2026!' },
+        ],
+        employees: [
+          { id: legacyEmployeeId, uid: randomUUID(), email: importEmployeeEmail, name: 'CI Imported Employee', roleType: 'Employé', roleId: 3, userId: legacyUserId, status: 'en_poste' },
+        ],
+        tasks: [
+          { id: legacyTaskId, uid: randomUUID(), title: 'CI imported task', employeeId: legacyEmployeeId, status: 'todo' },
+        ],
+        calls: [
+          { id: legacyCallId, uid: randomUUID(), callerId: legacyUserId, receiverId: legacyReceiverId, roomId: 'ci-room-' + importSuffix, status: 'ended' },
+        ],
+        ci_import_collection: [
+          { id: legacyGenericId, label: 'CI imported generic record' },
+        ],
+      },
+    };
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'citrine-mariadb-import-'));
+    const exportPath = path.join(tempDir, 'fixture.json');
+    try {
+      await fs.writeFile(exportPath, JSON.stringify(fixture), { encoding: 'utf8', mode: 0o600 });
+      execFileSync('npx', ['tsx', 'scripts/import_mariadb_export.ts', exportPath, '--merge'], {
+        encoding: 'utf8', stdio: 'pipe', env: process.env,
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+
+    const [importedUsers] = await connection.execute<any[]>(
+      'SELECT id, email, raw_data FROM users WHERE email IN (?, ?)', [importUserEmail, importReceiverEmail]
+    );
+    if (importedUsers.length !== 2) throw new Error('Import des utilisateurs Supabase incomplet.');
+    const importedUser = importedUsers.find(row => row.email === importUserEmail);
+    const importedReceiver = importedUsers.find(row => row.email === importReceiverEmail);
+    const importedRaw = typeof importedUser.raw_data === 'string' ? JSON.parse(importedUser.raw_data) : importedUser.raw_data;
+    if (!String(importedRaw.passwordHash || '').startsWith('pbkdf2:') || importedRaw.password) {
+      throw new Error('Le mot de passe importé doit être haché et aucun champ plaintext ne doit subsister.');
+    }
+    const [importedEmployeeRows] = await connection.execute<any[]>(
+      'SELECT id, user_id FROM employees WHERE email = ?', [importEmployeeEmail]
+    );
+    if (Number(importedEmployeeRows[0]?.user_id) !== Number(importedUser.id)) {
+      throw new Error('La relation employee.user_id n’a pas été remappée.');
+    }
+    const [importedTaskRows] = await connection.execute<any[]>(
+      'SELECT employee_id FROM tasks WHERE doc_id = ?', ['tasks-' + legacyTaskId]
+    );
+    if (Number(importedTaskRows[0]?.employee_id) !== Number(importedEmployeeRows[0]?.id)) {
+      throw new Error('La relation task.employee_id n’a pas été remappée.');
+    }
+    const [importedCallRows] = await connection.execute<any[]>(
+      'SELECT caller_id, receiver_id FROM calls WHERE doc_id = ?', ['calls-' + legacyCallId]
+    );
+    if (String(importedCallRows[0]?.caller_id) !== String(importedUser.id) ||
+        String(importedCallRows[0]?.receiver_id) !== String(importedReceiver.id)) {
+      throw new Error('Les participants de l’appel n’ont pas été remappés.');
+    }
+    const importedGeneric = await getMariaDbCollection('ci_import_collection');
+    if (!importedGeneric.some(row => row.id === legacyGenericId && row.label === 'CI imported generic record')) {
+      throw new Error('Import de generic_collections incomplet.');
+    }
+    await connection.execute('DELETE FROM calls WHERE doc_id = ?', ['calls-' + legacyCallId]);
+    await connection.execute('DELETE FROM tasks WHERE doc_id = ?', ['tasks-' + legacyTaskId]);
+    await connection.execute('DELETE FROM employees WHERE email = ?', [importEmployeeEmail]);
+    await connection.execute('DELETE FROM users WHERE email IN (?, ?)', [importUserEmail, importReceiverEmail]);
+    await connection.execute('DELETE FROM generic_collections WHERE collection = ? AND doc_id = ?', ['ci_import_collection', legacyGenericId]);
+
     const [requiredTables] = await connection.query<any[]>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('auth_sessions','call_signals','generic_collections')"
     );
@@ -78,6 +161,7 @@ async function main() {
     console.log('[OK] MariaDB CRUD users et generic_collections');
     console.log('[OK] Masquage passwordHash');
     console.log('[OK] Compatibilité bcrypt Supabase → PBKDF2 et collection absences');
+    console.log('[OK] Import Supabase : utilisateurs, relations, appels et collections génériques');
     console.log('[OK] ' + Number(tables[0].total) + ' tables, rôles, auth_sessions et call_signals');
   } finally {
     await connection.end();
