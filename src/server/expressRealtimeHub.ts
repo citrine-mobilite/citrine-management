@@ -1,5 +1,5 @@
 import express from 'express';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, requireAdminOrResponsable, AuthRequest } from '../middleware/auth';
 import { getMariaDbPool } from '../db/mariadb';
 import type { RowDataPacket } from 'mysql2/promise';
 
@@ -86,7 +86,7 @@ export function registerRealtimeRoutes(app: express.Express): void {
     });
   });
 
-  app.post('/api/realtime/broadcast', requireAuth, async (req: AuthRequest, res: express.Response) => {
+  app.post('/api/realtime/broadcast', requireAuth, requireAdminOrResponsable, async (req: AuthRequest, res: express.Response) => {
     const { event, data } = req.body || {};
     if (event !== 'presence_update' || !data?.presence || typeof data.presence !== 'object') {
       return res.status(400).json({ success: false, error: 'Événement temps réel non autorisé.' });
