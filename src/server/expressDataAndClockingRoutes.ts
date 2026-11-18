@@ -630,7 +630,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
           (value !== null && value !== undefined && String(value).trim() !== '' && [1, 2].includes(Number(value)))
         );
         if (requestsPrivilegedRole) {
-          return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer un rôle privilégié.'
+          return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer un rôle privilégié.' });
         }
 
         const targetKey = String(employeeInput._dbId || employeeInput.id || employeeInput.docId || employeeInput.doc_id || employeeInput.uid || employeeInput.email || '').trim();
