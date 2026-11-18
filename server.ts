@@ -8,6 +8,7 @@ import { registerCoreDataAndClockingRoutes } from './src/server/expressDataAndCl
 import { registerMailAndCronRoutes } from './src/server/expressMailAndCronRoutes';
 import { startScheduledCronJobs } from './src/server/cronScheduler';
 import { registerAuthRoutes } from './src/server/expressAuthRoutes';
+import { registerCallRoutes } from './src/server/expressCallRoutes';
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
   registerAuthRoutes(app);
+  registerCallRoutes(app);
   registerCoreDataAndClockingRoutes(app);
   registerRealtimeRoutes(app);
   registerMailAndCronRoutes(app);
