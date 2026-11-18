@@ -61,14 +61,40 @@ L'application propose une architecture modulaire activable à la demande, struct
 
 ---
 
-## 🛠️ Architecture Technique & Sécurité
+## 🛠️ Architecture technique
 
-* **Frontend** : React.js (TypeScript), Tailwind CSS pour une interface responsive et fluide (Zero-Pill design, sobre et moderne).
-* **Backend de Persistance** : Firebase Firestore (Base de données en temps réel) et LocalStorage (mécanisme de cache pour haute résilience hors-ligne).
-* **Sécurité & Confidentialité (PBKDF2)** :
-  * Chiffrement cryptographique fort et salage de tous les mots de passe.
-  * Masquage total des mots de passe dans les tables et interfaces système.
-  * Validation stricte des accès et permissions (RBAC) au niveau de l'Iframe client et des règles de sécurité Firestore.
+- **Frontend** : React, TypeScript, Vite et Tailwind CSS.
+- **Backend** : API Express/Node.js.
+- **Base de données** : MariaDB 10.11 sur l'hébergement OVH, via le pilote `mysql2`.
+- **Persistance** : repositories MariaDB, transactions InnoDB et identifiants UUID.
+- **Authentification** : sessions opaques côté serveur, mots de passe PBKDF2 et contrôle des accès sur les routes protégées.
+- **Temps réel** : événements applicatifs via Server-Sent Events et signalisation WebRTC persistée dans MariaDB.
+- **Notifications push** : Pusher Beams.
+- **Mode hors ligne** : cache local IndexedDB ; les écritures métier nécessitent une connexion au serveur MariaDB.
+
+## 🗄️ Installation de la base MariaDB
+
+Le schéma, les rôles de référence, les sessions et la signalisation WebRTC sont documentés dans [database/mariadb/README.md](database/mariadb/README.md).
+
+Ordre des scripts à appliquer sur une base de test :
+
+1. `database/mariadb/001_schema.sql`
+2. `database/mariadb/002_auth_sessions.sql`
+3. `database/mariadb/003_seed_reference_data.sql`
+4. `database/mariadb/004_call_signals.sql`
+
+Les données de production doivent être exportées séparément depuis l'ancienne base, puis importées avec `scripts/import_mariadb_export.ts`. Le fichier d'export d'exemple du dépôt ne contient pas les données réelles de production.
+
+## 🚀 Déploiement OVH
+
+1. Installer les dépendances avec `npm install`.
+2. Renseigner les variables privées dans le fichier `.env` du serveur (voir `.env.example`).
+3. Compiler avec `npm run build`.
+4. Démarrer avec `npm start` en définissant `PORT` selon la configuration du proxy Apache.
+5. Configurer le sous-domaine `management.citrine-mobilite.com` en HTTPS et faire pointer Apache vers le port local de l'application.
+
+Le proxy Apache et le mécanisme de supervision du processus Node.js dépendent des modules activés par l'hébergeur cPanel ; vérifier leur disponibilité avant la mise en production.
+
 
 ---
 
