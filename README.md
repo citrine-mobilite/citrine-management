@@ -70,7 +70,7 @@ L'application propose une architecture modulaire activable à la demande, struct
 - **Authentification** : sessions opaques côté serveur, mots de passe PBKDF2 et contrôle des accès sur les routes protégées.
 - **Temps réel** : événements applicatifs via Server-Sent Events et signalisation WebRTC persistée dans MariaDB.
 - **Notifications push** : Pusher Beams.
-- **Mode hors ligne** : cache local IndexedDB ; les écritures métier nécessitent une connexion au serveur MariaDB.
+- **Mode hors ligne** : cache IndexedDB isolé par compte et file d’attente des opérations compatibles, synchronisée au retour du réseau ; les pointages transactionnels nécessitent une connexion au serveur MariaDB.
 
 ## 🗄️ Installation de la base MariaDB
 
