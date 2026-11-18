@@ -51,7 +51,13 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
     if (!cleanUser.passwordHash) delete payload.passwordHash;
 
     const saved = await supabaseService.saveDocument(USERS_COLLECTION, payload);
-    const resolved = mapDbUserRow({ ...payload, ...(saved || {}) });
+    const resolved: AppUser = {
+      ...payload, ...(saved || {}),
+      id: String((saved as any)?.id || payload.id),
+      role: cleanUser.role, roleId,
+      status: cleanUser.status === 'actif' ? 'actif' : 'inactif',
+      email: cleanUser.email, name: cleanUser.name,
+    };
     await syncUserToEmployeeTable(cleanUser, resolved, roleId, oldEmail);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('citrine:user_updated', { detail: resolved }));
