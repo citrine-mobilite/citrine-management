@@ -71,8 +71,11 @@ function safeUserRaw(raw: Record<string, any>) {
 }
 function safeUserForStorage(raw: Record<string, any>) {
   const result = { ...raw };
-  delete result.password;
-  delete result.initialPassword;
+  for (const key of [
+    'password', 'initialPassword', 'smtpPass', 'smtpPassword',
+    'accessToken', 'refreshToken', 'resetToken', 'secretKey',
+    'serviceRoleKey', 'privateKey', 'apiKey',
+  ]) delete result[key];
   return result;
 }
 
