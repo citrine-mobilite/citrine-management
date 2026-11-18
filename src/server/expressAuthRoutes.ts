@@ -59,9 +59,23 @@ function publicUser(row: UserRow, raw: Record<string, any>) {
 }
 
 export function registerAuthRoutes(app: Express): void {
-  app.get('/api/health', async (_req: Request, res: Response) => {
-    try { await pingMariaDb(); return res.json({ success: true, service: 'citrine-management' }); }
-    catch { return res.status(503).json({ success: false, error: 'MariaDB indisponible.' }); }
+  // Liveness: doit rester disponible même si MariaDB est momentanément indisponible.
+  app.get('/api/health', (_req: Request, res: Response) => {
+    return res.status(200).json({
+      success: true,
+      service: 'citrine-management',
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+  });
+
+  // Readiness: vérifie que le service peut réellement accéder à MariaDB.
+  app.get('/api/ready', async (_req: Request, res: Response) => {
+    try {
+      const database = await pingMariaDb();
+      return res.status(200).json({ success: true, database: database.database, version: database.version });
+    } catch {
+      return res.status(503).json({ success: false, error: 'MariaDB indisponible.' });
+    }
   });
 
   app.post('/api/auth/login', async (req: Request, res: Response) => {
