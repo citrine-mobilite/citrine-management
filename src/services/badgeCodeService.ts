@@ -1,7 +1,6 @@
 import { BadgeSecurityCode16 } from '../types';
 import { COLLECTIONS, saveDocument, deleteDocument, subscribeToCollection, getCollection } from './dataService';
 import { offlineService } from './offlineService';
-import { supabase } from '../lib/supabase';
 
 // Helper to generate a 16-character alphanumeric code
 export function generate16CharCode(): { raw: string; formatted: string } {
@@ -110,46 +109,7 @@ export class BadgeCodeService {
     // 1. Recherche dans le cache mémoire local
     let match = this.findMatchingCode(this.codesCache, cleanedInput);
 
-    // 2. Recherche directe ultra-rapide et ciblée dans Supabase (table badge_codes_16)
-    if (!match) {
-      try {
-        const { data: supaRows } = await supabase
-          .from('badge_codes_16')
-          .select('*')
-          .or(`code.eq.${cleanedInput},code.ilike.%${cleanedInput}%`)
-          .limit(10);
-
-        if (supaRows && supaRows.length > 0) {
-          for (const row of supaRows) {
-            const raw = (row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {}) as Partial<BadgeSecurityCode16>;
-            const rowCode = String(row.code || raw.code || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-            if (rowCode === cleanedInput) {
-              match = {
-                id: raw.id || row.doc_id || String(row.id),
-                code: rowCode,
-                formattedCode: raw.formattedCode || `${rowCode.slice(0, 4)}-${rowCode.slice(4, 8)}-${rowCode.slice(8, 12)}-${rowCode.slice(12, 16)}`,
-                generatedBy: row.created_by || raw.generatedBy || 'Responsable',
-                createdAt: row.created_at || raw.createdAt || new Date().toISOString(),
-                expiresAt: row.expires_at || raw.expiresAt,
-                isUsed: Boolean(row.is_used ?? raw.isUsed ?? false),
-                usedAt: row.used_at || raw.usedAt,
-                usedByEmployeeId: raw.usedByEmployeeId || (row.employee_id ? String(row.employee_id) : undefined),
-                usedByEmployeeName: raw.usedByEmployeeName || row.assigned_name,
-                notes: raw.notes,
-                targetMonth: raw.targetMonth,
-              };
-              // Mise à jour immédiate du cache local
-              this.codesCache = [match, ...this.codesCache.filter((c) => c.code !== match!.code)];
-              break;
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('[BadgeCodeService] Direct Supabase lookup error:', err);
-      }
-    }
-
-    // 3. Si toujours non trouvé, interroger la collection globale complète (Supabase + Serveur API)
+    // 2. Recherche dans la collection MariaDB distante
     if (!match) {
       try {
         const remoteList = await getCollection<BadgeSecurityCode16>(COLLECTIONS.BADGE_CODES_16);
