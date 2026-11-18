@@ -233,10 +233,10 @@ async function main() {
     }
 
     const [importedPresenceRows] = await connection.execute<any[]>(
-      'SELECT id, employee_id, date FROM presences WHERE doc_id = ?',
+      "SELECT id, employee_id, DATE_FORMAT(date, '%Y-%m-%d') AS date FROM presences WHERE doc_id = ?",
       ['presences-' + legacyPresenceId]
     );
-    if (String(importedPresenceRows[0]?.date).slice(0, 10) !== '2025-01-15' ||
+    if (String(importedPresenceRows[0]?.date) !== '2025-01-15' ||
         Number(importedPresenceRows[0]?.employee_id) !== Number(importedEmployeeRows[0]?.id)) {
       throw new Error('La date historique du pointage ou sa relation collaborateur a été altérée.');
     }
@@ -299,7 +299,7 @@ async function main() {
     }).formatToParts(new Date());
     const expectedDoualaDate = `${doualaParts.find(p => p.type === 'year')?.value}-${doualaParts.find(p => p.type === 'month')?.value}-${doualaParts.find(p => p.type === 'day')?.value}`;
     const [clockedRows] = await connection.execute<any[]>(
-      'SELECT id, doc_id, date, arrival_time, raw_data FROM presences WHERE employee_id = ? AND date = ?',
+      "SELECT id, doc_id, DATE_FORMAT(date, '%Y-%m-%d') AS date, arrival_time, raw_data FROM presences WHERE employee_id = ? AND date = ?",
       [importedEmployeeRows[0].id, expectedDoualaDate]
     );
     if (!clockedRows[0] || String(clockedRows[0].arrival_time) === '00:01' ||
@@ -330,14 +330,14 @@ async function main() {
       actor: { id: String(importedUser.id), role: 'employé' },
     });
     const [updatedClockRows] = await connection.execute<any[]>(
-      'SELECT doc_id, date, arrival_time, raw_data FROM presences WHERE employee_id = ? AND date = ?',
+      "SELECT doc_id, DATE_FORMAT(date, '%Y-%m-%d') AS date, arrival_time, raw_data FROM presences WHERE employee_id = ? AND date = ?",
       [importedEmployeeRows[0].id, expectedDoualaDate]
     );
     const clockRaw = typeof updatedClockRows[0]?.raw_data === 'string'
       ? JSON.parse(updatedClockRows[0].raw_data) : updatedClockRows[0]?.raw_data;
     if (String(updatedClockRows[0]?.arrival_time) === '00:01' ||
         String(clockRaw?.pauseStart || '') === '00:02' ||
-        String(updatedClockRows[0]?.date).slice(0, 10) !== expectedDoualaDate) {
+        String(updatedClockRows[0]?.date) !== expectedDoualaDate) {
       throw new Error('Une action de pointage ne doit pas écraser les anciennes heures ni accepter les heures client.');
     }
     await connection.execute('DELETE FROM presences WHERE employee_id = ? AND date = ?', [importedEmployeeRows[0].id, expectedDoualaDate]);
