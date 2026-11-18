@@ -44,7 +44,7 @@ const MANAGER_READ_COLLECTIONS = new Set([
   'visitor_logs', 'hse_incidents', 'job_applications', 'rh_document_templates', 'badge_codes_16', 'dynamic_qr_sessions',
 ]);
 const OWN_READ_COLLECTIONS = new Set([
-  'presences', 'attendance_incidents', 'leave_requests', 'expense_claims',
+  'presences', 'attendance_incidents', 'leave_requests', 'expense_claims', 'absences',
 ]);
 
 async function getOwnEmployeeScope(req: AuthRequest): Promise<RowDataPacket | null> {
@@ -65,7 +65,7 @@ function authorizeCollectionWrite(req: AuthRequest, res: express.Response, next:
   const collection = String(req.params.collection || '');
   if (ADMIN_ONLY_COLLECTIONS.has(collection)) return requireAdmin(req, res, next);
   if (MANAGER_COLLECTIONS.has(collection)) return requireAdminOrResponsable(req, res, next);
-  if (collection === 'leave_requests' || collection === 'expense_claims') {
+  if (collection === 'leave_requests' || collection === 'expense_claims' || collection === 'absences') {
     return authorizeOwnEmployeeRecord(req, res, next);
   }
   return next();
