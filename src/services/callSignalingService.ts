@@ -85,7 +85,7 @@ class CallSignalingService {
           } catch (error) { console.warn('[Call answer]', error); }
         } else if (event === 'call_ended') {
           soundService.stopOutgoingRingback();
-          callbacks?.onEnded?.((signal as any).reason || \"L'appel a pris fin.\");
+          callbacks?.onEnded?.((signal as any).reason || "L'appel a pris fin.");
           this.cleanUp();
         }
       }));
@@ -117,7 +117,7 @@ class CallSignalingService {
     }));
     this.signalUnsubs.push(listenToSignals(call.id, call.calleeId, signal => {
       if ((signal as any).event === 'call_ended') {
-        callbacks?.onEnded?.((signal as any).reason || \"L'appel est terminé.\");
+        callbacks?.onEnded?.((signal as any).reason || "L'appel est terminé.");
         this.cleanUp();
       }
     }));
