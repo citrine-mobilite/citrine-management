@@ -83,6 +83,7 @@ Ordre des scripts à appliquer sur une base de test :
 3. `database/mariadb/003_seed_reference_data.sql`
 4. `database/mariadb/004_call_signals.sql`
 5. `database/mariadb/005_presence_employee_date_index.sql`
+6. `database/mariadb/006_relation_raw_data.sql`
 
 Les données réelles doivent être exportées depuis Supabase sur une machine de confiance. Définir temporairement SUPABASE_DATABASE_URL (ne jamais l'ajouter au dépôt), puis lancer :
 
@@ -93,7 +94,7 @@ npm run export:supabase -- ./citrine-supabase-export.json
 
 Le script produit un export JSON privé, importe les hashes de auth.users lorsqu'ils sont accessibles et signale les tables absentes ou supplémentaires du schéma source. Si auth.users est inaccessible ou si des utilisateurs n'ont aucun hash, ces comptes devront réinitialiser leur mot de passe.
 
-Après avoir appliqué les cinq migrations SQL et configuré les variables MariaDB dans .env, transférer le fichier JSON sur le serveur OVH et lancer :
+Après avoir appliqué les six migrations SQL et configuré les variables MariaDB dans .env, transférer le fichier JSON sur le serveur OVH et lancer :
 
 ```bash
 npm run import:mariadb -- ./citrine-supabase-export.json --dry-run
