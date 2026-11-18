@@ -40,12 +40,19 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
     );
     if (existingEmployees[0]) throw new Error(`Un collaborateur avec l'adresse "${email}" existe déjà.`);
 
-    await connection.execute(
-      `INSERT INTO roles (uid, name, code, description, permissions, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3))
-       ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`,
-      [randomUUID(), roleName, roleCode, `Rôle ${roleName}`, JSON.stringify([])]
-    );
+    const referenceRoles = [
+      ['SUPER_ADMIN', 'Super Administrateur', 'Administrateur système et IT avec accès complet'],
+      ['RESPONSABLE', 'Responsable d’Unité', 'Responsable de département et validation'],
+      ['EMPLOYE', 'Collaborateur / Employé', 'Accès collaborateur'],
+    ];
+    for (const [code, label, description] of referenceRoles) {
+      await connection.execute(
+        `INSERT INTO roles (uid, name, code, description, permissions, raw_data, created_at, updated_at)
+         VALUES (?, ?, ?, ?, JSON_OBJECT(), JSON_OBJECT('name', ?, 'code', ?), NOW(3), NOW(3))
+         ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`,
+        [randomUUID(), label, code, description, label, code]
+      );
+    }
     const [roleRows] = await connection.execute<any[]>('SELECT id FROM roles WHERE code = ? LIMIT 1', [roleCode]);
     const roleId = Number(roleRows[0]?.id);
     if (!roleId) throw new Error(`Impossible de résoudre le rôle ${roleName}.`);
