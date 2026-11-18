@@ -48,6 +48,7 @@ Sur une base MariaDB vide, appliquer les fichiers dans cet ordre, via phpMyAdmin
 3. `database/mariadb/003_seed_reference_data.sql`
 4. `database/mariadb/004_call_signals.sql`
 5. `database/mariadb/005_presence_employee_date_index.sql`
+6. `database/mariadb/006_relation_raw_data.sql`
 
 Faire d'abord une sauvegarde de toute base qui contient déjà des données. Ne pas appliquer ces fichiers sur une base de production existante sans vérifier son contenu et ses versions.
 
