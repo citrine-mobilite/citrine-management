@@ -118,8 +118,8 @@ export function mapModuleMariaDbRowToItem(table: string, row: any): any | null {
       companyName: raw.companyName || (row.setting_value && typeof row.setting_value === 'object' && row.setting_value.companyName) || 'Citrine SARL',
       workStartTime: raw.workStartTime || '08:00',
       plannedDepartureTime: raw.plannedDepartureTime || '16:30',
-      qrCodeSecret: raw.qrCodeSecret || 'CITRINE_SECRET_2026',
-      doorQrCodeToken: raw.doorQrCodeToken || 'CITRINE_DOOR_HQ_MAIN_2026',
+      qrCodeSecret: raw.qrCodeSecret || '',
+      doorQrCodeToken: raw.doorQrCodeToken || '',
     };
   }
 
