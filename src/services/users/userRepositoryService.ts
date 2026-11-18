@@ -25,7 +25,7 @@ export async function saveUser(user: AppUser, previousUser?: AppUser): Promise<A
       ...user, email: user.email.trim().toLowerCase(), name: user.name.trim(),
       department: user.department?.trim() || 'Direction Générale',
     };
-    if (cleanUser.passwordHash && !cleanUser.passwordHash.startsWith('pbkdf2:')) {
+    if (cleanUser.passwordHash && !cleanUser.passwordHash.startsWith('pbkdf2:') && !/^\\$2[aby]\\$/.test(cleanUser.passwordHash)) {
       cleanUser.passwordHash = await hashPassword(cleanUser.passwordHash);
     }
 
