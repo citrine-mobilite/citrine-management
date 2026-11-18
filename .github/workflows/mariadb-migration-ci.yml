@@ -14,9 +14,32 @@ on:
       - 'package-lock.json'
       - 'database/mariadb/**'
 
+concurrency:
+  group: mariadb-migration-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: ci-root-password
+          MARIADB_DATABASE: citrine_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      SQL_HOST: 127.0.0.1
+      SQL_PORT: 3306
+      SQL_DB_NAME: citrine_ci
+      SQL_ADMIN_USER: root
+      SQL_ADMIN_PASSWORD: ci-root-password
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,3 +52,5 @@ jobs:
         run: npm run lint
       - name: Production build
         run: npm run build
+      - name: Apply MariaDB migrations and test CRUD
+        run: npx tsx scripts/test_mariadb_schema.ts
