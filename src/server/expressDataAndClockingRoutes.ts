@@ -143,7 +143,23 @@ async function authorizeNotificationWrite(req: AuthRequest, res: express.Respons
       || [employeeName, employee.email, req.user?.id].some(value => String(value || '').toLowerCase() === recipient.toLowerCase());
     const isBroadcast = ['tous', 'broadcast'].includes(recipient.toLowerCase());
     if (!isOwn && !isBroadcast) return res.status(403).json({ success: false, error: 'Tu ne peux modifier que tes propres notifications.' });
-    req.body = { ...found.raw, id: found.raw.id || recordId, read: Boolean(body.read) };
+    let storedTargetEmployees = found.raw.targetEmployeeIds;
+    if (!Array.isArray(storedTargetEmployees)) {
+      try {
+        const parsedTargets = typeof found.row.target_employee_ids === 'string'
+          ? JSON.parse(found.row.target_employee_ids)
+          : found.row.target_employee_ids;
+        storedTargetEmployees = Array.isArray(parsedTargets) ? parsedTargets : [];
+      } catch { storedTargetEmployees = []; }
+    }
+    req.body = {
+      ...found.raw,
+      id: found.raw.id || recordId,
+      targetUserId: found.raw.targetUserId ?? found.row.target_user_id ?? undefined,
+      targetEmployeeIds: storedTargetEmployees,
+      recipient: found.raw.recipient || found.row.recipient || '',
+      read: Boolean(body.read),
+    };
     return next();
   } catch {
     return res.status(503).json({ success: false, error: 'Vérification des droits de notification indisponible.' });
