@@ -83,17 +83,33 @@ Ordre des scripts à appliquer sur une base de test :
 3. `database/mariadb/003_seed_reference_data.sql`
 4. `database/mariadb/004_call_signals.sql`
 
-Les données de production doivent être exportées séparément depuis l'ancienne base, puis importées avec `scripts/import_mariadb_export.ts`. Le fichier d'export d'exemple du dépôt ne contient pas les données réelles de production.
+Les données réelles doivent être exportées depuis Supabase sur une machine de confiance. Définir temporairement SUPABASE_DATABASE_URL (ne jamais l'ajouter au dépôt), puis lancer :
+
+```bash
+npm install --include=dev
+npm run export:supabase -- ./citrine-supabase-export.json
+```
+
+Le script produit un export JSON privé, importe les hashes de auth.users lorsqu'ils sont accessibles et signale les tables absentes ou supplémentaires du schéma source. Si auth.users est inaccessible ou si des utilisateurs n'ont aucun hash, ces comptes devront réinitialiser leur mot de passe.
+
+Après avoir appliqué les quatre migrations SQL et configuré les variables MariaDB dans .env, transférer le fichier JSON sur le serveur OVH et lancer :
+
+```bash
+npm run import:mariadb -- ./citrine-supabase-export.json --dry-run
+npm run import:mariadb -- ./citrine-supabase-export.json
+```
+
+L'import initial refuse une base contenant déjà des utilisateurs ou collaborateurs. --merge est réservé à une fusion volontaire après sauvegarde. L'import ne supprime aucune donnée. Ne jamais committer le fichier d'export et le supprimer après validation.
 
 ## 🚀 Déploiement OVH
 
-1. Installer les dépendances avec `npm install`.
+1. Installer les dépendances nécessaires à la compilation et à l'import avec `npm install --include=dev`.
 2. Renseigner les variables privées dans le fichier `.env` du serveur (voir `.env.example`).
 3. Compiler avec `npm run build`.
 4. Démarrer avec `npm start` en définissant `PORT` selon la configuration du proxy Apache.
 5. Configurer le sous-domaine `management.citrine-mobilite.com` en HTTPS et faire pointer Apache vers le port local de l'application.
 
-Le proxy Apache et le mécanisme de supervision du processus Node.js dépendent des modules activés par l'hébergeur cPanel ; vérifier leur disponibilité avant la mise en production.
+Le guide détaillé est dans [deploy/OVH-CPANEL.md](deploy/OVH-CPANEL.md). Le proxy Apache et le mécanisme de supervision dépendent des modules activés par l'hébergeur cPanel ; la mise en production attend la validation du reverse proxy et du certificat HTTPS.
 
 
 ---
@@ -101,7 +117,7 @@ Le proxy Apache et le mécanisme de supervision du processus Node.js dépendent 
 ## 💻 Installation & Lancement Local
 
 ### Prérequis
-* Node.js (version 18 ou supérieure)
+* Node.js (version 22 ou supérieure)
 
 ### Étapes d'installation
 1. **Cloner et installer les dépendances** :
