@@ -57,7 +57,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
     }, input.actor, connection);
 
     const [employeeRows] = await connection.execute<any[]>(
-      'SELECT id, name, first_name, last_name, email FROM employees WHERE id = ? LIMIT 1',
+      'SELECT id, user_id, name, first_name, last_name, email FROM employees WHERE id = ? LIMIT 1',
       [employeeId]
     );
     const employee = employeeRows[0];
@@ -272,7 +272,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
     let savedNotification: any = null;
     if (notification) {
       const notifId = String(notification.id || notification.docId || `notif-clock-${randomUUID()}`);
-      const userId = await resolveUserDbId(null, notification.targetUserId || notification.recipient || employeeId, notification.recipient);
+      const userId = Number(employee.user_id || 0) || null;
       const message = notification.message || notification.content || notification.description || notification.title || 'Pointage validé';
       const raw = { ...notification, id: notifId, message };
       const [existing] = await connection.execute<any[]>(
