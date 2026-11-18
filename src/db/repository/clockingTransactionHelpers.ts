@@ -130,7 +130,7 @@ export async function verifyDoorQrTokenOnServer(
     const revokedList = Array.isArray(cfg.revokedDoorTokens)
       ? cfg.revokedDoorTokens.map((value: any) => String(value).trim().toUpperCase())
       : [];
-    if (cfg.doorQrCodeRevoked === true || revokedList.includes(candidate) || candidate.includes('REVOKED') || candidate.includes('INVALIDE')) {
+    if (cfg.doorQrCodeRevoked === true || revokedList.includes(candidate) || candidate.includes('REVOKED') || candidate.includes('INVALIDE') || candidate.includes('EXPIRED')) {
       throw new Error("Pointage rejeté : ce QR Code d'entrée a été révoqué.");
     }
     const timedSuffix = candidate.match(/-(\d{6,})$/);
