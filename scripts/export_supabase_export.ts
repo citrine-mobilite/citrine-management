@@ -87,6 +87,7 @@ async function main() {
       collections[table] = result.rows.map(mapSqlRow);
     }
 
+    await client.query('SAVEPOINT auth_export');
     try {
       const auth = await client.query(
         `SELECT id, email, encrypted_password, created_at, updated_at
@@ -94,13 +95,16 @@ async function main() {
       );
       authRows = auth.rows;
       authReadable = true;
+      await client.query('RELEASE SAVEPOINT auth_export');
     } catch (error: any) {
+      await client.query('ROLLBACK TO SAVEPOINT auth_export');
+      await client.query('RELEASE SAVEPOINT auth_export');
       console.warn('[Export] auth.users inaccessible; les comptes sans hash dans public.users devront réinitialiser leur mot de passe.');
       console.warn('[Export] Détail :', error?.message || String(error));
     }
 
     const users = collections.users ||= [];
-    const byEmail = new Map(users.map(user => [String(user.email || '').trim().toLowerCase(), user]));
+    const byEmail = new Map<string, any>(users.map(user => [String(user.email || '').trim().toLowerCase(), user] as [string, any]));
     for (const authUser of authRows) {
       const email = String(authUser.email || '').trim().toLowerCase();
       if (!email) continue;
