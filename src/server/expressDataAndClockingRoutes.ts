@@ -305,8 +305,35 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.post('/api/collaborators/update-transactional', requireAuth, requireAdminOrResponsable, async (req: AuthRequest, res) => {
     try {
       if (!req.body?.employee) return res.status(400).json({ success: false, error: 'Données collaborateur manquantes.' });
-      if (String(req.user?.role || '').toLowerCase() === 'responsable' && [req.body?.userRole, req.body?.employee?.roleType].some((role: any) => String(role || '').toLowerCase().includes('admin'))) {
-        return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
+      if (String(req.user?.role || '').toLowerCase() === 'responsable') {
+        const employeeInput = req.body.employee || {};
+        const requestedRoleValues = [
+          req.body.userRole, employeeInput.roleType, employeeInput.role,
+          employeeInput.roleId, employeeInput.role_id,
+        ];
+        const requestsAdminRole = requestedRoleValues.some((value: any) =>
+          String(value || '').toLowerCase().includes('admin') || (value !== null && value !== undefined && String(value).trim() !== '' && Number(value) === 1)
+        );
+        if (requestsAdminRole) {
+          return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
+        }
+
+        const targetKey = String(employeeInput._dbId || employeeInput.id || employeeInput.docId || employeeInput.doc_id || employeeInput.uid || employeeInput.email || '').trim();
+        if (targetKey) {
+          const [targetRows] = await getMariaDbPool().execute<RowDataPacket[]>(
+            `SELECT COALESCE(u.role_id, e.role_id) AS role_id, r.code AS role_code
+             FROM employees e
+             LEFT JOIN users u ON u.id = e.user_id
+             LEFT JOIN roles r ON r.id = COALESCE(u.role_id, e.role_id)
+             WHERE e.id = ? OR e.doc_id = ? OR e.uid = ? OR LOWER(e.email) = ?
+             LIMIT 1`,
+            [/^\\d+$/.test(targetKey) ? Number(targetKey) : -1, targetKey, targetKey, targetKey.toLowerCase()]
+          );
+          const targetRole = String(targetRows[0]?.role_code || '').toUpperCase();
+          if (Number(targetRows[0]?.role_id) === 1 || targetRole.includes('ADMIN')) {
+            return res.status(403).json({ success: false, error: 'Un responsable ne peut pas modifier le compte d’un administrateur.' });
+          }
+        }
       }
       const result = await executeCollaboratorUpdateTransaction(req.body);
       broadcastRealtimeEvent('collection_update', { collection: 'employees', action: 'upsert', id: result.employee?.id });
