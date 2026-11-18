@@ -1,4 +1,4 @@
-export function mapModuleSupabaseRowToItem(table: string, row: any): any | null {
+export function mapModuleMariaDbRowToItem(table: string, row: any): any | null {
   if (table === 'presences') {
     const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
     const originalId = raw.id || row.doc_id || String(row.id);
