@@ -196,6 +196,21 @@ async function main() {
           row.jobOfferId = await resolveLegacyReference('job_offers', value, jobOfferMap);
           row.job_offer_id = row.jobOfferId;
         }
+        if (row.hostEmployeeId !== undefined || row.host_employee_id !== undefined) {
+          const value = row.hostEmployeeId ?? row.host_employee_id;
+          row.hostEmployeeId = await resolveLegacyReference('employees', value, employeeMap);
+          row.host_employee_id = row.hostEmployeeId;
+        }
+        if (row.targetEmployeeId !== undefined || row.target_employee_id !== undefined) {
+          const value = row.targetEmployeeId ?? row.target_employee_id;
+          row.targetEmployeeId = await resolveLegacyReference('employees', value, employeeMap);
+          row.target_employee_id = row.targetEmployeeId;
+        }
+        if (row.targetUserId !== undefined || row.target_user_id !== undefined) {
+          const value = row.targetUserId ?? row.target_user_id;
+          row.targetUserId = await resolveLegacyReference('users', value, userMap);
+          row.target_user_id = row.targetUserId;
+        }
         if (row.targetUserId !== undefined || row.target_user_id !== undefined) {
           const value = row.targetUserId ?? row.target_user_id;
           row.targetUserId = await resolveLegacyReference('users', value, userMap);
