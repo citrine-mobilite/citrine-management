@@ -1,24 +1,14 @@
-import { supabase } from '../lib/supabase';
+import { getApiToken } from './sessionService';
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  try {
-    const { data } = await supabase.auth.getSession();
-    if (data?.session?.access_token) {
-      headers['Authorization'] = `Bearer ${data.session.access_token}`;
-    }
-  } catch (err) {
-    // Non-fatal
-  }
-  return headers;
+function getAuthHeaders(): Record<string, string> {
+  const token = getApiToken();
+  return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 }
 
 export const cloudSqlService = {
   async fetchCollection<T>(collectionName: string): Promise<T[]> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = getAuthHeaders();
       const res = await fetch(`/api/data/${collectionName}`, { headers });
       if (!res.ok) return [];
       const json = await res.json();
