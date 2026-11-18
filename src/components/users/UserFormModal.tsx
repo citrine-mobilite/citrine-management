@@ -235,7 +235,9 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required={!isEditing}
-              placeholder={isEditing ? 'Laissez vide pour conserver le mot de passe actuel' : 'Minimum 6 caractères'}
+              minLength={isEditing ? undefined : 12}
+              autoComplete="new-password"
+              placeholder={isEditing ? 'Laissez vide pour conserver le mot de passe actuel' : 'Minimum 12 caractères'}
               className="w-full px-3.5 py-2 bg-white border border-stone-200 rounded-xl focus:outline-none focus:border-[#2A7B76] font-mono text-xs"
             />
             {isEditing && (
