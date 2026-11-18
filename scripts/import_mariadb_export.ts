@@ -223,16 +223,16 @@ async function main() {
         }
         const targetEmployeeIds = row.targetEmployeeIds ?? row.target_employee_ids;
         if (Array.isArray(targetEmployeeIds)) {
-          row.targetEmployeeIds = await Promise.all(targetEmployeeIds.map((value: any) =>
+          row.targetEmployeeIds = (await Promise.all(targetEmployeeIds.map((value: any) =>
             resolveLegacyReference('employees', value, employeeMap)
-          ));
+          ))).filter((value: any) => value !== null);
           row.target_employee_ids = row.targetEmployeeIds;
         }
         const targetUserIds = row.targetUserIds ?? row.target_user_ids;
         if (Array.isArray(targetUserIds)) {
-          row.targetUserIds = await Promise.all(targetUserIds.map((value: any) =>
+          row.targetUserIds = (await Promise.all(targetUserIds.map((value: any) =>
             resolveLegacyReference('users', value, userMap)
-          ));
+          ))).filter((value: any) => value !== null);
           row.target_user_ids = row.targetUserIds;
         }
       }
