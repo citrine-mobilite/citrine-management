@@ -119,6 +119,27 @@ export async function clearAllIdbStores(): Promise<void> {
   }
 }
 
+/** Clear cached application data without discarding queued writes owned by other accounts. */
+export async function clearIdbUserDataStores(): Promise<void> {
+  for (const storeName of Array.from(memoryFallback.keys())) {
+    if (storeName !== 'offline_queue') memoryFallback.delete(storeName);
+  }
+  try {
+    const db = await dbPromise;
+    if (!db || !db.objectStoreNames) return;
+    for (const storeName of Array.from(db.objectStoreNames)) {
+      if (storeName === 'offline_queue') continue;
+      try {
+        const tx = db.transaction(storeName, 'readwrite');
+        await tx.store.clear();
+        await tx.done;
+      } catch {}
+    }
+  } catch (err) {
+    console.warn('[IDB] Erreur lors du vidage du cache utilisateur:', err);
+  }
+}
+
 export async function closeIdbDatabase(): Promise<void> {
   try {
     if (activeDbInstance) {
