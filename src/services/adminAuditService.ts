@@ -1,5 +1,5 @@
 import { safeStorage } from '../utils/safeStorage';
-import { supabaseAdmin } from '../lib/supabase';
+import { supabaseService } from './supabaseService';
 
 export type AuditOperationType =
   | 'creation'
@@ -82,24 +82,9 @@ function persistOperations(ops: AdminAccountOperation[]): void {
 async function persistOperationToDb(op: AdminAccountOperation): Promise<void> {
   try {
     if (typeof window === 'undefined') return;
-    await Promise.resolve(
-      supabaseAdmin.from('admin_audit_logs').insert({
-        doc_id: op.id,
-        timestamp: op.timestamp,
-        author_name: op.authorName,
-        author_role: op.authorRole || 'utilisateur',
-        target_user_id: op.targetUserId || null,
-        target_employee_id: op.targetEmployeeId || null,
-        target_name: op.targetName,
-        operation_type: op.operationType,
-        operation_label: op.operationLabel,
-        details: op.details,
-        ip_address: op.ipAddress || 'Douala, CM',
-        raw_data: op,
-      })
-    );
+    await supabaseService.saveDocument('admin_audit_logs', op as any);
   } catch {
-    // Non-blocking remote audit sync
+    // La copie locale reste disponible si le serveur est hors ligne.
   }
 }
 
@@ -113,10 +98,8 @@ export function getAdminAuditOperations(): AdminAccountOperation[] {
 export async function hydrateAuditOperationsFromDb(): Promise<AdminAccountOperation[]> {
   const localOps = loadStoredOperations();
   try {
-    const { data }: any = await Promise.resolve(
-      supabaseAdmin.from('admin_audit_logs').select('*').order('id', { ascending: false }).limit(250)
-    );
-    if (data && Array.isArray(data) && data.length > 0) {
+    const data = await supabaseService.fetchCollection<any>('admin_audit_logs');
+    if (Array.isArray(data) && data.length > 0) {
       const dbOps: AdminAccountOperation[] = data
         .map((row: any) => {
           const base = row?.raw_data && typeof row.raw_data === 'object' ? row.raw_data : null;
