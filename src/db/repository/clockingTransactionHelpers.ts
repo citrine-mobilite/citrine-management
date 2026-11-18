@@ -57,6 +57,44 @@ export interface ClockingActor {
   role: string;
 }
 
+async function loadCompanySettings(connection: PoolConnection): Promise<any> {
+  const [rows] = await connection.execute<RowDataPacket[]>(
+    'SELECT doc_id, setting_key, raw_data, setting_value FROM company_settings ORDER BY id DESC LIMIT 20'
+  );
+  const row = rows.find((item: any) => item.doc_id === 'main_config' || item.setting_key === 'main_config') || rows[0];
+  return row ? { ...parseJson(row.setting_value), ...parseJson(row.raw_data) } : {};
+}
+
+function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const radians = (value: number) => value * Math.PI / 180;
+  const dLat = radians(lat2 - lat1);
+  const dLon = radians(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(radians(lat1)) * Math.cos(radians(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function validateEmployeeGps(context: ClockingCredentialContext, config: any): void {
+  const latitude = Number(context.latitude);
+  const longitude = Number(context.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    throw new Error('Pointage rejeté : une position GPS valide est obligatoire.');
+  }
+  const requireGps = config.doorQrRequireGps === true || config.doorQrRequireGps === 1
+    || String(config.doorQrRequireGps || '').toLowerCase() === 'true';
+  if (!requireGps) return;
+
+  const officeLatitude = Number(config.officeLatitude ?? config.hqLatitude ?? process.env.OFFICE_LATITUDE ?? 4.016246);
+  const officeLongitude = Number(config.officeLongitude ?? config.hqLongitude ?? process.env.OFFICE_LONGITUDE ?? 9.8203514);
+  const radius = Number(config.doorQrGpsRadiusMeters ?? process.env.OFFICE_GPS_RADIUS_METERS ?? 500);
+  if (!Number.isFinite(officeLatitude) || !Number.isFinite(officeLongitude) || !Number.isFinite(radius) || radius <= 0) {
+    throw new Error('Pointage rejeté : la géolocalisation du siège doit être configurée.');
+  }
+  if (distanceMeters(latitude, longitude, officeLatitude, officeLongitude) > radius) {
+    throw new Error(`Pointage rejeté : vous êtes hors de la zone autorisée (rayon ${Math.round(radius)} m).`);
+  }
+}
+
 export async function verifyDoorQrTokenOnServer(
   clockMethod: string,
   qrCodeToken: string | undefined,
@@ -69,14 +107,24 @@ export async function verifyDoorQrTokenOnServer(
   const actorRole = String(actor?.role || '').toLowerCase();
   const isPrivileged = ['administrateur', 'responsable'].includes(actorRole);
 
+  const employeeCredentialMethod = ['qr_code_door', 'qr_code', 'qr_code_dynamic', 'badge_code_16', 'alpha_numeric_code'].includes(method);
+  const cfg = employeeCredentialMethod ? await loadCompanySettings(connection) : {};
+  if (employeeCredentialMethod) validateEmployeeGps(context, cfg);
+
   if (method === 'qr_code_door' || method === 'qr_code') {
     if (!candidate) throw new Error('Pointage rejeté : jeton QR Code manquant.');
-    const [rows] = await connection.execute<RowDataPacket[]>(
-      'SELECT doc_id, setting_key, raw_data, setting_value FROM company_settings ORDER BY id DESC LIMIT 20'
-    );
-    const row = rows.find((item: any) => item.doc_id === 'main_config' || item.setting_key === 'main_config') || rows[0];
-    if (!row) throw new Error('Pointage rejeté : aucun jeton QR officiel n’est configuré.');
-    const cfg = { ...parseJson(row.setting_value), ...parseJson(row.raw_data) };
+    if (candidate.startsWith('CITRINE-TOTP-')) {
+      const totpSecret = String(cfg.qrCodeSecret || '').trim().toUpperCase();
+      if (!totpSecret) throw new Error('Pointage rejeté : le secret TOTP doit être configuré par un administrateur.');
+      const currentSlice = Math.floor(Date.now() / 30000);
+      const allowedSlices = [currentSlice, currentSlice - 1];
+      const valid = allowedSlices.some(slice => {
+        const digest = createHash('sha256').update(`${totpSecret}:${slice}:citrine-totp-salt-2026`).digest('hex').slice(0, 8).toUpperCase();
+        return candidate === `CITRINE-TOTP-${digest}`;
+      });
+      if (!valid) throw new Error('Pointage rejeté : ce QR TOTP est falsifié ou expiré.');
+      return;
+    }
     const official = String(cfg.doorQrCodeToken || cfg.qrCodeSecret || '').trim().toUpperCase();
     if (!official) throw new Error('Pointage rejeté : le jeton QR officiel doit être configuré par un administrateur.');
     const revokedList = Array.isArray(cfg.revokedDoorTokens)
