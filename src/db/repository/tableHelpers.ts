@@ -7,8 +7,8 @@ export function mapCollectionToTable(collectionName: string): string {
     citrine_admin_audit_operations_v1: 'admin_audit_logs',
   };
   const known = new Set([
-    'users','employees','tasks','task_projects','reminders','presences','attendance_incidents',
-    'badge_codes_16','dynamic_qr_sessions','inventory','disciplinary_incidents','departments',
+    'roles','users','employees','tasks','task_projects','reminders','presences','attendance_incidents',
+    'badge_codes_16','dynamic_qr_sessions','inventory','inventory_assignments','disciplinary_incidents','departments',
     'documents','rh_document_templates','processflow_salary_debts','salary_payments',
     'financial_transactions','partners','notifications','company_settings','calls','user_presences',
     'job_offers','job_applications','expense_claims','hse_incidents','visitor_logs','idea_suggestions',
