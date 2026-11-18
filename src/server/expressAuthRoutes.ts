@@ -16,7 +16,7 @@ function parseRaw(value: unknown): Record<string, any> {
   return {};
 }
 
-function verifyAndMaybeUpgrade(password: string, stored: string): { valid: boolean; upgraded?: string } {
+export function verifyAndMaybeUpgrade(password: string, stored: string): { valid: boolean; upgraded?: string } {
   if (/^\$2[aby]\$/.test(stored)) {
     try {
       if (!bcrypt.compareSync(password, stored)) return { valid: false };
