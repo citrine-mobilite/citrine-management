@@ -66,7 +66,7 @@ async function main() {
   const pool = getMariaDbPool();
   const info = await pingMariaDb();
   const [counts] = await pool.query<RowDataPacket[]>('SELECT (SELECT COUNT(*) FROM users) AS users, (SELECT COUNT(*) FROM employees) AS employees');
-  if (!allowExisting && (Number(counts[0]?.users || 0) > 0 || Number(counts[0]?.employees || 0) > 0)) {
+  if (!dryRun && !allowExisting && (Number(counts[0]?.users || 0) > 0 || Number(counts[0]?.employees || 0) > 0)) {
     throw new Error('La base contient déjà des utilisateurs ou collaborateurs. Ajoute --merge uniquement si tu souhaites fusionner les données.');
   }
 
@@ -216,9 +216,11 @@ async function main() {
       if (table !== 'generic_collections') {
         const [savedRows] = collection === 'roles' && row.code
           ? await pool.execute<any[]>('SELECT id FROM roles WHERE code = ? LIMIT 1', [row.code])
-          : await pool.execute<any[]>(
-              `SELECT id FROM \\x60${table}\\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
-            );
+          : ['users', 'employees'].includes(table) && row.email
+            ? await pool.execute<any[]>(`SELECT id FROM \\x60${table}\\x60 WHERE LOWER(email) = ? LIMIT 1`, [String(row.email).toLowerCase()])
+            : await pool.execute<any[]>(
+                `SELECT id FROM \\x60${table}\\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
+              );
         if (savedRows[0] && legacyId) {
           const mapKey = table === 'inventory' ? 'inventory' : collection;
           legacyIds[mapKey] ||= new Map<string, number>();
