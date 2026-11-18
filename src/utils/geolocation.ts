@@ -86,7 +86,7 @@ export function validateKioskPinCode(inputPin: string, dbKioskPin?: string): boo
  */
 export async function validateCompanyQRCodeAsync(
   scannedInput: string,
-  companySecret: string = DEFAULT_COMPANY_SECRET
+  companySecret: string = ''
 ): Promise<{ valid: boolean; reason?: string; isDynamic: boolean }> {
   return validateTotpQrCode(scannedInput, companySecret);
 }
