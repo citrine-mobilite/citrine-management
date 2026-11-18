@@ -261,7 +261,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       } else {
         const keys = Object.keys(fields);
         await connection.execute(
-          `INSERT INTO attendance_incidents (uid, doc_id, ${keys.map(k => `\x60${k}\\60`).join(', ')}, created_at)
+          `INSERT INTO attendance_incidents (uid, doc_id, ${keys.map(k => `\x60${k}\x60`).join(', ')}, created_at)
            VALUES (?, ?, ${keys.map(() => '?').join(', ')}, NOW(3))`,
           [randomUUID(), incidentId, ...keys.map(k => (fields as any)[k])]
         );
