@@ -1,0 +1,56 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import mysql from 'mysql2/promise';
+import { saveMariaDbDocument, getMariaDbCollection, deleteMariaDbDocument } from '../src/db/mariaDbCollections';
+import { closeMariaDbPool } from '../src/db/mariadb';
+
+async function main() {
+  const connection = await mysql.createConnection({
+    host: process.env.SQL_HOST || '127.0.0.1',
+    port: Number(process.env.SQL_PORT || 3306),
+    user: process.env.SQL_ADMIN_USER || 'root',
+    password: process.env.SQL_ADMIN_PASSWORD || '',
+    database: process.env.SQL_DB_NAME || 'citrine_ci',
+    multipleStatements: true,
+  });
+  try {
+    for (const file of ['001_schema.sql','002_auth_sessions.sql','003_seed_reference_data.sql','004_call_signals.sql']) {
+      const sql = await fs.readFile(path.resolve('database/mariadb', file), 'utf8');
+      await connection.query(sql);
+      console.log('[OK] Migration ' + file);
+    }
+    const [tables] = await connection.query<any[]>('SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema = DATABASE()');
+    if (Number(tables[0]?.total) < 42) throw new Error('Schéma incomplet : au moins 42 tables attendues.');
+    const [roles] = await connection.query<any[]>('SELECT code FROM roles ORDER BY id');
+    const codes = new Set(roles.map(row => row.code));
+    for (const code of ['SUPER_ADMIN','RESPONSABLE','EMPLOYE']) if (!codes.has(code)) throw new Error('Rôle de référence manquant : ' + code);
+
+    const suffix = randomUUID();
+    const userId = 'ci-user-' + suffix;
+    const email = 'ci-' + suffix + '@example.invalid';
+    const [roleRows] = await connection.query<any[]>('SELECT id FROM roles WHERE code = ? LIMIT 1', ['EMPLOYE']);
+    await saveMariaDbDocument('users', {
+      id: userId, uid: suffix, email, name: 'CI MariaDB User',
+      roleId: Number(roleRows[0].id), status: 'actif', passwordHash: 'not-a-real-password-hash',
+    });
+    const found = (await getMariaDbCollection('users')).find(row => row.email === email);
+    if (!found || found.name !== 'CI MariaDB User' || found.passwordHash) {
+      throw new Error('Échec du test CRUD users ou fuite du champ passwordHash.');
+    }
+    await saveMariaDbDocument('users', { ...found, name: 'CI MariaDB Updated' });
+    const updated = (await getMariaDbCollection('users')).find(row => row.email === email);
+    if (updated?.name !== 'CI MariaDB Updated') throw new Error('Échec du test UPDATE users.');
+    await deleteMariaDbDocument('users', String(updated.id));
+    console.log('[OK] MariaDB CRUD et masquage des mots de passe');
+    console.log('[OK] ' + Number(tables[0].total) + ' tables, rôles de référence et table call_signals');
+  } finally {
+    await connection.end();
+    await closeMariaDbPool().catch(() => {});
+  }
+}
+
+main().catch(error => {
+  console.error('[MariaDB schema test]', error?.message || error);
+  process.exitCode = 1;
+});
