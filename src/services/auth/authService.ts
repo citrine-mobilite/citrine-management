@@ -3,6 +3,7 @@ import { recordConnectionLog } from '../connectionLogService';
 import { storeSecureSession, clearSecureSession, loadSecureSession, storeApiToken, getApiToken } from '../sessionService';
 import { clearIdbUserDataStores } from '../../lib/idb';
 import { offlineService } from '../offlineService';
+import { clearStoredModuleConfig } from '../../hooks/initialData/moduleConfigStorage';
 
 export interface LoginResult { success: boolean; user?: AppUser; error?: string; }
 
@@ -22,6 +23,7 @@ export const authService = {
       }
       const user = result.user as AppUser;
       await clearIdbUserDataStores();
+      clearStoredModuleConfig();
       storeApiToken(result.token);
       await storeSecureSession(user);
       void offlineService.syncOfflineQueue().catch(error => console.warn('[Offline] Synchronisation après connexion :', error));
@@ -43,16 +45,17 @@ export const authService = {
       if (token) await fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     } catch {}
     await clearIdbUserDataStores();
+    clearStoredModuleConfig();
     clearSecureSession();
   },
 
   async validateCurrentSession(): Promise<AppUser | null> {
     const token = getApiToken();
-    if (!token) { await clearIdbUserDataStores(); clearSecureSession(); return null; }
+    if (!token) { await clearIdbUserDataStores(); clearStoredModuleConfig(); clearSecureSession(); return null; }
     try {
       const response = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.success || !result.user) { await clearIdbUserDataStores(); clearSecureSession(); return null; }
+      if (!response.ok || !result.success || !result.user) { await clearIdbUserDataStores(); clearStoredModuleConfig(); clearSecureSession(); return null; }
       const user = result.user as AppUser;
       await storeSecureSession(user);
       return user;
