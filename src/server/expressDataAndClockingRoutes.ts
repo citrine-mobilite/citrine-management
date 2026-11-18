@@ -28,6 +28,8 @@ const MANAGER_COLLECTIONS = new Set([
   'employees', 'presences', 'attendance_incidents', 'disciplinary_incidents',
   'departments', 'inventory', 'inventory_assignments', 'documents',
   'rh_document_templates', 'hse_incidents', 'visitor_logs', 'job_offers', 'badge_codes_16', 'dynamic_qr_sessions',
+  'job_applications', 'partners', 'task_projects', 'task_assignees', 'task_project_members',
+  'reminder_recipients', 'notification_recipients', 'calls', 'user_presences',
 ]);
 
 function isAdmin(user: any): boolean { return String(user?.role || '').toLowerCase() === 'administrateur'; }
@@ -44,12 +46,12 @@ const MANAGER_READ_COLLECTIONS = new Set([
   'visitor_logs', 'hse_incidents', 'job_applications', 'rh_document_templates', 'badge_codes_16', 'dynamic_qr_sessions',
 ]);
 const OWN_READ_COLLECTIONS = new Set([
-  'presences', 'attendance_incidents', 'leave_requests', 'expense_claims', 'absences',
+  'presences', 'attendance_incidents', 'leave_requests', 'expense_claims', 'absences', 'tasks', 'reminders', 'calls',
 ]);
 
 async function getOwnEmployeeScope(req: AuthRequest): Promise<RowDataPacket | null> {
   const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
-    'SELECT id, doc_id, uid, email FROM employees WHERE user_id = ? LIMIT 1',
+    'SELECT id, doc_id, uid, email, name, first_name, last_name FROM employees WHERE user_id = ? LIMIT 1',
     [Number(req.user?.id)]
   );
   return rows[0] || null;
@@ -61,14 +63,260 @@ function employeeScopeIds(employee: RowDataPacket | null): Set<string> {
     : []);
 }
 
+function parseRouteJson(value: any): Record<string, any> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {}
+  }
+  return {};
+}
+
+const COLLECTION_RECORD_TABLES: Record<string, string> = {
+  tasks: 'tasks',
+  reminders: 'reminders',
+  notifications: 'notifications',
+  idea_suggestions: 'idea_suggestions',
+  enterprise_surveys: 'enterprise_surveys',
+  leave_requests: 'leave_requests',
+  expense_claims: 'expense_claims',
+};
+
+async function findCollectionRecord(collection: string, recordId: string): Promise<{ row: RowDataPacket; raw: Record<string, any> } | null> {
+  const numericId = /^\\d+$/.test(recordId) ? Number(recordId) : -1;
+  if (collection === 'absences') {
+    const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
+      "SELECT * FROM generic_collections WHERE collection = 'absences' AND (id = ? OR doc_id = ?) LIMIT 1",
+      [numericId, recordId]
+    );
+    const row = rows[0];
+    return row ? { row, raw: parseRouteJson(row.data) } : null;
+  }
+  const table = COLLECTION_RECORD_TABLES[collection];
+  if (!table) return null;
+  const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
+    `SELECT * FROM ${table} WHERE id = ? OR doc_id = ? LIMIT 1`,
+    [numericId, recordId]
+  );
+  const row = rows[0];
+  return row ? { row, raw: parseRouteJson(row.raw_data) } : null;
+}
+
+function ownEmployeeName(employee: RowDataPacket): string {
+  return String(employee.name || `${employee.first_name || ''} ${employee.last_name || ''}`.trim());
+}
+
+async function authorizeNotificationWrite(req: AuthRequest, res: express.Response, next: express.NextFunction) {
+  if (isPrivileged(req.user)) return next();
+  try {
+    const employee = await getOwnEmployeeScope(req);
+    if (!employee) return res.status(403).json({ success: false, error: 'Compte collaborateur introuvable.' });
+    const ownIds = employeeScopeIds(employee);
+    ownIds.add(String(req.user?.id || ''));
+    const employeeName = ownEmployeeName(employee);
+    const body = req.body || {};
+    const recordId = String(body.id || body.docId || body.doc_id || '').trim();
+
+    if (!recordId) {
+      const targets = [
+        body.targetUserId,
+        ...(Array.isArray(body.targetEmployeeIds) ? body.targetEmployeeIds : []),
+      ].filter(Boolean).map(String);
+      const recipient = String(body.recipient || '').trim().toLowerCase();
+      const isOwn = targets.some(value => ownIds.has(value))
+        || [employeeName, employee.email, req.user?.id].some(value => String(value || '').toLowerCase() === recipient);
+      if (!isOwn) return res.status(403).json({ success: false, error: 'Tu ne peux créer une notification que pour ton propre compte.' });
+      req.body = { ...body, recipient: employeeName || body.recipient, targetUserId: String(employee.id) };
+      return next();
+    }
+
+    const found = await findCollectionRecord('notifications', recordId);
+    if (!found) return res.status(404).json({ success: false, error: 'Notification introuvable.' });
+    const targetIds = [
+      found.raw.targetUserId, found.row.target_user_id,
+      ...(Array.isArray(found.raw.targetEmployeeIds) ? found.raw.targetEmployeeIds : []),
+    ].filter(Boolean).map(String);
+    const recipient = String(found.raw.recipient || found.row.recipient || '').trim();
+    const isOwn = targetIds.some(value => ownIds.has(value))
+      || [employeeName, employee.email, req.user?.id].some(value => String(value || '').toLowerCase() === recipient.toLowerCase());
+    const isBroadcast = ['tous', 'broadcast'].includes(recipient.toLowerCase());
+    if (!isOwn && !isBroadcast) return res.status(403).json({ success: false, error: 'Tu ne peux modifier que tes propres notifications.' });
+    req.body = { ...found.raw, id: found.raw.id || recordId, read: Boolean(body.read) };
+    return next();
+  } catch {
+    return res.status(503).json({ success: false, error: 'Vérification des droits de notification indisponible.' });
+  }
+}
+
+async function authorizeTaskWrite(req: AuthRequest, res: express.Response, next: express.NextFunction) {
+  if (isPrivileged(req.user)) return next();
+  try {
+    const employee = await getOwnEmployeeScope(req);
+    if (!employee) return res.status(403).json({ success: false, error: 'Compte collaborateur introuvable.' });
+    const ownIds = employeeScopeIds(employee);
+    const employeeName = ownEmployeeName(employee);
+    const body = req.body || {};
+    const recordId = String(body.id || body.docId || body.doc_id || '').trim();
+    const found = recordId ? await findCollectionRecord('tasks', recordId) : null;
+
+    if (!found) {
+      const requestedEmployeeId = String(body.employeeId || body.employee_id || '');
+      if (requestedEmployeeId && !ownIds.has(requestedEmployeeId)) {
+        return res.status(403).json({ success: false, error: 'Tu ne peux créer une tâche que pour toi-même.' });
+      }
+      req.body = {
+        ...body,
+        employeeId: String(employee.id),
+        assignedTo: employeeName,
+        status: 'todo',
+        isMilestone: false,
+      };
+      return next();
+    }
+
+    const ownerId = String(found.row.employee_id || found.raw.employeeId || '');
+    const assignedTo = String(found.row.assigned_to || found.raw.assignedTo || '');
+    if (!ownIds.has(ownerId) && assignedTo.toLowerCase() !== employeeName.toLowerCase()) {
+      return res.status(403).json({ success: false, error: 'Tu ne peux modifier que les tâches qui te sont assignées.' });
+    }
+
+    const mutableFields = [
+      'status', 'subtasks', 'comments', 'incidents', 'lastUpdatedTime', 'updatedAt',
+      'completedAt', 'milestoneProgress', 'progress', 'personalBucket', 'orderIndex',
+      'timeSpent', 'actualStartTime', 'actualEndTime',
+    ];
+    const safeTask = { ...found.raw, id: found.raw.id || recordId, docId: found.row.doc_id || found.raw.docId };
+    for (const field of mutableFields) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) safeTask[field] = body[field];
+    }
+    safeTask.employeeId = ownerId || String(employee.id);
+    safeTask.assignedTo = assignedTo || employeeName;
+    req.body = safeTask;
+    return next();
+  } catch {
+    return res.status(503).json({ success: false, error: 'Vérification des droits de tâche indisponible.' });
+  }
+}
+
+async function authorizeReminderWrite(req: AuthRequest, res: express.Response, next: express.NextFunction) {
+  if (isPrivileged(req.user)) return next();
+  try {
+    const employee = await getOwnEmployeeScope(req);
+    if (!employee) return res.status(403).json({ success: false, error: 'Compte collaborateur introuvable.' });
+    const ownIds = employeeScopeIds(employee);
+    const body = req.body || {};
+    const recordId = String(body.id || body.docId || body.doc_id || '').trim();
+    const found = recordId ? await findCollectionRecord('reminders', recordId) : null;
+    const currentIds = found && Array.isArray(found.raw.employeeIds) ? found.raw.employeeIds.map(String) : [];
+    if (found && (found.raw.allEmployees === true || !currentIds.some(value => ownIds.has(value)))) {
+      return res.status(403).json({ success: false, error: 'Tu ne peux modifier que tes propres rappels.' });
+    }
+    if (!found) {
+      const requestedIds = Array.isArray(body.employeeIds) ? body.employeeIds.map(String) : [];
+      if (body.allEmployees === true || !requestedIds.some(value => ownIds.has(value))) {
+        return res.status(403).json({ success: false, error: 'Un rappel créé par un employé doit lui être destiné uniquement.' });
+      }
+    }
+    req.body = {
+      ...(found?.raw || {}),
+      ...body,
+      employeeIds: [String(employee.id)],
+      allEmployees: false,
+    };
+    return next();
+  } catch {
+    return res.status(503).json({ success: false, error: 'Vérification des droits de rappel indisponible.' });
+  }
+}
+
+async function authorizeIdeaWrite(req: AuthRequest, res: express.Response, next: express.NextFunction) {
+  if (isPrivileged(req.user)) return next();
+  try {
+    const body = req.body || {};
+    const recordId = String(body.id || body.docId || body.doc_id || '').trim();
+    const found = recordId ? await findCollectionRecord('idea_suggestions', recordId) : null;
+    if (!found) {
+      req.body = {
+        ...body,
+        authorId: body.isAnonymous ? undefined : String(req.user?.id || ''),
+        authorName: body.isAnonymous ? undefined : String(req.user?.name || ''),
+        status: 'soumise',
+        likesCount: 1,
+        likedUserIds: [String(req.user?.id || '')],
+        managementResponse: undefined,
+      };
+      return next();
+    }
+    const oldIds = Array.isArray(found.raw.likedUserIds) ? found.raw.likedUserIds.map(String) : [];
+    const nextIds = Array.isArray(body.likedUserIds) ? body.likedUserIds.map(String) : oldIds;
+    const userId = String(req.user?.id || '');
+    const oldOthers = oldIds.filter(value => value !== userId).sort();
+    const nextOthers = nextIds.filter(value => value !== userId).sort();
+    if (JSON.stringify(oldOthers) !== JSON.stringify(nextOthers) || nextIds.filter(value => value === userId).length > 1) {
+      return res.status(403).json({ success: false, error: 'Un collaborateur ne peut modifier que son propre vote.' });
+    }
+    req.body = {
+      ...found.raw,
+      id: found.raw.id || recordId,
+      likedUserIds: nextIds,
+      likesCount: nextIds.length,
+    };
+    return next();
+  } catch {
+    return res.status(503).json({ success: false, error: 'Vérification des droits de suggestion indisponible.' });
+  }
+}
+
+async function authorizeSurveyWrite(req: AuthRequest, res: express.Response, next: express.NextFunction) {
+  if (isPrivileged(req.user)) return next();
+  try {
+    const body = req.body || {};
+    const recordId = String(body.id || body.docId || body.doc_id || '').trim();
+    const found = recordId ? await findCollectionRecord('enterprise_surveys', recordId) : null;
+    if (!found || String(found.raw.status || '').toLowerCase() !== 'actif') {
+      return res.status(403).json({ success: false, error: 'Seul un sondage actif peut recevoir un vote.' });
+    }
+    const userId = String(req.user?.id || '');
+    const oldVoters = Array.isArray(found.raw.votedUserIds) ? found.raw.votedUserIds.map(String) : [];
+    if (oldVoters.includes(userId)) return res.status(409).json({ success: false, error: 'Tu as déjà participé à ce sondage.' });
+    const newVoters = Array.isArray(body.votedUserIds) ? body.votedUserIds.map(String) : [];
+    const expectedVoters = [...oldVoters, userId].sort();
+    if (JSON.stringify([...newVoters].sort()) !== JSON.stringify(expectedVoters)) {
+      return res.status(403).json({ success: false, error: 'Vote de sondage invalide.' });
+    }
+    const oldOptions = Array.isArray(found.raw.options) ? found.raw.options : [];
+    const newOptions = Array.isArray(body.options) ? body.options : [];
+    if (oldOptions.length !== newOptions.length) return res.status(403).json({ success: false, error: 'Options de sondage non modifiables.' });
+    let incremented = 0;
+    const safeOptions = oldOptions.map((oldOption: any) => {
+      const nextOption = newOptions.find((option: any) => String(option.id) === String(oldOption.id));
+      if (!nextOption || nextOption.text !== oldOption.text) throw new Error('Option de sondage invalide.');
+      const delta = Number(nextOption.votesCount) - Number(oldOption.votesCount);
+      if (delta === 1) incremented += 1;
+      else if (delta !== 0) throw new Error('Compteur de vote invalide.');
+      return { ...oldOption, votesCount: Number(oldOption.votesCount) + (delta === 1 ? 1 : 0) };
+    });
+    if (incremented !== 1) return res.status(403).json({ success: false, error: 'Un seul choix est autorisé par vote.' });
+    req.body = { ...found.raw, id: found.raw.id || recordId, options: safeOptions, votedUserIds: expectedVoters };
+    return next();
+  } catch {
+    return res.status(403).json({ success: false, error: 'Vote invalide ou déjà enregistré.' });
+  }
+}
+
 function authorizeCollectionWrite(req: AuthRequest, res: express.Response, next: express.NextFunction) {
   const collection = String(req.params.collection || '');
   if (ADMIN_ONLY_COLLECTIONS.has(collection)) return requireAdmin(req, res, next);
   if (MANAGER_COLLECTIONS.has(collection)) return requireAdminOrResponsable(req, res, next);
-  if (collection === 'leave_requests' || collection === 'expense_claims' || collection === 'absences') {
-    return authorizeOwnEmployeeRecord(req, res, next);
-  }
-  return next();
+  if (collection === 'leave_requests' || collection === 'expense_claims' || collection === 'absences') return authorizeOwnEmployeeRecord(req, res, next);
+  if (collection === 'notifications') return authorizeNotificationWrite(req, res, next);
+  if (collection === 'tasks') return authorizeTaskWrite(req, res, next);
+  if (collection === 'reminders') return authorizeReminderWrite(req, res, next);
+  if (collection === 'idea_suggestions') return authorizeIdeaWrite(req, res, next);
+  if (collection === 'enterprise_surveys') return authorizeSurveyWrite(req, res, next);
+  return requireAdminOrResponsable(req, res, next);
 }
 
 function authorizeCollectionDelete(req: AuthRequest, res: express.Response, next: express.NextFunction) {
