@@ -45,18 +45,35 @@ export async function getCollection<T>(collectionName: string): Promise<T[]> {
 export async function saveDocument<T extends { id: string }>(collectionName: string, item: T): Promise<T> {
   const cleanedItem = normalizeDocBeforeSave(collectionName, item);
   return asyncActionTrackerService.track('Enregistrement des modifications...', async () => {
-    const saved = await mariaDbService.saveDocument(collectionName, cleanedItem);
-    await offlineService.cacheLocally(collectionName, saved || cleanedItem);
-    return saved || cleanedItem;
+    try {
+      const saved = await mariaDbService.saveDocument(collectionName, cleanedItem);
+      await offlineService.cacheLocally(collectionName, saved || cleanedItem);
+      return saved || cleanedItem;
+    } catch (error: any) {
+      const offline = !offlineService.isOnline() || error instanceof TypeError ||
+        /fetch|network|indisponible|timeout/i.test(String(error?.message || ''));
+      if (!offline) throw error;
+      await offlineService.cacheLocally(collectionName, cleanedItem);
+      await offlineService.enqueueAction(collectionName, 'save', cleanedItem);
+      return cleanedItem;
+    }
   });
 }
 
 export async function deleteDocument(collectionName: string, id: string): Promise<boolean> {
   return asyncActionTrackerService.track('Suppression en cours...', async () => {
-    const deleted = await mariaDbService.deleteDocument(collectionName, id);
-    const cached = await offlineService.getCachedCollection(collectionName);
-    if (cached) await offlineService.cacheListLocally(collectionName, cached.filter((row: any) => row.id !== id) as any);
-    return deleted;
+    try {
+      const deleted = await mariaDbService.deleteDocument(collectionName, id);
+      await offlineService.deleteCachedItem(collectionName, id);
+      return deleted;
+    } catch (error: any) {
+      const offline = !offlineService.isOnline() || error instanceof TypeError ||
+        /fetch|network|indisponible|timeout/i.test(String(error?.message || ''));
+      if (!offline) throw error;
+      await offlineService.deleteCachedItem(collectionName, id);
+      await offlineService.enqueueAction(collectionName, 'delete', id);
+      return true;
+    }
   });
 }
 
