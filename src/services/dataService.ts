@@ -1,7 +1,5 @@
 import { offlineService } from './offlineService';
-import { supabaseService, mapCollectionToTable } from './supabaseService';
-import { cloudSqlService } from './cloudSqlService';
-import { supabase } from '../lib/supabase';
+import { supabaseService } from './supabaseService';
 import { asyncActionTrackerService } from './asyncActionTrackerService';
 import {
   COLLECTIONS,
@@ -55,25 +53,12 @@ export function subscribeToDocument<T>(
     } catch {}
   })();
 
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      filter ? { event: '*', schema: 'public', table, filter } : { event: '*', schema: 'public', table },
-      (payload) => {
-        if (isCancelled) return;
-        if (payload.new && typeof payload.new === 'object') {
-          const item = (payload.new as any).raw_data || payload.new;
-          callback(item as T);
-        }
-      }
-    )
-    .subscribe();
-
-  return () => {
-    isCancelled = true;
-    supabase.removeChannel(channel);
-  };
+  const unsubscribe = subscribeToCollection<T>(collectionName, (items) => {
+    if (isCancelled) return;
+    const found = items.find((item: any) => String(item.id) === String(docId) || String(item.docId) === String(docId));
+    callback(found || null);
+  });
+  return () => { isCancelled = true; unsubscribe(); };
 }
 
 // Real-time synchronization helper directly from database (no stale cache delivery)
@@ -113,21 +98,7 @@ export async function fetchOlderRecords<T>(
 // Fetch an entire collection directly from database (Supabase -> Server API)
 export async function getCollection<T>(collectionName: string): Promise<T[]> {
   try {
-    const supaData = await Promise.race([
-      supabaseService.fetchCollection<T>(collectionName),
-      new Promise<T[]>((resolve) => setTimeout(() => resolve([]), 3000)),
-    ]);
-
-    if (supaData && Array.isArray(supaData) && supaData.length > 0) {
-      return supaData;
-    }
-
-    const serverData = await cloudSqlService.fetchCollection<T>(collectionName);
-    if (serverData && Array.isArray(serverData)) {
-      return serverData;
-    }
-
-    return [];
+    return await supabaseService.fetchCollection<T>(collectionName);
   } catch (err) {
     console.warn(`Error getting collection ${collectionName}:`, err);
     return [];
@@ -142,9 +113,7 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
 
   // 2. Persister sur Supabase directement avec suivi du seuil de 1 seconde
   return asyncActionTrackerService.track('Enregistrement des modifications...', async () => {
-    const savedItem = await supabaseService.saveDocument(collectionName, cleanedItem);
-    cloudSqlService.saveDocument(collectionName, cleanedItem).catch(() => {});
-    return savedItem || cleanedItem;
+    return await supabaseService.saveDocument(collectionName, cleanedItem) || cleanedItem;
   });
 }
 
@@ -159,7 +128,6 @@ export async function deleteDocument(collectionName: string, id: string): Promis
   } catch {}
 
   return asyncActionTrackerService.track('Suppression en cours...', async () => {
-    cloudSqlService.deleteDocument(collectionName, id).catch(() => {});
     await supabaseService.deleteDocument(collectionName, id);
     return true;
   });
