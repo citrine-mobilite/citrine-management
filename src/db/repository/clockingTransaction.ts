@@ -1,169 +1,124 @@
-import { supabaseAdmin } from '../../lib/supabase';
+import { randomUUID } from 'node:crypto';
+import { withMariaDbTransaction } from '../mariadb';
 import { resolveEmployeeDbId, resolveUserDbId } from './tableHelpers';
-import {
-  resolveClockingDerogations,
-  rollbackAtomicClocking,
-  verifyDoorQrTokenOnServer,
-} from './clockingTransactionHelpers';
+import { resolveClockingDerogations, verifyDoorQrTokenOnServer } from './clockingTransactionHelpers';
 
-export interface AtomicClockingTransactionInput {
-  presence: any;
-  incident?: any | null;
-  notification?: any | null;
+export interface AtomicClockingTransactionInput { presence: any; incident?: any | null; notification?: any | null; }
+
+function parseRaw(value: any): any {
+  if (value && typeof value === 'object') return value;
+  if (typeof value === 'string') { try { return JSON.parse(value); } catch {} }
+  return {};
 }
-
-function incidentRowDoc(row: any): string {
-  return row?.doc_id || row?.id || `inc-${Date.now()}`;
-}
-
-function notifRowDoc(row: any): string {
-  return row?.doc_id || row?.id || `notif-${Date.now()}`;
+function dateOnly(value: any): string {
+  const date = value ? new Date(value) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date().toISOString().slice(0,10) : date.toISOString().slice(0,10);
 }
 
 export async function executeAtomicClockingTransaction(input: AtomicClockingTransactionInput) {
   const { presence, incident, notification } = input;
-  if (!presence) {
-    throw new Error('Données de présence obligatoires pour la transaction atomique.');
-  }
+  if (!presence) throw new Error('Données de présence obligatoires pour la transaction atomique.');
+  const employeeId = await resolveEmployeeDbId(null, presence.employeeId || presence.employee_id);
+  const derogations = await resolveClockingDerogations(employeeId, presence.employeeEmail);
+  const method = presence.clockingMethod || presence.method || 'qr_code_door';
+  await verifyDoorQrTokenOnServer(method, presence.qrCodeToken);
 
-  let presenceCreatedDbId: number | null = null;
-  let incidentCreatedDbId: number | null = null;
-  let notificationCreatedDbId: number | null = null;
+  const arrival = String(presence.arrivalTime || '');
+  const departure = String(presence.departureTime || '');
+  const exemptLate = derogations.allowLateArrival8_930 && arrival >= '08:00' && arrival <= '09:30';
+  const exemptEarly = derogations.allowEarlyDeparture15_17 && departure >= '15:00' && departure <= '17:00';
+  const effectiveStatus = exemptLate && !departure ? 'present' : (presence.status || 'present');
+  const effectiveLate = exemptLate ? 0 : Number(presence.lateMinutes || 0);
+  const presenceDocId = String(presence.id || presence.docId || `pr-${randomUUID()}`);
+  const date = dateOnly(presence.date);
+  const now = new Date();
 
-  try {
-    const empIdVal = presence.employeeId || presence.employee_id;
-    const resolvedEmpDbId = await resolveEmployeeDbId(supabaseAdmin, empIdVal);
-
-    const { allowEarlyDeparture15_17: dbAllowEarlyDeparture15_17, allowLateArrival8_930: dbAllowLateArrival8_930 } =
-      await resolveClockingDerogations(resolvedEmpDbId, presence.employeeEmail);
-
-    const clockMethod = presence.clockingMethod || presence.method || 'qr_code_door';
-    await verifyDoorQrTokenOnServer(clockMethod, presence.qrCodeToken);
-
-    const arrivalTimeStr = presence.arrivalTime ? String(presence.arrivalTime) : '';
-    const departureTimeStr = presence.departureTime ? String(presence.departureTime) : '';
-    const isExemptLateBackend = dbAllowLateArrival8_930 && arrivalTimeStr >= '08:00' && arrivalTimeStr <= '09:30';
-    const isExemptEarlyBackend = dbAllowEarlyDeparture15_17 && departureTimeStr >= '15:00' && departureTimeStr <= '17:00';
-
-    const effectivePresenceStatus = isExemptLateBackend && !departureTimeStr ? 'present' : (presence.status || 'present');
-    const effectiveLateMinutes = isExemptLateBackend ? 0 : Number(presence.lateMinutes || 0);
-
-    const presDocId = String(presence.id || presence.docId || `pr-${Date.now()}`);
-    const presenceRow: any = {
-      doc_id: presDocId,
-      employee_id: resolvedEmpDbId || null,
-      employee_name: presence.employeeName || presence.employee_name || null,
-      date: presence.date || new Date().toISOString().split('T')[0],
-      arrival_time: presence.arrivalTime || null,
-      departure_time: presence.departureTime || null,
-      status: effectivePresenceStatus,
-      late_minutes: effectiveLateMinutes,
-      pause_minutes: Number(presence.pauseMinutes || 0),
-      motif: presence.motif || presence.adminBadgeReason || null,
-      signature: presence.signature || null,
+  return withMariaDbTransaction(async connection => {
+    const [oldPresence] = await connection.execute<any[]>('SELECT id, uid, raw_data FROM presences WHERE doc_id = ? LIMIT 1', [presenceDocId]);
+    const presenceRaw = { ...presence, id: presenceDocId, status: effectiveStatus, lateMinutes: effectiveLate, qrCodeToken: presence.qrCodeToken || null };
+    const pFields = {
+      employee_id: employeeId, employee_name: presence.employeeName || presence.employee_name || null,
+      date, arrival_time: presence.arrivalTime || null, departure_time: presence.departureTime || null,
+      status: effectiveStatus, late_minutes: effectiveLate, pause_minutes: Number(presence.pauseMinutes || 0),
+      motif: presence.motif || presence.adminBadgeReason || null, signature: presence.signature || null,
       gps_lat: typeof presence.latitude === 'number' ? presence.latitude : (typeof presence.gpsLat === 'number' ? presence.gpsLat : null),
       gps_lng: typeof presence.longitude === 'number' ? presence.longitude : (typeof presence.gpsLng === 'number' ? presence.gpsLng : null),
-      method: clockMethod,
-      raw_data: {
-        ...presence,
-        status: effectivePresenceStatus,
-        lateMinutes: effectiveLateMinutes,
-        id: presDocId,
-        qrCodeToken: presence.qrCodeToken || null,
-      },
-      updated_at: new Date().toISOString(),
+      method, raw_data: JSON.stringify(presenceRaw), updated_at: now,
     };
-
-    const { data: savedPresence, error: presErr } = await supabaseAdmin
-      .from('presences')
-      .upsert(presenceRow, { onConflict: 'doc_id' })
-      .select()
-      .single();
-
-    if (presErr) {
-      console.error('[Atomic Clocking] Presence upsert error:', presErr.message);
-      throw new Error(`Échec de sauvegarde de la présence: ${presErr.message}`);
+    let presenceDbId: number;
+    if (oldPresence[0]) {
+      const columns = Object.keys(pFields);
+      await connection.execute(`UPDATE presences SET ${columns.map(k => `\x60${k}\x60 = ?`).join(', ')} WHERE id = ?`, [...columns.map(k => (pFields as any)[k]), oldPresence[0].id]);
+      presenceDbId = Number(oldPresence[0].id);
+    } else {
+      const [result] = await connection.execute<any>(
+        `INSERT INTO presences (uid, doc_id, ${Object.keys(pFields).map(k => `\x60${k}\x60`).join(', ')}, created_at)
+         VALUES (?, ?, ${Object.keys(pFields).map(() => '?').join(', ')}, NOW(3))`,
+        [randomUUID(), presenceDocId, ...Object.values(pFields)]
+      );
+      presenceDbId = Number(result.insertId);
     }
-    presenceCreatedDbId = savedPresence.id;
 
     let savedIncident: any = null;
-    const shouldSkipIncident =
-      (incident?.type === 'retard' && isExemptLateBackend) ||
-      ((incident?.type === 'sortie_prematuree' || incident?.type === 'depart_anticipe') && isExemptEarlyBackend);
-
-    if (incident && !shouldSkipIncident) {
-      const incDocId = String(incident.id || incident.docId || `inc-${Date.now()}`);
-      const incEmpId = await resolveEmployeeDbId(supabaseAdmin, incident.employeeId || empIdVal);
-      const incidentRow: any = {
-        doc_id: incDocId,
-        employee_id: incEmpId || resolvedEmpDbId || null,
-        date: incident.date || presenceRow.date,
+    const skipIncident = (incident?.type === 'retard' && exemptLate) ||
+      (['sortie_prematuree','depart_anticipe'].includes(incident?.type) && exemptEarly);
+    if (incident && !skipIncident) {
+      const incidentId = String(incident.id || incident.docId || `inc-${randomUUID()}`);
+      const incidentEmployeeId = await resolveEmployeeDbId(null, incident.employeeId || presence.employeeId || presence.employee_id);
+      const raw = { ...incident, id: incidentId };
+      const [existing] = await connection.execute<any[]>('SELECT id FROM attendance_incidents WHERE doc_id = ? LIMIT 1', [incidentId]);
+      const fields = {
+        employee_id: incidentEmployeeId || employeeId, date: dateOnly(incident.date || date),
         type: incident.type || 'retard',
         description: incident.reason || incident.description || incident.origin || 'Incident de présence',
-        status: incident.status || 'automatique',
-        raw_data: { ...incident, id: incDocId },
-        updated_at: new Date().toISOString(),
+        status: incident.status || 'automatique', raw_data: JSON.stringify(raw), updated_at: now,
       };
-
-      const { data: incData, error: incErr } = await supabaseAdmin
-        .from('attendance_incidents')
-        .upsert(incidentRow, { onConflict: 'doc_id' })
-        .select()
-        .single();
-
-      if (incErr) {
-        console.error('[Atomic Clocking] Incident upsert error:', incErr.message);
-        throw new Error(`Échec de sauvegarde de l'incident: ${incErr.message}`);
+      if (existing[0]) {
+        const keys = Object.keys(fields);
+        await connection.execute(`UPDATE attendance_incidents SET ${keys.map(k => `\x60${k}\x60 = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => (fields as any)[k]), existing[0].id]);
+      } else {
+        const keys = Object.keys(fields);
+        await connection.execute(
+          `INSERT INTO attendance_incidents (uid, doc_id, ${keys.map(k => `\x60${k}\x60`).join(', ')}, created_at)
+           VALUES (?, ?, ${keys.map(() => '?').join(', ')}, NOW(3))`,
+          [randomUUID(), incidentId, ...keys.map(k => (fields as any)[k])]
+        );
       }
-      savedIncident = incData;
-      incidentCreatedDbId = incData.id;
+      savedIncident = { ...incident, id: incidentId };
     }
 
     let savedNotification: any = null;
     if (notification) {
-      const notifDocId = String(notification.id || notification.docId || `notif-clock-${Date.now()}`);
-      const resolvedUserId = await resolveUserDbId(
-        supabaseAdmin,
-        notification.targetUserId || notification.recipient || empIdVal,
-        notification.recipient
-      );
-
-      const notifText = notification.message || notification.content || notification.description || notification.title || 'Pointage validé';
-      const notificationRow: any = {
-        doc_id: notifDocId,
-        title: notification.title || 'Pointage enregistré',
-        message: notifText,
-        type: notification.type || 'system',
-        is_read: Boolean(notification.isRead ?? notification.read ?? false),
-        target_user_id: resolvedUserId || null,
-        target_employee_ids: resolvedEmpDbId ? [resolvedEmpDbId] : null,
-        raw_data: { ...notification, id: notifDocId },
-        updated_at: new Date().toISOString(),
+      const notifId = String(notification.id || notification.docId || `notif-clock-${randomUUID()}`);
+      const userId = await resolveUserDbId(null, notification.targetUserId || notification.recipient || presence.employeeId, notification.recipient);
+      const message = notification.message || notification.content || notification.description || notification.title || 'Pointage validé';
+      const raw = { ...notification, id: notifId, message };
+      const [existing] = await connection.execute<any[]>('SELECT id FROM notifications WHERE doc_id = ? LIMIT 1', [notifId]);
+      const fields = {
+        title: notification.title || 'Pointage enregistré', message,
+        type: notification.type || 'system', is_read: Boolean(notification.isRead ?? notification.read ?? false),
+        target_user_id: userId, target_employee_ids: JSON.stringify(employeeId ? [employeeId] : []),
+        raw_data: JSON.stringify(raw), updated_at: now,
       };
-
-      const { data: notifData, error: notifErr } = await supabaseAdmin
-        .from('notifications')
-        .upsert(notificationRow, { onConflict: 'doc_id' })
-        .select()
-        .single();
-
-      if (notifErr) {
-        console.error('[Atomic Clocking] Notification upsert error:', notifErr.message);
-        throw new Error(`Échec de sauvegarde de la notification: ${notifErr.message}`);
+      if (existing[0]) {
+        const keys = Object.keys(fields);
+        await connection.execute(`UPDATE notifications SET ${keys.map(k => `\x60${k}\x60 = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => (fields as any)[k]), existing[0].id]);
+      } else {
+        const keys = Object.keys(fields);
+        await connection.execute(
+          `INSERT INTO notifications (uid, doc_id, ${keys.map(k => `\x60${k}\x60`).join(', ')}, created_at)
+           VALUES (?, ?, ${keys.map(() => '?').join(', ')}, NOW(3))`,
+          [randomUUID(), notifId, ...keys.map(k => (fields as any)[k])]
+        );
       }
-      savedNotification = notifData;
-      notificationCreatedDbId = notifData.id;
+      savedNotification = { ...notification, id: notifId, message };
     }
 
     return {
       success: true,
-      presence: { ...presence, id: presDocId, _dbId: presenceCreatedDbId },
-      incident: savedIncident ? { ...incident, id: incidentRowDoc(savedIncident), _dbId: incidentCreatedDbId } : null,
-      notification: savedNotification ? { ...notification, id: notifRowDoc(savedNotification), _dbId: notificationCreatedDbId } : null,
+      presence: { ...presence, id: presenceDocId, _dbId: presenceDbId, status: effectiveStatus, lateMinutes: effectiveLate },
+      incident: savedIncident,
+      notification: savedNotification,
     };
-  } catch (error: any) {
-    console.error(`🚨 [TRANSACTION POINTAGE ÉCHOUÉE - ROLLBACK INTÉGRAL] : ${error?.message || error}`);
-    await rollbackAtomicClocking(notificationCreatedDbId, incidentCreatedDbId, presenceCreatedDbId);
-    throw new Error(`Transaction de pointage atomique annulée : ${error?.message || 'Erreur inconnue'}`);
-  }
+  });
 }
