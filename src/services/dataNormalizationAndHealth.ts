@@ -99,6 +99,8 @@ export function normalizeDocBeforeSave<T extends { id: string }>(collectionName:
 
 export interface DatabaseHealthStatus {
   isDatabaseWorking: boolean;
+  /** @deprecated Compatibilité avec les composants plus anciens. */
+  isSupabaseWorking: boolean;
   hasPermissionError: boolean;
   errorMessage: string | null;
   serverPersistenceActive: boolean;
@@ -107,6 +109,7 @@ export interface DatabaseHealthStatus {
 
 let lastDbStatus: DatabaseHealthStatus = {
   isDatabaseWorking: false,
+  isSupabaseWorking: false,
   hasPermissionError: false,
   errorMessage: null,
   serverPersistenceActive: true,
@@ -123,6 +126,7 @@ export async function checkDatabaseHealth(): Promise<DatabaseHealthStatus> {
     const result = await response.json().catch(() => ({}));
     lastDbStatus = {
       isDatabaseWorking: response.ok && result.success === true,
+      isSupabaseWorking: response.ok && result.success === true,
       hasPermissionError: false,
       errorMessage: response.ok && result.success ? null : (result.error || 'API MariaDB indisponible'),
       serverPersistenceActive: true,
@@ -131,6 +135,7 @@ export async function checkDatabaseHealth(): Promise<DatabaseHealthStatus> {
   } catch (error: any) {
     lastDbStatus = {
       isDatabaseWorking: false,
+      isSupabaseWorking: false,
       hasPermissionError: false,
       errorMessage: error?.message || 'Erreur de connexion à MariaDB',
       serverPersistenceActive: true,
