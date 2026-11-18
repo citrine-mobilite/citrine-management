@@ -144,6 +144,7 @@ async function main() {
       const reminderMap = legacyIds.reminders || new Map<string, number>();
       const notificationMap = legacyIds.notifications || new Map<string, number>();
       const inventoryMap = legacyIds.inventory || new Map<string, number>();
+      const jobOfferMap = legacyIds.job_offers || new Map<string, number>();
 
       if (collection === 'employees') {
         row.userId = null;
@@ -190,6 +191,11 @@ async function main() {
           row.inventoryId = await resolveLegacyReference('inventory', value, inventoryMap);
           row.inventory_id = row.inventoryId;
         }
+        if (row.jobOfferId !== undefined || row.job_offer_id !== undefined) {
+          const value = row.jobOfferId ?? row.job_offer_id;
+          row.jobOfferId = await resolveLegacyReference('job_offers', value, jobOfferMap);
+          row.job_offer_id = row.jobOfferId;
+        }
         if (row.targetUserId !== undefined || row.target_user_id !== undefined) {
           const value = row.targetUserId ?? row.target_user_id;
           row.targetUserId = await resolveLegacyReference('users', value, userMap);
@@ -205,10 +211,19 @@ async function main() {
           row.receiverId = await resolveLegacyReference('users', value, userMap);
           row.receiver_id = row.receiverId;
         }
-        if (Array.isArray(row.targetEmployeeIds)) {
-          row.targetEmployeeIds = await Promise.all(row.targetEmployeeIds.map((value: any) =>
+        const targetEmployeeIds = row.targetEmployeeIds ?? row.target_employee_ids;
+        if (Array.isArray(targetEmployeeIds)) {
+          row.targetEmployeeIds = await Promise.all(targetEmployeeIds.map((value: any) =>
             resolveLegacyReference('employees', value, employeeMap)
           ));
+          row.target_employee_ids = row.targetEmployeeIds;
+        }
+        const targetUserIds = row.targetUserIds ?? row.target_user_ids;
+        if (Array.isArray(targetUserIds)) {
+          row.targetUserIds = await Promise.all(targetUserIds.map((value: any) =>
+            resolveLegacyReference('users', value, userMap)
+          ));
+          row.target_user_ids = row.targetUserIds;
         }
       }
 
