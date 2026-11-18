@@ -141,9 +141,14 @@ export async function executeCollaboratorUpdateTransaction(input: UpdateCollabor
     const userUid = userRow?.uid || randomUUID();
     const userDocId = userRow?.doc_id || `user-${randomUUID()}`;
     const userRawOld = parseRaw(userRow?.raw_data);
-    const passwordHash = input.userPassword
-      ? hashPassword(String(input.userPassword))
-      : (userRawOld.passwordHash || userRawOld.password_hash || hashPassword('Collab@2026'));
+    const existingPasswordHash = userRawOld.passwordHash || userRawOld.password_hash || userRow?.password_hash || userRow?.passwordHash;
+    if (input.userPassword && String(input.userPassword).length < 12) {
+      throw new Error('Le nouveau mot de passe doit contenir au moins 12 caractères.');
+    }
+    if (!input.userPassword && !existingPasswordHash) {
+      throw new Error('Un mot de passe initial doit être défini pour ce compte.');
+    }
+    const passwordHash = input.userPassword ? hashPassword(String(input.userPassword)) : existingPasswordHash;
     const userRaw = {
       ...userRawOld, name, email, role, roleId: resolvedRoleId, role_id: resolvedRoleId,
       status: isActive ? 'actif' : 'inactif', employmentStatus,
