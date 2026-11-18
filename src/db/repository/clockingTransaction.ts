@@ -188,24 +188,64 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       (['sortie_prematuree','depart_anticipe'].includes(incident?.type) && exemptEarly);
     if (incident && !skipIncident) {
       const incidentId = String(incident.id || incident.docId || `inc-${randomUUID()}`);
-      const incidentEmployeeId = await resolveEmployeeDbId(null, employeeId);
-      const raw = {
-        ...incident,
-        id: incidentId,
-        employeeId: String(employeeId),
-        employeeName,
-        date,
-      };
+      const allowedIncidentTypes = action === 'arrival'
+        ? ['retard']
+        : action === 'departure'
+          ? ['sortie_prematuree', 'depart_anticipe']
+          : [];
+      if (!allowedIncidentTypes.includes(String(incident.type || ''))) {
+        throw new Error('Incident de pointage rejeté : type incohérent avec l’action enregistrée.');
+      }
       const [existing] = await connection.execute<any[]>(
-        'SELECT id FROM attendance_incidents WHERE doc_id = ? LIMIT 1',
+        'SELECT id, employee_id, raw_data FROM attendance_incidents WHERE doc_id = ? LIMIT 1',
         [incidentId]
       );
+      let raw: any;
+      if (existing[0]) {
+        if (Number(existing[0].employee_id) !== Number(employeeId)) {
+          throw new Error('Incident de pointage rejeté : cet incident appartient à un autre collaborateur.');
+        }
+        const existingRaw = parseRaw(existing[0].raw_data);
+        const declaredInAdvance = Boolean(existingRaw.isDeclaredInAdvance || existingRaw.is_declared_in_advance);
+        raw = {
+          ...existingRaw,
+          id: incidentId,
+          employeeId: String(employeeId),
+          employeeName,
+          date,
+          timeString: actionTime,
+          isJustified: declaredInAdvance ? true : Boolean(existingRaw.isJustified),
+          status: declaredInAdvance ? 'justifie' : (existingRaw.status || 'automatique'),
+          reason: declaredInAdvance
+            ? `${existingRaw.reason || 'Incident déclaré à l’avance'} (Constaté au pointage à ${actionTime})`
+            : (existingRaw.reason || 'Incident automatique de pointage'),
+        };
+      } else {
+        const reason = action === 'arrival'
+          ? `Retard automatique constaté à ${actionTime} (seuil: ${lateThreshold})`
+          : `Sortie prématurée constatée à ${actionTime}`;
+        raw = {
+          id: incidentId,
+          employeeId: String(employeeId),
+          employeeName,
+          date,
+          timeString: actionTime,
+          type: incident.type,
+          origin: 'automatique_pointage',
+          reason,
+          description: reason,
+          isDeclaredInAdvance: false,
+          isJustified: false,
+          status: 'automatique',
+          createdAt: now.toISOString(),
+        };
+      }
       const fields = {
-        employee_id: incidentEmployeeId || employeeId,
+        employee_id: employeeId,
         date,
-        type: incident.type || 'retard',
-        description: incident.reason || incident.description || incident.origin || 'Incident de présence',
-        status: incident.status || 'automatique',
+        type: raw.type,
+        description: raw.reason || 'Incident de présence',
+        status: raw.status || 'automatique',
         raw_data: JSON.stringify(raw),
         updated_at: now,
       };
