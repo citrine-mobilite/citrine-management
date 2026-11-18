@@ -7,7 +7,8 @@ import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
 import { verifyAndMaybeUpgrade } from '../src/server/expressAuthRoutes';
 import { saveMariaDbDocument, getMariaDbCollection, deleteMariaDbDocument } from '../src/db/mariaDbCollections';
-import { closeMariaDbPool } from '../src/db/mariadb';
+import { closeMariaDbPool, withMariaDbTransaction } from '../src/db/mariadb';
+import { verifyDoorQrTokenOnServer } from '../src/db/repository/clockingTransactionHelpers';
 
 async function main() {
   const connection = await mysql.createConnection({
@@ -71,6 +72,58 @@ async function main() {
       throw new Error('La collection absences doit être conservée dans generic_collections.');
     }
     await deleteMariaDbDocument('absences', absenceId);
+
+    const credentialContext = {
+      employeeId: 910003,
+      employeeName: 'CI Collaborateur',
+      latitude: 4.016246,
+      longitude: 9.8203514,
+      action: 'arrival',
+    };
+    const employeeActor = { id: 'ci-employee', role: 'employé' };
+
+    const dynamicSessionId = 'ci-dynamic-' + suffix;
+    const dynamicToken = 'CITRINE-DYN-30S-' + suffix.toUpperCase();
+    await saveMariaDbDocument('dynamic_qr_sessions', {
+      id: dynamicSessionId,
+      sessionId: dynamicSessionId,
+      token: dynamicToken,
+      generatedBy: 'CI Responsable',
+      status: 'active',
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    await withMariaDbTransaction(connection =>
+      verifyDoorQrTokenOnServer('qr_code_dynamic', dynamicToken, credentialContext, employeeActor, connection)
+    );
+    let dynamicReuseRejected = false;
+    try {
+      await withMariaDbTransaction(connection =>
+        verifyDoorQrTokenOnServer('qr_code_dynamic', dynamicToken, credentialContext, employeeActor, connection)
+      );
+    } catch { dynamicReuseRejected = true; }
+    if (!dynamicReuseRejected) throw new Error('Un QR dynamique déjà consommé doit être rejeté.');
+    await deleteMariaDbDocument('dynamic_qr_sessions', dynamicSessionId);
+
+    const badgeCode = suffix.replace(/-/g, '').slice(0, 16).toUpperCase();
+    const badgeId = 'ci-badge-' + suffix;
+    await saveMariaDbDocument('badge_codes_16', {
+      id: badgeId,
+      code: badgeCode,
+      employeeId: null,
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      isUsed: false,
+    });
+    await withMariaDbTransaction(connection =>
+      verifyDoorQrTokenOnServer('badge_code_16', badgeCode, credentialContext, employeeActor, connection)
+    );
+    let badgeReuseRejected = false;
+    try {
+      await withMariaDbTransaction(connection =>
+        verifyDoorQrTokenOnServer('badge_code_16', badgeCode, credentialContext, employeeActor, connection)
+      );
+    } catch { badgeReuseRejected = true; }
+    if (!badgeReuseRejected) throw new Error('Un code temporaire de 16 caractères déjà utilisé doit être rejeté.');
+    await deleteMariaDbDocument('badge_codes_16', badgeId);
 
     const importSuffix = randomUUID();
     const importUserEmail = `ci-import-${importSuffix}@example.invalid`;
@@ -159,6 +212,7 @@ async function main() {
     if (requiredTables.length !== 3) throw new Error('Tables de session, signalisation ou collections génériques manquantes.');
 
     console.log('[OK] MariaDB CRUD users et generic_collections');
+    console.log('[OK] QR dynamique et codes 16 caractères à usage unique');
     console.log('[OK] Masquage passwordHash');
     console.log('[OK] Compatibilité bcrypt Supabase → PBKDF2 et collection absences');
     console.log('[OK] Import Supabase : utilisateurs, relations, appels et collections génériques');
