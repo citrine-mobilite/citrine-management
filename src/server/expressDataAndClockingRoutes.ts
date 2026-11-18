@@ -177,6 +177,9 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.post('/api/collaborators/transactional', requireAuth, requireAdminOrResponsable, async (req: express.Request, res: express.Response) => {
     try {
       const input = req.body;
+      if (String(req.user?.role || '').toLowerCase() === 'responsable' && String(input?.userRole || input?.roleType || '').toLowerCase().includes('admin')) {
+        return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
+      }
       if (!input?.name || !input?.email) {
         return res.status(400).json({ success: false, error: 'Nom et adresse email requis.' });
       }
@@ -191,6 +194,9 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.post('/api/collaborators/update-transactional', requireAuth, requireAdminOrResponsable, async (req: AuthRequest, res) => {
     try {
       if (!req.body?.employee) return res.status(400).json({ success: false, error: 'Données collaborateur manquantes.' });
+      if (String(req.user?.role || '').toLowerCase() === 'responsable' && String(req.body?.userRole || req.body?.employee?.roleType || '').toLowerCase().includes('admin')) {
+        return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
+      }
       const result = await executeCollaboratorUpdateTransaction(req.body);
       broadcastRealtimeEvent('collection_update', { collection: 'employees', action: 'upsert', id: result.employee?.id });
       broadcastRealtimeEvent('collection_update', { collection: 'users', action: 'upsert', id: result.user?.id });
@@ -233,7 +239,8 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
       res.json(result);
     } catch (error: any) {
       console.error('[API Atomic Clocking Error]:', error);
-      res.status(500).json({ success: false, error: error.message || 'Échec du pointage atomique.' });
+      const message = error?.message || 'Échec du pointage atomique.';
+      res.status(String(message).startsWith('Pointage rejeté') ? 403 : 500).json({ success: false, error: message });
     }
   });
 
