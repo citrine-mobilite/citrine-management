@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createHash, pbkdf2Sync, randomBytes } from 'node:crypto';
 import type { RowDataPacket } from 'mysql2/promise';
 import { getMariaDbPool, pingMariaDb, closeMariaDbPool } from '../src/db/mariadb';
-import { saveMariaDbDocument } from '../src/db/mariaDbCollections';
+import { saveMariaDbDocument, mapCollectionToMariaDbTable } from '../src/db/mariaDbCollections';
 
 type ExportFile = { metadata?: any; collections?: Record<string, any[]> };
 
@@ -30,6 +30,18 @@ function normalizeEmployee(row: any, roleIds: Record<string, number>) {
   raw.roleId = Number(row.roleId || row.role_id || roleIds[roleCode] || 0) || null;
   raw.userId = null; // Re-linked by email after all users and employees are imported.
   return raw;
+}
+
+async function resolveLegacyReference(table: string, value: any, legacyMap: Map<string, number>): Promise<number | null> {
+  if (value === undefined || value === null || value === '') return null;
+  const key = String(value);
+  if (legacyMap.has(key)) return legacyMap.get(key)!;
+  const pool = getMariaDbPool();
+  const [rows] = await pool.execute<any[]>(
+    `SELECT id FROM \x60${table}\x60 WHERE doc_id = ? OR uid = ? OR LOWER(email) = ? LIMIT 1`,
+    [key, key, key.toLowerCase()]
+  );
+  return rows[0]?.id ? Number(rows[0].id) : null;
 }
 
 async function main() {
@@ -62,13 +74,14 @@ async function main() {
 
   const [roles] = await pool.query<RowDataPacket[]>('SELECT id, code FROM roles');
   const roleIds = Object.fromEntries(roles.map(row => [String(row.code), Number(row.id)]));
-  const priority = ['roles','departments','users','employees'];
+  const priority = ['roles','departments','users','employees','task_projects','presences','tasks','reminders','notifications','inventory'];
   entries.sort(([a], [b]) => {
     const ai = priority.indexOf(a), bi = priority.indexOf(b);
     return (ai < 0 ? 100 : ai) - (bi < 0 ? 100 : bi);
   });
 
   const imported: Record<string, number> = {};
+  const legacyIds: Record<string, Map<string, number>> = {};
   for (const [collection, rows] of entries) {
     let count = 0;
     for (const original of rows) {
@@ -78,9 +91,74 @@ async function main() {
         : collection === 'employees'
           ? normalizeEmployee(original, roleIds)
           : { ...original };
-      const id = String(row.id || row.docId || row.doc_id || '').trim();
-      if (!id) row.id = `import-${collection}-${createHash('sha256').update(JSON.stringify(row)).digest('hex').slice(0,24)}`;
+      const legacyId = String(row.legacyId || row._dbId || row.id || row.docId || row.doc_id || '').trim();
+      const stableDocId = String(row.docId || row.doc_id || (legacyId && /^\\d+$/.test(legacyId) ? collection + '-' + legacyId : legacyId) ||
+        ('import-' + collection + '-' + createHash('sha256').update(JSON.stringify(row)).digest('hex').slice(0,24)));
+      row.legacyId = legacyId || null;
+      row.id = stableDocId;
+      row.docId = stableDocId;
+
+      const employeeMap = legacyIds.employees || new Map<string, number>();
+      const userMap = legacyIds.users || new Map<string, number>();
+      const projectMap = legacyIds.task_projects || new Map<string, number>();
+      const presenceMap = legacyIds.presences || new Map<string, number>();
+      const taskMap = legacyIds.tasks || new Map<string, number>();
+      const reminderMap = legacyIds.reminders || new Map<string, number>();
+      const notificationMap = legacyIds.notifications || new Map<string, number>();
+      const inventoryMap = legacyIds.inventory || new Map<string, number>();
+
+      if (collection === 'employees') row.userId = null;
+      if (collection !== 'employees' && collection !== 'users') {
+        if (row.employeeId !== undefined || row.employee_id !== undefined) {
+          const value = row.employeeId ?? row.employee_id;
+          row.employeeId = await resolveLegacyReference('employees', value, employeeMap);
+          row.employee_id = row.employeeId;
+        }
+        if (row.userId !== undefined || row.user_id !== undefined) {
+          const value = row.userId ?? row.user_id;
+          row.userId = await resolveLegacyReference('users', value, userMap);
+        }
+        if (row.projectId !== undefined || row.project_id !== undefined) {
+          const value = row.projectId ?? row.project_id;
+          row.projectId = await resolveLegacyReference('task_projects', value, projectMap);
+        }
+        if (row.presenceId !== undefined || row.presence_id !== undefined) {
+          const value = row.presenceId ?? row.presence_id;
+          row.presenceId = await resolveLegacyReference('presences', value, presenceMap);
+        }
+        if (row.taskId !== undefined || row.task_id !== undefined) {
+          const value = row.taskId ?? row.task_id;
+          row.taskId = await resolveLegacyReference('tasks', value, taskMap);
+        }
+        if (row.reminderId !== undefined || row.reminder_id !== undefined) {
+          const value = row.reminderId ?? row.reminder_id;
+          row.reminderId = await resolveLegacyReference('reminders', value, reminderMap);
+        }
+        if (row.notificationId !== undefined || row.notification_id !== undefined) {
+          const value = row.notificationId ?? row.notification_id;
+          row.notificationId = await resolveLegacyReference('notifications', value, notificationMap);
+        }
+        if (row.inventoryId !== undefined || row.inventory_id !== undefined) {
+          const value = row.inventoryId ?? row.inventory_id;
+          row.inventoryId = await resolveLegacyReference('inventory', value, inventoryMap);
+        }
+        if (row.targetUserId !== undefined || row.target_user_id !== undefined) {
+          const value = row.targetUserId ?? row.target_user_id;
+          row.targetUserId = await resolveLegacyReference('users', value, userMap);
+        }
+      }
+
       await saveMariaDbDocument(collection, row);
+      const table = mapCollectionToMariaDbTable(collection);
+      if (table !== 'generic_collections') {
+        const [savedRows] = await pool.execute<any[]>(
+          `SELECT id FROM \x60${table}\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
+        );
+        if (savedRows[0] && legacyId) {
+          legacyIds[collection] ||= new Map<string, number>();
+          legacyIds[collection].set(legacyId, Number(savedRows[0].id));
+        }
+      }
       count++;
     }
     imported[collection] = count;
