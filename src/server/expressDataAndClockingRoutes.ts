@@ -429,13 +429,27 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
       if (!privileged && (OWN_READ_COLLECTIONS.has(collection) || collection === 'notifications')) {
         employee = await getOwnEmployeeScope(req);
         allowedEmployeeIds = employeeScopeIds(employee);
+        allowedEmployeeIds.add(String(req.user?.id || ''));
       }
 
       if (!privileged && OWN_READ_COLLECTIONS.has(collection)) {
-        data = data.filter((item: any) => {
-          const target = String(item.employeeId || item.employee_id || item.employeeDocId || item.employeeEmail || '');
-          return target !== '' && allowedEmployeeIds.has(target);
-        });
+        if (collection === 'reminders') {
+          data = data.filter((item: any) => {
+            const employeeIds = Array.isArray(item.employeeIds) ? item.employeeIds.map(String) : [];
+            return item.allEmployees === true || employeeIds.some((id: string) => allowedEmployeeIds.has(id));
+          });
+        } else if (collection === 'calls') {
+          const userId = String(req.user?.id || '');
+          data = data.filter((item: any) =>
+            String(item.callerId || item.caller_id || '') === userId ||
+            String(item.receiverId || item.receiver_id || '') === userId
+          );
+        } else {
+          data = data.filter((item: any) => {
+            const target = String(item.employeeId || item.employee_id || item.employeeDocId || item.employeeEmail || '');
+            return target !== '' && allowedEmployeeIds.has(target);
+          });
+        }
       }
 
       if (!privileged && collection === 'notifications') {
@@ -448,7 +462,15 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
           }
           if (!Array.isArray(targetEmployees)) targetEmployees = [];
           const hasTarget = Boolean(targetUser || targetEmployees.length);
-          return !hasTarget || targetUser === userId || targetEmployees.some((id: any) => allowedEmployeeIds.has(String(id)));
+          if (hasTarget) {
+            return targetUser === userId || allowedEmployeeIds.has(targetUser)
+              || targetEmployees.some((id: any) => allowedEmployeeIds.has(String(id)));
+          }
+          const recipient = String(item.recipient || '').trim().toLowerCase();
+          const employeeName = String(employee?.name || '').trim().toLowerCase();
+          const employeeEmail = String(employee?.email || req.user?.email || '').trim().toLowerCase();
+          return ['tous', 'broadcast'].includes(recipient)
+            || recipient === employeeName || recipient === employeeEmail || recipient === userId.toLowerCase();
         });
       }
 
