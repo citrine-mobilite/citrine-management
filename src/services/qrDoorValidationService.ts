@@ -1,5 +1,5 @@
 import { CompanyModuleConfig } from '../types';
-import { supabase, supabaseAdmin } from '../lib/supabase';
+import { getCollection } from './dataService';
 import { getStoredModuleConfig } from '../hooks/useAppInitialData';
 
 /**
@@ -152,57 +152,28 @@ export async function verifyDoorQrToken(
     };
   }
 
-  // 3. Deuxième passe : Interrogation directe et fraîche de la base de données Supabase
-  // (permet de synchroniser instantanément si le responsable vient de changer le QR code)
+  // 3. Interrogation fraîche de la configuration MariaDB.
   try {
-    const client = supabaseAdmin || supabase;
-    const { data: dbRows, error: dbErr } = await client
-      .from('company_settings')
-      .select('*')
-      .order('id', { ascending: false })
-      .limit(3);
-
-    if (!dbErr && dbRows && dbRows.length > 0) {
-      for (const row of dbRows) {
+    const dbRows = await getCollection<any>('company_settings');
+    if (Array.isArray(dbRows) && dbRows.length > 0) {
+      for (const row of dbRows.slice(0, 3)) {
         const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : row;
-        const serverDoorToken = (raw.doorQrCodeToken || raw.qrCodeSecret || '').trim();
-        const serverSecret = (raw.qrCodeSecret || '').trim();
+        const serverDoorToken = String(raw.doorQrCodeToken || raw.qrCodeSecret || '').trim();
+        const serverSecret = String(raw.qrCodeSecret || '').trim();
         const serverRevoked = raw.doorQrCodeRevoked === true;
         const serverRevokedList: string[] = Array.isArray(raw.revokedDoorTokens)
-          ? raw.revokedDoorTokens.map((t: string) => String(t).toUpperCase().trim())
-          : [];
-
-        // Révocation détectée sur le serveur
-        if (
-          serverRevoked ||
-          serverRevokedList.includes(cleanUpper) ||
-          (serverRevoked && (isTokenMatch(cleanToken, serverDoorToken) || isTokenMatch(cleanToken, serverSecret)))
-        ) {
-          return {
-            valid: false,
-            cleanToken,
-            officialToken: serverDoorToken,
-            isRevoked: true,
-            error: "Ce QR Code d'entrée n'est plus valide : il a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle.",
-          };
+          ? raw.revokedDoorTokens.map((t: string) => String(t).toUpperCase().trim()) : [];
+        if (serverRevoked || serverRevokedList.includes(cleanUpper)) {
+          return { valid: false, cleanToken, officialToken: serverDoorToken, isRevoked: true,
+            error: "Ce QR Code d'entrée n'est plus valide : il a été révoqué par la direction. Veuillez scanner la nouvelle affiche officielle." };
         }
-
-        // Correspondance stricte avec le jeton actif en base
-        if (
-          !serverRevoked &&
-          (isTokenMatch(cleanToken, serverDoorToken) || (serverSecret && isTokenMatch(cleanToken, serverSecret)))
-        ) {
-          return {
-            valid: true,
-            cleanToken,
-            officialToken: serverDoorToken || cleanToken,
-            isRevoked: false,
-          };
+        if (!serverRevoked && (isTokenMatch(cleanToken, serverDoorToken) || (serverSecret && isTokenMatch(cleanToken, serverSecret)))) {
+          return { valid: true, cleanToken, officialToken: serverDoorToken || cleanToken, isRevoked: false };
         }
       }
     }
-  } catch (netErr) {
-    console.warn('[verifyDoorQrToken] Erreur vérification directe base Supabase:', netErr);
+  } catch (error) {
+    console.warn('[verifyDoorQrToken] Lecture MariaDB impossible :', error);
   }
 
   // 4. Troisième passe : Vérification avec le stockage persistant local de l'application
