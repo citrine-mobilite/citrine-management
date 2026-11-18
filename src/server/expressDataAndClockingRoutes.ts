@@ -597,8 +597,12 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.post('/api/collaborators/transactional', requireAuth, requireAdminOrResponsable, async (req: AuthRequest, res: express.Response) => {
     try {
       const input = req.body;
-      if (String(req.user?.role || '').toLowerCase() === 'responsable' && [input?.userRole, input?.roleType].some((role: any) => String(role || '').toLowerCase().includes('admin'))) {
-        return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
+      if (String(req.user?.role || '').toLowerCase() === 'responsable' && [input?.userRole, input?.roleType, input?.roleId, input?.role_id].some((role: any) =>
+        String(role || '').toLowerCase().includes('admin') ||
+        String(role || '').toLowerCase().includes('responsable') ||
+        (role !== null && role !== undefined && String(role).trim() !== '' && [1, 2].includes(Number(role)))
+      )) {
+        return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer un rôle privilégié.' });
       }
       if (!input?.name || !input?.email) {
         return res.status(400).json({ success: false, error: 'Nom et adresse email requis.' });
@@ -620,11 +624,13 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
           req.body.userRole, employeeInput.roleType, employeeInput.role,
           employeeInput.roleId, employeeInput.role_id,
         ];
-        const requestsAdminRole = requestedRoleValues.some((value: any) =>
-          String(value || '').toLowerCase().includes('admin') || (value !== null && value !== undefined && String(value).trim() !== '' && Number(value) === 1)
+        const requestsPrivilegedRole = requestedRoleValues.some((value: any) =>
+          String(value || '').toLowerCase().includes('admin') ||
+          String(value || '').toLowerCase().includes('responsable') ||
+          (value !== null && value !== undefined && String(value).trim() !== '' && [1, 2].includes(Number(value)))
         );
-        if (requestsAdminRole) {
-          return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
+        if (requestsPrivilegedRole) {
+          return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer un rôle privilégié.'
         }
 
         const targetKey = String(employeeInput._dbId || employeeInput.id || employeeInput.docId || employeeInput.doc_id || employeeInput.uid || employeeInput.email || '').trim();
@@ -639,8 +645,8 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
             [/^\d+$/.test(targetKey) ? Number(targetKey) : -1, targetKey, targetKey, targetKey.toLowerCase()]
           );
           const targetRole = String(targetRows[0]?.role_code || '').toUpperCase();
-          if (Number(targetRows[0]?.role_id) === 1 || targetRole.includes('ADMIN')) {
-            return res.status(403).json({ success: false, error: 'Un responsable ne peut pas modifier le compte d’un administrateur.' });
+          if ([1, 2].includes(Number(targetRows[0]?.role_id)) || targetRole.includes('ADMIN') || targetRole.includes('RESPONSABLE')) {
+            return res.status(403).json({ success: false, error: 'Un responsable ne peut pas modifier le compte d’un administrateur ou d’un autre responsable.' });
           }
         }
       }
