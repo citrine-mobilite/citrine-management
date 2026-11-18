@@ -274,6 +274,14 @@ async function main() {
       throw new Error('Les destinataires multiples de la notification n’ont pas été remappés.');
     }
 
+    const testSettingsId = 'ci-main-config-' + importSuffix;
+    await saveMariaDbDocument('company_settings', {
+      id: testSettingsId,
+      settingKey: 'main_config',
+      lateThresholdTime: '23:59',
+      plannedDepartureTime: '23:59',
+      doorQrRequireGps: false,
+    });
     const clockSessionId1 = 'ci-clock-dynamic-1-' + importSuffix;
     const clockToken1 = 'CITRINE-DYN-30S-CI-CLOCK-1-' + importSuffix.toUpperCase();
     await saveMariaDbDocument('dynamic_qr_sessions', {
@@ -294,8 +302,21 @@ async function main() {
         longitude: 9.8203514,
         location: 'CI HQ',
       },
+      incident: {
+        id: 'forged-incident-' + importSuffix,
+        employeeId: String(importedEmployeeRows[0].id),
+        type: 'retard',
+        status: 'justifie',
+        isJustified: true,
+        isDeclaredInAdvance: true,
+      },
       actor: { id: String(importedUser.id), role: 'employé' },
     });
+    const [forgedIncidentRows] = await connection.execute<any[]>(
+      'SELECT id FROM attendance_incidents WHERE doc_id = ?',
+      ['forged-incident-' + importSuffix]
+    );
+    if (forgedIncidentRows.length) throw new Error('Un collaborateur ne peut pas créer un incident justifié par simple payload navigateur.');
     const doualaParts = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Africa/Douala', year: 'numeric', month: '2-digit', day: '2-digit',
     }).formatToParts(new Date());
@@ -345,6 +366,7 @@ async function main() {
     await connection.execute('DELETE FROM presences WHERE employee_id = ? AND date = ?', [importedEmployeeRows[0].id, expectedDoualaDate]);
     await deleteMariaDbDocument('dynamic_qr_sessions', clockSessionId1);
     await deleteMariaDbDocument('dynamic_qr_sessions', clockSessionId2);
+    await deleteMariaDbDocument('company_settings', testSettingsId);
     const importedGeneric = await getMariaDbCollection('ci_import_collection');
     if (!importedGeneric.some(row => row.id === 'ci_import_collection-' + legacyGenericId && row.label === 'CI imported generic record')) {
       throw new Error('Import de generic_collections incomplet.');
