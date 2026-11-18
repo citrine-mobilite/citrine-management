@@ -3,6 +3,7 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getMariaDbPool } from './mariadb';
 
 const TABLES: Record<string, string> = {
+  roles: 'roles', inventory_assignments: 'inventory_assignments',
   users: 'users', employees: 'employees', tasks: 'tasks', task_projects: 'task_projects',
   reminders: 'reminders', presences: 'presences', attendance_incidents: 'attendance_incidents',
   badge_codes_16: 'badge_codes_16', dynamic_qr_sessions: 'dynamic_qr_sessions',
