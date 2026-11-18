@@ -217,9 +217,9 @@ async function main() {
         const [savedRows] = collection === 'roles' && row.code
           ? await pool.execute<any[]>('SELECT id FROM roles WHERE code = ? LIMIT 1', [row.code])
           : ['users', 'employees'].includes(table) && row.email
-            ? await pool.execute<any[]>(`SELECT id FROM \\x60${table}\\x60 WHERE LOWER(email) = ? LIMIT 1`, [String(row.email).toLowerCase()])
+            ? await pool.execute<any[]>(`SELECT id FROM \x60${table}\x60 WHERE LOWER(email) = ? LIMIT 1`, [String(row.email).toLowerCase()])
             : await pool.execute<any[]>(
-                `SELECT id FROM \\x60${table}\\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
+                `SELECT id FROM \x60${table}\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
               );
         if (savedRows[0] && legacyId) {
           const mapKey = table === 'inventory' ? 'inventory' : collection;
