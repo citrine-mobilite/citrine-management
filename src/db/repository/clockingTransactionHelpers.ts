@@ -84,9 +84,21 @@ export async function verifyDoorQrTokenOnServer(
     if (cfg.doorQrCodeRevoked === true || revokedList.includes(candidate) || candidate.includes('REVOKED') || candidate.includes('INVALIDE')) {
       throw new Error("Pointage rejeté : ce QR Code d'entrée a été révoqué.");
     }
-    const candidateRoot = candidate.replace(/-\\d{4,}$/, '');
-    const officialRoot = official.replace(/-\\d{4,}$/, '');
-    if (candidate !== official && candidateRoot !== official && candidate !== officialRoot && candidateRoot !== officialRoot) {
+    const timedSuffix = candidate.match(/-(\\d{6,})$/);
+    if (timedSuffix) {
+      const candidateBase = candidate.slice(0, -timedSuffix[0].length);
+      const officialBase = official.replace(/-\\d{6,}$/, '');
+      const scannedSlot = Number(timedSuffix[1]);
+      const currentSlot = Math.floor(Date.now() / 30000);
+      if (candidateBase !== official && candidateBase !== officialBase) {
+        throw new Error('Pointage rejeté : le jeton QR Code ne correspond pas au jeton officiel actif.');
+      }
+      if (!Number.isSafeInteger(scannedSlot) || ![currentSlot, currentSlot - 1].includes(scannedSlot)) {
+        throw new Error('Pointage rejeté : ce QR Code rotatif a expiré. Scannez le code actuellement affiché.');
+      }
+      return;
+    }
+    if (candidate !== official) {
       throw new Error('Pointage rejeté : le jeton QR Code ne correspond pas au jeton officiel actif.');
     }
     return;
