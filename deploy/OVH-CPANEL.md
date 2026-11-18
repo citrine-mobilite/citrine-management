@@ -27,7 +27,6 @@ Depuis le compte cPanel :
 cd ~/repositories/citrine-management
 git checkout migration/mariadb
 npm install --include=dev --no-audit --no-fund
-npm run build
 ```
 
 Les scripts d'export/import utilisent également les variables d'environnement. L'importeur charge automatiquement le fichier `.env` du dépôt.
@@ -63,6 +62,14 @@ npx tsx scripts/import_mariadb_export.ts ./citrine-supabase-export.json
 L'import initial refuse de s'exécuter si la base contient déjà des utilisateurs ou collaborateurs. L'option `--merge` ne doit être utilisée que pour une fusion volontaire et après sauvegarde. L'import ne supprime aucune ligne. En cas d'interruption, corriger l'erreur puis relancer avec `--merge` après avoir contrôlé les enregistrements déjà importés.
 
 Si le script d'export ne peut pas lire `auth.users`, les comptes sans hash récupérable devront réinitialiser leur mot de passe. Supprimer le fichier d'export du serveur et de la machine locale après validation.
+
+Après avoir renseigné le fichier .env et appliqué le schéma/import, compiler l'application afin que Vite intègre les variables VITE_* :
+
+```bash
+npm run build
+```
+
+Le mode --dry-run affiche les volumes et les tables à importer ; il ne modifie aucune ligne et ne remplace pas la validation sur un jeu de données représentatif.
 
 ## Démarrage et surveillance
 
