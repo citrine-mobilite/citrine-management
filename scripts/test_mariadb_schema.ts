@@ -45,10 +45,14 @@ async function main() {
     const userId = 'ci-user-' + suffix;
     const email = 'ci-' + suffix + '@example.invalid';
     const [roleRows] = await connection.query<any[]>('SELECT id FROM roles WHERE code = ? LIMIT 1', ['EMPLOYE']);
-    await saveMariaDbDocument('users', {
+    const savedUserResponse = await saveMariaDbDocument('users', {
       id: userId, uid: suffix, email, name: 'CI MariaDB User',
       roleId: Number(roleRows[0].id), status: 'actif', passwordHash: 'not-a-real-password-hash',
+      smtpPass: 'must-not-persist', accessToken: 'must-not-persist',
     });
+    if (savedUserResponse.passwordHash || savedUserResponse.smtpPass || savedUserResponse.accessToken) {
+      throw new Error('Une écriture utilisateur ne doit jamais renvoyer de hash ni de secret.');
+    }
     const found = (await getMariaDbCollection('users')).find(row => row.email === email);
     if (!found || found.name !== 'CI MariaDB User' || found.passwordHash) {
       throw new Error('Échec du test CRUD users ou fuite du champ passwordHash.');
