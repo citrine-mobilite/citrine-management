@@ -31,7 +31,9 @@ function verifyAndMaybeUpgrade(password: string, stored: string): { valid: boole
 
 function publicUser(row: UserRow, raw: Record<string, any>) {
   const roleId = Number(row.role_id || raw.roleId || 3);
-  const role = roleId === 1 ? 'administrateur' : roleId === 2 ? 'responsable' : 'employé';
+  const roleCode = String((row as any).role_code || raw.role || '').toUpperCase();
+  const role = roleCode.includes('ADMIN') || roleId === 1 ? 'administrateur'
+    : roleCode.includes('RESPONSABLE') || roleId === 2 ? 'responsable' : 'employé';
   return {
     ...raw,
     id: String(row.id), uid: row.uid, doc_id: row.doc_id,
@@ -59,7 +61,7 @@ export function registerAuthRoutes(app: Express): void {
 
       const pool = getMariaDbPool();
       const [rows] = await pool.execute<UserRow[]>(
-        'SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1', [email]
+        'SELECT u.*, r.code AS role_code FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE LOWER(u.email) = ? LIMIT 1', [email]
       );
       const row = rows[0];
       if (!row) return res.status(401).json({ success: false, error: 'Identifiants incorrects.' });
