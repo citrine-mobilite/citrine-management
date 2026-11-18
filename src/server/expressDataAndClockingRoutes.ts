@@ -34,6 +34,32 @@ function isPrivileged(user: any): boolean {
   return isAdmin(user) || String(user?.role || '').toLowerCase() === 'responsable';
 }
 
+const ADMIN_READ_COLLECTIONS = new Set([
+  'salary_payments', 'financial_transactions', 'processflow_salary_debts',
+  'admin_audit_logs', 'connection_logs',
+]);
+const MANAGER_READ_COLLECTIONS = new Set([
+  'disciplinary_incidents', 'inventory', 'inventory_assignments',
+  'visitor_logs', 'hse_incidents', 'job_applications', 'rh_document_templates',
+]);
+const OWN_READ_COLLECTIONS = new Set([
+  'presences', 'attendance_incidents', 'leave_requests', 'expense_claims',
+]);
+
+async function getOwnEmployeeScope(req: AuthRequest): Promise<RowDataPacket | null> {
+  const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
+    'SELECT id, doc_id, uid, email FROM employees WHERE user_id = ? LIMIT 1',
+    [Number(req.user?.id)]
+  );
+  return rows[0] || null;
+}
+
+function employeeScopeIds(employee: RowDataPacket | null): Set<string> {
+  return new Set(employee
+    ? [employee.id, employee.doc_id, employee.uid, employee.email].filter(Boolean).map(String)
+    : []);
+}
+
 function authorizeCollectionWrite(req: AuthRequest, res: express.Response, next: express.NextFunction) {
   const collection = String(req.params.collection || '');
   if (ADMIN_ONLY_COLLECTIONS.has(collection)) return requireAdmin(req, res, next);
@@ -114,7 +140,54 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.get('/api/data/:collection', requireAuth, async (req: AuthRequest, res) => {
     try {
       const { collection } = req.params;
+      if (ADMIN_READ_COLLECTIONS.has(collection) && !isAdmin(req.user)) {
+        return res.status(403).json({ success: false, error: 'Accès réservé à l’administrateur.' });
+      }
+      if (MANAGER_READ_COLLECTIONS.has(collection) && !isPrivileged(req.user)) {
+        return res.status(403).json({ success: false, error: 'Accès réservé aux responsables.' });
+      }
+
       let data = await getCollectionData(collection);
+      const privileged = isPrivileged(req.user);
+      let employee: RowDataPacket | null = null;
+      let allowedEmployeeIds = new Set<string>();
+
+      if (!privileged && (OWN_READ_COLLECTIONS.has(collection) || collection === 'notifications')) {
+        employee = await getOwnEmployeeScope(req);
+        allowedEmployeeIds = employeeScopeIds(employee);
+      }
+
+      if (!privileged && OWN_READ_COLLECTIONS.has(collection)) {
+        data = data.filter((item: any) => {
+          const target = String(item.employeeId || item.employee_id || item.employeeDocId || item.employeeEmail || '');
+          return target !== '' && allowedEmployeeIds.has(target);
+        });
+      }
+
+      if (!privileged && collection === 'notifications') {
+        const userId = String(req.user?.id || '');
+        data = data.filter((item: any) => {
+          const targetUser = String(item.targetUserId || item.target_user_id || item.userId || '');
+          let targetEmployees: any = item.targetEmployeeIds || item.target_employee_ids || [];
+          if (typeof targetEmployees === 'string') {
+            try { targetEmployees = JSON.parse(targetEmployees); } catch { targetEmployees = []; }
+          }
+          if (!Array.isArray(targetEmployees)) targetEmployees = [];
+          const hasTarget = Boolean(targetUser || targetEmployees.length);
+          return !hasTarget || targetUser === userId || targetEmployees.some((id: any) => allowedEmployeeIds.has(String(id)));
+        });
+      }
+
+      if (!privileged && collection === 'employees') {
+        data = data.map((item: any) => {
+          const safe = { ...item };
+          for (const key of ['salary', 'salaryAmount', 'emergencyContact', 'birthDate', 'bankAccount', 'rib', 'nationalId', 'taxId', 'socialSecurityNumber']) {
+            delete safe[key];
+          }
+          return safe;
+        });
+      }
+
       if (collection === 'company_settings') {
         data = data.map((item: any) => ({
           ...item,
@@ -128,13 +201,10 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
           } : {}),
         }));
       }
-      if (['salary_payments', 'financial_transactions', 'processflow_salary_debts', 'admin_audit_logs', 'connection_logs'].includes(collection) && !isAdmin(req.user)) {
-        return res.status(403).json({ success: false, error: 'Accès réservé à la direction.' });
-      }
       res.json({ success: true, data });
     } catch (error: any) {
       console.error(`Error fetching collection ${req.params.collection}:`, error);
-      res.status(500).json({ success: false, error: error.message || 'Failed to fetch data' });
+      res.status(500).json({ success: false, error: 'Erreur lors de la lecture des données.' });
     }
   });
 
