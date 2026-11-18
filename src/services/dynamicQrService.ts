@@ -1,7 +1,6 @@
 import { DynamicQrSession } from '../types';
 import { COLLECTIONS, saveDocument, subscribeToDocument, subscribeToCollection, deleteDocument, getCollection } from './dataService';
 import { offlineService } from './offlineService';
-import { supabase } from '../lib/supabase';
 
 export class DynamicQrService {
   private activeSessionsCache: DynamicQrSession[] = [];
@@ -89,38 +88,7 @@ export class DynamicQrService {
     // 1. Recherche dans le cache local mémoire
     let match = this.activeSessionsCache.find((s) => s.token === cleanedToken);
 
-    // 2. Recherche ciblée directe dans Supabase (table dynamic_qr_sessions)
-    if (!match) {
-      try {
-        const { data: supaRows } = await supabase
-          .from('dynamic_qr_sessions')
-          .select('*')
-          .eq('token', cleanedToken)
-          .limit(1);
-
-        if (supaRows && supaRows.length > 0) {
-          const row = supaRows[0];
-          const raw = (row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {}) as Partial<DynamicQrSession>;
-          match = {
-            id: raw.id || row.doc_id || row.session_id || String(row.id),
-            sessionId: row.session_id || raw.sessionId || String(row.id),
-            token: row.token || raw.token,
-            generatedBy: row.generated_by || raw.generatedBy || 'Responsable',
-            createdAt: row.created_at || raw.createdAt || new Date().toISOString(),
-            expiresAt: row.expires_at || raw.expiresAt,
-            status: (row.status || raw.status || 'active') as any,
-            usedByEmployeeId: row.used_by_employee_id || raw.usedByEmployeeId,
-            usedByEmployeeName: raw.usedByEmployeeName,
-            action: (row.action || raw.action) as any,
-          };
-          this.activeSessionsCache = [match, ...this.activeSessionsCache.filter((s) => s.id !== match!.id)];
-        }
-      } catch (err) {
-        console.warn('[DynamicQrService] Direct Supabase lookup notice:', err);
-      }
-    }
-
-    // 3. Recherche dans la collection complète distante
+    // 2. Recherche dans la collection MariaDB distante
     if (!match) {
       try {
         const remoteSessions = await getCollection<DynamicQrSession>(COLLECTIONS.DYNAMIC_QR_SESSIONS);
