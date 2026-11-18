@@ -16,8 +16,8 @@ export async function executeCollaboratorCreationTransaction(input: CreateCollab
   if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('Nom et adresse email valides requis.');
   }
-  const initialPassword = String(input.userPassword || 'Collab@2026');
-  if (initialPassword.length < 10) throw new Error('Le mot de passe initial doit contenir au moins 10 caractères.');
+  const initialPassword = String(input.userPassword || '').trim();
+  if (initialPassword.length < 12) throw new Error('Le mot de passe initial doit contenir au moins 12 caractères.');
 
   const roleText = String(input.roleType || input.userRole || '').toLowerCase();
   const roleCode = roleText.includes('admin') ? 'SUPER_ADMIN' : roleText.includes('responsable') ? 'RESPONSABLE' : 'EMPLOYE';
