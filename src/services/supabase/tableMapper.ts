@@ -1,4 +1,4 @@
-import { supabase, supabaseAdmin } from '../../lib/supabase';
+import { getApiToken } from '../sessionService';
 
 export function mapCollectionToTable(collectionName: string): string {
   switch (collectionName) {
@@ -42,35 +42,28 @@ export function mapCollectionToTable(collectionName: string): string {
     case 'presence_pauses': return 'presence_pauses';
     case 'absences': return 'absences';
     case 'leave_requests': return 'leave_requests';
-    case 'building_supervisors': return 'generic_collections';
     default: return 'generic_collections';
   }
 }
 
 export function isUuid(val: any): boolean {
-  if (typeof val !== 'string') return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+  return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
 }
 
-export async function resolveEmployeeDbId(client: any, empIdVal: any): Promise<number | null> {
-  if (!empIdVal) return null;
-  if (typeof empIdVal === 'number' && Number.isInteger(empIdVal)) return empIdVal;
-  const strId = String(empIdVal).trim();
-  if (/^\d+$/.test(strId)) return Number(strId);
-
+/** Résout un identifiant d'employé via l'API MariaDB (aucun client SQL navigateur). */
+export async function resolveEmployeeDbId(_client: any, value: any): Promise<number | null> {
+  if (!value) return null;
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  const token = getApiToken();
+  if (!token) return null;
   try {
-    const { data: byDoc } = await client.from('employees').select('id').eq('doc_id', strId).maybeSingle();
-    if (byDoc?.id) return Number(byDoc.id);
-
-    const { data: byEmail } = await client.from('employees').select('id').eq('email', strId.toLowerCase()).maybeSingle();
-    if (byEmail?.id) return Number(byEmail.id);
-
-    if (isUuid(strId)) {
-      const { data: byUid } = await client.from('employees').select('id').eq('uid', strId).maybeSingle();
-      if (byUid?.id) return Number(byUid.id);
-    }
-  } catch {}
-  return null;
+    const response = await fetch('/api/data/employees', { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) return null;
+    const result = await response.json();
+    const match = (result.data || []).find((employee: any) =>
+      String(employee.id) === String(value) || String(employee.docId) === String(value) ||
+      String(employee.uid) === String(value) || String(employee.email || '').toLowerCase() === String(value).toLowerCase()
+    );
+    return match?._dbId ? Number(match._dbId) : (/^\d+$/.test(String(value)) ? Number(value) : null);
+  } catch { return null; }
 }
-
-export const getSupabaseClient = () => supabaseAdmin || supabase;
