@@ -664,9 +664,9 @@ CREATE TABLE IF NOT EXISTS enterprise_surveys (
 -- Table: generic_collections
 CREATE TABLE IF NOT EXISTS generic_collections (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    doc_id LONGTEXT NOT NULL,
+    doc_id VARCHAR(255) NOT NULL,
     uid CHAR(36) NOT NULL UNIQUE,
-    collection LONGTEXT NOT NULL,
+    collection VARCHAR(255) NOT NULL,
     data JSON NOT NULL,
     updated_at DATETIME(3) DEFAULT NOW(),
     CONSTRAINT uq_generic_collection_doc UNIQUE (collection, doc_id)
