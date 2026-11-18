@@ -16,7 +16,7 @@ function normalizeUser(row: any, roleIds: Record<string, number>) {
   const raw = { ...row };
   const role = String(row.role || row.roleCode || row.role_type || '').toUpperCase();
   const roleCode = role.includes('ADMIN') ? 'SUPER_ADMIN' : role.includes('RESPONSABLE') ? 'RESPONSABLE' : 'EMPLOYE';
-  raw.roleId = Number(roleIds[roleCode] || row.roleId || row.role_id || 0) || null;
+  raw.roleId = Number(role ? roleIds[roleCode] || row.roleId || row.role_id : row.roleId || row.role_id || roleIds[roleCode] || 0) || null;
   const legacyPassword = String(raw.passwordHash || raw.password_hash || raw.password || raw.initialPassword || '');
   if (legacyPassword) {
     raw.passwordHash = legacyPassword.startsWith('pbkdf2:') || /^\$2[aby]\$/.test(legacyPassword)
@@ -32,7 +32,7 @@ function normalizeEmployee(row: any, roleIds: Record<string, number>) {
   const raw = { ...row };
   const role = String(row.roleType || row.role || row.role_type || '').toUpperCase();
   const roleCode = role.includes('ADMIN') ? 'SUPER_ADMIN' : role.includes('RESPONSABLE') ? 'RESPONSABLE' : 'EMPLOYE';
-  raw.roleId = Number(roleIds[roleCode] || row.roleId || row.role_id || 0) || null;
+  raw.roleId = Number(role ? roleIds[roleCode] || row.roleId || row.role_id : row.roleId || row.role_id || roleIds[roleCode] || 0) || null;
   raw.userId = null; // Re-linked by email after all users and employees are imported.
   return raw;
 }
@@ -114,6 +114,11 @@ async function main() {
         : (sourceRow.raw_data || {});
       const flattened = { ...raw, ...sourceRow };
       delete flattened.raw_data;
+      const legacyRoleId = String(flattened.roleId || flattened.role_id || '');
+      const legacyRoleMap = legacyIds.roles || new Map<string, number>();
+      if ((collection === 'users' || collection === 'employees') && legacyRoleMap.has(legacyRoleId)) {
+        flattened.roleId = legacyRoleMap.get(legacyRoleId);
+      }
       let row = collection === 'users'
         ? normalizeUser(flattened, roleIds)
         : collection === 'employees'
@@ -209,9 +214,11 @@ async function main() {
       await saveMariaDbDocument(collection, row);
       const table = mapCollectionToMariaDbTable(collection);
       if (table !== 'generic_collections') {
-        const [savedRows] = await pool.execute<any[]>(
-          `SELECT id FROM \\x60${table}\\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
-        );
+        const [savedRows] = collection === 'roles' && row.code
+          ? await pool.execute<any[]>('SELECT id FROM roles WHERE code = ? LIMIT 1', [row.code])
+          : await pool.execute<any[]>(
+              `SELECT id FROM \\x60${table}\\x60 WHERE doc_id = ? LIMIT 1`, [stableDocId]
+            );
         if (savedRows[0] && legacyId) {
           const mapKey = table === 'inventory' ? 'inventory' : collection;
           legacyIds[mapKey] ||= new Map<string, number>();
