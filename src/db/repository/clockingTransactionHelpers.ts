@@ -84,9 +84,9 @@ function validateEmployeeGps(context: ClockingCredentialContext, config: any): v
     || String(config.doorQrRequireGps || '').toLowerCase() === 'true';
   if (!requireGps) return;
 
-  const officeLatitude = Number(config.officeLatitude ?? config.hqLatitude ?? process.env.OFFICE_LATITUDE ?? 4.016246);
-  const officeLongitude = Number(config.officeLongitude ?? config.hqLongitude ?? process.env.OFFICE_LONGITUDE ?? 9.8203514);
-  const radius = Number(config.doorQrGpsRadiusMeters ?? process.env.OFFICE_GPS_RADIUS_METERS ?? 500);
+  const officeLatitude = Number(config.officeLatitude || config.hqLatitude || process.env.OFFICE_LATITUDE || 4.016246);
+  const officeLongitude = Number(config.officeLongitude || config.hqLongitude || process.env.OFFICE_LONGITUDE || 9.8203514);
+  const radius = Number(config.doorQrGpsRadiusMeters || process.env.OFFICE_GPS_RADIUS_METERS || 500);
   if (!Number.isFinite(officeLatitude) || !Number.isFinite(officeLongitude) || !Number.isFinite(radius) || radius <= 0) {
     throw new Error('Pointage rejeté : la géolocalisation du siège doit être configurée.');
   }
