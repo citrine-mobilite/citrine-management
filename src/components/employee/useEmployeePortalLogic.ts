@@ -22,6 +22,7 @@ import {
   calculateEmployeeTenure,
 } from './portal/employeeProfileBuilder';
 import { usePortalClockingAndReport } from './portal/usePortalClockingAndReport';
+import { getDoualaDateString } from '../../utils/doualaTime';
 
 interface UseEmployeePortalLogicProps {
   currentUser: AppUser | null;
