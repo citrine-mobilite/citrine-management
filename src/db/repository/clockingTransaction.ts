@@ -24,6 +24,15 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
   const method = presence.clockingMethod || presence.method || 'qr_code_door';
   const safePresence = { ...presence };
   delete safePresence.qrCodeToken;
+  if (safePresence.clockLocations && typeof safePresence.clockLocations === 'object') {
+    safePresence.clockLocations = Object.fromEntries(
+      Object.entries(safePresence.clockLocations).map(([key, value]: [string, any]) => {
+        const safeLocation = value && typeof value === 'object' ? { ...value } : value;
+        if (safeLocation && typeof safeLocation === 'object') delete safeLocation.qrCodeToken;
+        return [key, safeLocation];
+      })
+    );
+  }
 
   const arrival = String(presence.arrivalTime || '');
   const departure = String(presence.departureTime || '');
