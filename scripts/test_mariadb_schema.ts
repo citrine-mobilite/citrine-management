@@ -7,7 +7,7 @@ import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
 import { verifyAndMaybeUpgrade } from '../src/server/expressAuthRoutes';
 import { saveMariaDbDocument, getMariaDbCollection, deleteMariaDbDocument } from '../src/db/mariaDbCollections';
-import { closeMariaDbPool, withMariaDbTransaction } from '../src/db/mariadb';
+import { closeMariaDbPool, getMariaDbPool, withMariaDbTransaction } from '../src/db/mariadb';
 import { verifyDoorQrTokenOnServer } from '../src/db/repository/clockingTransactionHelpers';
 import { executeAtomicClockingTransaction } from '../src/db/repository/clockingTransaction';
 
