@@ -2,6 +2,7 @@ import { dbPromise } from '../lib/idb';
 import { mariaDbService } from './mariaDbService';
 import { sendBatchedOfflineWhatsappNotifications } from './notificationSender';
 import { NotificationLog } from '../types';
+import { loadSecureSession } from './sessionService';
 
 export interface QueuedOfflineAction {
   id: string;
@@ -9,6 +10,7 @@ export interface QueuedOfflineAction {
   actionType: 'save' | 'delete';
   payload: any;
   timestamp: string;
+  ownerUserId?: string;
 }
 
 export const OFFLINE_SYNC_EVENT = 'processflow_offline_sync';
@@ -50,7 +52,8 @@ export const offlineService = {
   async enqueueAction(
     collectionName: string,
     actionType: 'save' | 'delete',
-    payload: any
+    payload: any,
+    ownerUserId: string
   ): Promise<QueuedOfflineAction> {
     const queueId = `queue-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const action: QueuedOfflineAction = {
@@ -58,7 +61,8 @@ export const offlineService = {
       collectionName,
       actionType,
       payload,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      ownerUserId
     };
 
     try {
@@ -165,12 +169,22 @@ export const offlineService = {
     if (queue.length === 0) {
       return { success: true, syncedCount: 0, errors: 0 };
     }
+    const currentUser = await loadSecureSession();
+    if (!currentUser?.id) {
+      return { success: false, syncedCount: 0, errors: 0 };
+    }
 
     let syncedCount = 0;
     let errors = 0;
     const queuedNotificationsToBatch: NotificationLog[] = [];
 
     for (const action of queue) {
+      if (!action.ownerUserId) {
+        // Legacy unscoped actions cannot safely be replayed under an arbitrary account.
+        await this.removeQueueAction(action.id);
+        continue;
+      }
+      if (String(action.ownerUserId) !== String(currentUser.id)) continue;
       try {
         if (action.actionType === 'save') {
           const docId = action.payload.id || action.payload.employeeId;
