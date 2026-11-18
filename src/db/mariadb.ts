@@ -27,10 +27,8 @@ export function getMariaDbPool(): Pool {
     enableKeepAlive: true,
     keepAliveInitialDelay: 0,
   });
-  pool.on('connection', connection => {
-    void connection.query("SET time_zone = '+00:00'").catch(error => {
-      console.error('[MariaDB] Impossible de fixer le fuseau UTC de la connexion :', error);
-    });
+  pool.on('connection', (connection: any) => {
+    connection.query("SET time_zone = '+00:00'");
   });
   return pool;
 }
