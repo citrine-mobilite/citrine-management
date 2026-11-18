@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { withMariaDbTransaction } from '../mariadb';
-import { resolveEmployeeDbId, resolveUserDbId } from './tableHelpers';
+import { resolveEmployeeDbId } from './tableHelpers';
 import { resolveClockingDerogations, verifyDoorQrTokenOnServer } from './clockingTransactionHelpers';
 
 export interface AtomicClockingTransactionInput { presence: any; incident?: any | null; notification?: any | null; actor?: { id: string; role: string }; action?: string; }
