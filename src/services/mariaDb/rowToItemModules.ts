@@ -1,6 +1,17 @@
+function parseRowJson(value: any): Record<string, any> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch { return {}; }
+  }
+  return {};
+}
+
 export function mapModuleMariaDbRowToItem(table: string, row: any): any | null {
   if (table === 'presences') {
-    const raw = (row.raw_data && typeof row.raw_data === 'object') ? row.raw_data : {};
+    const raw = parseRowJson(row.raw_data);
     const originalId = raw.id || row.doc_id || String(row.id);
     return {
       ...raw,
