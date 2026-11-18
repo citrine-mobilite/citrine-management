@@ -29,8 +29,9 @@ const MANAGER_COLLECTIONS = new Set([
   'rh_document_templates', 'hse_incidents', 'visitor_logs', 'job_offers',
 ]);
 
+function isAdmin(user: any): boolean { return String(user?.role || '').toLowerCase() === 'administrateur'; }
 function isPrivileged(user: any): boolean {
-  return ['administrateur', 'responsable'].includes(String(user?.role || '').toLowerCase());
+  return isAdmin(user) || String(user?.role || '').toLowerCase() === 'responsable';
 }
 
 function authorizeCollectionWrite(req: AuthRequest, res: express.Response, next: express.NextFunction) {
@@ -120,9 +121,14 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
           smtpPass: '',
           smtpPassConfigured: Boolean(item.smtpPass),
           smtpPassword: undefined,
+          ...(!isAdmin(req.user) ? {
+            qrCodeSecret: undefined,
+            doorQrCodeToken: undefined,
+            qrToken: undefined,
+          } : {}),
         }));
       }
-      if (['salary_payments', 'financial_transactions', 'processflow_salary_debts', 'admin_audit_logs', 'connection_logs'].includes(collection) && !isPrivileged(req.user)) {
+      if (['salary_payments', 'financial_transactions', 'processflow_salary_debts', 'admin_audit_logs', 'connection_logs'].includes(collection) && !isAdmin(req.user)) {
         return res.status(403).json({ success: false, error: 'Accès réservé à la direction.' });
       }
       res.json({ success: true, data });
@@ -174,10 +180,10 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/collaborators/transactional', requireAuth, requireAdminOrResponsable, async (req: express.Request, res: express.Response) => {
+  app.post('/api/collaborators/transactional', requireAuth, requireAdminOrResponsable, async (req: AuthRequest, res: express.Response) => {
     try {
       const input = req.body;
-      if (String(req.user?.role || '').toLowerCase() === 'responsable' && String(input?.userRole || input?.roleType || '').toLowerCase().includes('admin')) {
+      if (String(req.user?.role || '').toLowerCase() === 'responsable' && String(input?.userRole || '').toLowerCase().includes('admin') || String(input?.roleType || '').toLowerCase().includes('admin')) {
         return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
       }
       if (!input?.name || !input?.email) {
@@ -194,7 +200,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.post('/api/collaborators/update-transactional', requireAuth, requireAdminOrResponsable, async (req: AuthRequest, res) => {
     try {
       if (!req.body?.employee) return res.status(400).json({ success: false, error: 'Données collaborateur manquantes.' });
-      if (String(req.user?.role || '').toLowerCase() === 'responsable' && String(req.body?.userRole || req.body?.employee?.roleType || '').toLowerCase().includes('admin')) {
+      if (String(req.user?.role || '').toLowerCase() === 'responsable' && String(req.body?.userRole || '').toLowerCase().includes('admin') || String(req.body?.employee?.roleType || '').toLowerCase().includes('admin')) {
         return res.status(403).json({ success: false, error: 'Seul un administrateur peut attribuer le rôle administrateur.' });
       }
       const result = await executeCollaboratorUpdateTransaction(req.body);
