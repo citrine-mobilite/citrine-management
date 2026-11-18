@@ -1,7 +1,7 @@
 import { AppUser, CallType, VoIPCall } from '../../types';
 import { webRTCService } from '../webRTCService';
 import { soundService } from '../soundService';
-import { sendCandidate, sendCallEvent } from './signalingSupabase';
+import { sendCandidate, sendCallEvent } from './signalingMariaDb';
 import { CallEventCallbacks } from './callTypes';
 
 export function setupCallWebRtcCallbacks(params: {
