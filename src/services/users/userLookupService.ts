@@ -1,5 +1,5 @@
 import { AppUser } from '../../types';
-import { supabaseService } from '../supabaseService';
+import { mariaDbService } from '../mariaDbService';
 import { asyncActionTrackerService } from '../asyncActionTrackerService';
 import { mapDbEmployeeOnlyToAppUser, mapDbUserAndEmpToAppUser, mapDbUserRow } from './userMapperHelpers';
 
@@ -8,8 +8,8 @@ export async function fetchDatabaseUserByEmail(email: string): Promise<AppUser |
   const cleanEmail = email.trim().toLowerCase();
   try {
     const [users, employees] = await Promise.all([
-      supabaseService.fetchCollection<any>('users'),
-      supabaseService.fetchCollection<any>('employees'),
+      mariaDbService.fetchCollection<any>('users'),
+      mariaDbService.fetchCollection<any>('employees'),
     ]);
     const user = users.find((row: any) => String(row.email || '').trim().toLowerCase() === cleanEmail);
     const employee = employees.find((row: any) =>
@@ -29,7 +29,7 @@ export async function fetchFreshUser(emailOrId: string): Promise<AppUser | null>
   if (!value) return null;
   if (value.includes('@')) return fetchDatabaseUserByEmail(value);
   try {
-    const users = await supabaseService.fetchCollection<any>('users');
+    const users = await mariaDbService.fetchCollection<any>('users');
     const user = users.find((row: any) =>
       String(row.id) === value || String(row._dbId) === value ||
       String(row.uid || '') === value || String(row.docId || row.doc_id || '') === value
@@ -40,7 +40,7 @@ export async function fetchFreshUser(emailOrId: string): Promise<AppUser | null>
 
 export async function deleteUser(userId: string): Promise<void> {
   return asyncActionTrackerService.track('Suppression du compte utilisateur...', async () => {
-    await supabaseService.deleteDocument('users', userId);
+    await mariaDbService.deleteDocument('users', userId);
   });
 }
 
