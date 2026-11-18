@@ -12,7 +12,7 @@ function parseRaw(value: any): any {
 }
 function minutesBetweenClocks(from: string, to: string): number {
   const parse = (value: string) => {
-    const match = value.match(/^(\\d{2}):(\\d{2})$/);
+    const match = value.match(/^(\d{2}):(\d{2})$/);
     return match ? Number(match[1]) * 60 + Number(match[2]) : 0;
   };
   return Math.max(0, parse(to) - parse(from));
@@ -78,7 +78,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
     const oldRaw = parseRaw(oldPresence[0]?.raw_data);
     const requestedTime = String(presence[actionField] || '').trim();
     const isAdminOverride = method === 'admin_on_behalf';
-    const actionTime = isAdminOverride && /^([01]\\d|2[0-3]):[0-5]\\d$/.test(requestedTime)
+    const actionTime = isAdminOverride && /^([01]\d|2[0-3]):[0-5]\d$/.test(requestedTime)
       ? requestedTime
       : serverTime;
     const arrivalTime = action === 'arrival' ? actionTime : String(oldRaw.arrivalTime || '');
