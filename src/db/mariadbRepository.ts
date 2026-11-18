@@ -27,7 +27,7 @@ function assertColumn(column: string): void {
   if (!IDENTIFIER.test(column)) throw new Error(`Nom de colonne SQL invalide : ${column}`);
 }
 
-function normalizeValue(value: unknown): unknown {
+function normalizeValue(value: any): any {
   if (value === undefined) return null;
   if (value !== null && typeof value === 'object' && !(value instanceof Date) && !Buffer.isBuffer(value)) {
     return JSON.stringify(value);
