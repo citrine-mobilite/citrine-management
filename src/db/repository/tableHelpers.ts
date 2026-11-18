@@ -13,8 +13,7 @@ export function mapCollectionToTable(collectionName: string): string {
     'financial_transactions','partners','notifications','company_settings','calls','user_presences',
     'job_offers','job_applications','expense_claims','hse_incidents','visitor_logs','idea_suggestions',
     'enterprise_surveys','connection_logs','admin_audit_logs','task_assignees','task_project_members',
-    'reminder_recipients','notification_recipients','presence_pauses','leave_requests','absences',
-  ]);
+    'reminder_recipients','notification_recipients','presence_pauses','leave_requests',]);
   const table = map[collectionName] || collectionName;
   return known.has(table) ? table : 'generic_collections';
 }
