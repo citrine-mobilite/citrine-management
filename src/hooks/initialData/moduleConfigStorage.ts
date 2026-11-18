@@ -42,3 +42,7 @@ export function persistStoredModuleConfig(config: CompanyModuleConfig): void {
     }
   } catch {}
 }
+
+export function clearStoredModuleConfig(): void {
+  safeStorage.removeItem(MODULE_CACHE_KEY);
+}
