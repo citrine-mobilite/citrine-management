@@ -21,7 +21,7 @@ async function main() {
     multipleStatements: true,
   });
   try {
-    for (const file of ['001_schema.sql','002_auth_sessions.sql','003_seed_reference_data.sql','004_call_signals.sql','005_presence_employee_date_index.sql']) {
+    for (const file of ['001_schema.sql','002_auth_sessions.sql','003_seed_reference_data.sql','004_call_signals.sql','005_presence_employee_date_index.sql','006_relation_raw_data.sql']) {
       const sql = await fs.readFile(path.resolve('database/mariadb', file), 'utf8');
       await connection.query(sql);
       console.log('[OK] Migration ' + file);
@@ -30,6 +30,10 @@ async function main() {
     if (Number(tables[0]?.total) < 42) throw new Error('Schéma incomplet : au moins 42 tables attendues.');
     const [presenceIndexes] = await connection.query<any[]>("SELECT index_name FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'presences' AND index_name = 'idx_presences_employee_date'");
     if (!presenceIndexes.length) throw new Error('Index de verrouillage des pointages par collaborateur/jour manquant.');
+    const [relationRawData] = await connection.query<any[]>(
+      "SELECT COUNT(*) AS total FROM information_schema.columns WHERE table_schema = DATABASE() AND column_name = 'raw_data' AND table_name IN ('task_project_members','task_assignees','reminder_recipients','notification_recipients','presence_pauses','inventory_assignments')"
+    );
+    if (Number(relationRawData[0]?.total) !== 6) throw new Error('Les tables relationnelles doivent toutes conserver raw_data.');
     const [roles] = await connection.query<any[]>('SELECT code FROM roles ORDER BY id');
     const codes = new Set(roles.map(row => row.code));
     for (const code of ['SUPER_ADMIN','RESPONSABLE','EMPLOYE']) if (!codes.has(code)) throw new Error('Rôle de référence manquant : ' + code);
