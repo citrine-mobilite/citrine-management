@@ -2,6 +2,7 @@ import { getApiToken } from '../sessionService';
 
 export function mapCollectionToTable(collectionName: string): string {
   switch (collectionName) {
+    case 'roles': return 'roles';
     case 'users': return 'users';
     case 'employees': return 'employees';
     case 'tasks': return 'tasks';
@@ -11,6 +12,7 @@ export function mapCollectionToTable(collectionName: string): string {
     case 'attendance_incidents': return 'attendance_incidents';
     case 'badge_codes_16': return 'badge_codes_16';
     case 'dynamic_qr_sessions': return 'dynamic_qr_sessions';
+    case 'inventory_assignments': return 'inventory_assignments';
     case 'inventory_items':
     case 'inventory': return 'inventory';
     case 'disciplinary_incidents': return 'disciplinary_incidents';
