@@ -45,11 +45,12 @@ export async function verifyDoorQrTokenOnServer(clockMethod: string, qrCodeToken
   if (clockMethod !== 'qr_code_door') return;
   const [rows] = await getMariaDbPool().execute<RowDataPacket[]>('SELECT raw_data, setting_value FROM company_settings ORDER BY id DESC LIMIT 20');
   const row = rows.find((x: any) => x.doc_id === 'main_config' || x.setting_key === 'main_config') || rows[0];
-  if (!row) return;
+  if (!row) throw new Error('Pointage rejeté : aucun jeton QR officiel n’est configuré.');
   const cfg = parseJson(row.raw_data).doorQrCodeToken !== undefined
     ? parseJson(row.raw_data)
     : parseJson(row.setting_value || row.raw_data);
   const official = String(cfg.doorQrCodeToken || cfg.qrCodeSecret || '').trim().toUpperCase();
+  if (!official) throw new Error('Pointage rejeté : le jeton QR officiel doit être configuré par un administrateur.');
   const revoked = cfg.doorQrCodeRevoked === true;
   const revokedList = Array.isArray(cfg.revokedDoorTokens) ? cfg.revokedDoorTokens.map((x: any) => String(x).trim().toUpperCase()) : [];
   const candidate = String(qrCodeToken || '').trim().toUpperCase();
