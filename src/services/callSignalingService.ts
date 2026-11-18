@@ -1,51 +1,56 @@
-import { supabase, supabaseAdmin } from '../lib/supabase';
 import { VoIPCall, CallType, AppUser } from '../types';
 import { webRTCService } from './webRTCService';
 import { soundService } from './soundService';
-import { listenToCandidates } from './calls/signalingSupabase';
+import { listenToCandidates, listenToSignals, sendSignal } from './calls/signalingSupabase';
 import { CallEventCallbacks } from './calls/callTypes';
-import {
-  broadcastCallRoomEvent,
-  buildOutgoingCallPayload,
-  setupCallWebRtcCallbacks,
-} from './calls/callChannelHelpers';
+import { broadcastCallRoomEvent, buildOutgoingCallPayload, setupCallWebRtcCallbacks } from './calls/callChannelHelpers';
+import { getApiToken } from './sessionService';
 
 type Unsubscribe = () => void;
 
+async function apiFetch(path: string, init: RequestInit = {}) {
+  const token = getApiToken();
+  if (!token) throw new Error('Session expirée. Veuillez vous reconnecter.');
+  const response = await fetch(path, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, ...(init.headers || {}) },
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.success === false) throw new Error(result.error || 'Service d’appel indisponible.');
+  return result;
+}
+
 class CallSignalingService {
-  private activeCallChannel: any = null;
-  private candidatesUnsub: Unsubscribe | null = null;
+  private signalUnsubs: Unsubscribe[] = [];
   private currentCallId: string | null = null;
 
-  public listenForIncomingCalls(
-    userId: string,
-    onIncomingCall: (call: VoIPCall | null) => void
-  ): Unsubscribe {
-    if (!userId) return () => {};
-
-    const userChannel = supabase.channel(`incoming_calls_user_${userId}`);
-    userChannel.on('broadcast', { event: 'incoming_call' }, ({ payload }) => {
-      const callData = payload as VoIPCall;
-      if (callData && callData.status === 'ringing') {
-        const callTime = new Date(callData.createdAt).getTime();
-        if (Date.now() - callTime < 60000) {
+  public listenForIncomingCalls(_userId: string, onIncomingCall: (call: VoIPCall | null) => void): Unsubscribe {
+    let active = true, busy = false;
+    let lastCallId: string | null = null;
+    const poll = async () => {
+      if (!active || busy) return;
+      busy = true;
+      try {
+        const result = await apiFetch('/api/calls/incoming');
+        const call = (result.calls || []).find((item: VoIPCall) =>
+          item.status === 'ringing' && Date.now() - new Date(item.createdAt).getTime() < 60000
+        ) as VoIPCall | undefined;
+        if (call && call.id !== lastCallId) {
+          lastCallId = call.id;
           soundService.playIncomingRingtone();
-          onIncomingCall(callData);
-        } else {
+          onIncomingCall(call);
+        } else if (!call && lastCallId) {
+          lastCallId = null;
+          soundService.stopIncomingRingtone();
           onIncomingCall(null);
         }
-      }
-    });
-
-    userChannel.on('broadcast', { event: 'call_ended' }, () => {
-      soundService.stopIncomingRingtone();
-      onIncomingCall(null);
-    });
-
-    userChannel.subscribe();
-    return () => {
-      supabase.removeChannel(userChannel);
+      } catch (error) {
+        console.warn('[Call incoming poll]', error);
+      } finally { busy = false; }
     };
+    void poll();
+    const timer = window.setInterval(poll, 2000);
+    return () => { active = false; window.clearInterval(timer); soundService.stopIncomingRingtone(); };
   }
 
   public async initiateCall(params: {
@@ -56,132 +61,88 @@ class CallSignalingService {
   }): Promise<VoIPCall> {
     const { caller, callee, type, callbacks } = params;
     this.cleanUp();
-
-    const callId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const callId = 'call_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     this.currentCallId = callId;
-
-    await webRTCService.startLocalStream(type);
-    setupCallWebRtcCallbacks({ callId, localUserId: caller.id, stopRingbackOnConnect: true, callbacks });
-
-    const offer = await webRTCService.createOffer(callee.id);
-    const callData = buildOutgoingCallPayload({ callId, caller, callee, type, offerSdp: offer.sdp });
-
-    const calleeChannel = supabase.channel(`incoming_calls_user_${callee.id}`);
-    calleeChannel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        calleeChannel.send({ type: 'broadcast', event: 'incoming_call', payload: callData });
-      }
-    });
-
-    supabaseAdmin
-      .from('calls')
-      .insert({
-        room_id: callId,
-        caller_id: caller.id,
-        recipient_id: callee.id,
-        call_type: type,
-        status: 'ringing',
-        raw_data: callData,
-        updated_at: new Date().toISOString(),
-      })
-      .then(() => {}, () => {});
-
-    soundService.playOutgoingRingback();
-    this.candidatesUnsub = listenToCandidates(callId, caller.id, (c) => webRTCService.addIceCandidate(c.fromUserId, c));
-
-    const callChannel = supabase.channel(`call_room_${callId}`);
-    this.activeCallChannel = callChannel;
-
-    callChannel.on('broadcast', { event: 'call_answered' }, async ({ payload }) => {
-      soundService.stopOutgoingRingback();
-      if (payload?.answer) {
-        try {
-          await webRTCService.handleAnswer(callee.id, payload.answer as RTCSessionDescriptionInit);
-          callbacks?.onConnected?.();
-        } catch (err) {
-          console.warn('Erreur établissement réponse WebRTC :', err);
+    try {
+      await webRTCService.startLocalStream(type);
+      setupCallWebRtcCallbacks({ callId, localUserId: caller.id, stopRingbackOnConnect: true, callbacks });
+      const offer = await webRTCService.createOffer(callee.id);
+      const callData = buildOutgoingCallPayload({ callId, caller, callee, type, offerSdp: offer.sdp });
+      const created = await apiFetch('/api/calls', {
+        method: 'POST', body: JSON.stringify({ receiverId: callee.id, call: callData }),
+      });
+      soundService.playOutgoingRingback();
+      this.signalUnsubs.push(listenToCandidates(callId, caller.id, candidate => {
+        void webRTCService.addIceCandidate(candidate.fromUserId, candidate);
+      }));
+      this.signalUnsubs.push(listenToSignals(callId, caller.id, async signal => {
+        const event = (signal as any).event;
+        if (event === 'call_answered' && (signal as any).answer) {
+          soundService.stopOutgoingRingback();
+          try {
+            await webRTCService.handleAnswer(callee.id, (signal as any).answer as RTCSessionDescriptionInit);
+            callbacks?.onConnected?.();
+          } catch (error) { console.warn('[Call answer]', error); }
+        } else if (event === 'call_ended') {
+          soundService.stopOutgoingRingback();
+          callbacks?.onEnded?.((signal as any).reason || \"L'appel a pris fin.\");
+          this.cleanUp();
         }
-      }
-    });
-
-    callChannel.on('broadcast', { event: 'call_ended' }, ({ payload }) => {
-      soundService.stopOutgoingRingback();
-      callbacks?.onEnded?.(payload?.reason || "L'appel a pris fin.");
+      }));
+      return (created.call || callData) as VoIPCall;
+    } catch (error) {
       this.cleanUp();
-    });
-
-    callChannel.subscribe();
-    return callData;
+      throw error;
+    }
   }
 
   public async answerCall(call: VoIPCall, callbacks?: CallEventCallbacks): Promise<void> {
     this.cleanUp();
     this.currentCallId = call.id;
     soundService.stopIncomingRingtone();
-
     await webRTCService.startLocalStream(call.type);
     setupCallWebRtcCallbacks({ callId: call.id, localUserId: call.calleeId, callbacks });
-
     if (call.offer) {
       const answer = await webRTCService.handleOffer(call.callerId, call.offer as RTCSessionDescriptionInit);
-      const callChannel = supabase.channel(`call_room_${call.id}`);
-      this.activeCallChannel = callChannel;
-
-      callChannel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          callChannel.send({
-            type: 'broadcast',
-            event: 'call_answered',
-            payload: { answer: { type: 'answer', sdp: answer.sdp || '' }, calleeId: call.calleeId },
-          });
-        }
+      await sendSignal(call.id, {
+        fromUserId: call.calleeId, toUserId: call.callerId,
+        event: 'call_answered', answer: { type: 'answer', sdp: answer.sdp || '' },
+      } as any);
+      await apiFetch('/api/calls/' + encodeURIComponent(call.id) + '/status', {
+        method: 'POST', body: JSON.stringify({ status: 'connected' }),
       });
-
-      callChannel.on('broadcast', { event: 'call_ended' }, ({ payload }) => {
-        callbacks?.onEnded?.(payload?.reason || "L'appel est terminé.");
-        this.cleanUp();
-      });
-
-      supabaseAdmin
-        .from('calls')
-        .update({
-          status: 'connected',
-          raw_data: { ...call, status: 'connected', answer: { type: 'answer', sdp: answer.sdp || '' } },
-          updated_at: new Date().toISOString(),
-        })
-        .eq('room_id', call.id)
-        .then(() => {}, () => {});
     }
-
+    this.signalUnsubs.push(listenToCandidates(call.id, call.calleeId, candidate => {
+      void webRTCService.addIceCandidate(candidate.fromUserId, candidate);
+    }));
+    this.signalUnsubs.push(listenToSignals(call.id, call.calleeId, signal => {
+      if ((signal as any).event === 'call_ended') {
+        callbacks?.onEnded?.((signal as any).reason || \"L'appel est terminé.\");
+        this.cleanUp();
+      }
+    }));
     soundService.playCallConnected();
-    this.candidatesUnsub = listenToCandidates(call.id, call.calleeId, (c) => webRTCService.addIceCandidate(c.fromUserId, c));
   }
 
   public async rejectCall(callId: string, reason = 'Appel refusé'): Promise<void> {
     soundService.stopIncomingRingtone();
-    broadcastCallRoomEvent(callId, 'call_ended', { reason });
-    supabaseAdmin
-      .from('calls')
-      .update({ status: 'rejected', updated_at: new Date().toISOString() })
-      .eq('room_id', callId)
-      .then(() => {}, () => {});
+    await broadcastCallRoomEvent(callId, 'call_ended', { reason });
+    await apiFetch('/api/calls/' + encodeURIComponent(callId) + '/status', {
+      method: 'POST', body: JSON.stringify({ status: 'rejected' }),
+    }).catch(() => {});
     this.cleanUp();
   }
 
   public async endCall(callId?: string, reason = 'Terminé'): Promise<void> {
-    const idToClose = callId || this.currentCallId;
+    const id = callId || this.currentCallId;
     soundService.stopOutgoingRingback();
     soundService.stopIncomingRingtone();
-
-    if (idToClose) {
-      broadcastCallRoomEvent(idToClose, 'call_ended', { reason });
-      supabaseAdmin
-        .from('calls')
-        .update({ status: 'ended', updated_at: new Date().toISOString() })
-        .eq('room_id', idToClose)
-        .then(() => {}, () => {});
+    if (id) {
+      await broadcastCallRoomEvent(id, 'call_ended', { reason });
+      await apiFetch('/api/calls/' + encodeURIComponent(id) + '/status', {
+        method: 'POST', body: JSON.stringify({ status: 'ended' }),
+      }).catch(() => {});
     }
-
     soundService.playCallEnded();
     webRTCService.endCall();
     this.cleanUp();
@@ -190,12 +151,8 @@ class CallSignalingService {
   public cleanUp(): void {
     soundService.stopOutgoingRingback();
     soundService.stopIncomingRingtone();
-    if (this.activeCallChannel) {
-      supabase.removeChannel(this.activeCallChannel);
-      this.activeCallChannel = null;
-    }
-    if (this.candidatesUnsub) this.candidatesUnsub();
-    this.candidatesUnsub = null;
+    for (const unsubscribe of this.signalUnsubs) unsubscribe();
+    this.signalUnsubs = [];
     this.currentCallId = null;
   }
 }
