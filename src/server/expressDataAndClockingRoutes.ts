@@ -26,7 +26,7 @@ const ADMIN_ONLY_COLLECTIONS = new Set([
 const MANAGER_COLLECTIONS = new Set([
   'employees', 'presences', 'attendance_incidents', 'disciplinary_incidents',
   'departments', 'inventory', 'inventory_assignments', 'documents',
-  'rh_document_templates', 'hse_incidents', 'visitor_logs', 'job_offers',
+  'rh_document_templates', 'hse_incidents', 'visitor_logs', 'job_offers', 'badge_codes_16', 'dynamic_qr_sessions',
 ]);
 
 function isAdmin(user: any): boolean { return String(user?.role || '').toLowerCase() === 'administrateur'; }
@@ -40,7 +40,7 @@ const ADMIN_READ_COLLECTIONS = new Set([
 ]);
 const MANAGER_READ_COLLECTIONS = new Set([
   'disciplinary_incidents', 'inventory', 'inventory_assignments',
-  'visitor_logs', 'hse_incidents', 'job_applications', 'rh_document_templates',
+  'visitor_logs', 'hse_incidents', 'job_applications', 'rh_document_templates', 'badge_codes_16', 'dynamic_qr_sessions',
 ]);
 const OWN_READ_COLLECTIONS = new Set([
   'presences', 'attendance_incidents', 'leave_requests', 'expense_claims',
