@@ -26,6 +26,7 @@ async function main() {
       await connection.query(sql);
       console.log('[OK] Migration ' + file);
     }
+    console.log('[CI] Migrations SQL terminées.');
     const [timezoneRows] = await getMariaDbPool().query<any[]>('SELECT @@session.time_zone AS time_zone');
     if (String(timezoneRows[0]?.time_zone) !== '+00:00') throw new Error('Les connexions applicatives MariaDB doivent utiliser UTC.');
     const [tables] = await connection.query<any[]>('SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema = DATABASE()');
@@ -90,6 +91,7 @@ async function main() {
     }
     await deleteMariaDbDocument('absences', absenceId);
 
+    console.log('[CI] CRUD users et collections génériques terminé.');
     const credentialContext = {
       employeeId: 910003,
       employeeName: 'CI Collaborateur',
@@ -142,6 +144,7 @@ async function main() {
     if (!badgeReuseRejected) throw new Error('Un code temporaire de 16 caractères déjà utilisé doit être rejeté.');
     await deleteMariaDbDocument('badge_codes_16', badgeId);
 
+    console.log('[CI] QR dynamique et code 16 caractères testés.');
     const importSuffix = randomUUID();
     const importUserEmail = `ci-import-${importSuffix}@example.invalid`;
     const importReceiverEmail = `ci-receiver-${importSuffix}@example.invalid`;
@@ -197,9 +200,11 @@ async function main() {
     const exportPath = path.join(tempDir, 'fixture.json');
     try {
       await fs.writeFile(exportPath, JSON.stringify(fixture), { encoding: 'utf8', mode: 0o600 });
+      console.log('[CI] Début import du jeu de données de test.');
       execFileSync('npx', ['tsx', 'scripts/import_mariadb_export.ts', exportPath, '--merge'], {
-        encoding: 'utf8', stdio: 'pipe', env: process.env,
+        encoding: 'utf8', stdio: 'pipe', env: process.env, timeout: 120000, maxBuffer: 10 * 1024 * 1024,
       });
+      console.log('[CI] Import du jeu de données terminé.');
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
@@ -274,6 +279,7 @@ async function main() {
       throw new Error('Les destinataires multiples de la notification n’ont pas été remappés.');
     }
 
+    console.log('[CI] Relations importées et vérifiées.');
     const testSettingsId = 'ci-main-config-' + importSuffix;
     await saveMariaDbDocument('company_settings', {
       id: testSettingsId,
@@ -363,6 +369,7 @@ async function main() {
         String(updatedClockRows[0]?.date) !== expectedDoualaDate) {
       throw new Error('Une action de pointage ne doit pas écraser les anciennes heures ni accepter les heures client.');
     }
+    console.log('[CI] Horodatage serveur et incidents automatiques vérifiés.');
     await connection.execute('DELETE FROM presences WHERE employee_id = ? AND date = ?', [importedEmployeeRows[0].id, expectedDoualaDate]);
     await deleteMariaDbDocument('dynamic_qr_sessions', clockSessionId1);
     await deleteMariaDbDocument('dynamic_qr_sessions', clockSessionId2);
