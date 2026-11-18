@@ -32,7 +32,7 @@ npm run build
 
 Les scripts d'export/import utilisent également les variables d'environnement. L'importeur charge automatiquement le fichier `.env` du dépôt.
 
-Créer le fichier privé `~/repositories/citrine-management/.env` à partir de `.env.example`, renseigner les identifiants MariaDB et les secrets SMTP/Pusher, puis :
+Créer le fichier privé `~/repositories/citrine-management/.env` à partir de `.env.example`, renseigner les identifiants MariaDB et les secrets SMTP/Pusher. Générer `CRON_SECRET` avec `/usr/bin/node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` et le conserver uniquement dans `.env`, puis :
 
 ```bash
 chmod 600 .env
@@ -77,7 +77,7 @@ Après avoir testé le démarrage manuel, vérifier `https://management.citrine-
 * * * * * /bin/bash /home/citrinemobilite/repositories/citrine-management/scripts/ovh_management_watchdog.sh >/dev/null 2>&1
 ```
 
-Le script écrit les logs dans `~/logs/management.log`. Le PID est conservé dans `~/.management-node.pid`.
+Le script écrit les logs dans `~/logs/management.log`. Le PID est conservé dans `~/.management-node.pid`. Les routes `/api/cron/*` exigent l'en-tête HTTP `x-cron-secret` égal à `CRON_SECRET`; le planificateur interne Node n'a pas besoin de cet en-tête.
 
 **Ne supprime pas le cron de test Node actuellement présent sur l'hébergement avant que le nouveau serveur soit démarré et vérifié.** Une fois le watchdog de production validé, remplacer uniquement le cron de test par celui ci-dessus.
 
