@@ -144,14 +144,14 @@ async function main() {
       throw new Error('Les participants de l’appel n’ont pas été remappés.');
     }
     const importedGeneric = await getMariaDbCollection('ci_import_collection');
-    if (!importedGeneric.some(row => row.id === legacyGenericId && row.label === 'CI imported generic record')) {
+    if (!importedGeneric.some(row => row.id === 'ci_import_collection-' + legacyGenericId && row.label === 'CI imported generic record')) {
       throw new Error('Import de generic_collections incomplet.');
     }
     await connection.execute('DELETE FROM calls WHERE doc_id = ?', ['calls-' + legacyCallId]);
     await connection.execute('DELETE FROM tasks WHERE doc_id = ?', ['tasks-' + legacyTaskId]);
     await connection.execute('DELETE FROM employees WHERE email = ?', [importEmployeeEmail]);
     await connection.execute('DELETE FROM users WHERE email IN (?, ?)', [importUserEmail, importReceiverEmail]);
-    await connection.execute('DELETE FROM generic_collections WHERE collection = ? AND doc_id = ?', ['ci_import_collection', legacyGenericId]);
+    await connection.execute('DELETE FROM generic_collections WHERE collection = ? AND doc_id = ?', ['ci_import_collection', 'ci_import_collection-' + legacyGenericId]);
 
     const [requiredTables] = await connection.query<any[]>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('auth_sessions','call_signals','generic_collections')"
