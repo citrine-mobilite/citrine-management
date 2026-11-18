@@ -2,6 +2,7 @@ import type { Express, Request, Response } from 'express';
 import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { getMariaDbPool, pingMariaDb } from '../db/mariadb';
 import type { RowDataPacket } from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
 
 type UserRow = RowDataPacket & {
   id: number; uid: string; doc_id: string; email: string; name: string | null;
@@ -16,6 +17,16 @@ function parseRaw(value: unknown): Record<string, any> {
 }
 
 function verifyAndMaybeUpgrade(password: string, stored: string): { valid: boolean; upgraded?: string } {
+  if (/^\$2[aby]\$/.test(stored)) {
+    try {
+      if (!bcrypt.compareSync(password, stored)) return { valid: false };
+      const salt = randomBytes(16);
+      const hash = pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+      return { valid: true, upgraded: `pbkdf2:${salt.toString('hex')}:${hash.toString('hex')}` };
+    } catch {
+      return { valid: false };
+    }
+  }
   if (stored.startsWith('pbkdf2:')) {
     const [, saltHex, expectedHex] = stored.split(':');
     if (!/^[a-f0-9]{32}$/i.test(saltHex || '') || !/^[a-f0-9]{64}$/i.test(expectedHex || '')) return { valid: false };
