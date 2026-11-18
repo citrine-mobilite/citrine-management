@@ -85,7 +85,7 @@ function buildRequiredColumns(table: string, item: any, docId: string): Record<s
     processflow_salary_debts: { amount, employee_id: Number(item.employeeId || 0) || null },
     salary_payments: { month: String(item.month || today.slice(0,7)), year: Number(item.year || new Date().getFullYear()), base_salary: Number(item.baseSalary || 0), net_salary: Number(item.netSalary || item.amount || 0), employee_id: Number(item.employeeId || 0) || null },
     financial_transactions: { type: item.type || 'autre', amount, date: today, description: item.description || null },
-    partners: { name: item.name || 'Partenaire', type: item.type || null, contact_name: item.contactName || null },
+    partners: { name: item.name || 'Partenaire' },
     company_settings: { setting_key: item.settingKey || 'main_config', setting_value: jsonValue(item) },
     leave_requests: { employee_id: Number(item.employeeId || 0) || null, employee_name: item.employeeName || null, start_date: item.startDate ? asDate(item.startDate) : today, end_date: item.endDate ? asDate(item.endDate) : today, days_count: Number(item.daysCount || 1), reason: item.reason || null, status: item.status || 'pending' },
     job_offers: { title: item.title || 'Offre', description: item.description || null, status: item.status || 'ouverte' },
