@@ -1,8 +1,7 @@
-import { supabase } from '../../lib/supabase';
 import { AppUser, CallType, VoIPCall } from '../../types';
 import { webRTCService } from '../webRTCService';
 import { soundService } from '../soundService';
-import { sendCandidate } from './signalingSupabase';
+import { sendCandidate, sendCallEvent } from './signalingSupabase';
 import { CallEventCallbacks } from './callTypes';
 
 export function setupCallWebRtcCallbacks(params: {
@@ -67,10 +66,5 @@ export function buildOutgoingCallPayload(params: {
 }
 
 export function broadcastCallRoomEvent(callId: string, event: string, payload: Record<string, any>): void {
-  const channel = supabase.channel(`call_room_${callId}`);
-  channel.subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      channel.send({ type: 'broadcast', event, payload });
-    }
-  });
+  void sendCallEvent(callId, event, payload).catch(error => console.warn('[Call signaling]', error));
 }
