@@ -1,5 +1,6 @@
 import express from 'express';
 import { pingMariaDb, getMariaDbPool } from '../db/mariadb';
+import { isSupportedMariaDbCollection, isGenericMariaDbCollection } from '../db/mariaDbCollections';
 import type { RowDataPacket } from 'mysql2/promise';
 import { requireAuth, requireAdmin, requireAdminOrResponsable, AuthRequest } from '../middleware/auth';
 import {
@@ -140,6 +141,8 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.get('/api/data/:collection', requireAuth, async (req: AuthRequest, res) => {
     try {
       const { collection } = req.params;
+      if (!isSupportedMariaDbCollection(collection)) return res.status(404).json({ success: false, error: 'Collection inconnue ou non autorisée.' });
+      if (isGenericMariaDbCollection(collection) && !isPrivileged(req.user)) return res.status(403).json({ success: false, error: 'Accès réservé aux responsables.' });
       if (ADMIN_READ_COLLECTIONS.has(collection) && !isAdmin(req.user)) {
         return res.status(403).json({ success: false, error: 'Accès réservé à l’administrateur.' });
       }
@@ -176,6 +179,17 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
           const hasTarget = Boolean(targetUser || targetEmployees.length);
           return !hasTarget || targetUser === userId || targetEmployees.some((id: any) => allowedEmployeeIds.has(String(id)));
         });
+      }
+
+      if (!privileged && collection === 'users') {
+        const ownUserId = String(req.user?.id || '');
+        const ownUid = String(req.user?.uid || '');
+        const ownEmail = String(req.user?.email || '').toLowerCase();
+        data = data.filter((item: any) =>
+          String(item.id || '') === ownUserId ||
+          String(item.uid || '') === ownUid ||
+          String(item.email || '').toLowerCase() === ownEmail
+        );
       }
 
       if (!privileged && collection === 'employees') {
@@ -228,6 +242,8 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.post('/api/data/:collection', requireAuth, authorizeCollectionWrite, async (req: AuthRequest, res) => {
     try {
       const { collection } = req.params;
+      if (!isSupportedMariaDbCollection(collection)) return res.status(404).json({ success: false, error: 'Collection inconnue ou non autorisée.' });
+      if (isGenericMariaDbCollection(collection) && !isPrivileged(req.user)) return res.status(403).json({ success: false, error: 'Accès réservé aux responsables.' });
       const saved = await saveDocumentData(collection, req.body);
       broadcastRealtimeEvent('collection_update', { collection, id: saved?.id, action: 'upsert' });
       res.json({ success: true, data: saved });
@@ -240,6 +256,8 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.delete('/api/data/:collection/:id', requireAuth, authorizeCollectionDelete, async (req: AuthRequest, res) => {
     try {
       const { collection, id } = req.params;
+      if (!isSupportedMariaDbCollection(collection)) return res.status(404).json({ success: false, error: 'Collection inconnue ou non autorisée.' });
+      if (isGenericMariaDbCollection(collection) && !isPrivileged(req.user)) return res.status(403).json({ success: false, error: 'Accès réservé aux responsables.' });
       await deleteDocumentData(collection, id);
       broadcastRealtimeEvent('collection_update', { collection, id, action: 'delete' });
       res.json({ success: true });
