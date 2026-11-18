@@ -3,6 +3,7 @@ import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypt
 import { getMariaDbPool, pingMariaDb } from '../db/mariadb';
 import type { RowDataPacket } from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
+import { getRequestAuthToken } from '../middleware/auth';
 
 type UserRow = RowDataPacket & {
   id: number; uid: string; doc_id: string; email: string; name: string | null;
@@ -41,12 +42,16 @@ export function verifyAndMaybeUpgrade(password: string, stored: string): { valid
 }
 
 function publicUser(row: UserRow, raw: Record<string, any>) {
+  const safeRaw = { ...raw };
+  for (const key of ['passwordHash', 'password_hash', 'password', 'initialPassword', 'smtpPass', 'smtpPassword', 'accessToken', 'refreshToken', 'resetToken', 'secretKey', 'serviceRoleKey']) {
+    delete safeRaw[key];
+  }
   const roleId = Number(row.role_id || raw.roleId || 3);
   const roleCode = String((row as any).role_code || raw.role || '').toUpperCase();
   const role = roleCode.includes('ADMIN') || roleId === 1 ? 'administrateur'
     : roleCode.includes('RESPONSABLE') || roleId === 2 ? 'responsable' : 'employé';
   return {
-    ...raw,
+    ...safeRaw,
     id: String(row.id), uid: row.uid, doc_id: row.doc_id,
     name: row.name || raw.name || row.email.split('@')[0],
     email: row.email, role, roleId,
@@ -54,8 +59,48 @@ function publicUser(row: UserRow, raw: Record<string, any>) {
     department: row.department || raw.department || 'Direction Générale',
     phone: row.phone || raw.phone || '',
     avatarUrl: row.avatar_url || raw.avatarUrl || '',
-    passwordHash: undefined, password_hash: undefined,
   };
+}
+
+const loginFailures = new Map<string, { count: number; resetAt: number }>();
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 8;
+
+function loginIsRateLimited(req: Request, res: Response): boolean {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  let entry = loginFailures.get(ip);
+  if (!entry || entry.resetAt <= now) {
+    entry = { count: 0, resetAt: now + LOGIN_WINDOW_MS };
+    loginFailures.set(ip, entry);
+  }
+  if (entry.count < LOGIN_MAX_FAILURES) return false;
+  res.setHeader('Retry-After', String(Math.max(1, Math.ceil((entry.resetAt - now) / 1000))));
+  res.status(429).json({ success: false, error: 'Trop de tentatives. Réessaie dans quelques minutes.' });
+  return true;
+}
+
+function recordLoginFailure(req: Request): void {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const entry = loginFailures.get(ip);
+  if (!entry || entry.resetAt <= now) loginFailures.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+  else entry.count += 1;
+  if (loginFailures.size > 5000) {
+    for (const [key, value] of loginFailures) if (value.resetAt <= now) loginFailures.delete(key);
+  }
+}
+
+function clearLoginFailures(req: Request): void {
+  loginFailures.delete(req.ip || req.socket.remoteAddress || 'unknown');
+}
+
+function setSessionCookie(req: Request, res: Response, token: string, maxAge: number): void {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const secure = process.env.NODE_ENV === 'production' || req.secure || forwardedProto === 'https';
+  const parts = [`cm_session=${encodeURIComponent(token)}`, 'HttpOnly', 'Path=/', 'SameSite=Lax', `Max-Age=${maxAge}`];
+  if (secure) parts.push('Secure');
+  res.append('Set-Cookie', parts.join('; '));
 }
 
 export function registerAuthRoutes(app: Express): void {
@@ -72,7 +117,7 @@ export function registerAuthRoutes(app: Express): void {
   app.get('/api/ready', async (_req: Request, res: Response) => {
     try {
       const database = await pingMariaDb();
-      return res.status(200).json({ success: true, database: database.database, version: database.version });
+      return res.status(200).json({ success: true, database: 'mariadb' });
     } catch {
       return res.status(503).json({ success: false, error: 'MariaDB indisponible.' });
     }
@@ -83,19 +128,21 @@ export function registerAuthRoutes(app: Express): void {
       const email = String(req.body?.email || '').trim().toLowerCase();
       const password = String(req.body?.password || '');
       if (!email || !password) return res.status(400).json({ success: false, error: 'Adresse email et mot de passe requis.' });
+      if (password.length > 256) return res.status(400).json({ success: false, error: 'Mot de passe trop long.' });
+      if (loginIsRateLimited(req, res)) return;
 
       const pool = getMariaDbPool();
       const [rows] = await pool.execute<UserRow[]>(
         'SELECT u.*, r.code AS role_code FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE LOWER(u.email) = ? LIMIT 1', [email]
       );
       const row = rows[0];
-      if (!row) return res.status(401).json({ success: false, error: 'Identifiants incorrects.' });
+      if (!row) { recordLoginFailure(req); return res.status(401).json({ success: false, error: 'Identifiants incorrects.' }); }
 
       const raw = parseRaw(row.raw_data);
       const stored = String(raw.passwordHash || raw.password_hash || '');
       const check = verifyAndMaybeUpgrade(password, stored);
-      if (!check.valid) return res.status(401).json({ success: false, error: 'Identifiants incorrects.' });
-      if (!(row.status === true || row.status === 1)) return res.status(403).json({ success: false, error: 'Ce compte est désactivé.' });
+      if (!check.valid) { recordLoginFailure(req); return res.status(401).json({ success: false, error: 'Identifiants incorrects.' }); }
+      if (!(row.status === true || row.status === 1)) { recordLoginFailure(req); return res.status(403).json({ success: false, error: 'Ce compte est désactivé.' }); }
 
       const [employees] = await pool.execute<RowDataPacket[]>(
         'SELECT status, raw_data FROM employees WHERE user_id = ? OR LOWER(email) = ? LIMIT 1',
@@ -123,6 +170,8 @@ export function registerAuthRoutes(app: Express): void {
         [row.id, tokenHash, expiresAt, req.ip || null, String(req.headers['user-agent'] || '').slice(0, 500)]
       );
 
+      clearLoginFailures(req);
+      setSessionCookie(req, res, token, 12 * 60 * 60);
       return res.json({ success: true, token, expiresAt: expiresAt.toISOString(), user: publicUser(row, raw) });
     } catch (error: any) {
       console.error('[Auth login]', error);
@@ -131,8 +180,7 @@ export function registerAuthRoutes(app: Express): void {
   });
 
   app.get('/api/auth/me', async (req: Request, res: Response) => {
-    const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const token = getRequestAuthToken(req);
     if (!token) return res.status(401).json({ success: false, error: 'Session absente.' });
     try {
       const hash = createHash('sha256').update(token).digest('hex');
@@ -153,12 +201,16 @@ export function registerAuthRoutes(app: Express): void {
   });
 
   app.post('/api/auth/logout', async (req: Request, res: Response) => {
-    const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-    if (token) {
-      const hash = createHash('sha256').update(token).digest('hex');
-      await getMariaDbPool().execute('UPDATE auth_sessions SET revoked_at = NOW(3) WHERE token_hash = ?', [hash]);
+    const token = getRequestAuthToken(req);
+    try {
+      if (token) {
+        const hash = createHash('sha256').update(token).digest('hex');
+        await getMariaDbPool().execute('UPDATE auth_sessions SET revoked_at = NOW(3) WHERE token_hash = ?', [hash]);
+      }
+    } catch (error) {
+      console.error('[Auth logout]', error);
     }
+    setSessionCookie(req, res, '', 0);
     return res.json({ success: true });
   });
 }
