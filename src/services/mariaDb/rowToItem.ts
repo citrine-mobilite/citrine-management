@@ -1,7 +1,7 @@
 import { mapCollectionToTable } from './tableMapper';
-import { mapModuleSupabaseRowToItem } from './rowToItemModules';
+import { mapModuleMariaDbRowToItem } from './rowToItemModules';
 
-export function supabaseRowToItem(collectionName: string, row: any): any {
+export function mariaDbRowToItem(collectionName: string, row: any): any {
   if (!row) return null;
 
   if (row.collection && row.data) {
