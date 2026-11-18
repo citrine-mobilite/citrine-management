@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "files": [
+    "scripts/export_supabase_export.ts",
+    "scripts/import_mariadb_export.ts",
+    "scripts/test_mariadb_schema.ts"
+  ],
+  "exclude": []
+}
