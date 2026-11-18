@@ -39,4 +39,4 @@ npx tsx scripts/import_mariadb_export.ts /chemin/prive/export.json
 
 Le script refuse par défaut d'importer si des utilisateurs ou employés existent déjà. `--merge` est une option explicite pour fusionner des données, à réserver aux imports contrôlés. Le script n'efface aucune ligne et peut être relancé pour reprendre un import partiel.
 
-Ordre recommandé des migrations SQL : `001_schema.sql`, `002_auth_sessions.sql`, `003_seed_reference_data.sql`.
+Ordre recommandé des migrations SQL : `001_schema.sql`, `002_auth_sessions.sql`, `003_seed_reference_data.sql`, `004_call_signals.sql`.
