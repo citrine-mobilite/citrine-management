@@ -1,11 +1,11 @@
 import { AppUser, Employee } from '../../types';
-import { supabaseService } from '../supabaseService';
+import { mariaDbService } from '../mariaDbService';
 
 export async function syncUserToEmployeeTable(
   cleanUser: AppUser, resolvedUser: AppUser, resolvedRoleId: number, oldEmail: string
 ): Promise<void> {
   try {
-    const employees = await supabaseService.fetchCollection<Employee>('employees');
+    const employees = await mariaDbService.fetchCollection<Employee>('employees');
     const employee = employees.find((emp: any) =>
       (cleanUser.employeeId && [emp.id, emp.docId, emp.doc_id, emp._dbId].some(x => String(x) === String(cleanUser.employeeId))) ||
       (resolvedUser.id && String(emp.userId) === String(resolvedUser.id)) ||
@@ -42,7 +42,7 @@ export async function syncUserToEmployeeTable(
       allowEarlyDeparture15_17: cleanUser.allowEarlyDeparture15_17 ?? employee.allowEarlyDeparture15_17,
       allowLateArrival8_930: cleanUser.allowLateArrival8_930 ?? employee.allowLateArrival8_930,
     };
-    await supabaseService.saveDocument('employees', updated as any);
+    await mariaDbService.saveDocument('employees', updated as any);
     if (!resolvedUser.employeeId) resolvedUser.employeeId = String(employee.docId || employee.id);
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('citrine:employee_updated', { detail: updated }));
   } catch (error) {
