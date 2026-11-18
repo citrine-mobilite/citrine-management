@@ -34,7 +34,9 @@ function listen(callId: string, userId: string, eventType: string, callback: (pa
       const result = await response.json();
       for (const row of result.signals || []) {
         lastId = Math.max(lastId, Number(row.id || 0));
-        if (row.event_type === eventType) callback(row.payload);
+        if (row.event_type === eventType || (eventType === 'signal' && row.event_type === 'call_ended')) {
+          callback({ ...row.payload, event: row.event_type });
+        }
       }
     } catch {} finally { busy = false; }
   };
