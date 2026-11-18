@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from 'express';
 import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
-import { getMariaDbPool } from '../db/mariadb';
+import { getMariaDbPool, pingMariaDb } from '../db/mariadb';
 import type { RowDataPacket } from 'mysql2/promise';
 
 type UserRow = RowDataPacket & {
@@ -46,6 +46,11 @@ function publicUser(row: UserRow, raw: Record<string, any>) {
 }
 
 export function registerAuthRoutes(app: Express): void {
+  app.get('/api/health', async (_req: Request, res: Response) => {
+    try { await pingMariaDb(); return res.json({ success: true, service: 'citrine-management' }); }
+    catch { return res.status(503).json({ success: false, error: 'MariaDB indisponible.' }); }
+  });
+
   app.post('/api/auth/login', async (req: Request, res: Response) => {
     try {
       const email = String(req.body?.email || '').trim().toLowerCase();
