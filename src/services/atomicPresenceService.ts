@@ -1,7 +1,6 @@
 import { offlineService } from './offlineService';
 import { asyncActionTrackerService } from './asyncActionTrackerService';
 import { COLLECTIONS, removeUndefined } from './dataNormalizationAndHealth';
-import { logSystemAudit } from './adminAuditService';
 import { getApiToken } from './sessionService';
 
 export async function savePresenceAtomic(
@@ -48,7 +47,6 @@ export async function savePresenceAtomic(
         window.dispatchEvent(new CustomEvent('citrine:realtime_presence_badge', { detail: payload }));
         window.dispatchEvent(new CustomEvent('citrine:presence_updated', { detail: payload }));
       }
-      await logSystemAudit('CLOCKING_ATOMIC', 'presences', String((result.presence || cleanedPresence).id || ''), 'Pointage enregistré').catch(() => {});
       return { success: true, data: result };
     } catch (error: any) {
       console.error('[savePresenceAtomic MariaDB]', error);
