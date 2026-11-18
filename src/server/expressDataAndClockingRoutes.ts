@@ -85,7 +85,7 @@ const COLLECTION_RECORD_TABLES: Record<string, string> = {
 };
 
 async function findCollectionRecord(collection: string, recordId: string): Promise<{ row: RowDataPacket; raw: Record<string, any> } | null> {
-  const numericId = /^\\d+$/.test(recordId) ? Number(recordId) : -1;
+  const numericId = /^\d+$/.test(recordId) ? Number(recordId) : -1;
   if (collection === 'absences') {
     const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
       "SELECT * FROM generic_collections WHERE collection = 'absences' AND (id = ? OR doc_id = ?) LIMIT 1",
