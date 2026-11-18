@@ -14,7 +14,7 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
     return Array.isArray(result.data) ? result.data as T[] : [];
   } catch (error) {
     console.warn(`[MariaDB] Lecture impossible pour ${collectionName}:`, error);
-    return [];
+    return (await offlineService.getCachedCollection<T>(collectionName)) || [];
   }
 }
 
