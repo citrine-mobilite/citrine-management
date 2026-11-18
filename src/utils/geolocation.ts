@@ -48,7 +48,7 @@ let memoryKioskPinCode = "";
 export function generateKioskPinCode(): string {
   const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // High legibility, no 0/O/1/I
   const chunk = () => Array.from({ length: 4 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join("");
-  const newPin = `${chunk()}-${chunk()}-${chunk()}-${chunk()}`;
+  const newPin = `${chunk(0)}-${chunk(4)}-${chunk(8)}-${chunk(12)}`;
   memoryKioskPinCode = newPin;
   if (typeof window !== "undefined") {
     try {
@@ -97,7 +97,8 @@ export async function validateCompanyQRCodeAsync(
 export function validateCompanyQRCode(scannedInput: string, companySecret: string = ""): boolean {
   if (!scannedInput) return false;
   const cleaned = scannedInput.trim().toUpperCase();
-  const targetSecret = (companySecret || DEFAULT_COMPANY_SECRET).trim().toUpperCase();
+  const targetSecret = String(companySecret || '').trim().toUpperCase();
+  if (!targetSecret) return false;
 
   // Accepte les tokens TOTP dynamiques Citrine ainsi que le format d'entreprise
   if (cleaned.startsWith("CITRINE-TOTP-") || cleaned.startsWith("CITRINE-")) {
