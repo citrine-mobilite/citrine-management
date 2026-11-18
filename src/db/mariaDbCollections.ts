@@ -18,8 +18,7 @@ const TABLES: Record<string, string> = {
   admin_audit_logs: 'admin_audit_logs', citrine_admin_audit_operations_v1: 'admin_audit_logs',
   task_assignees: 'task_assignees', task_project_members: 'task_project_members',
   reminder_recipients: 'reminder_recipients', notification_recipients: 'notification_recipients',
-  presence_pauses: 'presence_pauses', leave_requests: 'leave_requests', absences: 'absences',
-};
+  presence_pauses: 'presence_pauses', leave_requests: 'leave_requests', };
 
 const ALLOWED = new Set([
   'roles','users','employees','task_projects','task_project_members','tasks','task_assignees',
@@ -29,8 +28,7 @@ const ALLOWED = new Set([
   'processflow_salary_debts','salary_payments','financial_transactions','partners','company_settings',
   'leave_requests','calls','user_presences','job_offers','job_applications','expense_claims',
   'hse_incidents','visitor_logs','idea_suggestions','enterprise_surveys','generic_collections',
-  'connection_logs','admin_audit_logs','absences',
-]);
+  'connection_logs','admin_audit_logs',]);
 
 const UNIQUE_LOOKUPS: Record<string, string[]> = {
   users: ['email'], employees: ['email'], roles: ['code','name'], departments: ['name'],
