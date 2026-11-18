@@ -192,6 +192,15 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
         data = data.map((item: any) => {
           const safe = { ...item };
           delete safe.qrCodeToken;
+          if (safe.clockLocations && typeof safe.clockLocations === 'object') {
+            safe.clockLocations = Object.fromEntries(
+              Object.entries(safe.clockLocations).map(([key, value]: [string, any]) => {
+                const safeLocation = value && typeof value === 'object' ? { ...value } : value;
+                if (safeLocation && typeof safeLocation === 'object') delete safeLocation.qrCodeToken;
+                return [key, safeLocation];
+              })
+            );
+          }
           return safe;
         });
       }
