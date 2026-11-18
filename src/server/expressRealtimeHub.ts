@@ -25,7 +25,7 @@ export function broadcastRealtimeEvent(event: string, data: any): void {
     }
   }
   const targetEmployeeId = String(safeData?.presence?.employeeId || safeData?.presence?.employee_id || '');
-  const payload = `event: ${event}\\ndata: ${JSON.stringify(safeData)}\\n\\n`;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(safeData)}\n\n`;
   for (const [id, client] of sseClients.entries()) {
     try {
       if (client.res.writableEnded || client.res.destroyed) {
