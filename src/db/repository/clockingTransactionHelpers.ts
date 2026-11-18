@@ -1,111 +1,68 @@
-import { supabaseAdmin } from '../../lib/supabase';
+import { getMariaDbPool } from '../mariadb';
+import { resolveEmployeeDbId } from './tableHelpers';
+import type { RowDataPacket } from 'mysql2/promise';
+
+function parseJson(value: any): any {
+  if (value && typeof value === 'object') return value;
+  if (typeof value === 'string') { try { return JSON.parse(value); } catch {} }
+  return {};
+}
 
 export async function resolveClockingDerogations(
-  resolvedEmpDbId: number | null,
+  employeeId: number | null,
   employeeEmail?: string
 ): Promise<{ allowEarlyDeparture15_17: boolean; allowLateArrival8_930: boolean }> {
-  let dbAllowEarlyDeparture15_17 = false;
-  let dbAllowLateArrival8_930 = false;
   try {
-    let empRow: any = null;
-    if (resolvedEmpDbId) {
-      const { data } = await supabaseAdmin.from('employees').select('*').eq('id', resolvedEmpDbId).maybeSingle();
-      empRow = data;
+    let emp: any = null;
+    if (employeeId) {
+      const [rows] = await getMariaDbPool().execute<RowDataPacket[]>('SELECT user_id, email, raw_data FROM employees WHERE id = ? LIMIT 1', [employeeId]);
+      emp = rows[0];
     } else if (employeeEmail) {
-      const { data } = await supabaseAdmin.from('employees').select('*').ilike('email', String(employeeEmail).trim()).maybeSingle();
-      empRow = data;
+      const [rows] = await getMariaDbPool().execute<RowDataPacket[]>('SELECT user_id, email, raw_data FROM employees WHERE LOWER(email) = ? LIMIT 1', [employeeEmail.trim().toLowerCase()]);
+      emp = rows[0];
     }
-    const empRaw = (empRow?.raw_data && typeof empRow.raw_data === 'object') ? empRow.raw_data : {};
-    let userRow: any = null;
-    if (empRow?.user_id) {
-      const { data } = await supabaseAdmin.from('users').select('*').eq('id', empRow.user_id).maybeSingle();
-      userRow = data;
-    } else if (employeeEmail || empRow?.email) {
-      const { data } = await supabaseAdmin.from('users').select('*').ilike('email', String(employeeEmail || empRow.email).trim()).maybeSingle();
-      userRow = data;
+    const empRaw = parseJson(emp?.raw_data);
+    let user: any = null;
+    if (emp?.user_id) {
+      const [rows] = await getMariaDbPool().execute<RowDataPacket[]>('SELECT raw_data FROM users WHERE id = ? LIMIT 1', [emp.user_id]);
+      user = rows[0];
+    } else if (employeeEmail || emp?.email) {
+      const [rows] = await getMariaDbPool().execute<RowDataPacket[]>('SELECT raw_data FROM users WHERE LOWER(email) = ? LIMIT 1', [String(employeeEmail || emp.email).trim().toLowerCase()]);
+      user = rows[0];
     }
-    const userRaw = (userRow?.raw_data && typeof userRow.raw_data === 'object') ? userRow.raw_data : {};
-
-    dbAllowEarlyDeparture15_17 = Boolean(empRaw.allowEarlyDeparture15_17 || userRaw.allowEarlyDeparture15_17);
-    dbAllowLateArrival8_930 = Boolean(empRaw.allowLateArrival8_930 || userRaw.allowLateArrival8_930);
-  } catch (permErr) {
-    console.warn('[repository] Notice vérification dérogations pointage:', permErr);
+    const userRaw = parseJson(user?.raw_data);
+    return {
+      allowEarlyDeparture15_17: Boolean(empRaw.allowEarlyDeparture15_17 || userRaw.allowEarlyDeparture15_17),
+      allowLateArrival8_930: Boolean(empRaw.allowLateArrival8_930 || userRaw.allowLateArrival8_930),
+    };
+  } catch (error) {
+    console.warn('[MariaDB] Vérification dérogations pointage :', error);
+    return { allowEarlyDeparture15_17: false, allowLateArrival8_930: false };
   }
-
-  return {
-    allowEarlyDeparture15_17: dbAllowEarlyDeparture15_17,
-    allowLateArrival8_930: dbAllowLateArrival8_930,
-  };
 }
 
 export async function verifyDoorQrTokenOnServer(clockMethod: string, qrCodeToken?: string): Promise<void> {
   if (clockMethod !== 'qr_code_door') return;
-
-  try {
-    const { data: settingsData } = await supabaseAdmin.from('company_settings').select('*');
-    if (settingsData && settingsData.length > 0) {
-      const cfg = settingsData.find((s: any) => s.id === 'main_config' || s.doc_id === 'main_config') || settingsData[0];
-      const rawCfg = (cfg.raw_data && typeof cfg.raw_data === 'object')
-        ? cfg.raw_data
-        : (cfg.setting_value && typeof cfg.setting_value === 'object' ? cfg.setting_value : cfg);
-      const serverDoorToken = (rawCfg.doorQrCodeToken || rawCfg.qrCodeSecret || '').trim();
-      const serverRevoked = rawCfg.doorQrCodeRevoked === true;
-      const serverRevokedList: string[] = Array.isArray(rawCfg.revokedDoorTokens)
-        ? rawCfg.revokedDoorTokens.map((t: string) => String(t).toUpperCase().trim())
-        : [];
-
-      const clientToken = (qrCodeToken || '').trim();
-      if (clientToken) {
-        const cUpper = clientToken.toUpperCase();
-        const sUpper = serverDoorToken.toUpperCase();
-        const secUpper = (rawCfg.qrCodeSecret || '').trim().toUpperCase();
-        const cRoot = cUpper.replace(/-\d{4,}$/, '');
-
-        if (serverRevoked || serverRevokedList.includes(cUpper) || cUpper.includes('REVOKED') || cUpper.includes('INVALIDE')) {
-          throw new Error("Pointage rejeté : Ce QR Code d'entrée n'est plus valide (révoqué par la direction).");
-        }
-
-        const matches =
-          (sUpper && (cUpper === sUpper || cRoot === sUpper)) ||
-          (secUpper && (cUpper === secUpper || cRoot === secUpper));
-
-        if (!matches) {
-          throw new Error(`Pointage rejeté : Le jeton QR Code ("${clientToken}") n'est plus valide ou ne correspond pas au jeton officiel actif.`);
-        }
-      }
-    }
-  } catch (checkErr: any) {
-    if (checkErr.message?.includes('Pointage rejeté')) {
-      throw checkErr;
-    }
-    console.warn('[repository] Notice vérification token serveur:', checkErr?.message);
+  const [rows] = await getMariaDbPool().execute<RowDataPacket[]>('SELECT raw_data, setting_value FROM company_settings ORDER BY id DESC LIMIT 20');
+  const row = rows.find((x: any) => x.doc_id === 'main_config' || x.setting_key === 'main_config') || rows[0];
+  if (!row) return;
+  const cfg = parseJson(row.raw_data).doorQrCodeToken !== undefined
+    ? parseJson(row.raw_data)
+    : parseJson(row.setting_value || row.raw_data);
+  const official = String(cfg.doorQrCodeToken || cfg.qrCodeSecret || '').trim().toUpperCase();
+  const revoked = cfg.doorQrCodeRevoked === true;
+  const revokedList = Array.isArray(cfg.revokedDoorTokens) ? cfg.revokedDoorTokens.map((x: any) => String(x).trim().toUpperCase()) : [];
+  const candidate = String(qrCodeToken || '').trim().toUpperCase();
+  if (!candidate) throw new Error('Pointage rejeté : jeton QR Code manquant.');
+  const root = candidate.replace(/-\d{4,}$/, '');
+  if (revoked || revokedList.includes(candidate) || candidate.includes('REVOKED') || candidate.includes('INVALIDE')) {
+    throw new Error("Pointage rejeté : ce QR Code d'entrée a été révoqué.");
+  }
+  if (official && candidate !== official && root !== official) {
+    throw new Error('Pointage rejeté : le jeton QR Code ne correspond pas au jeton officiel actif.');
   }
 }
 
-export async function rollbackAtomicClocking(
-  notificationCreatedDbId: number | null,
-  incidentCreatedDbId: number | null,
-  presenceCreatedDbId: number | null
-): Promise<void> {
-  if (notificationCreatedDbId) {
-    try {
-      await supabaseAdmin.from('notifications').delete().eq('id', notificationCreatedDbId);
-    } catch (rbErr: any) {
-      console.error(`❌ [ROLLBACK ERREUR] Suppression notification:`, rbErr?.message);
-    }
-  }
-  if (incidentCreatedDbId) {
-    try {
-      await supabaseAdmin.from('attendance_incidents').delete().eq('id', incidentCreatedDbId);
-    } catch (rbErr: any) {
-      console.error(`❌ [ROLLBACK ERREUR] Suppression incident:`, rbErr?.message);
-    }
-  }
-  if (presenceCreatedDbId) {
-    try {
-      await supabaseAdmin.from('presences').delete().eq('id', presenceCreatedDbId);
-    } catch (rbErr: any) {
-      console.error(`❌ [ROLLBACK ERREUR] Suppression présence:`, rbErr?.message);
-    }
-  }
+export async function rollbackAtomicClocking(): Promise<void> {
+  // Les transactions InnoDB sont désormais annulées atomiquement par withMariaDbTransaction.
 }
