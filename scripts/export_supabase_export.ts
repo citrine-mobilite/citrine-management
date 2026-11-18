@@ -68,8 +68,11 @@ async function main() {
     if (error?.code !== 'ENOENT') throw error;
   }
 
+  const parsedConnection = new URL(connectionString);
+  parsedConnection.searchParams.delete('sslmode');
+  parsedConnection.searchParams.delete('ssl');
   const client = new Client({
-    connectionString,
+    connectionString: parsedConnection.toString(),
     ssl: process.env.SUPABASE_DB_SSL === 'disable' ? false : { rejectUnauthorized: true },
     connectionTimeoutMillis: 20000,
     query_timeout: 120000,
@@ -85,7 +88,19 @@ async function main() {
 
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const discovered = await client.query<{ table_name: string }>(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
+    );
+    const publicTableNames = new Set(discovered.rows.map(row => row.table_name));
+    const missingTables = TABLES.filter(table => !publicTableNames.has(table));
+    const extraPublicTables = discovered.rows.map(row => row.table_name).filter(table => !TABLES.includes(table as any));
+
     for (const table of TABLES) {
+      if (!publicTableNames.has(table)) {
+        collections[table] = [];
+        rowCounts[table] = 0;
+        continue;
+      }
       const result = await client.query(`SELECT * FROM public."${table}" ORDER BY id`);
       rowCounts[table] = result.rows.length;
 
@@ -156,6 +171,8 @@ async function main() {
         source: 'Supabase PostgreSQL',
         tables: TABLES.length,
         rowCounts,
+        missingTables,
+        extraPublicTables,
         authUsers: authRows.length,
         authUsersReadable: authReadable,
         usersExported: users.length,
@@ -166,6 +183,8 @@ async function main() {
     await fs.writeFile(outputPath, JSON.stringify(payload), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
     console.log(`Export terminé : ${outputPath}`);
     console.log(`Tables PostgreSQL : ${TABLES.length} | lignes exportées : ${Object.values(rowCounts).reduce((a,b) => a+b, 0)}`);
+    if (missingTables.length) console.warn('[Export] Tables absentes du schéma source :', missingTables.join(', '));
+    if (extraPublicTables.length) console.warn('[Export] Tables publiques supplémentaires à examiner :', extraPublicTables.join(', '));
     console.log(`Comptes Auth Supabase : ${authRows.length} | utilisateurs sans hash : ${usersWithoutPassword}`);
     if (usersWithoutPassword > 0) {
       console.warn('ATTENTION : ces utilisateurs devront réinitialiser leur mot de passe avant leur première connexion MariaDB.');
