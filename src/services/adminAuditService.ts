@@ -1,5 +1,5 @@
 import { safeStorage } from '../utils/safeStorage';
-import { supabaseService } from './supabaseService';
+import { mariaDbService } from './mariaDbService';
 
 export type AuditOperationType =
   | 'creation'
@@ -82,7 +82,7 @@ function persistOperations(ops: AdminAccountOperation[]): void {
 async function persistOperationToDb(op: AdminAccountOperation): Promise<void> {
   try {
     if (typeof window === 'undefined') return;
-    await supabaseService.saveDocument('admin_audit_logs', op as any);
+    await mariaDbService.saveDocument('admin_audit_logs', op as any);
   } catch {
     // La copie locale reste disponible si le serveur est hors ligne.
   }
@@ -98,7 +98,7 @@ export function getAdminAuditOperations(): AdminAccountOperation[] {
 export async function hydrateAuditOperationsFromDb(): Promise<AdminAccountOperation[]> {
   const localOps = loadStoredOperations();
   try {
-    const data = await supabaseService.fetchCollection<any>('admin_audit_logs');
+    const data = await mariaDbService.fetchCollection<any>('admin_audit_logs');
     if (Array.isArray(data) && data.length > 0) {
       const dbOps: AdminAccountOperation[] = data
         .map((row: any) => {
