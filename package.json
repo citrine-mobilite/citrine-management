@@ -6,12 +6,12 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "vercel-build": "npm run build",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js api/index.js",
     "lint": "tsc --noEmit",
-    "export:supabase": "tsx scripts/export_supabase_export.ts"
+    "export:supabase": "tsx scripts/export_supabase_export.ts",
+    "import:mariadb": "tsx scripts/import_mariadb_export.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
