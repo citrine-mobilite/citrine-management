@@ -34,6 +34,10 @@ async function main() {
       "SELECT COUNT(*) AS total FROM information_schema.columns WHERE table_schema = DATABASE() AND column_name = 'raw_data' AND table_name IN ('task_project_members','task_assignees','reminder_recipients','notification_recipients','presence_pauses','inventory_assignments')"
     );
     if (Number(relationRawData[0]?.total) !== 6) throw new Error('Les tables relationnelles doivent toutes conserver raw_data.');
+    const [relationUpdatedAt] = await connection.query<any[]>(
+      "SELECT COUNT(*) AS total FROM information_schema.columns WHERE table_schema = DATABASE() AND column_name = 'updated_at' AND table_name IN ('task_project_members','task_assignees','reminder_recipients','notification_recipients','presence_pauses','inventory_assignments')"
+    );
+    if (Number(relationUpdatedAt[0]?.total) !== 6) throw new Error('Les tables relationnelles doivent toutes avoir updated_at.');
     const [roles] = await connection.query<any[]>('SELECT code FROM roles ORDER BY id');
     const codes = new Set(roles.map(row => row.code));
     for (const code of ['SUPER_ADMIN','RESPONSABLE','EMPLOYE']) if (!codes.has(code)) throw new Error('Rôle de référence manquant : ' + code);
