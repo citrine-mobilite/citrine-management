@@ -1,6 +1,7 @@
 import { Employee, Presence, NotificationLog, CompanyModuleConfig, AttendanceIncident } from '../../types';
 import { savePresenceAtomic } from '../../services/dataService';
 import { realtimeSyncService } from '../../services/realtimeSyncService';
+import { getDoualaDateTime } from '../../utils/doualaTime';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
 import { COMPANY_HQ_LOCATION } from '../../utils/geolocation';
 import { isLate } from '../../utils/dateUtils';
@@ -17,9 +18,7 @@ export async function executeKioskClockAction(params: {
   setToastMessage: (msg: string | null) => void;
 }): Promise<void> {
   const { emp, action, presences, moduleConfig, onUpdatePresences, onAddNotification, onAddAttendanceIncident, setToastMessage } = params;
-  const todayStr = new Date().toISOString().split('T')[0];
-  const now = new Date();
-  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const { date: todayStr, time: timeStr } = getDoualaDateTime();
   const scheduleStart = moduleConfig?.lateThresholdTime || '08:30';
   const plannedDeparture = moduleConfig?.plannedDepartureTime || '16:30';
   const exemptLate = emp.allowLateArrival8_930 === true && timeStr >= '08:00' && timeStr <= '09:30';
