@@ -141,6 +141,11 @@ async function main() {
     const legacyTaskId = '910004';
     const legacyCallId = '910005';
     const legacyGenericId = '910006';
+    const legacyPresenceId = '910011';
+    const legacyPauseId = '910012';
+    const legacyJobOfferId = '910008';
+    const legacyJobApplicationId = '910009';
+    const legacyNotificationId = '910010';
     const fixture = {
       metadata: { exportDate: new Date().toISOString(), source: 'CI fixture' },
       collections: {
@@ -153,6 +158,21 @@ async function main() {
         ],
         tasks: [
           { id: legacyTaskId, uid: randomUUID(), title: 'CI imported task', employeeId: legacyEmployeeId, status: 'todo' },
+        ],
+        presences: [
+          { id: legacyPresenceId, uid: randomUUID(), employeeId: legacyEmployeeId, date: '2025-01-15', arrivalTime: '08:02', status: 'present' },
+        ],
+        presence_pauses: [
+          { id: legacyPauseId, uid: randomUUID(), presenceId: legacyPresenceId, startTime: '12:00', endTime: '12:30', durationMinutes: 30 },
+        ],
+        notifications: [
+          { id: legacyNotificationId, uid: randomUUID(), title: 'CI notification', message: 'Imported notification', targetUserId: legacyUserId, targetUserIds: [legacyReceiverId], targetEmployeeIds: [legacyEmployeeId] },
+        ],
+        job_offers: [
+          { id: legacyJobOfferId, uid: randomUUID(), title: 'CI job offer', description: 'Test offer', status: 'ouverte' },
+        ],
+        job_applications: [
+          { id: legacyJobApplicationId, uid: randomUUID(), jobOfferId: legacyJobOfferId, candidateName: 'CI Candidate', candidateEmail: 'candidate@example.invalid' },
         ],
         calls: [
           { id: legacyCallId, uid: randomUUID(), callerId: legacyUserId, receiverId: legacyReceiverId, roomId: 'ci-room-' + importSuffix, status: 'ended' },
@@ -202,11 +222,56 @@ async function main() {
         String(importedCallRows[0]?.receiver_id) !== String(importedReceiver.id)) {
       throw new Error('Les participants de l’appel n’ont pas été remappés.');
     }
+
+    const [importedPresenceRows] = await connection.execute<any[]>(
+      'SELECT id, employee_id, date FROM presences WHERE doc_id = ?',
+      ['presences-' + legacyPresenceId]
+    );
+    if (String(importedPresenceRows[0]?.date).slice(0, 10) !== '2025-01-15' ||
+        Number(importedPresenceRows[0]?.employee_id) !== Number(importedEmployeeRows[0]?.id)) {
+      throw new Error('La date historique du pointage ou sa relation collaborateur a été altérée.');
+    }
+    const [importedPauseRows] = await connection.execute<any[]>(
+      'SELECT presence_id FROM presence_pauses WHERE doc_id = ?',
+      ['presence_pauses-' + legacyPauseId]
+    );
+    if (Number(importedPauseRows[0]?.presence_id) !== Number(importedPresenceRows[0]?.id)) {
+      throw new Error('La relation presence_pauses.presence_id n’a pas été remappée.');
+    }
+    const [importedJobRows] = await connection.execute<any[]>(
+      'SELECT job_offer_id FROM job_applications WHERE doc_id = ?',
+      ['job_applications-' + legacyJobApplicationId]
+    );
+    const [importedOfferRows] = await connection.execute<any[]>(
+      'SELECT id FROM job_offers WHERE doc_id = ?',
+      ['job_offers-' + legacyJobOfferId]
+    );
+    if (Number(importedJobRows[0]?.job_offer_id) !== Number(importedOfferRows[0]?.id)) {
+      throw new Error('La relation job_applications.job_offer_id n’a pas été remappée.');
+    }
+    const [importedNotificationRows] = await connection.execute<any[]>(
+      'SELECT target_user_id, target_user_ids, target_employee_ids FROM notifications WHERE doc_id = ?',
+      ['notifications-' + legacyNotificationId]
+    );
+    const targetUsers = typeof importedNotificationRows[0]?.target_user_ids === 'string'
+      ? JSON.parse(importedNotificationRows[0].target_user_ids) : importedNotificationRows[0]?.target_user_ids;
+    const targetEmployees = typeof importedNotificationRows[0]?.target_employee_ids === 'string'
+      ? JSON.parse(importedNotificationRows[0].target_employee_ids) : importedNotificationRows[0]?.target_employee_ids;
+    if (Number(importedNotificationRows[0]?.target_user_id) !== Number(importedUser.id) ||
+        !targetUsers?.includes(Number(importedReceiver.id)) ||
+        !targetEmployees?.includes(Number(importedEmployeeRows[0]?.id))) {
+      throw new Error('Les destinataires multiples de la notification n’ont pas été remappés.');
+    }
     const importedGeneric = await getMariaDbCollection('ci_import_collection');
     if (!importedGeneric.some(row => row.id === 'ci_import_collection-' + legacyGenericId && row.label === 'CI imported generic record')) {
       throw new Error('Import de generic_collections incomplet.');
     }
     await connection.execute('DELETE FROM calls WHERE doc_id = ?', ['calls-' + legacyCallId]);
+    await connection.execute('DELETE FROM job_applications WHERE doc_id = ?', ['job_applications-' + legacyJobApplicationId]);
+    await connection.execute('DELETE FROM job_offers WHERE doc_id = ?', ['job_offers-' + legacyJobOfferId]);
+    await connection.execute('DELETE FROM notifications WHERE doc_id = ?', ['notifications-' + legacyNotificationId]);
+    await connection.execute('DELETE FROM presence_pauses WHERE doc_id = ?', ['presence_pauses-' + legacyPauseId]);
+    await connection.execute('DELETE FROM presences WHERE doc_id = ?', ['presences-' + legacyPresenceId]);
     await connection.execute('DELETE FROM tasks WHERE doc_id = ?', ['tasks-' + legacyTaskId]);
     await connection.execute('DELETE FROM employees WHERE email = ?', [importEmployeeEmail]);
     await connection.execute('DELETE FROM users WHERE email IN (?, ?)', [importUserEmail, importReceiverEmail]);
@@ -221,7 +286,7 @@ async function main() {
     console.log('[OK] QR dynamique et codes 16 caractères à usage unique');
     console.log('[OK] Masquage passwordHash');
     console.log('[OK] Compatibilité bcrypt Supabase → PBKDF2 et collection absences');
-    console.log('[OK] Import Supabase : utilisateurs, relations, appels et collections génériques');
+    console.log('[OK] Import Supabase : utilisateurs, dates historiques, pointages, pauses, notifications multi-destinataires, candidatures, appels et collections génériques');
     console.log('[OK] ' + Number(tables[0].total) + ' tables, rôles, auth_sessions et call_signals');
   } finally {
     await connection.end();
