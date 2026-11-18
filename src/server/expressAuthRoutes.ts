@@ -66,11 +66,12 @@ export function registerAuthRoutes(app: Express): void {
       if (!(row.status === true || row.status === 1)) return res.status(403).json({ success: false, error: 'Ce compte est désactivé.' });
 
       const [employees] = await pool.execute<RowDataPacket[]>(
-        'SELECT status, employment_status FROM employees WHERE user_id = ? OR LOWER(email) = ? LIMIT 1',
+        'SELECT status, raw_data FROM employees WHERE user_id = ? OR LOWER(email) = ? LIMIT 1',
         [row.id, email]
       );
       const employee = employees[0];
-      const empStatus = String(employee?.employment_status || '').toLowerCase();
+      const empRaw = parseRaw(employee?.raw_data);
+      const empStatus = String(empRaw.employmentStatus || empRaw.status || '').toLowerCase();
       if (['renvoye', 'demissionne', 'parti', 'suspendu'].includes(empStatus) || employee?.status === 0) {
         return res.status(403).json({ success: false, error: 'Connexion refusée : situation du collaborateur non autorisée.' });
       }
