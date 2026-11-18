@@ -46,7 +46,13 @@ function asDate(value: any, fallback = new Date()): string {
 function jsonValue(value: any): string { return JSON.stringify(value ?? {}); }
 function safeUserRaw(raw: Record<string, any>) {
   const result = { ...raw };
-  delete result.passwordHash; delete result.password_hash; delete result.initialPassword;
+  delete result.passwordHash; delete result.password_hash; delete result.initialPassword; delete result.password;
+  return result;
+}
+function safeUserForStorage(raw: Record<string, any>) {
+  const result = { ...raw };
+  delete result.password;
+  delete result.initialPassword;
   return result;
 }
 
@@ -138,7 +144,8 @@ export async function saveMariaDbDocument(collection: string, item: any): Promis
     return { ...item, id: docId };
   }
 
-  const data = buildRequiredColumns(table, item, docId);
+  const persistedItem = table === 'users' ? safeUserForStorage(item) : item;
+  const data = buildRequiredColumns(table, persistedItem, docId);
   let existing: any = null;
   if (/^\d+$/.test(docId)) {
     const [rows] = await pool.execute<RowDataPacket[]>(`SELECT id, raw_data FROM \x60${table}\x60 WHERE id = ? LIMIT 1`, [Number(docId)]);
@@ -162,7 +169,7 @@ export async function saveMariaDbDocument(collection: string, item: any): Promis
 
   if (existing) {
     const oldRaw = parseJson(existing.raw_data);
-    const newRaw = { ...oldRaw, ...item, id: docId, updatedAt: new Date().toISOString() };
+    const newRaw = { ...oldRaw, ...persistedItem, id: docId, updatedAt: new Date().toISOString() };
     if (table === 'users' && !item.passwordHash && !item.password_hash) {
       if (oldRaw.passwordHash) newRaw.passwordHash = oldRaw.passwordHash;
       else if (oldRaw.password_hash) newRaw.password_hash = oldRaw.password_hash;
@@ -173,7 +180,7 @@ export async function saveMariaDbDocument(collection: string, item: any): Promis
     const assignments = columns.map(key => `\x60${key}\x60 = ?`).join(', ');
     await pool.execute(`UPDATE \x60${table}\x60 SET ${assignments} WHERE id = ?`, [...columns.map(key => data[key]), existing.id]);
   } else {
-    data.raw_data = jsonValue({ ...item, id: docId, createdAt: new Date().toISOString() });
+    data.raw_data = jsonValue({ ...persistedItem, id: docId, createdAt: new Date().toISOString() });
     const columns = Object.keys(data);
     await pool.execute(
       `INSERT INTO \x60${table}\x60 (${columns.map(key => `\x60${key}\x60`).join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
