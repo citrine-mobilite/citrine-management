@@ -1,6 +1,7 @@
 import express from 'express';
-import { pingMariaDb } from '../db/mariadb';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { pingMariaDb, getMariaDbPool } from '../db/mariadb';
+import type { RowDataPacket } from 'mysql2/promise';
+import { requireAuth, requireAdmin, requireAdminOrResponsable, AuthRequest } from '../middleware/auth';
 import {
   getCollectionData,
   saveDocumentData,
@@ -18,19 +19,93 @@ import {
   publishClockingBeamsNotification,
 } from './services/pusherBeamsService';
 
+const ADMIN_ONLY_COLLECTIONS = new Set([
+  'roles', 'users', 'company_settings', 'admin_audit_logs', 'connection_logs',
+  'salary_payments', 'financial_transactions', 'processflow_salary_debts',
+]);
+const MANAGER_COLLECTIONS = new Set([
+  'employees', 'presences', 'attendance_incidents', 'disciplinary_incidents',
+  'departments', 'inventory', 'inventory_assignments', 'documents',
+  'rh_document_templates', 'hse_incidents', 'visitor_logs', 'job_offers',
+]);
+
+function isPrivileged(user: any): boolean {
+  return ['administrateur', 'responsable'].includes(String(user?.role || '').toLowerCase());
+}
+
+function authorizeCollectionWrite(req: AuthRequest, res: express.Response, next: express.NextFunction) {
+  const collection = String(req.params.collection || '');
+  if (ADMIN_ONLY_COLLECTIONS.has(collection)) return requireAdmin(req, res, next);
+  if (MANAGER_COLLECTIONS.has(collection)) return requireAdminOrResponsable(req, res, next);
+  if (collection === 'leave_requests' || collection === 'expense_claims') {
+    return authorizeOwnEmployeeRecord(req, res, next);
+  }
+  return next();
+}
+
+function authorizeCollectionDelete(req: AuthRequest, res: express.Response, next: express.NextFunction) {
+  const collection = String(req.params.collection || '');
+  if (ADMIN_ONLY_COLLECTIONS.has(collection)) return requireAdmin(req, res, next);
+  return requireAdminOrResponsable(req, res, next);
+}
+
+async function authorizeOwnEmployeeRecord(req: AuthRequest, res: express.Response, next: express.NextFunction) {
+  if (isPrivileged(req.user)) return next();
+  try {
+    const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
+      'SELECT id, doc_id, uid, email FROM employees WHERE user_id = ? LIMIT 1',
+      [Number(req.user?.id)]
+    );
+    const employee = rows[0];
+    const body = req.body || {};
+    const target = String(body.employeeId || body.employee_id || body.employeeDocId || body.email || '');
+    const allowed = employee
+      ? [employee.id, employee.doc_id, employee.uid, employee.email].filter(Boolean).map(String)
+      : [];
+    if (!target || !allowed.includes(target)) {
+      return res.status(403).json({ success: false, error: 'Tu ne peux modifier que tes propres demandes.' });
+    }
+    return next();
+  } catch {
+    return res.status(503).json({ success: false, error: 'Vérification des droits indisponible.' });
+  }
+}
+
+async function authorizeClockingTarget(req: AuthRequest, target: any, res: express.Response): Promise<boolean> {
+  if (isPrivileged(req.user)) return true;
+  try {
+    const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
+      'SELECT id, doc_id, uid, email FROM employees WHERE user_id = ? LIMIT 1',
+      [Number(req.user?.id)]
+    );
+    const employee = rows[0];
+    const requested = String(target || employee?.id || '');
+    const allowed = employee
+      ? [employee.id, employee.doc_id, employee.uid, employee.email].filter(Boolean).map(String)
+      : [];
+    if (!employee || !allowed.includes(requested)) {
+      res.status(403).json({ success: false, error: 'Tu ne peux effectuer le pointage que pour ton propre compte.' });
+      return false;
+    }
+    return true;
+  } catch {
+    res.status(503).json({ success: false, error: 'Vérification du collaborateur indisponible.' });
+    return false;
+  }
+}
+
 export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.get('/api/database/status', async (_req, res) => {
     try {
       const database = await pingMariaDb();
       res.json({
         success: true, isSqlConfigured: true, localPersistence: true,
-        database: database.database, version: database.version,
-        message: 'MariaDB opérationnelle',
+        database: 'mariadb', message: 'MariaDB opérationnelle',
       });
     } catch (error: any) {
       res.status(503).json({
         success: false, isSqlConfigured: false, localPersistence: true,
-        message: 'Base MariaDB indisponible', error: error?.message || 'Connexion impossible',
+        message: 'Base MariaDB indisponible',
       });
     }
   });
@@ -38,7 +113,18 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
   app.get('/api/data/:collection', requireAuth, async (req: AuthRequest, res) => {
     try {
       const { collection } = req.params;
-      const data = await getCollectionData(collection);
+      let data = await getCollectionData(collection);
+      if (collection === 'company_settings') {
+        data = data.map((item: any) => ({
+          ...item,
+          smtpPass: '',
+          smtpPassConfigured: Boolean(item.smtpPass),
+          smtpPassword: undefined,
+        }));
+      }
+      if (['salary_payments', 'financial_transactions', 'processflow_salary_debts', 'admin_audit_logs', 'connection_logs'].includes(collection) && !isPrivileged(req.user)) {
+        return res.status(403).json({ success: false, error: 'Accès réservé à la direction.' });
+      }
       res.json({ success: true, data });
     } catch (error: any) {
       console.error(`Error fetching collection ${req.params.collection}:`, error);
@@ -46,7 +132,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/data/:collection', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/data/:collection', requireAuth, authorizeCollectionWrite, async (req: AuthRequest, res) => {
     try {
       const { collection } = req.params;
       const saved = await saveDocumentData(collection, req.body);
@@ -58,7 +144,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.delete('/api/data/:collection/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.delete('/api/data/:collection/:id', requireAuth, authorizeCollectionDelete, async (req: AuthRequest, res) => {
     try {
       const { collection, id } = req.params;
       await deleteDocumentData(collection, id);
@@ -76,7 +162,11 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
       if (!uid || !email) {
         return res.status(400).json({ success: false, error: 'Missing uid or email' });
       }
+      if (String(uid) !== String(req.user?.uid) || String(email).trim().toLowerCase() !== String(req.user?.email || '').toLowerCase()) {
+        return res.status(403).json({ success: false, error: 'Synchronisation limitée au compte connecté.' });
+      }
       const user = await getOrCreateUserRecord(uid, email, name, role);
+      if (user) delete (user as any).raw_data;
       res.json({ success: true, data: user });
     } catch (error: any) {
       console.error('Error syncing user:', error);
@@ -84,7 +174,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/collaborators/transactional', requireAuth, async (req: express.Request, res: express.Response) => {
+  app.post('/api/collaborators/transactional', requireAuth, requireAdminOrResponsable, async (req: express.Request, res: express.Response) => {
     try {
       const input = req.body;
       if (!input?.name || !input?.email) {
@@ -98,7 +188,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/collaborators/update-transactional', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/collaborators/update-transactional', requireAuth, requireAdminOrResponsable, async (req: AuthRequest, res) => {
     try {
       if (!req.body?.employee) return res.status(400).json({ success: false, error: 'Données collaborateur manquantes.' });
       const result = await executeCollaboratorUpdateTransaction(req.body);
@@ -111,12 +201,14 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/clocking/atomic', requireAuth, async (req: express.Request, res: express.Response) => {
+  app.post('/api/clocking/atomic', requireAuth, async (req: AuthRequest, res: express.Response) => {
     try {
       const input = req.body;
       if (!input?.presence) {
         return res.status(400).json({ success: false, error: 'Données de présence manquantes.' });
       }
+      const targetEmployee = input.presence.employeeId || input.presence.employee_id || input.presence.employeeEmail;
+      if (!(await authorizeClockingTarget(req, targetEmployee, res))) return;
       const result = await executeAtomicClockingTransaction(input);
       if (result.success) {
         broadcastRealtimeEvent('presence_update', {
@@ -154,7 +246,7 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     });
   });
 
-  app.post('/api/push/beams/publish', requireAuth, async (req: express.Request, res: express.Response) => {
+  app.post('/api/push/beams/publish', requireAuth, requireAdminOrResponsable, async (req: express.Request, res: express.Response) => {
     try {
       const {
         title,
@@ -198,13 +290,21 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
     }
   });
 
-  app.get('/api/clocking/eligibility', requireAuth, async (req: express.Request, res: express.Response) => {
+  app.get('/api/clocking/eligibility', requireAuth, async (req: AuthRequest, res: express.Response) => {
     try {
-      const result = await checkClockingEligibilityBackend({
-        employeeId: req.query.employeeId as string | undefined,
-        userId: req.query.userId as string | undefined,
-        email: req.query.email as string | undefined,
-      });
+      let employeeId = req.query.employeeId as string | undefined;
+      let userId = req.query.userId as string | undefined;
+      let email = req.query.email as string | undefined;
+      if (!isPrivileged(req.user)) {
+        const [rows] = await getMariaDbPool().execute<RowDataPacket[]>(
+          'SELECT id FROM employees WHERE user_id = ? LIMIT 1', [Number(req.user?.id)]
+        );
+        if (!rows[0]) return res.status(403).json({ success: false, error: 'Aucun dossier collaborateur associé au compte.' });
+        employeeId = String(rows[0].id);
+        userId = String(req.user?.id);
+        email = String(req.user?.email || '');
+      }
+      const result = await checkClockingEligibilityBackend({ employeeId, userId, email });
       res.json(result);
     } catch (error: any) {
       console.error('[API Clocking Eligibility Error]:', error);
