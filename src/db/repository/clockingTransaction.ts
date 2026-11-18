@@ -19,6 +19,7 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
   const { presence, incident, notification } = input;
   if (!presence) throw new Error('Données de présence obligatoires pour la transaction atomique.');
   const employeeId = await resolveEmployeeDbId(null, presence.employeeId || presence.employee_id);
+  if (!employeeId) throw new Error('Pointage rejeté : collaborateur introuvable ou non rattaché.');
   const derogations = await resolveClockingDerogations(employeeId, presence.employeeEmail);
   const method = presence.clockingMethod || presence.method || 'qr_code_door';
   await verifyDoorQrTokenOnServer(method, presence.qrCodeToken);
