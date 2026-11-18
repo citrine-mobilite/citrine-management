@@ -148,13 +148,13 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
     if (oldPresence[0]) {
       const columns = Object.keys(pFields);
       await connection.execute(
-        `UPDATE presences SET ${columns.map(k => `\\x60${k}\\x60 = ?`).join(', ')} WHERE id = ?`,
+        `UPDATE presences SET ${columns.map(k => `\x60${k}\x60 = ?`).join(', ')} WHERE id = ?`,
         [...columns.map(k => (pFields as any)[k]), oldPresence[0].id]
       );
       presenceDbId = Number(oldPresence[0].id);
     } else {
       const [result] = await connection.execute<any>(
-        `INSERT INTO presences (uid, doc_id, ${Object.keys(pFields).map(k => `\\x60${k}\\x60`).join(', ')}, created_at)
+        `INSERT INTO presences (uid, doc_id, ${Object.keys(pFields).map(k => `\x60${k}\x60`).join(', ')}, created_at)
          VALUES (?, ?, ${Object.keys(pFields).map(() => '?').join(', ')}, NOW(3))`,
         [randomUUID(), presenceDocId, ...Object.values(pFields)]
       );
@@ -191,13 +191,13 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       if (existing[0]) {
         const keys = Object.keys(fields);
         await connection.execute(
-          `UPDATE attendance_incidents SET ${keys.map(k => `\\x60${k}\\x60 = ?`).join(', ')} WHERE id = ?`,
+          `UPDATE attendance_incidents SET ${keys.map(k => `\x60${k}\x60 = ?`).join(', ')} WHERE id = ?`,
           [...keys.map(k => (fields as any)[k]), existing[0].id]
         );
       } else {
         const keys = Object.keys(fields);
         await connection.execute(
-          `INSERT INTO attendance_incidents (uid, doc_id, ${keys.map(k => `\\x60${k}\\x60`).join(', ')}, created_at)
+          `INSERT INTO attendance_incidents (uid, doc_id, ${keys.map(k => `\x60${k}\x60`).join(', ')}, created_at)
            VALUES (?, ?, ${keys.map(() => '?').join(', ')}, NOW(3))`,
           [randomUUID(), incidentId, ...keys.map(k => (fields as any)[k])]
         );
@@ -228,13 +228,13 @@ export async function executeAtomicClockingTransaction(input: AtomicClockingTran
       if (existing[0]) {
         const keys = Object.keys(fields);
         await connection.execute(
-          `UPDATE notifications SET ${keys.map(k => `\\x60${k}\\x60 = ?`).join(', ')} WHERE id = ?`,
+          `UPDATE notifications SET ${keys.map(k => `\x60${k}\x60 = ?`).join(', ')} WHERE id = ?`,
           [...keys.map(k => (fields as any)[k]), existing[0].id]
         );
       } else {
         const keys = Object.keys(fields);
         await connection.execute(
-          `INSERT INTO notifications (uid, doc_id, ${keys.map(k => `\\x60${k}\\x60`).join(', ')}, created_at)
+          `INSERT INTO notifications (uid, doc_id, ${keys.map(k => `\x60${k}\x60`).join(', ')}, created_at)
            VALUES (?, ?, ${keys.map(() => '?').join(', ')}, NOW(3))`,
           [randomUUID(), notifId, ...keys.map(k => (fields as any)[k])]
         );
