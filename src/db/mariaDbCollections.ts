@@ -211,7 +211,8 @@ export async function saveMariaDbDocument(collection: string, item: any): Promis
       columns.map(key => data[key])
     );
   }
-  return { ...item, id: docId, updatedAt: new Date().toISOString() };
+  const savedItem = { ...item, id: docId, updatedAt: new Date().toISOString() };
+  return table === 'users' ? safeUserRaw(savedItem) : savedItem;
 }
 
 export async function deleteMariaDbDocument(collection: string, id: string): Promise<boolean> {
