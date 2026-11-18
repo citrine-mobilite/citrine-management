@@ -361,6 +361,9 @@ export function registerCoreDataAndClockingRoutes(app: express.Express): void {
           notification: result.notification,
           timestamp: new Date().toISOString(),
         });
+        if (String(input.presence.clockingMethod || input.presence.method || '').toLowerCase() === 'qr_code_dynamic') {
+          broadcastRealtimeEvent('collection_update', { collection: 'dynamic_qr_sessions', action: 'upsert' });
+        }
 
         const reqOrigin =
           (typeof req.headers.origin === 'string' && req.headers.origin) ||
