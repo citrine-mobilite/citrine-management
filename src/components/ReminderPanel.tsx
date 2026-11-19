@@ -1,38 +1,28 @@
-import React, { useState, useMemo } from 'react';
-import { CheckCircle2, Repeat } from 'lucide-react';
-import {
-  Reminder,
-  Employee,
-  ReminderCategory,
-  ReminderRoutineType,
-} from '../types';
-import {
-  ReminderStatsCards,
-  ReminderItemCard,
-  ReminderTableView,
-  ReminderModal,
-  ActiveAlarmBanner,
-  RoutineReminderCard,
-  RoutineStatsCards,
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { 
+  Bell, 
+  Plus, 
+  Search, 
+  LayoutGrid, 
+  ListOrdered, 
+  Volume2, 
+  VolumeX, 
+  Clock, 
+  Filter 
+} from 'lucide-react';
+import { Reminder, Employee } from '../types';
+import { soundService } from '../services/soundService';
+import { 
+  ReminderStatsCards, 
+  ReminderItemCard, 
+  ReminderTableView, 
+  ReminderModal, 
+  ActiveAlarmBanner 
 } from './reminders';
-import {
-  computeReminderUrgency,
-  computeNextRoutineOccurrence,
-  formatDeadlineFrenchDate,
-  isRoutineReminder,
-  renewOrResolveReminder,
-  sortRemindersByUrgency,
-} from '../services/reminderService';
-import {
-  executeOperationWithLoading,
-  executeDeleteWithSweetAlert,
-} from '../utils/sweetAlert';
-import { useReminderAlarmScheduler } from './reminders/useReminderAlarmScheduler';
-import { ReminderToolbarAndHeader } from './reminders/ReminderToolbarAndHeader';
 
 interface ReminderPanelProps {
   reminders: Reminder[];
-  onUpdateReminders: (updated: Reminder[]) => Promise<void> | void;
+  onUpdateReminders: (updated: Reminder[]) => void;
   currentTime: string;
   employees?: Employee[];
   currentRole?: string;
@@ -43,242 +33,187 @@ interface ReminderPanelProps {
 export default function ReminderPanel({
   reminders,
   onUpdateReminders,
+  currentTime,
   employees = [],
   currentRole = 'admin',
   connectedEmployee = null,
   showToast,
 }: ReminderPanelProps) {
-  const [activeSection, setActiveSection] = useState<'deadlines' | 'routines'>('deadlines');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'actionable' | 'upcoming' | 'resolved'>('all');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | ReminderCategory>('all');
-  const [routineTypeFilter, setRoutineTypeFilter] = useState<'all' | ReminderRoutineType>('all');
-  const [routineStatusFilter, setRoutineStatusFilter] = useState<'all' | 'active' | 'paused'>('all');
+  const [filterPeriod, setFilterPeriod] = useState<'all' | 'today' | 'upcoming'>('all');
 
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
-  const [modalDefaultMode, setModalDefaultMode] = useState<'deadline' | 'routine'>('deadline');
 
-  const {
-    activeRingingReminder,
-    handleStartAlarm,
-    handleStopAlarm,
-    handleSnooze5m,
-  } = useReminderAlarmScheduler(reminders, onUpdateReminders, showToast);
+  // Active Ringing Alarm State (Continuous alarm until stopped)
+  const [activeRingingReminder, setActiveRingingReminder] = useState<Reminder | null>(null);
 
-  const deadlineReminders = useMemo(
-    () => reminders.filter((r) => !isRoutineReminder(r)),
-    [reminders]
-  );
+  // Start continuous ringing alarm
+  const handleStartAlarm = useCallback((reminder: Reminder) => {
+    setActiveRingingReminder(reminder);
+    soundService.startContinuousAlertRingtone(0.7);
+    if (showToast) {
+      showToast(`Sonnerie d'alerte activée : "${reminder.title || reminder.note || 'Alerte'}"`, 'success');
+    }
+  }, [showToast]);
 
-  const routineReminders = useMemo(
-    () => reminders.filter((r) => isRoutineReminder(r)),
-    [reminders]
-  );
+  // Stop continuous ringing alarm
+  const handleStopAlarm = useCallback(() => {
+    soundService.stopContinuousAlertRingtone();
+    if (activeRingingReminder && showToast) {
+      showToast('Sonnerie arrêtée avec succès.', 'success');
+    }
+    setActiveRingingReminder(null);
+  }, [activeRingingReminder, showToast]);
 
+  // Snooze alarm by 5 minutes
+  const handleSnooze5m = useCallback(() => {
+    soundService.stopContinuousAlertRingtone();
+    if (activeRingingReminder) {
+      // Calculate new time + 5m
+      const now = new Date();
+      now.setMinutes(now.getMinutes() + 5);
+      const newTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const updated = reminders.map((r) =>
+        r.id === activeRingingReminder.id ? { ...r, time: newTime } : r
+      );
+      onUpdateReminders(updated);
+      if (showToast) showToast('Alerte reportée de 5 minutes.', 'success');
+    }
+    setActiveRingingReminder(null);
+  }, [activeRingingReminder, reminders, onUpdateReminders, showToast]);
+
+  // Automatic real-time scheduler check: triggers continuous alarm when scheduled time matches
+  useEffect(() => {
+    const checkSchedule = () => {
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const currentH = now.getHours();
+      const currentM = now.getMinutes();
+      const currentTotalMin = currentH * 60 + currentM;
+
+      for (const r of reminders) {
+        if (!r.date || !r.time) continue;
+        if (r.date !== todayStr) continue;
+
+        const [rH, rM] = r.time.split(':').map(Number);
+        if (isNaN(rH) || isNaN(rM)) continue;
+        const targetTotalMin = rH * 60 + rM;
+
+        const periods = r.triggerPeriods && r.triggerPeriods.length > 0 ? r.triggerPeriods : ['exact'];
+        const triggered = r.triggeredPeriods || [];
+
+        for (const period of periods) {
+          if (triggered.includes(period)) continue;
+
+          let shouldRing = false;
+          if (period === 'exact' && currentTotalMin === targetTotalMin) {
+            shouldRing = true;
+          } else if (period === '5m' && targetTotalMin - currentTotalMin === 5) {
+            shouldRing = true;
+          } else if (period === '15m' && targetTotalMin - currentTotalMin === 15) {
+            shouldRing = true;
+          } else if (period === '30m' && targetTotalMin - currentTotalMin === 30) {
+            shouldRing = true;
+          } else if (period === '1h' && targetTotalMin - currentTotalMin === 60) {
+            shouldRing = true;
+          }
+
+          if (shouldRing) {
+            // Mark as triggered so it rings only once for this period
+            const updated = reminders.map((rem) =>
+              rem.id === r.id
+                ? { ...rem, triggeredPeriods: [...(rem.triggeredPeriods || []), period] }
+                : rem
+            );
+            onUpdateReminders(updated);
+            handleStartAlarm(r);
+            break;
+          }
+        }
+      }
+    };
+
+    const interval = setInterval(checkSchedule, 10000);
+    return () => clearInterval(interval);
+  }, [reminders, onUpdateReminders, handleStartAlarm]);
+
+  // Clean up sound on unmount
+  useEffect(() => {
+    return () => {
+      soundService.stopContinuousAlertRingtone();
+    };
+  }, []);
+
+  // Open creation modal
   const handleOpenCreateModal = () => {
     setEditingReminder(null);
-    setModalDefaultMode(activeSection === 'routines' ? 'routine' : 'deadline');
     setIsModalOpen(true);
   };
 
+  // Open edit modal
   const handleOpenEditModal = (reminder: Reminder) => {
     setEditingReminder(reminder);
-    setModalDefaultMode(isRoutineReminder(reminder) ? 'routine' : 'deadline');
     setIsModalOpen(true);
   };
 
-  const handleSaveReminder = async (
+  // Save (Create or Edit)
+  const handleSaveReminder = (
     reminderData: Omit<Reminder, 'id' | 'createdAt'> & { id?: string }
   ) => {
-    const isEdit = Boolean(reminderData.id);
-    const isRoutine = reminderData.kind === 'routine' || reminderData.kind === 'alarm';
-
-    await executeOperationWithLoading({
-      loadingTitle: isEdit
-        ? isRoutine
-          ? 'Mise à jour du rappel...'
-          : "Mise à jour de l'échéance..."
-        : isRoutine
-        ? 'Enregistrement du rappel récurrent...'
-        : "Enregistrement de l'échéance...",
-      loadingText: 'Synchronisation avec la base de données...',
-      action: async () => {
-        if (reminderData.id) {
-          const updated = reminders.map((r) =>
-            r.id === reminderData.id ? ({ ...r, ...reminderData } as Reminder) : r
-          );
-          await onUpdateReminders(updated);
-        } else {
-          const newReminderItem: Reminder = {
-            id: `rem-${Date.now()}`,
-            createdAt: new Date().toISOString(),
-            ...reminderData,
-          } as Reminder;
-          await onUpdateReminders([newReminderItem, ...reminders]);
-        }
-
-        if (isRoutine) {
-          setActiveSection('routines');
-        } else {
-          setActiveSection('deadlines');
-        }
-      },
-      successTitle: isEdit
-        ? isRoutine
-          ? 'Rappel mis à jour'
-          : 'Échéance mise à jour'
-        : isRoutine
-        ? 'Rappel récurrent créé'
-        : 'Échéance ajoutée',
-      successMessage: `"${reminderData.title}" est bien enregistré.`,
-    });
+    if (reminderData.id) {
+      // Modification
+      const updated = reminders.map((r) =>
+        r.id === reminderData.id ? ({ ...r, ...reminderData } as Reminder) : r
+      );
+      onUpdateReminders(updated);
+      if (showToast) showToast('Alerte modifiée avec succès.', 'success');
+    } else {
+      // Création
+      const newReminderItem: Reminder = {
+        id: `rem-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        ...reminderData,
+      } as Reminder;
+      onUpdateReminders([newReminderItem, ...reminders]);
+      if (showToast) showToast('Nouvelle alerte programmée.', 'success');
+    }
   };
 
-  const handleRenewOrResolveReminder = async (reminder: Reminder) => {
-    const renewed = renewOrResolveReminder(reminder);
-    const isRecurring = (reminder.renewalCycle || 'none') !== 'none';
-
-    await executeOperationWithLoading({
-      loadingTitle: isRecurring ? 'Renouvellement en cours...' : 'Validation du document...',
-      loadingText: 'Mise à jour de la prochaine échéance...',
-      action: async () => {
-        if (activeRingingReminder?.id === reminder.id) {
-          handleStopAlarm();
-        }
-        const updated = reminders.map((r) => (r.id === reminder.id ? renewed : r));
-        await onUpdateReminders(updated);
-      },
-      successTitle: isRecurring ? 'Échéance renouvelée !' : 'Document validé !',
-      successMessage: isRecurring
-        ? `Prochaine échéance planifiée le ${formatDeadlineFrenchDate(
-            renewed.expirationDate || renewed.date
-          )}.`
-        : `"${reminder.title}" a été marqué comme validé.`,
-    });
+  // Delete
+  const handleDeleteReminder = (id: string) => {
+    if (activeRingingReminder?.id === id) {
+      handleStopAlarm();
+    }
+    onUpdateReminders(reminders.filter((r) => r.id !== id));
+    if (showToast) showToast('Alerte supprimée.');
   };
 
-  const handleTogglePauseRoutine = async (reminder: Reminder) => {
-    const willPause = !Boolean(reminder.stopped || reminder.isResolved);
-    await executeOperationWithLoading({
-      loadingTitle: willPause ? 'Mise en pause du rappel...' : 'Réactivation du rappel...',
-      loadingText: 'Mise à jour du planning...',
-      action: async () => {
-        if (willPause && activeRingingReminder?.id === reminder.id) {
-          handleStopAlarm();
-        }
-        const updated = reminders.map((r) =>
-          r.id === reminder.id
-            ? {
-                ...r,
-                stopped: willPause,
-                isResolved: false,
-              }
-            : r
-        );
-        await onUpdateReminders(updated);
-      },
-      successTitle: willPause ? 'Rappel mis en pause' : 'Rappel réactivé',
-      successMessage: willPause
-        ? `"${reminder.title}" ne déclenchera plus d'alerte jusqu'à réactivation.`
-        : `"${reminder.title}" est de nouveau actif.`,
-    });
-  };
+  // Filtered Reminders
+  const todayDateStr = new Date().toISOString().split('T')[0];
+  const filtered = useMemo(() => {
+    return reminders.filter((r) => {
+      const matchSearch =
+        (r.title && r.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (r.note && r.note.toLowerCase().includes(searchTerm.toLowerCase()));
+      if (!matchSearch) return false;
 
-  const handleDeleteReminder = async (id: string) => {
-    const target = reminders.find((r) => r.id === id);
-    const isRoutine = target ? isRoutineReminder(target) : false;
-
-    await executeDeleteWithSweetAlert({
-      title: isRoutine ? 'Supprimer ce rappel ?' : 'Supprimer cette échéance ?',
-      text: 'Voulez-vous vraiment supprimer cet élément ?',
-      itemName: target?.title,
-      action: async () => {
-        if (activeRingingReminder?.id === id) {
-          handleStopAlarm();
-        }
-        await onUpdateReminders(reminders.filter((r) => r.id !== id));
-      },
-      successTitle: 'Élément supprimé',
-      successMessage: target?.title
-        ? `"${target.title}" a été supprimé.`
-        : 'Le rappel a été supprimé.',
-    });
-  };
-
-  const sortedAndFilteredDeadlines = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    const list = deadlineReminders.filter((r) => {
-      if (query) {
-        const match =
-          (r.title && r.title.toLowerCase().includes(query)) ||
-          (r.entityName && r.entityName.toLowerCase().includes(query)) ||
-          (r.documentRef && r.documentRef.toLowerCase().includes(query)) ||
-          (r.note && r.note.toLowerCase().includes(query));
-        if (!match) return false;
+      if (filterPeriod === 'today') {
+        return r.date === todayDateStr;
       }
-
-      if (categoryFilter !== 'all') {
-        const cat = r.category || 'autre';
-        if (cat !== categoryFilter) return false;
+      if (filterPeriod === 'upcoming') {
+        return r.date && r.date >= todayDateStr;
       }
-
-      const urgency = computeReminderUrgency(r);
-      if (statusFilter === 'actionable') return urgency.isActionNeeded;
-      if (statusFilter === 'upcoming') {
-        return urgency.level === 'upcoming' || urgency.level === 'unscheduled';
-      }
-      if (statusFilter === 'resolved') return urgency.level === 'resolved';
-
       return true;
     });
-
-    return sortRemindersByUrgency(list);
-  }, [deadlineReminders, searchTerm, statusFilter, categoryFilter]);
-
-  const sortedAndFilteredRoutines = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    const filtered = routineReminders.filter((r) => {
-      if (query) {
-        const match =
-          (r.title && r.title.toLowerCase().includes(query)) ||
-          (r.location && r.location.toLowerCase().includes(query)) ||
-          (r.entityName && r.entityName.toLowerCase().includes(query)) ||
-          (r.note && r.note.toLowerCase().includes(query));
-        if (!match) return false;
-      }
-
-      if (routineTypeFilter !== 'all') {
-        if ((r.routineType || 'reunion') !== routineTypeFilter) return false;
-      }
-
-      const isPaused = Boolean(r.stopped || r.isResolved);
-      if (routineStatusFilter === 'active' && isPaused) return false;
-      if (routineStatusFilter === 'paused' && !isPaused) return false;
-
-      return true;
-    });
-
-    const now = new Date();
-    return [...filtered].sort((a, b) => {
-      const pausedA = Boolean(a.stopped || a.isResolved);
-      const pausedB = Boolean(b.stopped || b.isResolved);
-      if (pausedA !== pausedB) return pausedA ? 1 : -1;
-
-      const nextA = computeNextRoutineOccurrence(a, now)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      const nextB = computeNextRoutineOccurrence(b, now)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      return nextA - nextB;
-    });
-  }, [routineReminders, searchTerm, routineTypeFilter, routineStatusFilter]);
-
-  const actionableCount = useMemo(
-    () => deadlineReminders.filter((r) => computeReminderUrgency(r).isActionNeeded).length,
-    [deadlineReminders]
-  );
+  }, [reminders, searchTerm, filterPeriod, todayDateStr]);
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
+      
+      {/* Active Continuous Ringing Banner (Stops when user clicks Stop) */}
       {activeRingingReminder && (
         <ActiveAlarmBanner
           ringingReminder={activeRingingReminder}
@@ -287,113 +222,150 @@ export default function ReminderPanel({
         />
       )}
 
-      <ReminderToolbarAndHeader
-        activeSection={activeSection}
-        setActiveSection={setActiveSection}
-        deadlinesCount={deadlineReminders.length}
-        routinesCount={routineReminders.length}
-        onOpenCreateModal={handleOpenCreateModal}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        categoryFilter={categoryFilter}
-        setCategoryFilter={setCategoryFilter}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        actionableCount={actionableCount}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-        routineTypeFilter={routineTypeFilter}
-        setRoutineTypeFilter={setRoutineTypeFilter}
-        routineStatusFilter={routineStatusFilter}
-        setRoutineStatusFilter={setRoutineStatusFilter}
-      />
+      {/* Top Banner */}
+      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <Bell className="h-5 w-5 text-emerald-200" />
+            <h2 className="font-serif font-bold text-xl">Gestion des Alertes & Rappels</h2>
+          </div>
+        </div>
 
-      {activeSection === 'deadlines' ? (
-        <>
-          <ReminderStatsCards reminders={deadlineReminders} />
+        <button
+          onClick={handleOpenCreateModal}
+          className="bg-white text-[#2A7B76] hover:bg-emerald-50 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
+        >
+          <Plus className="h-4 w-4" />
+          <span>Créer une Alerte</span>
+        </button>
+      </div>
 
-          {viewMode === 'cards' ? (
-            <div className="space-y-2.5">
-              {sortedAndFilteredDeadlines.length === 0 ? (
-                <div className="bg-white p-12 text-center rounded-3xl border border-stone-200/80 space-y-2">
-                  <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto" />
-                  <p className="text-sm font-bold text-stone-800">
-                    Aucune échéance pour ce filtre
-                  </p>
-                  <p className="text-xs text-stone-500 max-w-md mx-auto">
-                    Ajoutez vos cartes grises, visites techniques, impôts trimestriels ou annuels
-                    pour recevoir une alerte sur l&apos;accueil avant expiration.
-                  </p>
-                </div>
-              ) : (
-                sortedAndFilteredDeadlines.map((reminder) => (
-                  <ReminderItemCard
-                    key={reminder.id}
-                    reminder={reminder}
-                    isRinging={activeRingingReminder?.id === reminder.id}
-                    onStartAlarm={handleStartAlarm}
-                    onStopAlarm={handleStopAlarm}
-                    onRenewOrResolve={handleRenewOrResolveReminder}
-                    onEdit={handleOpenEditModal}
-                    onDelete={handleDeleteReminder}
-                  />
-                ))
-              )}
+      {/* KPI Stats */}
+      <ReminderStatsCards reminders={reminders} />
+
+      {/* Toolbar: Search, Period Filter & View Switcher (Cards vs DataTable) */}
+      <div className="bg-white p-3.5 rounded-3xl border border-stone-200/90 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        {/* Search */}
+        <div className="relative flex-1 sm:max-w-md">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+          <input
+            type="text"
+            placeholder="Rechercher par intitulé, consigne ou date..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-stone-50 rounded-2xl border border-stone-200 text-xs focus:ring-2 focus:ring-[#2A7B76] outline-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          {/* Quick Filter */}
+          <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-2xl border border-stone-200/70 text-xs">
+            <button
+              onClick={() => setFilterPeriod('all')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                filterPeriod === 'all'
+                  ? 'bg-white text-stone-900 shadow-2xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              Toutes
+            </button>
+            <button
+              onClick={() => setFilterPeriod('today')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                filterPeriod === 'today'
+                  ? 'bg-white text-[#2A7B76] shadow-2xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              Aujourd'hui
+            </button>
+            <button
+              onClick={() => setFilterPeriod('upcoming')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                filterPeriod === 'upcoming'
+                  ? 'bg-white text-emerald-800 shadow-2xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              À venir
+            </button>
+          </div>
+
+          {/* View Mode Switcher: Cards vs DataTable */}
+          <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-2xl border border-stone-200/70 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                viewMode === 'cards'
+                  ? 'bg-white text-[#2A7B76] shadow-2xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+              title="Affichage sous forme de cartes"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Cartes</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-white text-[#2A7B76] shadow-2xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+              title="Affichage sous forme de liste dans un tableau (DataTable)"
+            >
+              <ListOrdered className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Tableau</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mode 1: Cards View */}
+      {viewMode === 'cards' && (
+        <div className="space-y-3">
+          {filtered.length === 0 ? (
+            <div className="bg-white p-12 text-center rounded-3xl border border-stone-200/80 text-stone-400 text-xs">
+              Aucune alerte correspondante. Cliquez sur "Créer une Alerte" pour en planifier une.
             </div>
           ) : (
-            <ReminderTableView
-              reminders={sortedAndFilteredDeadlines}
-              employees={employees}
-              ringingReminderId={activeRingingReminder?.id}
-              onStartAlarm={handleStartAlarm}
-              onStopAlarm={handleStopAlarm}
-              onRenewOrResolve={handleRenewOrResolveReminder}
-              onEdit={handleOpenEditModal}
-              onDelete={handleDeleteReminder}
-            />
+            filtered.map((reminder) => (
+              <ReminderItemCard
+                key={reminder.id}
+                reminder={reminder}
+                isRinging={activeRingingReminder?.id === reminder.id}
+                onStartAlarm={handleStartAlarm}
+                onStopAlarm={handleStopAlarm}
+                onEdit={handleOpenEditModal}
+                onDelete={handleDeleteReminder}
+              />
+            ))
           )}
-        </>
-      ) : (
-        <>
-          <RoutineStatsCards routines={routineReminders} />
-
-          <div className="space-y-2.5">
-            {sortedAndFilteredRoutines.length === 0 ? (
-              <div className="bg-white p-12 text-center rounded-3xl border border-stone-200/80 space-y-2.5">
-                <Repeat className="h-8 w-8 text-[#2A7B76] mx-auto" />
-                <p className="text-sm font-bold text-stone-800">
-                  Aucun rappel récurrent ou réunion planifiée
-                </p>
-                <p className="text-xs text-stone-500 max-w-md mx-auto">
-                  Créez par exemple une réunion tous les{' '}
-                  <strong>Lundi, Mercredi et Vendredi à 09h00</strong> pour envoyer automatiquement
-                  un rappel Push et une alerte à l&apos;équipe concernée.
-                </p>
-              </div>
-            ) : (
-              sortedAndFilteredRoutines.map((reminder) => (
-                <RoutineReminderCard
-                  key={reminder.id}
-                  reminder={reminder}
-                  isRinging={activeRingingReminder?.id === reminder.id}
-                  onStartAlarm={handleStartAlarm}
-                  onStopAlarm={handleStopAlarm}
-                  onTogglePause={handleTogglePauseRoutine}
-                  onEdit={handleOpenEditModal}
-                  onDelete={handleDeleteReminder}
-                />
-              ))
-            )}
-          </div>
-        </>
+        </div>
       )}
 
+      {/* Mode 2: DataTable View */}
+      {viewMode === 'table' && (
+        <ReminderTableView
+          reminders={filtered}
+          employees={employees}
+          ringingReminderId={activeRingingReminder?.id}
+          onStartAlarm={handleStartAlarm}
+          onStopAlarm={handleStopAlarm}
+          onEdit={handleOpenEditModal}
+          onDelete={handleDeleteReminder}
+        />
+      )}
+
+      {/* Create / Edit Reminder Modal */}
       <ReminderModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSaveReminder={handleSaveReminder}
         initialReminder={editingReminder}
-        defaultMode={modalDefaultMode}
         employees={employees}
         isEmployee={currentRole === 'employé'}
         currentEmployee={connectedEmployee}

@@ -5,5 +5,5 @@ export * from './types/taskTypes';
 export * from './types/businessTypes';
 export * from './types/callTypes';
 export * from './types/leaveTypes';
-export * from './types/absenceTypes';
-export * from './types/projectTypes';
+export * from './types/apiTypes';
+export * from './types/githubTypes';

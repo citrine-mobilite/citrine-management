@@ -23,15 +23,26 @@ try {
 // 2. Register Service Worker for PWA Offline Mode & Push Notifications
 try {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      try {
-        navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
-          console.warn('SW registration warning:', err);
-        });
-      } catch (e) {
-        console.warn('SW registration exception:', e);
-      }
-    });
+    if (import.meta.env.PROD) {
+      window.addEventListener('load', () => {
+        try {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((reg) => {
+            console.log('✅ Service Worker Citrine actif (PWA & Push):', reg.scope);
+          }).catch((err) => {
+            console.warn('SW registration warning:', err);
+          });
+        } catch (e) {
+          console.warn('SW registration exception:', e);
+        }
+      });
+    } else {
+      // In development mode, purge any stale SW registrations so they never intercept Vite dev requests
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const reg of registrations) {
+          reg.unregister();
+        }
+      }).catch(() => {});
+    }
   }
 } catch (swError) {
   console.warn('Service worker check safely ignored:', swError);

@@ -1,8 +1,6 @@
 import React from 'react';
 import { Briefcase, CheckCircle, Clock, PlayCircle } from 'lucide-react';
 import { Task, Employee, NotificationLog, TaskStatus } from '../../types';
-import { isTaskAssignedToEmployee } from '../../utils/rendementCalculator';
-import { notifyExceptionalTaskCompletion } from '../../services/exceptionalTaskCompletionService';
 
 interface EmployeeAssignedTasksSectionProps {
   myTasks?: Task[];
@@ -23,7 +21,7 @@ export const EmployeeAssignedTasksSection: React.FC<EmployeeAssignedTasksSection
   const safeTasks = tasks || [];
   const effectiveTasks = safeMyTasks.length > 0 
     ? safeMyTasks 
-    : safeTasks.filter(t => t && (!employeeProfile || isTaskAssignedToEmployee(t, employeeProfile)));
+    : safeTasks.filter(t => t && (!employeeProfile || t.assignedTo === employeeProfile.name || t.employeeId === employeeProfile.id));
   const list = effectiveTasks || [];
 
   const handleUpdateStatus = (task: Task, newStatus: TaskStatus) => {
@@ -41,14 +39,7 @@ export const EmployeeAssignedTasksSection: React.FC<EmployeeAssignedTasksSection
     const label = statusLabels[newStatus] || newStatus;
     const recipient = employeeProfile?.id || task.assignedTo || 'Collaborateur';
 
-    if (newStatus === 'completed' && task.status !== 'completed') {
-      notifyExceptionalTaskCompletion(
-        { ...task, status: 'completed' },
-        employeeProfile?.name || task.assignedTo,
-        onAddNotification as any
-      );
-    } else if (onAddNotification) {
-      const operationKey = `task-status:${task.id}:${newStatus}`;
+    if (onAddNotification) {
       onAddNotification({
         id: `notif-task-move-${Date.now()}-${task.id}`,
         recipient,
@@ -57,7 +48,6 @@ export const EmployeeAssignedTasksSection: React.FC<EmployeeAssignedTasksSection
         content: `La tâche est passée au statut « ${label} ».`,
         payload: JSON.stringify({
           source: 'task_movement',
-          operationKey,
           taskId: task.id,
           employeeId: recipient,
           newStatus,

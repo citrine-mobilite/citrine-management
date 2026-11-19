@@ -191,17 +191,7 @@ export const StatisticsEmployeeRankTable: React.FC<StatisticsEmployeeRankTablePr
 
                   {/* Jours Présents */}
                   <td className="py-3 px-4 text-center font-mono font-bold text-emerald-700 text-xs">
-                    <span>
-                      {row.presentDays + row.lateDays + row.weekendWorkedDays}j
-                      {row.workingDaysInPeriod !== undefined && row.workingDaysInPeriod > 0
-                        ? ` / ${row.workingDaysInPeriod}j`
-                        : ''}
-                    </span>
-                    {row.weekendWorkedDays > 0 && (
-                      <span className="block text-[10px] font-semibold text-amber-700">
-                        dont +{row.weekendWorkedDays}j WE
-                      </span>
-                    )}
+                    {row.presentDays + row.lateDays} j
                   </td>
 
                   {/* Retards */}

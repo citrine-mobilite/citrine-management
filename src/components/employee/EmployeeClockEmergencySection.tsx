@@ -5,23 +5,34 @@ import { Presence } from '../../types';
 interface EmployeeClockEmergencySectionProps {
   todayPresence?: Presence;
   onOpenEmergencyModal: () => void;
+  onOpenCustomClockModal: () => void;
 }
 
 export const EmployeeClockEmergencySection: React.FC<EmployeeClockEmergencySectionProps> = ({
   todayPresence,
   onOpenEmergencyModal,
+  onOpenCustomClockModal,
 }) => {
   return (
     <div className="space-y-3">
       {/* Actions Bar */}
-      <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 glass-card p-3.5 rounded-2xl">
+      <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 bg-stone-50/80 p-3 rounded-2xl border border-stone-200/80">
         <button
           onClick={onOpenEmergencyModal}
-          className="w-full sm:w-auto glass-btn-primary text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
+          className="w-full sm:w-auto bg-[#2A7B76] hover:bg-[#20635F] text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-xs cursor-pointer active:scale-98"
           title="Déclarer une sortie professionnelle, un retard, un départ anticipé, une permission ou autre"
         >
           <HelpCircle className="h-4 w-4 text-emerald-200 shrink-0" />
           <span>*Autre* (Sortie pro, Retard, Départ, Permission)</span>
+        </button>
+
+        <button
+          onClick={onOpenCustomClockModal}
+          className="text-stone-600 hover:text-[#2A7B76] font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+          title="Ajuster l'horaire manuellement (Horloge 24h)"
+        >
+          <Clock className="h-3.5 w-3.5 text-[#2A7B76]" />
+          Ajuster l'horaire manuellement (Horloge 24h)
         </button>
       </div>
 

@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { Eye, Trash2, Calendar, User, Database, ShieldCheck, ArrowUpDown, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Filter, Edit3 } from 'lucide-react';
+import { Eye, Trash2, Calendar, User, Database, ShieldCheck, ArrowUpDown, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { GeneratedDocument } from '../../types';
 
 interface DocumentTableViewProps {
   documents: GeneratedDocument[];
   searchTerm: string;
   onPreview: (doc: GeneratedDocument) => void;
-  onEdit?: (doc: GeneratedDocument) => void;
   onDelete: (id: string) => void;
 }
 
@@ -17,7 +16,6 @@ export const DocumentTableView: React.FC<DocumentTableViewProps> = ({
   documents,
   searchTerm,
   onPreview,
-  onEdit,
   onDelete,
 }) => {
   const [sortField, setSortField] = useState<SortField>('createdAt');
@@ -226,17 +224,6 @@ export const DocumentTableView: React.FC<DocumentTableViewProps> = ({
                           <Eye className="h-3.5 w-3.5" />
                           <span>Aperçu PDF</span>
                         </button>
-                        {onEdit && (
-                          <button
-                            type="button"
-                            onClick={() => onEdit(doc)}
-                            className="px-2.5 py-1.5 bg-stone-100 hover:bg-[#2A7B76] hover:text-white text-stone-700 text-[11px] font-bold rounded-xl transition flex items-center gap-1 cursor-pointer border border-stone-200"
-                            title="Modifier ce document en base de données"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                            <span>Modifier</span>
-                          </button>
-                        )}
                         <button
                           type="button"
                           onClick={() => onDelete(doc.id)}

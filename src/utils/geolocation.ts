@@ -10,10 +10,10 @@ export interface GeolocationResult {
  * Exact Company HQ Position (Editable via Settings)
  */
 export let COMPANY_HQ_LOCATION = {
-  latitude: 4.016246,
-  longitude: 9.8203514,
-  address: "Japoma (Carrefour Matango), Douala",
-  name: "Siège Citrine - Japoma Carrefour Matango"
+  latitude: 0,
+  longitude: 0,
+  address: "",
+  name: ""
 };
 
 export function updateCompanyHQLocation(newHQ: { latitude?: number; longitude?: number; address?: string; name?: string }) {
@@ -21,22 +21,6 @@ export function updateCompanyHQLocation(newHQ: { latitude?: number; longitude?: 
     ...COMPANY_HQ_LOCATION,
     ...newHQ
   };
-}
-
-export function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 999999;
-  const R = 6371e3; // metres
-  const φ1 = lat1 * Math.PI / 180;
-  const φ2 = lat2 * Math.PI / 180;
-  const Δφ = (lat2 - lat1) * Math.PI / 180;
-  const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-          Math.cos(φ1) * Math.cos(φ2) *
-          Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; // in metres
 }
 
 /**
@@ -147,6 +131,10 @@ export async function getCurrentUserLocation(): Promise<GeolocationResult> {
       async (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
+
+        // Aucune restriction de précision GPS : position acceptée directement
+        console.log(`Position GPS acquise : ${lat}, ${lon} (Précision: ${accuracy || 'inconnue'}m)`);
 
         try {
           // Attempt reverse geocoding via OpenStreetMap Nominatim API with 3.5s timeout

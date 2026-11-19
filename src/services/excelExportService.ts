@@ -1,5 +1,3 @@
-import { DEFAULT_COMPANY_INFO } from './pdf/pdfCompanyInfo';
-
 /**
  * Export structured tabular data to Microsoft Excel (.xls formatted HTML table)
  */
@@ -30,17 +28,12 @@ export function exportToExcel(
       </xml>
       <![endif]-->
       <style>
-        body { font-family: Calibri, Arial, sans-serif; padding: 12px; }
-        .company-header { font-size: 20px; font-weight: bold; color: #164e4b; font-style: italic; margin-bottom: 2px; }
-        .title { font-size: 14px; font-weight: bold; color: #ffffff; background-color: #2A7B76; padding: 8px 12px; margin-bottom: 12px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-        th { background-color: #164e4b; color: #ffffff; font-weight: bold; font-family: Calibri, Arial, sans-serif; font-size: 11px; padding: 8px 10px; border: 1px solid #113835; text-align: left; }
-        td { font-family: Calibri, Arial, sans-serif; font-size: 11px; padding: 6px 10px; border: 1px solid #cbd5e1; color: #1e293b; background-color: #ffffff; }
-        tr:nth-child(even) td { background-color: #f8fafc; }
+        th { background-color: #2A7B76; color: #ffffff; font-weight: bold; font-family: Arial, sans-serif; font-size: 12px; padding: 8px; }
+        td { font-family: Arial, sans-serif; font-size: 11px; padding: 6px; }
+        .title { font-size: 16px; font-weight: bold; color: #2A7B76; margin-bottom: 12px; }
       </style>
     </head>
     <body>
-      <div class="company-header">${DEFAULT_COMPANY_INFO.name} — ${DEFAULT_COMPANY_INFO.subTitle} (République du Cameroun · Document Officiel)</div>
       <div class="title">${title}</div>
       <table border="1" style="border-collapse: collapse;">
         <thead>
@@ -62,9 +55,6 @@ export function exportToExcel(
             .join('')}
         </tbody>
       </table>
-      <div style="margin-top: 12px; padding-top: 6px; border-top: 2px solid #D4A82F; font-size: 10px; color: #475569; text-align: center;">
-        <strong>${DEFAULT_COMPANY_INFO.name}</strong> · ${DEFAULT_COMPANY_INFO.address} · Tél. ${DEFAULT_COMPANY_INFO.phone} · ${DEFAULT_COMPANY_INFO.email} · Capital : ${DEFAULT_COMPANY_INFO.capital} · NUI : ${DEFAULT_COMPANY_INFO.nui} · RCCM : ${DEFAULT_COMPANY_INFO.rccm}
-      </div>
     </body>
     </html>
   `;

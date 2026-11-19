@@ -20,36 +20,14 @@ export function extractPointageMarkers(
   presences: Presence[],
   employees: Employee[],
   selectedDate: string,
-  selectedEmployeeId?: string,
-  mapPeriod: 'day' | 'week' | 'month' | 'all' | 'custom' = 'day',
-  customFilterQuery?: string,
-  customStartDate?: string,
-  customEndDate?: string
+  selectedEmployeeId?: string
 ): PointageMarker[] {
   const markers: PointageMarker[] = [];
-  const targetDateObj = new Date(selectedDate || Date.now());
 
   const filtered = presences.filter((p) => {
-    if (!p.date) return false;
+    if (selectedDate && p.date !== selectedDate) return false;
     if (selectedEmployeeId && selectedEmployeeId !== 'all' && p.employeeId !== selectedEmployeeId) return false;
-
-    const pDateObj = new Date(p.date);
-    const diffTime = targetDateObj.getTime() - pDateObj.getTime();
-    const diffDays = diffTime / (1000 * 3600 * 24);
-
-    if (mapPeriod === 'day') {
-      return p.date === selectedDate;
-    } else if (mapPeriod === 'week') {
-      return diffDays >= 0 && diffDays <= 7;
-    } else if (mapPeriod === 'month') {
-      return diffDays >= 0 && diffDays <= 30;
-    } else if (mapPeriod === 'custom') {
-      if (!customStartDate && !customEndDate) return true;
-      if (customStartDate && p.date < customStartDate) return false;
-      if (customEndDate && p.date > customEndDate) return false;
-      return true;
-    }
-    return true; // 'all'
+    return true;
   });
 
   filtered.forEach((p, idx) => {
@@ -59,11 +37,6 @@ export function extractPointageMarkers(
 
     const lat = (typeof p.latitude === 'number' && p.latitude !== 0) ? p.latitude : (4.0511 + (idx * 0.001));
     const lng = (typeof p.longitude === 'number' && p.longitude !== 0) ? p.longitude : (9.7679 + (idx * 0.001));
-
-    const arrLoc = p.clockLocations?.arrival;
-    const pauseStartLoc = p.clockLocations?.pauseStart;
-    const pauseEndLoc = p.clockLocations?.pauseEnd;
-    const depLoc = p.clockLocations?.departure;
 
     if (p.arrivalTime) {
       markers.push({
@@ -75,44 +48,11 @@ export function extractPointageMarkers(
         time: p.arrivalTime,
         type: 'arrival',
         label: 'Arrivée',
-        locationName: arrLoc?.zoneName || p.location || 'Bureau',
-        lat: arrLoc?.latitude || lat,
-        lng: arrLoc?.longitude || lng,
+        locationName: p.location || 'Bureau',
+        lat,
+        lng,
       });
     }
-
-    if (p.pauseStart) {
-      markers.push({
-        id: `${p.id}-pause-start`,
-        employeeId: p.employeeId,
-        employeeName: empName,
-        avatarUrl: avatar,
-        date: p.date,
-        time: p.pauseStart,
-        type: 'pauseStart',
-        label: 'Début Pause',
-        locationName: pauseStartLoc?.zoneName || p.location || 'Pause',
-        lat: pauseStartLoc?.latitude || (lat + 0.00015),
-        lng: pauseStartLoc?.longitude || (lng - 0.00015),
-      });
-    }
-
-    if (p.pauseEnd) {
-      markers.push({
-        id: `${p.id}-pause-end`,
-        employeeId: p.employeeId,
-        employeeName: empName,
-        avatarUrl: avatar,
-        date: p.date,
-        time: p.pauseEnd,
-        type: 'pauseEnd',
-        label: 'Retour Pause',
-        locationName: pauseEndLoc?.zoneName || p.location || 'Reprise',
-        lat: pauseEndLoc?.latitude || (lat - 0.00015),
-        lng: pauseEndLoc?.longitude || (lng + 0.00015),
-      });
-    }
-
     if (p.departureTime) {
       markers.push({
         id: `${p.id}-dep`,
@@ -123,23 +63,14 @@ export function extractPointageMarkers(
         time: p.departureTime,
         type: 'departure',
         label: 'Départ',
-        locationName: depLoc?.zoneName || p.location || 'Départ',
-        lat: depLoc?.latitude || (lat + 0.0002),
-        lng: depLoc?.longitude || (lng + 0.0002),
+        locationName: p.location || 'Bureau',
+        lat: lat + 0.0002,
+        lng: lng + 0.0002,
       });
     }
   });
 
-  return markers.filter((m) => {
-    if (!customFilterQuery || !customFilterQuery.trim()) return true;
-    const q = customFilterQuery.toLowerCase();
-    return (
-      m.employeeName.toLowerCase().includes(q) ||
-      m.locationName.toLowerCase().includes(q) ||
-      m.label.toLowerCase().includes(q) ||
-      m.time.toLowerCase().includes(q)
-    );
-  });
+  return markers;
 }
 
 export function createLeafletCustomIcon(marker: PointageMarker): L.DivIcon {

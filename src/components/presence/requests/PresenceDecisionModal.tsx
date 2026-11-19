@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { X, CheckCircle2, XCircle } from 'lucide-react';
 import { RequestItem } from './presenceRequestsUtils';
 
 interface PresenceDecisionModalProps {
@@ -9,7 +9,6 @@ interface PresenceDecisionModalProps {
   setComment: (val: string) => void;
   onClose: () => void;
   onConfirm: () => void;
-  isProcessing?: boolean;
 }
 
 export const PresenceDecisionModal: React.FC<PresenceDecisionModalProps> = ({
@@ -19,7 +18,6 @@ export const PresenceDecisionModal: React.FC<PresenceDecisionModalProps> = ({
   setComment,
   onClose,
   onConfirm,
-  isProcessing = false,
 }) => {
   if (!item || !action) return null;
 
@@ -69,20 +67,17 @@ export const PresenceDecisionModal: React.FC<PresenceDecisionModalProps> = ({
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               onClick={onClose}
-              disabled={isProcessing}
-              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-xl transition cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-xl transition cursor-pointer"
             >
               Annuler
             </button>
             <button
               onClick={onConfirm}
-              disabled={isProcessing}
-              className={`px-4 py-2 text-white font-bold rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-60 ${
+              className={`px-4 py-2 text-white font-bold rounded-xl transition cursor-pointer shadow-xs ${
                 isApproved ? 'bg-[#2A7B76] hover:bg-[#20635F]' : 'bg-red-600 hover:bg-red-700'
               }`}
             >
-              {isProcessing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{isProcessing ? 'Traitement en cours...' : 'Confirmer la décision'}</span>
+              Confirmer la décision
             </button>
           </div>
         </div>

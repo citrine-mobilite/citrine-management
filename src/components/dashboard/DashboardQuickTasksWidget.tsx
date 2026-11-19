@@ -1,13 +1,7 @@
 import React from 'react';
-import { ListTodo, ChevronRight, AlertTriangle, Calendar, Repeat } from 'lucide-react';
+import { ListTodo, ChevronRight, CheckCircle2, AlertTriangle, Calendar } from 'lucide-react';
 import { Task, Reminder } from '../../types';
 import { TabType } from '../Sidebar';
-import { HumaanRelaxedState } from '../illustrations/HumaanIllustrations';
-import {
-  formatNextOccurrenceBadge,
-  formatRoutineRecurrenceLabel,
-  isRoutineReminder,
-} from '../../services/reminderService';
 
 interface DashboardQuickTasksWidgetProps {
   tasks: Task[];
@@ -21,11 +15,11 @@ export const DashboardQuickTasksWidget: React.FC<DashboardQuickTasksWidgetProps>
   onSelectTab,
 }) => {
   const pendingTasks = tasks.filter((t) => t.status !== 'completed');
-  const activeReminders = reminders.filter((r) => !r.stopped && r.status === 'pending');
+  const activeReminders = reminders.filter((r) => r.status === 'pending');
 
   return (
-    <div className="glass-card rounded-3xl overflow-hidden flex flex-col">
-      <div className="p-4 border-b border-white/60 flex items-center justify-between bg-white/40 backdrop-blur-xs">
+    <div className="bg-white rounded-3xl border border-stone-200/90 shadow-sm overflow-hidden flex flex-col">
+      <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
         <div className="flex items-center gap-2">
           <ListTodo className="h-4 w-4 text-[#2A7B76]" />
           <h3 className="font-serif font-bold text-xs text-stone-900">
@@ -46,50 +40,33 @@ export const DashboardQuickTasksWidget: React.FC<DashboardQuickTasksWidgetProps>
 
       <div className="divide-y divide-stone-100 overflow-y-auto max-h-[380px]">
         {pendingTasks.length === 0 && activeReminders.length === 0 ? (
-          <div className="p-8 text-center flex flex-col items-center justify-center space-y-2">
-            <HumaanRelaxedState className="w-24 h-24" />
-            <p className="text-xs font-bold text-stone-700">Toutes les tâches sont à jour</p>
-            <p className="text-[11px] text-stone-400">Aucune alerte urgente en attente actuellement.</p>
+          <div className="p-8 text-center text-stone-400 text-xs italic">
+            Aucune tâche urgente ou alerte en attente.
           </div>
         ) : (
           <>
-            {activeReminders.slice(0, 3).map((rem) => {
-              const routine = isRoutineReminder(rem);
-              return (
-                <div
-                  key={rem.id}
-                  onClick={() => onSelectTab('reminders')}
-                  className={`p-3.5 transition flex items-center justify-between gap-3 cursor-pointer group ${
-                    routine ? 'bg-emerald-50/40 hover:bg-emerald-50/80' : 'bg-amber-50/40 hover:bg-amber-50/80'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
-                        routine ? 'bg-emerald-100 text-[#2A7B76]' : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {routine ? <Repeat className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="font-bold text-xs text-stone-900 truncate">{rem.title}</h4>
-                      <p className="text-[10px] text-stone-500 truncate">
-                        {routine
-                          ? `${formatRoutineRecurrenceLabel(rem)}${rem.location ? ` · ${rem.location}` : ''}`
-                          : rem.description || rem.note || 'Échéance administrative'}
-                      </p>
-                    </div>
+            {activeReminders.slice(0, 3).map((rem) => (
+              <div
+                key={rem.id}
+                onClick={() => onSelectTab('reminders')}
+                className="p-3.5 bg-amber-50/40 hover:bg-amber-50/80 transition flex items-center justify-between gap-3 cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="h-3.5 w-3.5" />
                   </div>
-                  <span
-                    className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${
-                      routine ? 'bg-emerald-100 text-[#2A7B76]' : 'bg-amber-200 text-amber-900'
-                    }`}
-                  >
-                    {routine ? formatNextOccurrenceBadge(rem).label : 'Alerte'}
-                  </span>
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-xs text-amber-950 group-hover:text-amber-900 truncate">
+                      {rem.title}
+                    </h4>
+                    <p className="text-[10px] text-amber-800/80 truncate">{rem.description}</p>
+                  </div>
                 </div>
-              );
-            })}
+                <span className="text-[9px] bg-amber-200 text-amber-900 font-extrabold px-2 py-0.5 rounded-full shrink-0">
+                  Alerte
+                </span>
+              </div>
+            ))}
 
             {pendingTasks.slice(0, 6).map((task) => (
               <div

@@ -1,25 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { User, Shield, Lock, Activity, ArrowLeft, LogOut, BarChart3 } from 'lucide-react';
-import { AppUser, ConnectionLog, Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../types';
+import React, { useState, useEffect } from 'react';
+import { User, Shield, Lock, Activity, ArrowLeft, LogOut } from 'lucide-react';
+import { AppUser, ConnectionLog } from '../types';
 import { subscribeToConnectionLogs } from '../services/connectionLogService';
 import { ProfileInfoSubTab } from './profile/ProfileInfoSubTab';
 import { ProfileSecuritySubTab } from './profile/ProfileSecuritySubTab';
 import { ProfileActivitySubTab } from './profile/ProfileActivitySubTab';
 import { ProfilePermissionsSubTab } from './profile/ProfilePermissionsSubTab';
-import { UserStatisticsSummaryPanel } from './presence/statistics/UserStatisticsSummaryPanel';
-import { computePresenceStatistics } from './presence/statistics/statisticsCalculations';
-import { EmployeeRendementDetailModal } from './presence/statistics/EmployeeRendementDetailModal';
-import { TaskSheetModal } from './tasksheet/TaskSheetModal';
 
 interface ProfilePageProps {
   currentUser: AppUser;
-  employees?: Employee[];
-  presences?: Presence[];
-  tasks?: Task[];
-  reminders?: Reminder[];
-  notifications?: NotificationLog[];
-  strategicProjects?: StrategicProject[];
-  salaryPayments?: SalaryPayment[];
   onBackToDashboard: () => void;
   onLogout: () => void;
   onAddNotification: (notif: any) => void;
@@ -29,26 +18,14 @@ interface ProfilePageProps {
 
 export default function ProfilePage({
   currentUser,
-  employees = [],
-  presences = [],
-  tasks = [],
-  reminders = [],
-  notifications = [],
-  strategicProjects = [],
-  salaryPayments = [],
   onBackToDashboard,
   onLogout,
   onAddNotification,
   showToast,
   onUpdateUser,
 }: ProfilePageProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'info' | 'stats' | 'security' | 'activity' | 'permissions'>('info');
+  const [activeSubTab, setActiveSubTab] = useState<'info' | 'security' | 'activity' | 'permissions'>('info');
   const [connectionLogs, setConnectionLogs] = useState<ConnectionLog[]>([]);
-  const [taskSheetState, setTaskSheetState] = useState<{
-    employee: Employee;
-    mode: 'day' | 'month' | 'year';
-  } | null>(null);
-  const [rendementModalEmployee, setRendementModalEmployee] = useState<Employee | null>(null);
 
   useEffect(() => {
     const unsub = subscribeToConnectionLogs((logs) => {
@@ -57,14 +34,8 @@ export default function ProfilePage({
     return () => unsub();
   }, []);
 
-  const modalAssiduite = useMemo(() => {
-    if (!rendementModalEmployee) return 100;
-    const res = computePresenceStatistics([rendementModalEmployee], presences, 'all');
-    return res.statsByEmployee[0]?.assiduiteRate ?? 100;
-  }, [rendementModalEmployee, presences]);
-
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-12">
+    <div className="max-w-4xl mx-auto space-y-6 pb-12">
       {/* Header Profile */}
       <div className="bg-white p-5 sm:p-6 rounded-3xl border border-stone-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
@@ -103,7 +74,6 @@ export default function ProfilePage({
       <div className="flex items-center gap-1.5 overflow-x-auto p-1 bg-stone-100/80 rounded-2xl border border-stone-200/80">
         {[
           { id: 'info', label: 'Informations', icon: User },
-          { id: 'stats', label: 'Mes Statistiques & Rendement', icon: BarChart3 },
           { id: 'security', label: 'Sécurité & Mot de passe', icon: Lock },
           { id: 'activity', label: 'Activité & Connexions', icon: Activity },
           { id: 'permissions', label: 'Permissions & Rôle', icon: Shield },
@@ -137,25 +107,10 @@ export default function ProfilePage({
             onUpdateUser={onUpdateUser}
           />
         )}
-        {activeSubTab === 'stats' && (
-          <UserStatisticsSummaryPanel
-            user={currentUser}
-            employees={employees}
-            presences={presences}
-            tasks={tasks}
-            reminders={reminders}
-            notifications={notifications}
-            strategicProjects={strategicProjects}
-            salaryPayments={salaryPayments}
-            onOpenTaskSheet={(targetEmp, mode) => setTaskSheetState({ employee: targetEmp, mode })}
-            onOpenFullRendement={(targetEmp) => setRendementModalEmployee(targetEmp)}
-          />
-        )}
         {activeSubTab === 'security' && (
           <ProfileSecuritySubTab
             currentUser={currentUser}
             showToast={showToast}
-            onUpdateUser={onUpdateUser}
           />
         )}
         {activeSubTab === 'activity' && (
@@ -179,32 +134,6 @@ export default function ProfilePage({
           <span>Se déconnecter de la session</span>
         </button>
       </div>
-
-      {taskSheetState && (
-        <TaskSheetModal
-          isOpen={Boolean(taskSheetState)}
-          onClose={() => setTaskSheetState(null)}
-          employee={taskSheetState.employee}
-          allTasks={tasks}
-          presences={presences}
-          reminders={reminders}
-          notifications={notifications}
-          strategicProjects={strategicProjects}
-          defaultMode={taskSheetState.mode}
-          currentUser={currentUser}
-          currentRole={currentUser.role}
-        />
-      )}
-
-      {rendementModalEmployee && (
-        <EmployeeRendementDetailModal
-          isOpen={Boolean(rendementModalEmployee)}
-          onClose={() => setRendementModalEmployee(null)}
-          employee={rendementModalEmployee}
-          tasks={tasks}
-          assiduiteRate={modalAssiduite}
-        />
-      )}
     </div>
   );
 }

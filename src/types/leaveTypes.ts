@@ -5,10 +5,9 @@ export type LeaveType =
   | 'sans_solde'
   | 'maternite_paternite'
   | 'recuperation'
-  | 'mission_professionnelle'
   | 'autre';
 
-export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'modified' | 'terminee';
+export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'modified';
 
 export interface LeaveRequest {
   id: string;
@@ -63,10 +62,6 @@ export const LEAVE_TYPE_LABELS: Record<LeaveType, { label: string; badgeColor: s
     label: 'Repos compensateur / Récupération',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
   },
-  mission_professionnelle: {
-    label: 'Mission Professionnelle / Déplacement Extérieur',
-    badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
-  },
   autre: {
     label: 'Autre motif d’absence',
     badgeColor: 'bg-stone-50 text-stone-700 border-stone-200',
@@ -89,9 +84,5 @@ export const LEAVE_STATUS_LABELS: Record<LeaveStatus, { label: string; badgeColo
   modified: {
     label: 'Durée ajustée par le responsable',
     badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  },
-  terminee: {
-    label: 'Mission Terminée (En poste)',
-    badgeColor: 'bg-stone-100 text-stone-700 border-stone-200',
   },
 };

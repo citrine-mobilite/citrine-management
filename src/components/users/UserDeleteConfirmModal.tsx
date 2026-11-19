@@ -1,14 +1,12 @@
 import React from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, X, AlertTriangle } from 'lucide-react';
 import { AppUser } from '../../types';
-import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface UserDeleteConfirmModalProps {
   user: AppUser | null;
   onClose: () => void;
-  onConfirm: () => Promise<void> | void;
+  onConfirm: () => void;
   isDeleting: boolean;
-  setIsDeleting: (val: boolean) => void;
 }
 
 export const UserDeleteConfirmModal: React.FC<UserDeleteConfirmModalProps> = ({
@@ -16,31 +14,8 @@ export const UserDeleteConfirmModal: React.FC<UserDeleteConfirmModalProps> = ({
   onClose,
   onConfirm,
   isDeleting,
-  setIsDeleting,
 }) => {
   if (!user) return null;
-
-  const handleExecute = async () => {
-    setIsDeleting(true);
-    const name = user.name;
-    try {
-      const res = await executeOperationWithLoading({
-        loadingTitle: 'Suppression du compte...',
-        loadingText: `Suppression définitive de "${name}", veuillez patienter...`,
-        action: async () => {
-          await onConfirm();
-        },
-        successTitle: 'Utilisateur supprimé !',
-        successMessage: `Le compte "${name}" a été supprimé avec succès.`,
-        errorMessage: "Erreur lors de la suppression de l'utilisateur.",
-      });
-      if (res.success) {
-        onClose();
-      }
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-200">
@@ -64,7 +39,7 @@ export const UserDeleteConfirmModal: React.FC<UserDeleteConfirmModalProps> = ({
             Annuler
           </button>
           <button
-            onClick={handleExecute}
+            onClick={onConfirm}
             disabled={isDeleting}
             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50"
           >

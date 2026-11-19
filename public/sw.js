@@ -1,69 +1,38 @@
-// Service Worker pour Citrine Management - Pusher Beams & Support Hors-Ligne (PWA)
-try {
-  importScripts('https://js.pusher.com/beams/service-worker.js');
-} catch (err) {
-  console.warn('[SW] Pusher Beams script load notice:', err);
-}
-
-const CACHE_NAME = 'citrine-v5';
-const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/pwa-192x192.png',
-  '/pwa-512x512.png',
-  '/apple-touch-icon.png',
-  '/favicon-32x32.png',
-];
+// Service Worker pour Citrine Management - Notifications Push & Support Hors-Ligne (PWA)
+const CACHE_NAME = 'citrine-v3';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) =>
-        Promise.allSettled(
-          PRECACHE_ASSETS.map((asset) =>
-            cache.add(asset).catch(() => undefined)
-          )
-        )
-      )
-      .then(() => self.skipWaiting())
-  );
+  // Force active immediately without waiting
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((cacheNames) =>
-        Promise.all(
-          cacheNames.map((cache) => {
-            if (cache !== CACHE_NAME) {
-              return caches.delete(cache);
-            }
-          })
-        )
-      )
-      .then(() => self.clients.claim())
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cache) => {
+          if (cache !== CACHE_NAME) {
+            console.log('[SW] Purge old cache:', cache);
+            return caches.delete(cache);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
+// Écouteur des requêtes réseau avec stratégie Network-First pour HTML et Stale-While-Revalidate pour assets
 self.addEventListener('fetch', (event) => {
+  // Seules les requêtes GET sont éligibles
   if (event.request.method !== 'GET') return;
-
+  
   const url = new URL(event.request.url);
 
+  // Ignorer les requêtes Chrome Extension, dev modules Vite et Firebase/API externes
   if (
-    url.protocol.startsWith('chrome-extension') ||
-    url.hostname.includes('firestore') ||
+    url.protocol.startsWith('chrome-extension') || 
+    url.hostname.includes('firestore') || 
     url.hostname.includes('googleapis') ||
-    url.hostname.includes('pusher') ||
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/src/') ||
     url.pathname.includes('node_modules') ||
@@ -75,6 +44,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 1. Navigation / HTML Requests: ALWAYS Network-First (so new hashed assets are never out of sync)
   if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
     event.respondWith(
       fetch(event.request)
@@ -85,16 +55,15 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(async () => {
-          const cached = await caches.match(event.request);
-          if (cached) return cached;
-          const fallback = await caches.match('/index.html');
-          return fallback || Response.error();
+        .catch(() => {
+          // Offline fallback
+          return caches.match(event.request).then((cached) => cached || caches.match('/index.html'));
         })
     );
     return;
   }
 
+  // 2. Static Assets: Network-First with cache fallback
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
@@ -108,71 +77,73 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(async () => {
         const cached = await caches.match(event.request);
-        return cached || Response.error();
+        if (cached) return cached;
+        throw new Error('Offline and not in cache');
       })
   );
 });
 
-// Écouteur push secondaire pour payloads non-Beams uniquement (évite toute double notification Pusher Beams)
+// Écouteur pour les événements de push natifs (Web Push API)
 self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  let parsed = null;
-  try {
-    parsed = event.data.json();
-  } catch {
-    parsed = { body: event.data.text() };
+  let payload = {
+    title: 'Citrine Management',
+    body: 'Nouvelle notification administrative.',
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+    tag: 'citrine-alert'
+  };
+
+  if (event.data) {
+    try {
+      const parsed = event.data.json();
+      payload = { ...payload, ...parsed };
+    } catch (e) {
+      payload.body = event.data.text();
+    }
   }
 
-  // Si c'est une notification Pusher Beams, le script Beams importé la gère déjà nativement.
-  if (parsed && (parsed.data?.pusher || parsed.pusher || parsed.notification)) {
-    return;
-  }
-
-  const payload = {
-    title: parsed?.title || 'Citrine Management',
-    body: parsed?.body || 'Nouvelle notification administrative.',
-    icon: parsed?.icon || '/pwa-192x192.png',
-    badge: parsed?.badge || '/pwa-192x192.png',
-    tag: parsed?.tag || 'citrine-alert',
-    url: parsed?.url || '/',
+  const options = {
+    body: payload.body,
+    icon: payload.icon || '/favicon.ico',
+    badge: payload.badge || '/favicon.ico',
+    tag: payload.tag || 'citrine-alert',
+    renotify: true,
+    vibrate: [100, 50, 100],
+    data: {
+      url: payload.url || '/'
+    }
   };
 
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: payload.icon,
-      badge: payload.badge,
-      tag: payload.tag,
-      renotify: true,
-      vibrate: [100, 50, 100],
-      data: { url: payload.url },
-    })
+    self.registration.showNotification(payload.title, options)
   );
 });
 
+// Écouteur pour le clic sur la notification (Web Push & Notification native)
 self.addEventListener('notificationclick', (event) => {
-  // Laisser Pusher Beams gérer le clic si le payload provient de Beams
-  if (event.notification?.data?.pusher) {
+  event.notification.close();
+
+  if (event.action === 'fermer') {
     return;
   }
 
-  event.notification.close();
-  if (event.action === 'fermer') return;
-
+  // Cible de redirection précise
   const rawTarget = event.notification.data?.url || event.notification.data?.link || '/';
-  const targetUrl = new URL(rawTarget.startsWith('#') ? `/${rawTarget}` : rawTarget, self.location.origin).href;
+  const targetUrl = new URL(rawTarget, self.location.origin).href;
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientList) => {
+      // 1. Chercher si un client avec la même origine est déjà ouvert
       for (const client of clientList) {
         if ('focus' in client) {
           await client.focus();
+          // Informer l'application React du lien cliqué sans recharger la page
           if ('postMessage' in client) {
             client.postMessage({
               type: 'NAVIGATE_TO',
               url: targetUrl,
               link: event.notification.data?.link || rawTarget,
-              action: event.action,
+              action: event.action
             });
           }
           if ('navigate' in client && client.url !== targetUrl) {
@@ -181,9 +152,34 @@ self.addEventListener('notificationclick', (event) => {
           return;
         }
       }
+
+      // 2. Si aucune fenêtre n'est ouverte, ouvrir la fenêtre directement sur l'URL cible
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }
     })
   );
 });
+
+// Écouteur de messages envoyés depuis l'application cliente (pour déclencher des notifications système en arrière-plan)
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = event.data.payload || {};
+    if (title) {
+      const notifOptions = {
+        body: options?.body || 'Nouvelle notification Citrine',
+        icon: options?.icon || '/pwa-192x192.png',
+        badge: options?.badge || '/pwa-192x192.png',
+        tag: options?.tag || 'citrine-push-' + Date.now(),
+        renotify: true,
+        vibrate: [200, 100, 200],
+        data: {
+          url: options?.url || '/'
+        },
+        ...options
+      };
+      self.registration.showNotification(title, notifOptions);
+    }
+  }
+});
+

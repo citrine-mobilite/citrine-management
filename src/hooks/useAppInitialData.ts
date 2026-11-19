@@ -1,22 +1,72 @@
-import { useState, useRef, useCallback } from 'react';
-import {
-  Employee, Presence, Task, Reminder, NotificationLog, SalaryPayment,
-  FinancialTransaction, EmployeeSalaryDebt, GeneratedDocument, DisciplinaryIncident,
-  AttendanceIncident, InventoryItem, Partner, AppUser, CompanyModuleConfig,
-  LeaveRequest, StrategicProject,
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { 
+  Employee, 
+  Presence, 
+  Task, 
+  Reminder, 
+  NotificationLog, 
+  SalaryPayment, 
+  FinancialTransaction, 
+  EmployeeSalaryDebt, 
+  GeneratedDocument, 
+  DisciplinaryIncident, 
+  AttendanceIncident,
+  InventoryItem, 
+  Partner, 
+  AppUser, 
+  CompanyModuleConfig, 
+  DEFAULT_MODULE_CONFIG,
+  LeaveRequest 
 } from '../types';
-import { saveDocument, deleteDocument, COLLECTIONS } from '../services/dataService';
+import { subscribeToCollection, subscribeToDocument, saveDocument, deleteDocument, getCollection, COLLECTIONS } from '../services/dataService';
+import { subscribeToUsers } from '../services/userService';
 import { cloudSqlService } from '../services/cloudSqlService';
 import { safeStorage } from '../utils/safeStorage';
-import {
-  pushNotificationBridgeService,
-  CITRINE_TAB_SESSION_ID,
-} from '../services/pushNotificationBridgeService';
-import { MODULE_CACHE_KEY, getStoredModuleConfig, persistStoredModuleConfig } from './initialData/moduleConfigStorage';
-import { syncCollectionDiff, addAttendanceIncidentWithNotification, refreshInitialCollectionsData } from './initialData/collectionSyncHelpers';
-import { useInitialDataSubscriptions } from './initialData/useInitialDataSubscriptions';
+import { CITRINE_DEFAULT_LOGO_BASE64 } from '../assets/citrineLogoBase64';
+import { pushNotificationBridgeService } from '../services/pushNotificationBridgeService';
+import { realtimeSyncService } from '../services/realtimeSyncService';
 
-export { MODULE_CACHE_KEY, getStoredModuleConfig };
+const MODULE_CACHE_KEY = 'citrine_module_config';
+
+function getStoredModuleConfig(): CompanyModuleConfig {
+  try {
+    let raw = safeStorage.getItem(MODULE_CACHE_KEY);
+    if (!raw && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        raw = window.localStorage.getItem(MODULE_CACHE_KEY);
+      } catch {}
+    }
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const configObj = parsed && typeof parsed === 'object' && 'config' in parsed ? parsed.config : parsed;
+      if (configObj && typeof configObj === 'object') {
+        return {
+          ...DEFAULT_MODULE_CONFIG,
+          ...configObj,
+          companyLogoBase64: configObj.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Erreur lecture configuration modules stockée:', e);
+  }
+  return DEFAULT_MODULE_CONFIG;
+}
+
+function persistStoredModuleConfig(config: CompanyModuleConfig): void {
+  try {
+    const payload = JSON.stringify({
+      config,
+      updatedAt: new Date().toISOString(),
+    });
+    safeStorage.setItem(MODULE_CACHE_KEY, payload);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(MODULE_CACHE_KEY, payload);
+      } catch {}
+    }
+  } catch {}
+}
 
 export function useAppInitialData() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -34,16 +84,16 @@ export function useAppInitialData() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-  const [strategicProjects, setStrategicProjects] = useState<StrategicProject[]>([]);
+
   const [moduleConfig, setModuleConfig] = useState<CompanyModuleConfig>(() => getStoredModuleConfig());
 
   const appStartTimeRef = useRef(Date.now());
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
   const isInitialNotifLoadDoneRef = useRef(false);
-  const recentNotifKeysRef = useRef<Map<string, number>>(new Map());
 
   const handleIncomingNotifications = useCallback((newNotifs: NotificationLog[]) => {
     if (!newNotifs || newNotifs.length === 0) return;
+
     if (!isInitialNotifLoadDoneRef.current) {
       newNotifs.forEach((n) => seenNotificationIdsRef.current.add(n.id));
       isInitialNotifLoadDoneRef.current = true;
@@ -63,40 +113,27 @@ export function useAppInitialData() {
       if (!seenNotificationIdsRef.current.has(notif.id)) {
         seenNotificationIdsRef.current.add(notif.id);
 
-        let parsedPayload: any = null;
-        try {
-          if (typeof (notif as any).payload === 'string' && (notif as any).payload.startsWith('{')) {
-            parsedPayload = JSON.parse((notif as any).payload);
-          }
-        } catch {}
-
-        const opKey = (notif as any).operationKey || parsedPayload?.operationKey || notif.id;
-        const fromCurrentSession = parsedPayload?.originSessionId === CITRINE_TAB_SESSION_ID;
-        if (fromCurrentSession || pushNotificationBridgeService.wasOperationRecentlyDispatched(opKey)) {
-          continue;
-        }
-
         const notifTime = new Date(notif.timestamp).getTime();
-        if (notifTime > appStartTimeRef.current - 5000) {
-          const isTarget =
-            isCurrentAdmin ||
-            (currentUser && (
+        // Ne déclencher le push/son que si la notification a été créée APRES le démarrage de l'application
+        const isBrandNew = notifTime > appStartTimeRef.current - 5000;
+
+        if (isBrandNew) {
+          const isTarget = isCurrentAdmin || (
+            currentUser && (
               notif.recipient === currentUser.name ||
               notif.recipient === currentUser.email ||
               notif.recipient === currentUser.id ||
               notif.recipient === 'Direction & RH' ||
-              notif.recipient === 'Direction RH & Responsables' ||
               notif.recipient === 'Équipe' ||
               notif.recipient === 'Tous'
-            ));
+            )
+          );
 
           if (isTarget) {
             pushNotificationBridgeService.sendPush({
               id: notif.id,
-              actionKey: opKey,
-              operationKey: opKey,
               title: notif.title || 'Notification RH Citrine',
-              message: notif.content || (notif as any).message || '',
+              message: notif.content || '',
               senderName: (notif as any).senderName || 'Portail RH',
               type: (notif.type as any) || 'alert',
               timestamp: notif.timestamp || new Date().toISOString(),
@@ -106,86 +143,249 @@ export function useAppInitialData() {
         }
       }
     }
+
     setNotifications(newNotifs);
   }, []);
 
-  const handleAddNotification = async (notif: any) => {
-    const text = notif.content || notif.message || notif.title || 'Notification';
-    const recipient = notif.recipient || 'Général';
-    const title = notif.title || 'Notification';
+  // Subscriptions to Supabase Tables
+  useEffect(() => {
+    const unsubs = [
+      subscribeToCollection<Employee>(COLLECTIONS.EMPLOYEES, setEmployees),
+      subscribeToCollection<Presence>(COLLECTIONS.PRESENCES, setPresences),
+      subscribeToCollection<Task>(COLLECTIONS.TASKS, (data) => setTasks(data || [])),
+      subscribeToCollection<Reminder>(COLLECTIONS.REMINDERS, setReminders),
+      subscribeToCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS, (data) => {
+        if (data) {
+          handleIncomingNotifications(data);
+        }
+      }),
+      subscribeToCollection<LeaveRequest>(COLLECTIONS.LEAVE_REQUESTS, (data) => {
+        const sorted = [...(data || [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setLeaveRequests(sorted);
+      }),
+      subscribeToCollection<SalaryPayment>(COLLECTIONS.SALARY_PAYMENTS, setSalaryPayments),
+      subscribeToCollection<FinancialTransaction>(COLLECTIONS.FINANCIAL_TRANSACTIONS, setFinancialTransactions),
+      subscribeToCollection<EmployeeSalaryDebt>(COLLECTIONS.EMPLOYEE_SALARY_DEBT, setSalaryDebts),
+      subscribeToCollection<GeneratedDocument>(COLLECTIONS.DOCUMENTS, setDocuments),
+      subscribeToCollection<DisciplinaryIncident>(COLLECTIONS.DISCIPLINARY_INCIDENTS, setDisciplinaryIncidents),
+      subscribeToCollection<AttendanceIncident>(COLLECTIONS.ATTENDANCE_INCIDENTS, (data) => {
+        const unique: AttendanceIncident[] = [];
+        const seen = new Set<string>();
+        (data || []).forEach((item) => {
+          const reasonStr = (item.reason || (item as any).description || '').trim().toLowerCase();
+          const key = `${item.employeeId}_${item.date}_${item.type}_${reasonStr}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(item);
+          }
+        });
+        setAttendanceIncidents(unique);
+      }),
+      subscribeToCollection<InventoryItem>(COLLECTIONS.INVENTORY, setInventoryItems),
+      subscribeToCollection<Partner>(COLLECTIONS.PARTNERS, setPartners),
+      subscribeToUsers(setUsers),
+      // Synchronisation temps réel des paramètres de l'entreprise et du logo stocké en BD
+      subscribeToDocument<CompanyModuleConfig>(COLLECTIONS.COMPANY_SETTINGS, 'main_config', (data) => {
+        if (data) {
+          setModuleConfig((prev) => {
+            const mergedConfig: CompanyModuleConfig = {
+              ...DEFAULT_MODULE_CONFIG,
+              ...prev,
+              ...data,
+              companyLogoBase64: data.companyLogoBase64 || prev.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+            };
+            persistStoredModuleConfig(mergedConfig);
+            return mergedConfig;
+          });
+        }
+      }),
+    ];
 
-    let payloadObj: any = {};
+    // Chargement initial complet des paramètres d'entreprise depuis la base de données
+    (async () => {
+      try {
+        const settingsList = await getCollection<CompanyModuleConfig>(COLLECTIONS.COMPANY_SETTINGS);
+        if (settingsList && settingsList.length > 0) {
+          const dbConfig = settingsList.find((s: any) => s.id === 'main_config' || s.docId === 'main_config') || settingsList[0];
+          if (dbConfig) {
+            setModuleConfig((prev) => {
+              const mergedConfig: CompanyModuleConfig = {
+                ...DEFAULT_MODULE_CONFIG,
+                ...prev,
+                ...dbConfig,
+                companyLogoBase64: dbConfig.companyLogoBase64 || prev.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+              };
+              persistStoredModuleConfig(mergedConfig);
+              return mergedConfig;
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Erreur chargement initial company_settings:', err);
+      }
+    })();
+
+    // 🚀 Écouteur Temps Réel Ultra-Rapide (SSE + Event Bus) pour Responsables & Administrateurs
+    const unsubRealtime = realtimeSyncService.subscribeToPresenceUpdates(async (eventData) => {
+      console.log('⚡ [REALTIME SYNC] Nouveau pointage reçu en direct :', eventData.presence?.employeeName || eventData.presence?.employeeId);
+
+      if (eventData.presence) {
+        const newPres = eventData.presence;
+        setPresences((prev) => {
+          const index = prev.findIndex(
+            (p) => p.id === newPres.id || (String(p.employeeId) === String(newPres.employeeId) && p.date === newPres.date)
+          );
+          if (index >= 0) {
+            const copy = [...prev];
+            copy[index] = { ...copy[index], ...newPres };
+            return copy;
+          }
+          return [newPres, ...prev];
+        });
+      }
+
+      if (eventData.incident) {
+        const newInc = eventData.incident;
+        setAttendanceIncidents((prev) => {
+          const index = prev.findIndex((i) => i.id === newInc.id || (String(i.employeeId) === String(newInc.employeeId) && i.date === newInc.date && i.type === newInc.type));
+          if (index >= 0) {
+            const copy = [...prev];
+            copy[index] = { ...copy[index], ...newInc };
+            return copy;
+          }
+          return [newInc, ...prev];
+        });
+      }
+
+      if (eventData.notification) {
+        handleIncomingNotifications([eventData.notification]);
+      }
+
+      // Re-fetch silencieux pour garantir une cohérence intégrale avec la base
+      try {
+        const freshPresences = await getCollection<Presence>(COLLECTIONS.PRESENCES);
+        if (freshPresences && Array.isArray(freshPresences)) {
+          setPresences(freshPresences);
+        }
+      } catch {}
+    });
+
+    // Cross-tab synchronization via BroadcastChannel
+    let bc: BroadcastChannel | null = null;
     try {
-      if (typeof notif.payload === 'string' && notif.payload.startsWith('{')) {
-        payloadObj = JSON.parse(notif.payload);
-      } else if (notif.payload && typeof notif.payload === 'object') {
-        payloadObj = { ...notif.payload };
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('citrine_cross_tab_sync');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'SYNC_TASKS' && Array.isArray(event.data.tasks)) {
+            setTasks(event.data.tasks);
+          } else if (event.data?.type === 'SYNC_NOTIFICATIONS' && Array.isArray(event.data.notifications)) {
+            handleIncomingNotifications(event.data.notifications);
+          } else if (event.data?.type === 'SYNC_PRESENCES' && Array.isArray(event.data.presences)) {
+            setPresences(event.data.presences);
+          } else if (event.data?.type === 'SYNC_INCIDENTS' && Array.isArray(event.data.incidents)) {
+            setAttendanceIncidents(event.data.incidents);
+          }
+        };
       }
     } catch {}
 
-    const opKey = notif.operationKey || payloadObj.operationKey || `${recipient}:${title}:${text}`;
-    const now = Date.now();
-
-    const last = recentNotifKeysRef.current.get(opKey);
-    if (last && now - last < 8000) return;
-    recentNotifKeysRef.current.set(opKey, now);
-
-    for (const [key, timestamp] of recentNotifKeysRef.current.entries()) {
-      if (now - timestamp > 15000) recentNotifKeysRef.current.delete(key);
-    }
-
-    const enrichedPayload = JSON.stringify({
-      ...payloadObj,
-      operationKey: opKey,
-      originSessionId: CITRINE_TAB_SESSION_ID,
-    });
-
-    const notifId = notif.id || `notif-${Date.now()}`;
-    seenNotificationIdsRef.current.add(notifId);
-
-    const n: NotificationLog = {
-      id: notifId,
-      type: notif.type || 'system',
-      recipient,
-      title,
-      content: text,
-      message: text,
-      payload: enrichedPayload,
-      timestamp: notif.timestamp || new Date().toISOString(),
+    const onEmpUpdated = (e: any) => {
+      const emp = e.detail;
+      if (emp) {
+        setEmployees((prev) => {
+          const idx = prev.findIndex(item => item.id === emp.id || (item.email && item.email.toLowerCase() === emp.email.toLowerCase()));
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...emp };
+            return next;
+          }
+          return [emp, ...prev];
+        });
+      }
     };
-    await saveDocument(COLLECTIONS.NOTIFICATIONS, n);
-  };
 
-  useInitialDataSubscriptions({
-    setEmployees, setPresences, setTasks, setReminders, setSalaryPayments,
-    setFinancialTransactions, setSalaryDebts, setDocuments, setDisciplinaryIncidents,
-    setAttendanceIncidents, setInventoryItems, setPartners, setUsers, setLeaveRequests,
-    setStrategicProjects, setModuleConfig, handleIncomingNotifications,
-    leaveRequests, employees, users, handleAddNotification,
-  });
+    const onUserUpdated = (e: any) => {
+      const user = e.detail;
+      if (user) {
+        setUsers((prev) => {
+          const idx = prev.findIndex(item => item.id === user.id || (item.email && item.email.toLowerCase() === user.email.toLowerCase()));
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...user };
+            return next;
+          }
+          return [user, ...prev];
+        });
+      }
+    };
+
+    window.addEventListener('citrine:employee_updated', onEmpUpdated);
+    window.addEventListener('citrine:user_updated', onUserUpdated);
+
+    return () => {
+      unsubs.forEach((u) => typeof u === 'function' && u());
+      unsubRealtime();
+      if (bc) bc.close();
+      window.removeEventListener('citrine:employee_updated', onEmpUpdated);
+      window.removeEventListener('citrine:user_updated', onUserUpdated);
+    };
+  }, []);
 
   const handleUpdateEmployees = async (updated: Employee[]) => {
-    setEmployees(updated);
     for (const emp of updated) {
       const existing = employees.find((e) => e.id === emp.id || (e.uid && emp.uid && e.uid === emp.uid));
       if (!existing || JSON.stringify(existing) !== JSON.stringify(emp)) {
-        try { await saveDocument(COLLECTIONS.EMPLOYEES, emp); } catch (e) { console.warn('Database save employee notice:', e); }
+        try {
+          await saveDocument(COLLECTIONS.EMPLOYEES, emp);
+        } catch (e) {
+          console.warn('Supabase save employee notice:', e);
+        }
+        try {
+          await cloudSqlService.saveDocument(COLLECTIONS.EMPLOYEES, emp);
+        } catch (e) {
+          console.warn('Cloud SQL save employee notice:', e);
+        }
       }
     }
     for (const emp of employees) {
       if (!updated.some((e) => e.id === emp.id || (e.uid && emp.uid && e.uid === emp.uid))) {
         const idToDelete = emp.id || emp.uid;
         if (idToDelete) {
-          try { await deleteDocument(COLLECTIONS.EMPLOYEES, String(idToDelete)); } catch (e) { console.warn('Supabase delete employee notice:', e); }
-          try { await cloudSqlService.deleteDocument(COLLECTIONS.EMPLOYEES, String(idToDelete)); } catch (e) { console.warn('Cloud SQL delete employee notice:', e); }
+          try {
+            await deleteDocument(COLLECTIONS.EMPLOYEES, String(idToDelete));
+          } catch (e) {
+            console.warn('Supabase delete employee notice:', e);
+          }
+          try {
+            await cloudSqlService.deleteDocument(COLLECTIONS.EMPLOYEES, String(idToDelete));
+          } catch (e) {
+            console.warn('Cloud SQL delete employee notice:', e);
+          }
         }
       }
     }
     setEmployees(updated);
   };
 
+  const handleUpdatePresences = async (updated: Presence[]) => {
+    for (const pres of updated) {
+      const existing = presences.find((p) => p.id === pres.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(pres)) {
+        await saveDocument(COLLECTIONS.PRESENCES, pres);
+      }
+    }
+    for (const pres of presences) {
+      if (!updated.some((p) => p.id === pres.id)) {
+        await deleteDocument(COLLECTIONS.PRESENCES, pres.id);
+      }
+    }
+    setPresences(updated);
+  };
+
   const handleUpdateTasks = async (updated: Task[]) => {
     setTasks(updated);
+
+    // Broadcast immediately across open tabs/windows
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         const bcast = new BroadcastChannel('citrine_cross_tab_sync');
@@ -193,63 +393,367 @@ export function useAppInitialData() {
         bcast.close();
       }
     } catch {}
-    await syncCollectionDiff(COLLECTIONS.TASKS, tasks, updated);
-  };
 
-  const handleUpdateStrategicProjects = async (updated: StrategicProject[]) => {
-    setStrategicProjects(updated);
-    try {
-      if (typeof BroadcastChannel !== 'undefined') {
-        const bcast = new BroadcastChannel('citrine_cross_tab_sync');
-        bcast.postMessage({ type: 'SYNC_STRATEGIC_PROJECTS', strategicProjects: updated });
-        bcast.close();
+    for (const t of updated) {
+      const existing = tasks.find((x) => x.id === t.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(t)) {
+        await saveDocument(COLLECTIONS.TASKS, t);
       }
-    } catch {}
-    await syncCollectionDiff(COLLECTIONS.STRATEGIC_PROJECTS, strategicProjects, updated);
+    }
+    for (const t of tasks) {
+      if (!updated.some((x) => x.id === t.id)) {
+        await deleteDocument(COLLECTIONS.TASKS, t.id);
+      }
+    }
   };
 
-  const makeUpdater = <T extends { id: string }>(col: string, cur: T[], set: (v: T[]) => void) => async (updated: T[]) => {
-    await syncCollectionDiff(col, cur, updated);
-    set(updated);
+  const handleUpdateReminders = async (updated: Reminder[]) => {
+    for (const r of updated) {
+      const existing = reminders.find((x) => x.id === r.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(r)) {
+        await saveDocument(COLLECTIONS.REMINDERS, r);
+      }
+    }
+    for (const r of reminders) {
+      if (!updated.some((x) => x.id === r.id)) {
+        await deleteDocument(COLLECTIONS.REMINDERS, r.id);
+      }
+    }
+    setReminders(updated);
   };
 
-  const handleAddAttendanceIncident = (incident: AttendanceIncident) =>
-    addAttendanceIncidentWithNotification({ incident, attendanceIncidents, setAttendanceIncidents, setNotifications });
+  const handleUpdateNotifications = async (updated: NotificationLog[]) => {
+    for (const n of updated) {
+      const existing = notifications.find((x) => x.id === n.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(n)) {
+        await saveDocument(COLLECTIONS.NOTIFICATIONS, n);
+      }
+    }
+    for (const n of notifications) {
+      if (!updated.some((x) => x.id === n.id)) {
+        await deleteDocument(COLLECTIONS.NOTIFICATIONS, n.id);
+      }
+    }
+    setNotifications(updated);
+  };
 
-  const handleUpdateModuleConfig = async (newConfig: CompanyModuleConfig): Promise<void> => {
-    const fullConfig: CompanyModuleConfig = { ...moduleConfig, ...newConfig };
+  const handleUpdateSalaryPayments = async (updated: SalaryPayment[]) => {
+    for (const s of updated) {
+      const existing = salaryPayments.find((x) => x.id === s.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(s)) {
+        await saveDocument(COLLECTIONS.SALARY_PAYMENTS, s);
+      }
+    }
+    for (const s of salaryPayments) {
+      if (!updated.some((x) => x.id === s.id)) {
+        await deleteDocument(COLLECTIONS.SALARY_PAYMENTS, s.id);
+      }
+    }
+    setSalaryPayments(updated);
+  };
+
+  const handleUpdateFinancialTransactions = async (updated: FinancialTransaction[]) => {
+    for (const f of updated) {
+      const existing = financialTransactions.find((x) => x.id === f.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(f)) {
+        await saveDocument(COLLECTIONS.FINANCIAL_TRANSACTIONS, f);
+      }
+    }
+    for (const f of financialTransactions) {
+      if (!updated.some((x) => x.id === f.id)) {
+        await deleteDocument(COLLECTIONS.FINANCIAL_TRANSACTIONS, f.id);
+      }
+    }
+    setFinancialTransactions(updated);
+  };
+
+  const handleUpdateSalaryDebts = async (updated: EmployeeSalaryDebt[]) => {
+    for (const d of updated) {
+      const existing = salaryDebts.find((x) => x.id === d.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(d)) {
+        await saveDocument(COLLECTIONS.EMPLOYEE_SALARY_DEBT, d);
+      }
+    }
+    for (const d of salaryDebts) {
+      if (!updated.some((x) => x.id === d.id)) {
+        await deleteDocument(COLLECTIONS.EMPLOYEE_SALARY_DEBT, d.id);
+      }
+    }
+    setSalaryDebts(updated);
+  };
+
+  const handleUpdateDocuments = async (updated: GeneratedDocument[]) => {
+    for (const docItem of updated) {
+      const existing = documents.find((x) => x.id === docItem.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(docItem)) {
+        await saveDocument(COLLECTIONS.DOCUMENTS, docItem);
+      }
+    }
+    for (const docItem of documents) {
+      if (!updated.some((x) => x.id === docItem.id)) {
+        await deleteDocument(COLLECTIONS.DOCUMENTS, docItem.id);
+      }
+    }
+    setDocuments(updated);
+  };
+
+  const handleUpdateDisciplinaryIncidents = async (updated: DisciplinaryIncident[]) => {
+    for (const d of updated) {
+      const existing = disciplinaryIncidents.find((x) => x.id === d.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(d)) {
+        await saveDocument(COLLECTIONS.DISCIPLINARY_INCIDENTS, d);
+      }
+    }
+    for (const d of disciplinaryIncidents) {
+      if (!updated.some((x) => x.id === d.id)) {
+        await deleteDocument(COLLECTIONS.DISCIPLINARY_INCIDENTS, d.id);
+      }
+    }
+    setDisciplinaryIncidents(updated);
+  };
+
+  const handleUpdateAttendanceIncidents = async (updated: AttendanceIncident[]) => {
+    for (const item of updated) {
+      const existing = attendanceIncidents.find((x) => x.id === item.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(item)) {
+        await saveDocument(COLLECTIONS.ATTENDANCE_INCIDENTS, item);
+      }
+    }
+    for (const item of attendanceIncidents) {
+      if (!updated.some((x) => x.id === item.id)) {
+        await deleteDocument(COLLECTIONS.ATTENDANCE_INCIDENTS, item.id);
+      }
+    }
+    setAttendanceIncidents(updated);
+  };
+
+  const handleAddAttendanceIncident = async (incident: AttendanceIncident) => {
+    const incidentEmpIdStr = String(incident.employeeId || '');
+    const incidentReasonStr = (incident.reason || (incident as any).description || '').trim().toLowerCase();
+
+    // Éviter d'insérer un incident s'il en existe déjà un identique pour ce collaborateur
+    const existingDuplicate = attendanceIncidents.find(
+      (i) =>
+        i.id !== incident.id &&
+        String(i.employeeId || '') === incidentEmpIdStr &&
+        i.date === incident.date &&
+        i.type === incident.type &&
+        (i.reason || (i as any).description || '').trim().toLowerCase() === incidentReasonStr
+    );
+
+    if (existingDuplicate) {
+      return;
+    }
+
+    await saveDocument(COLLECTIONS.ATTENDANCE_INCIDENTS, incident);
+    const updated = [incident, ...attendanceIncidents.filter((i) => i.id !== incident.id)];
+    setAttendanceIncidents(updated);
+
+    if ((incident.employeeId || incident.employeeName) && incident.origin !== 'automatique_pointage') {
+      const typeLabels: Record<string, string> = {
+        retard: 'Retard constaté',
+        sortie_prematuree: 'Sortie prématurée',
+        depart_anticipe: 'Départ anticipé',
+        absence_injustifiee: 'Absence injustifiée',
+      };
+      const label = typeLabels[incident.type] || 'Signalement RH';
+      const notifId = `notif-inc-${incident.id}`;
+
+      const notif: NotificationLog = {
+        id: notifId,
+        type: 'system',
+        recipient: incident.employeeName || incident.employeeId || 'Collaborateur',
+        targetUserId: incident.employeeId ? String(incident.employeeId) : undefined,
+        title: `Signalement RH : ${label}`,
+        content: incident.reason || `Incident enregistré pour la date du ${incident.date}.`,
+        payload: JSON.stringify({
+          source: 'attendance_incident',
+          incidentId: incident.id,
+          employeeId: incident.employeeId,
+          type: incident.type,
+          date: incident.date,
+        }),
+        timestamp: incident.createdAt || new Date().toISOString(),
+        read: false,
+      };
+      try {
+        await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
+        setNotifications((prev) => [notif, ...prev.filter((n) => n.id !== notifId)]);
+      } catch (e) {
+        console.warn('Notice saving notification for incident:', e);
+      }
+    }
+  };
+
+  const handleUpdateInventoryItems = async (updated: InventoryItem[]) => {
+    for (const i of updated) {
+      const existing = inventoryItems.find((x) => x.id === i.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(i)) {
+        await saveDocument(COLLECTIONS.INVENTORY, i);
+      }
+    }
+    for (const i of inventoryItems) {
+      if (!updated.some((x) => x.id === i.id)) {
+        await deleteDocument(COLLECTIONS.INVENTORY, i.id);
+      }
+    }
+    setInventoryItems(updated);
+  };
+
+  const handleUpdatePartners = async (updated: Partner[]) => {
+    for (const p of updated) {
+      const existing = partners.find((x) => x.id === p.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(p)) {
+        await saveDocument(COLLECTIONS.PARTNERS, p);
+      }
+    }
+    for (const p of partners) {
+      if (!updated.some((x) => x.id === p.id)) {
+        await deleteDocument(COLLECTIONS.PARTNERS, p.id);
+      }
+    }
+    setPartners(updated);
+  };
+
+  const handleUpdateUsers = async (updated: AppUser[]) => {
+    setUsers(updated);
+  };
+
+  const handleAddNotification = async (notif: any) => {
+    const text = notif.content || notif.message || notif.title || 'Notification';
+    const n: NotificationLog = {
+      id: notif.id || `notif-${Date.now()}`,
+      type: notif.type || 'system',
+      recipient: notif.recipient || 'Général',
+      title: notif.title || 'Notification',
+      content: text,
+      message: text,
+      payload: notif.payload || '',
+      timestamp: notif.timestamp || new Date().toISOString(),
+    };
+    await saveDocument(COLLECTIONS.NOTIFICATIONS, n);
+  };
+
+  const handleUpdateLeaveRequests = async (updated: LeaveRequest[]) => {
+    for (const l of updated) {
+      const existing = leaveRequests.find((x) => x.id === l.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(l)) {
+        await saveDocument(COLLECTIONS.LEAVE_REQUESTS, l);
+      }
+    }
+    for (const l of leaveRequests) {
+      if (!updated.some((x) => x.id === l.id)) {
+        await deleteDocument(COLLECTIONS.LEAVE_REQUESTS, l.id);
+      }
+    }
+    setLeaveRequests(updated);
+  };
+
+  const handleUpdateModuleConfig = (newConfig: CompanyModuleConfig) => {
+    const fullConfig: CompanyModuleConfig = {
+      ...moduleConfig,
+      ...newConfig,
+    };
     setModuleConfig(fullConfig);
     persistStoredModuleConfig(fullConfig);
-    await saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...fullConfig, id: 'main_config' });
+    saveDocument(COLLECTIONS.COMPANY_SETTINGS, { ...fullConfig, id: 'main_config' }).catch((err) => {
+      console.warn('Erreur persistance BD company_settings:', err);
+    });
   };
 
-  const refreshAll = () =>
-    refreshInitialCollectionsData({
-      setUsers, setEmployees, setPresences, setLeaveRequests,
-      setNotifications, setAttendanceIncidents, setStrategicProjects, setModuleConfig,
-    });
+  const refreshAll = async () => {
+    try {
+      const [
+        freshUsers,
+        freshEmployees,
+        freshPresences,
+        freshLeaves,
+        freshNotifs,
+        freshIncidents,
+        freshSettings,
+      ] = await Promise.all([
+        getCollection<AppUser>(COLLECTIONS.USERS),
+        getCollection<Employee>(COLLECTIONS.EMPLOYEES),
+        getCollection<Presence>(COLLECTIONS.PRESENCES),
+        getCollection<LeaveRequest>(COLLECTIONS.LEAVE_REQUESTS),
+        getCollection<NotificationLog>(COLLECTIONS.NOTIFICATIONS),
+        getCollection<AttendanceIncident>(COLLECTIONS.ATTENDANCE_INCIDENTS),
+        getCollection<CompanyModuleConfig>(COLLECTIONS.COMPANY_SETTINGS),
+      ]);
+
+      if (freshUsers) {
+        setUsers(freshUsers);
+      }
+      if (freshEmployees) {
+        setEmployees(freshEmployees);
+      }
+      if (freshPresences) {
+        setPresences(freshPresences);
+      }
+      if (freshLeaves) {
+        const sorted = [...freshLeaves].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setLeaveRequests(sorted);
+      }
+      if (freshNotifs) {
+        setNotifications(freshNotifs);
+      }
+      if (freshIncidents) {
+        setAttendanceIncidents(freshIncidents);
+      }
+      if (freshSettings && freshSettings.length > 0) {
+        const dbConfig = freshSettings.find((s: any) => s.id === 'main_config' || s.docId === 'main_config') || freshSettings[0];
+        if (dbConfig) {
+          setModuleConfig((prev) => {
+            const mergedConfig: CompanyModuleConfig = {
+              ...DEFAULT_MODULE_CONFIG,
+              ...prev,
+              ...dbConfig,
+              companyLogoBase64: dbConfig.companyLogoBase64 || prev.companyLogoBase64 || CITRINE_DEFAULT_LOGO_BASE64,
+            };
+            persistStoredModuleConfig(mergedConfig);
+            return mergedConfig;
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur lors du rafraîchissement global:', e);
+    }
+  };
 
   return {
-    employees, presences, tasks, reminders, notifications, salaryPayments, financialTransactions,
-    salaryDebts, documents, disciplinaryIncidents, attendanceIncidents, inventoryItems, partners,
-    users, leaveRequests, strategicProjects, moduleConfig, refreshAll,
+    employees,
+    presences,
+    tasks,
+    reminders,
+    notifications,
+    salaryPayments,
+    financialTransactions,
+    salaryDebts,
+    documents,
+    disciplinaryIncidents,
+    attendanceIncidents,
+    inventoryItems,
+    partners,
+    users,
+    leaveRequests,
+    moduleConfig,
+    refreshAll,
     setTasks: handleUpdateTasks,
-    setReminders: makeUpdater(COLLECTIONS.REMINDERS, reminders, setReminders),
-    setNotifications: makeUpdater(COLLECTIONS.NOTIFICATIONS, notifications, setNotifications),
-    setLeaveRequests: makeUpdater(COLLECTIONS.LEAVE_REQUESTS, leaveRequests, setLeaveRequests),
-    setStrategicProjects: handleUpdateStrategicProjects,
-    setSalaryPayments: makeUpdater(COLLECTIONS.SALARY_PAYMENTS, salaryPayments, setSalaryPayments),
-    setFinancialTransactions: makeUpdater(COLLECTIONS.FINANCIAL_TRANSACTIONS, financialTransactions, setFinancialTransactions),
-    setSalaryDebts: makeUpdater(COLLECTIONS.EMPLOYEE_SALARY_DEBT, salaryDebts, setSalaryDebts),
-    setDocuments: makeUpdater(COLLECTIONS.DOCUMENTS, documents, setDocuments),
-    setDisciplinaryIncidents: makeUpdater(COLLECTIONS.DISCIPLINARY_INCIDENTS, disciplinaryIncidents, setDisciplinaryIncidents),
-    handleUpdateAttendanceIncidents: makeUpdater(COLLECTIONS.ATTENDANCE_INCIDENTS, attendanceIncidents, setAttendanceIncidents),
+    setReminders: handleUpdateReminders,
+    setNotifications: handleUpdateNotifications,
+    setLeaveRequests: handleUpdateLeaveRequests,
+    setSalaryPayments: handleUpdateSalaryPayments,
+    setFinancialTransactions: handleUpdateFinancialTransactions,
+    setSalaryDebts: handleUpdateSalaryDebts,
+    setDocuments: handleUpdateDocuments,
+    setDisciplinaryIncidents: handleUpdateDisciplinaryIncidents,
+    handleUpdateAttendanceIncidents,
     handleAddAttendanceIncident,
-    setInventoryItems: makeUpdater(COLLECTIONS.INVENTORY, inventoryItems, setInventoryItems),
-    setPartners: makeUpdater(COLLECTIONS.PARTNERS, partners, setPartners),
-    setUsers: async (updated: AppUser[]) => setUsers(updated),
+    setInventoryItems: handleUpdateInventoryItems,
+    setPartners: handleUpdatePartners,
+    setUsers: handleUpdateUsers,
     handleUpdateEmployees,
-    handleUpdatePresences: makeUpdater(COLLECTIONS.PRESENCES, presences, setPresences),
+    handleUpdatePresences,
     handleAddNotification,
     handleUpdateModuleConfig,
   };

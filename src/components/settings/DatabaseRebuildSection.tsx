@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { Database, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { initializeFullDatabase, InitDatabaseResult } from '../../services/dbInitService';
-import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface DatabaseRebuildSectionProps {
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
-export const DatabaseRebuildSection: React.FC<DatabaseRebuildSectionProps> = () => {
+export const DatabaseRebuildSection: React.FC<DatabaseRebuildSectionProps> = ({ showToast }) => {
   const [isSeedingDb, setIsSeedingDb] = useState(false);
   const [seedResult, setSeedResult] = useState<InitDatabaseResult | null>(null);
 
@@ -15,21 +14,13 @@ export const DatabaseRebuildSection: React.FC<DatabaseRebuildSectionProps> = () 
     setIsSeedingDb(true);
     setSeedResult(null);
     try {
-      await executeOperationWithLoading({
-        loadingTitle: 'Reconstruction de la base...',
-        loadingText: 'Veuillez patienter pendant la vérification et initialisation de Supabase...',
-        action: async () => {
-          const result = await initializeFullDatabase({ overwriteExisting: false });
-          setSeedResult(result);
-          if (!result.success) {
-            throw new Error(result.message || 'Échec de la réinitialisation de la base.');
-          }
-          return result;
-        },
-        successTitle: 'Base vérifiée !',
-        successMessage: 'Base Supabase initialisée et vérifiée avec succès !',
-        errorMessage: 'Échec de la réinitialisation de la base.',
-      });
+      const result = await initializeFullDatabase({ overwriteExisting: false });
+      setSeedResult(result);
+      if (result.success && showToast) {
+        showToast('Base Supabase initialisée et vérifiée avec succès !', 'success');
+      }
+    } catch {
+      if (showToast) showToast('Échec de la réinitialisation de la base.', 'error');
     } finally {
       setIsSeedingDb(false);
     }

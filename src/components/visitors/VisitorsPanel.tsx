@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { VisitorLog, AppUser, Employee } from '../../types';
-import { subscribeToVisitorLogs } from '../../services/visitorLogService';
-import { subscribeToBuildingSupervisors, BuildingSupervisor } from '../../services/supervisorService';
+import { Contact2, LogIn, Search } from 'lucide-react';
+import { 
+  VisitorLog, 
+  VisitorPurpose, 
+  AppUser, 
+  Employee 
+} from '../../types';
+import { 
+  subscribeToVisitorLogs, 
+  saveVisitorLog 
+} from '../../services/visitorLogService';
 import { VisitorsKpiCards } from './VisitorsKpiCards';
 import { VisitorDetailModal } from './VisitorDetailModal';
 import { NewVisitorModal } from './NewVisitorModal';
 import { VisitorsTable } from './VisitorsTable';
-import { SupervisorConfigModal } from './SupervisorConfigModal';
-import { useVisitorsActions } from './useVisitorsActions';
-import { VisitorsHeaderAndFilters } from './VisitorsHeaderAndFilters';
 
 interface VisitorsPanelProps {
   currentUser?: AppUser | null;
@@ -18,139 +23,211 @@ interface VisitorsPanelProps {
 }
 
 export const VisitorsPanel: React.FC<VisitorsPanelProps> = ({
+  currentUser,
   employees,
   onAddNotification,
   showToast,
 }) => {
   const [visitors, setVisitors] = useState<VisitorLog[]>([]);
-  const [supervisors, setSupervisors] = useState<BuildingSupervisor[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-
-  const [dateFilter, setDateFilter] = useState<string>('all');
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [siteFilter, setSiteFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [personTypeFilter, setPersonTypeFilter] = useState<string>('all');
-
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
-  const [isSupervisorsModalOpen, setIsSupervisorsModalOpen] = useState(false);
   const [selectedVisitor, setSelectedVisitor] = useState<VisitorLog | null>(null);
 
   useEffect(() => {
-    const unsubVisitors = subscribeToVisitorLogs(setVisitors);
-    const unsubSupervisors = subscribeToBuildingSupervisors(setSupervisors);
-    return () => {
-      unsubVisitors();
-      unsubSupervisors();
-    };
+    const unsub = subscribeToVisitorLogs(setVisitors);
+    return () => unsub();
   }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
   const currentOnSite = visitors.filter((v) => v.status === 'sur_site').length;
   const todayDeparted = visitors.filter((v) => v.status === 'sorti' && v.checkInDate === todayStr).length;
-  const pendingApprovals = visitors.filter((v) => v.status === 'attente_validation' || v.status === 'attendu').length;
+  const expectedVisitors = visitors.filter((v) => v.status === 'attendu').length;
   const todayTotal = visitors.filter((v) => v.checkInDate === todayStr).length;
 
   const filteredVisitors = visitors.filter((v) => {
-    const q = searchTerm.toLowerCase();
-    const matchSearch =
-      v.visitorName.toLowerCase().includes(q) ||
-      (v.visitorCompany && v.visitorCompany.toLowerCase().includes(q)) ||
-      v.badgeNumber.toLowerCase().includes(q) ||
-      (v.vehiclePlate && v.vehiclePlate.toLowerCase().includes(q)) ||
-      v.hostEmployeeName.toLowerCase().includes(q) ||
-      (v.supervisorName && v.supervisorName.toLowerCase().includes(q)) ||
-      (v.idCardNumber && v.idCardNumber.toLowerCase().includes(q));
+    const matchSearch = 
+      v.visitorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (v.visitorCompany && v.visitorCompany.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      v.badgeNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (v.vehiclePlate && v.vehiclePlate.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      v.hostEmployeeName.toLowerCase().includes(searchTerm.toLowerCase());
 
+    const matchSite = siteFilter === 'all' || v.siteLocation === siteFilter;
     const matchStatus = statusFilter === 'all' || v.status === statusFilter;
-    const matchType = personTypeFilter === 'all' || (v.personType || 'visiteur') === personTypeFilter;
-    const matchDate =
-      dateFilter === 'all'
-        ? true
-        : dateFilter === 'today'
-        ? v.checkInDate === todayStr
-        : v.checkInDate === selectedDate;
-
-    return matchSearch && matchStatus && matchType && matchDate;
+    return matchSearch && matchSite && matchStatus;
   });
 
-  const {
-    handleQuickCheckOut,
-    handleQuickCheckIn,
-    handleAuthorizeAccess,
-    handleRejectAccess,
-    handleCreateVisitor,
-    handleDeleteVisitor,
-  } = useVisitorsActions({
-    employees,
-    visitorsCount: visitors.length,
-    setVisitors,
-    setIsNewModalOpen,
-    onAddNotification,
-    showToast,
-  });
+  const handleQuickCheckOut = async (visitor: VisitorLog) => {
+    try {
+      const now = new Date();
+      const checkOutTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const updated: VisitorLog = {
+        ...visitor,
+        status: 'sorti',
+        checkOutTime,
+      };
+      await saveVisitorLog(updated);
+      showToast?.(`Sortie enregistrée pour ${visitor.visitorName} à ${checkOutTime}.`, 'success');
+      onAddNotification?.({
+        title: 'Sortie Visiteur',
+        message: `${visitor.visitorName} a quitté ${visitor.siteLocation} (Badge ${visitor.badgeNumber} restitué).`,
+        type: 'info',
+      });
+    } catch {
+      showToast?.('Erreur lors de l\'enregistrement de sortie.', 'error');
+    }
+  };
+
+  const handleQuickCheckIn = async (visitor: VisitorLog) => {
+    try {
+      const now = new Date();
+      const checkInTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const updated: VisitorLog = {
+        ...visitor,
+        status: 'sur_site',
+        checkInTime,
+      };
+      await saveVisitorLog(updated);
+      showToast?.(`Arrivée confirmée pour ${visitor.visitorName} à ${checkInTime}.`, 'success');
+    } catch {
+      showToast?.('Erreur lors de l\'enregistrement d\'arrivée.', 'error');
+    }
+  };
+
+  const handleCreateVisitor = async (visitorData: Partial<VisitorLog>) => {
+    if (!visitorData.visitorName || !visitorData.visitorPhone) {
+      showToast?.('Nom et téléphone du visiteur obligatoires.', 'error');
+      return;
+    }
+
+    try {
+      const selectedHost = employees.find((emp) => emp.id === visitorData.hostEmployeeId);
+      const now = new Date();
+      const checkInTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const checkInDate = now.toISOString().split('T')[0];
+
+      const visitorToSave: VisitorLog = {
+        id: `vis-${Date.now()}`,
+        visitorName: visitorData.visitorName,
+        visitorCompany: visitorData.visitorCompany || 'Particulier',
+        visitorPhone: visitorData.visitorPhone,
+        idCardNumber: visitorData.idCardNumber || '',
+        siteLocation: visitorData.siteLocation || 'Base Logistique Japoma',
+        purpose: (visitorData.purpose as VisitorPurpose) || 'rdv_commercial',
+        hostEmployeeId: selectedHost?.id || '',
+        hostEmployeeName: selectedHost ? selectedHost.name : (visitorData.hostEmployeeName || 'Accueil Citrine'),
+        hostDepartment: selectedHost?.department || 'Général',
+        badgeNumber: visitorData.badgeNumber || `BADGE-${String(visitors.length + 1).padStart(2, '0')}`,
+        vehiclePlate: visitorData.vehiclePlate || '',
+        checkInTime,
+        checkInDate,
+        status: 'sur_site',
+        notes: visitorData.notes || '',
+        createdAt: now.toISOString(),
+      };
+
+      await saveVisitorLog(visitorToSave);
+      setIsNewModalOpen(false);
+      showToast?.(`Visiteur ${visitorToSave.visitorName} enregistré à l'accueil !`, 'success');
+      onAddNotification?.({
+        title: 'Arrivée Visiteur',
+        message: `${visitorToSave.visitorName} (${visitorToSave.visitorCompany}) est arrivé pour voir ${visitorToSave.hostEmployeeName}.`,
+        type: 'info',
+      });
+    } catch {
+      showToast?.('Erreur lors de l\'enregistrement.', 'error');
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      <VisitorsHeaderAndFilters
-        supervisorsCount={supervisors.length}
-        todayStr={todayStr}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        personTypeFilter={personTypeFilter}
-        setPersonTypeFilter={setPersonTypeFilter}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        dateFilter={dateFilter}
-        setDateFilter={setDateFilter}
-        selectedDate={selectedDate}
-        setSelectedDate={setSelectedDate}
-        onOpenSupervisorsModal={() => setIsSupervisorsModalOpen(true)}
-        onOpenNewModal={() => setIsNewModalOpen(true)}
-        kpiSlot={
-          <VisitorsKpiCards
-            currentOnSite={currentOnSite}
-            todayDeparted={todayDeparted}
-            expectedVisitors={pendingApprovals}
-            todayTotal={todayTotal}
-          />
-        }
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200 shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2.5 bg-blue-50 text-blue-700 rounded-xl border border-blue-100">
+            <Contact2 className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-stone-800">Registre d'Accueil & Visiteurs du Siège (Japoma / Akwa)</h1>
+            <p className="text-xs text-stone-500">
+              Gestion des entrées/sorties en temps réel, émargement, badges et sécurité d'accès des locaux
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setIsNewModalOpen(true)}
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#2A7B76] hover:bg-[#236863] rounded-xl shadow-xs transition cursor-pointer"
+        >
+          <LogIn className="w-4 h-4" /> Enregistrer une Arrivée Visiteur
+        </button>
+      </div>
+
+      <VisitorsKpiCards
+        currentOnSite={currentOnSite}
+        todayDeparted={todayDeparted}
+        expectedVisitors={expectedVisitors}
+        todayTotal={todayTotal}
       />
+
+      {/* Filters Bar */}
+      <div className="flex flex-col md:flex-row items-center gap-3 bg-white p-3.5 rounded-xl border border-stone-200">
+        <div className="relative flex-1 w-full">
+          <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Rechercher par visiteur, entreprise, badge, plaque ou hôte..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 text-xs rounded-lg border border-stone-200 focus:outline-none focus:border-[#2A7B76]"
+          />
+        </div>
+
+        <select
+          value={siteFilter}
+          onChange={(e) => setSiteFilter(e.target.value)}
+          className="px-3 py-2 text-xs rounded-lg border border-stone-200 bg-white text-stone-700"
+        >
+          <option value="all">Tous les sites</option>
+          <option value="Base Logistique Japoma">Base Logistique Japoma</option>
+          <option value="Siège Akwa">Siège Akwa</option>
+        </select>
+
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-2 text-xs rounded-lg border border-stone-200 bg-white text-stone-700"
+        >
+          <option value="all">Tous les statuts</option>
+          <option value="sur_site">Sur site (Actuel)</option>
+          <option value="sorti">Sorti</option>
+          <option value="attendu">Attendu</option>
+        </select>
+      </div>
 
       <VisitorsTable
         visitors={filteredVisitors}
         onSelectVisitor={setSelectedVisitor}
         onQuickCheckOut={handleQuickCheckOut}
         onQuickCheckIn={handleQuickCheckIn}
-        onAuthorizeAccess={handleAuthorizeAccess}
-        onRejectAccess={handleRejectAccess}
       />
-
-      {isNewModalOpen && (
-        <NewVisitorModal
-          employees={employees}
-          visitorsCount={visitors.length}
-          knownWorkers={visitors}
-          onClose={() => setIsNewModalOpen(false)}
-          onSubmit={handleCreateVisitor}
-        />
-      )}
-
-      {isSupervisorsModalOpen && (
-        <SupervisorConfigModal
-          currentSupervisors={supervisors}
-          onClose={() => setIsSupervisorsModalOpen(false)}
-          onSaved={() => {
-            showToast?.('Liste des superviseurs mise à jour en base de données.', 'success');
-          }}
-        />
-      )}
 
       {selectedVisitor && (
         <VisitorDetailModal
           visitor={selectedVisitor}
           onClose={() => setSelectedVisitor(null)}
-          onDelete={handleDeleteVisitor}
+        />
+      )}
+
+      {isNewModalOpen && (
+        <NewVisitorModal
+          employees={employees}
+          visitorsCount={visitors.length}
+          onClose={() => setIsNewModalOpen(false)}
+          onSubmit={handleCreateVisitor}
         />
       )}
     </div>

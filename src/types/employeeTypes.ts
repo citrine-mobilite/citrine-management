@@ -14,7 +14,6 @@ export type EmployeeStatus =
   | 'en_poste'
   | 'en_conge'
   | 'en_permission'
-  | 'en_mission'
   | 'maladie'
   | 'suspendu'
   | 'demissionne'
@@ -57,21 +56,6 @@ export interface Employee {
   birthDate?: string;
   salary?: number;
   team?: string;
-  teams?: string[]; // Multiples équipes de rattachement
-  managerName?: string; // Nom du supérieur hiérarchique direct
   createdAt?: string;
   updatedAt?: string;
-  statusReason?: string;
-  statusStartDate?: string;
-  statusEndDate?: string;
-  allowEarlyDeparture15_17?: boolean; // Autorisation de départ entre 15h et 17h
-  allowLateArrival8_930?: boolean;     // Autorisation d'arrivée entre 8h et 9h30 sans retard
-  missionHistory?: Array<{
-    id: string;
-    reason: string;
-    startDate: string;
-    endDate: string;
-    durationDays: number;
-    createdAt: string;
-  }>;
 }

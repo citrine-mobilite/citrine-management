@@ -1,88 +1,213 @@
-import express from 'express';
-import http from 'http';
-import path from 'path';
-import dotenv from 'dotenv';
-import { createServer as createViteServer } from 'vite';
-import { registerRealtimeRoutes } from './src/server/expressRealtimeHub';
-import { registerCoreDataAndClockingRoutes } from './src/server/expressDataAndClockingRoutes';
-import { registerMailAndCronRoutes } from './src/server/expressMailAndCronRoutes';
-import { startScheduledCronJobs } from './src/server/cronScheduler';
-
-dotenv.config();
+import express from "express";
+import http from "http";
+import path from "path";
+import { createServer as createViteServer } from "vite";
+import { requireAuth, AuthRequest } from "./src/middleware/auth.ts";
+import { 
+  getCollectionData, 
+  saveDocumentData, 
+  deleteDocumentData, 
+  getOrCreateUserRecord,
+  executeCollaboratorCreationTransaction,
+  executeAtomicClockingTransaction
+} from "./src/db/repository.ts";
+import { registerGithubRoutes } from "./src/server/githubRoutes";
+import { registerApiExplorerRoutes } from "./src/server/apiExplorerRoutes";
 
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
   const PORT = 3000;
 
-  app.use(express.json({ limit: '25mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+  app.use(express.json({ limit: "15mb" }));
 
-  registerCoreDataAndClockingRoutes(app);
-  registerRealtimeRoutes(app);
-  registerMailAndCronRoutes(app);
+  // Health check & Database Diagnostics
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
 
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: false, ws: false, allowedHosts: true },
-      plugins: [
-        {
-          name: 'disable-vite-client-ws',
-          transform(code, id) {
-            if (
-              (id.includes('vite/dist/client/client.mjs') || id.includes('@vite/client')) &&
-              code.includes('transport.connect(createHMRHandler(handleMessage))')
-            ) {
-              return code
-                .replace('transport.connect(createHMRHandler(handleMessage));', '/* HMR WebSocket disabled */')
-                .replace('if (!invokeableTransport.send) return;', 'return;');
-            }
-          },
-        },
-      ],
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
-  startScheduledCronJobs();
-
-  server.on('error', (err: any) => {
-    if (err.code === 'EADDRINUSE') {
-      console.warn(`[Server] Port ${PORT} already in use. Retrying in 1s...`);
-      setTimeout(() => {
-        try {
-          server.close();
-        } catch {}
-        server.listen(PORT, '0.0.0.0');
-      }, 1000);
-    } else {
-      console.error('[Server Error]:', err);
+  app.get("/api/database/status", async (req, res) => {
+    try {
+      const isSql = Boolean(process.env.SQL_HOST || process.env.DATABASE_URL);
+      res.json({
+        success: true,
+        isSqlConfigured: isSql,
+        localPersistence: true,
+        message: isSql ? "Base de données SQL active" : "Persistance disque locale active",
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
     }
   });
 
-  const shutdown = () => {
-    server.close(() => {
-      process.exit(0);
+
+  // Cloud SQL Data Routes
+  app.get("/api/data/:collection", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { collection } = req.params;
+      const data = await getCollectionData(collection);
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error(`Error fetching collection ${req.params.collection}:`, error);
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch data" });
+    }
+  });
+
+  app.post("/api/data/:collection", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { collection } = req.params;
+      const item = req.body;
+      const saved = await saveDocumentData(collection, item);
+      res.json({ success: true, data: saved });
+    } catch (error: any) {
+      console.error(`Error saving to collection ${req.params.collection}:`, error);
+      res.status(500).json({ success: false, error: error.message || "Failed to save data" });
+    }
+  });
+
+  app.delete("/api/data/:collection/:id", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { collection, id } = req.params;
+      await deleteDocumentData(collection, id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error(`Error deleting from collection ${req.params.collection}:`, error);
+      res.status(500).json({ success: false, error: error.message || "Failed to delete data" });
+    }
+  });
+
+  // User Profile Sync
+  app.post("/api/users/sync", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { uid, email, name, role } = req.body;
+      if (!uid || !email) {
+        return res.status(400).json({ success: false, error: "Missing uid or email" });
+      }
+      const user = await getOrCreateUserRecord(uid, email, name, role);
+      res.json({ success: true, data: user });
+    } catch (error: any) {
+      console.error("Error syncing user:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to sync user" });
+    }
+  });
+
+  // Transactional Collaborator Creation
+  app.post("/api/collaborators/transactional", async (req: express.Request, res: express.Response) => {
+    try {
+      const input = req.body;
+      if (!input?.name || !input?.email) {
+        return res.status(400).json({ success: false, error: "Nom et adresse email requis." });
+      }
+      const result = await executeCollaboratorCreationTransaction(input);
+      res.json(result);
+    } catch (error: any) {
+      console.error("[API Collaborator Transaction Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Échec de la transaction." });
+    }
+  });
+
+  // Realtime Server-Sent Events (SSE) Hub for instant real-time sync (Presences, Incidents, Notifs)
+  const sseClients: Map<string, express.Response> = new Map();
+
+  function broadcastRealtimeEvent(event: string, data: any) {
+    const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const [id, clientRes] of sseClients.entries()) {
+      try {
+        clientRes.write(payload);
+      } catch {
+        sseClients.delete(id);
+      }
+    }
+  }
+
+  // SSE Stream endpoint for real-time frontend listener (Manager dashboard, Employee portal, etc.)
+  app.get("/api/realtime/events", (req: express.Request, res: express.Response) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    const clientId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    sseClients.set(clientId, res);
+
+    res.write(`event: connected\ndata: ${JSON.stringify({ clientId, timestamp: Date.now() })}\n\n`);
+
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(": keepalive\n\n");
+      } catch {
+        clearInterval(keepAlive);
+        sseClients.delete(clientId);
+      }
+    }, 25000);
+
+    req.on("close", () => {
+      clearInterval(keepAlive);
+      sseClients.delete(clientId);
     });
-  };
-
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
-  process.on('uncaughtException', (err) => {
-    console.error('[Server Uncaught Exception]:', err);
-  });
-  process.on('unhandledRejection', (reason) => {
-    console.warn('[Server Unhandled Rejection]:', reason);
   });
 
-  server.listen(PORT, '0.0.0.0');
+  // Client broadcast trigger (allows any client action to notify all other open windows/sessions)
+  app.post("/api/realtime/broadcast", (req: express.Request, res: express.Response) => {
+    const { event, data } = req.body;
+    if (event && data) {
+      broadcastRealtimeEvent(event, data);
+    }
+    res.json({ success: true, clientsNotified: sseClients.size });
+  });
+
+  // Transactional Atomic Clocking (Presence + Incident + Notification)
+  app.post("/api/clocking/atomic", async (req: express.Request, res: express.Response) => {
+    try {
+      const input = req.body;
+      if (!input?.presence) {
+        return res.status(400).json({ success: false, error: "Données de présence manquantes." });
+      }
+      const result = await executeAtomicClockingTransaction(input);
+
+      // DIFFUSION INSTANTANÉE TEMPS RÉEL (Vers le Responsable, l'Admin, etc.)
+      if (result.success) {
+        broadcastRealtimeEvent("presence_update", {
+          presence: result.presence,
+          incident: result.incident,
+          notification: result.notification,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[API Atomic Clocking Error]:", error);
+      res.status(500).json({ success: false, error: error.message || "Échec du pointage atomique." });
+    }
+  });
+
+  // API Explorer & GitHub OAuth Read-Only Routes
+  registerApiExplorerRoutes(app);
+  registerGithubRoutes(app);
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const isHmrDisabled = process.env.DISABLE_HMR === "true";
+    const vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr: isHmrDisabled ? false : { server },
+      },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 }
 
 startServer();

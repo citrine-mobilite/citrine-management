@@ -108,7 +108,7 @@ export async function buildMonthlyAttendanceReport(
     const dayLabel = dateObj.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit' });
     const p = empPresences.find(item => item.date === dateKey);
 
-    if (p && !(isWeekend && p.status === 'absent')) {
+    if (p) {
       workedDays++;
       let dayDurationMinutes = 0;
 
@@ -132,7 +132,7 @@ export async function buildMonthlyAttendanceReport(
 
       totalMinutes += dayDurationMinutes;
 
-      if (!isWeekend && (p.status === 'late' || (p.arrivalTime && isLate(p.arrivalTime, '08:00')))) {
+      if (p.status === 'late' || (p.arrivalTime && isLate(p.arrivalTime, '08:00'))) {
         totalLateOccurrences++;
         if (p.arrivalTime) {
           const [h, m] = p.arrivalTime.split(':').map(Number);
@@ -142,8 +142,8 @@ export async function buildMonthlyAttendanceReport(
         }
       }
 
-      const rowStatus: 'present' | 'late' | 'absent' =
-        p.status === 'present' || isWeekend ? 'present' :
+      const rowStatus: 'present' | 'late' | 'absent' = 
+        p.status === 'present' ? 'present' :
         p.status === 'late' ? 'late' : 'absent';
 
       dailyRows.push({
@@ -169,7 +169,7 @@ export async function buildMonthlyAttendanceReport(
       dailyRows.push({
         date: dateKey,
         dayLabel,
-        status: isWeekend ? 'present' : 'absent',
+        status: 'absent',
         arrival: '--:--',
         pauseStart: '--:--',
         pauseEnd: '--:--',

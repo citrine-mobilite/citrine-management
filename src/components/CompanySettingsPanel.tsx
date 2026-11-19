@@ -7,24 +7,21 @@ import {
   Users, 
   ShieldCheck, 
   Database,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles
 } from 'lucide-react';
 import { CompanyModuleConfig, DEFAULT_MODULE_CONFIG, Employee, Presence, NotificationLog } from '../types';
 import { CompanyIdentitySettings } from './settings/CompanyIdentitySettings';
 import { CompanyScheduleSettings } from './settings/CompanyScheduleSettings';
 import { CompanyModulesToggle } from './settings/CompanyModulesToggle';
-import { CompanyEmailSettings } from './settings/CompanyEmailSettings';
 import { DisciplinaryMotifsManagementSection } from './settings/DisciplinaryMotifsManagementSection';
 import { SecuritySettingsSection } from './settings/SecuritySettingsSection';
 import { DatabaseRebuildSection } from './settings/DatabaseRebuildSection';
-import { HumaanSettings } from './illustrations/HumaanIllustrations';
 import ErrorBoundary from './ErrorBoundary';
-import { Mail } from 'lucide-react';
-import { logSystemAudit } from '../services/adminAuditService';
 
 interface CompanySettingsPanelProps {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
   employeeCount?: number;
   employees?: Employee[];
   presences?: Presence[];
@@ -34,7 +31,7 @@ interface CompanySettingsPanelProps {
   initialTab?: SettingsTabId;
 }
 
-export type SettingsTabId = 'identity' | 'schedules' | 'modules' | 'email' | 'discipline' | 'security' | 'database';
+export type SettingsTabId = 'identity' | 'schedules' | 'modules' | 'discipline' | 'security' | 'database';
 
 interface TabItem {
   id: SettingsTabId;
@@ -69,14 +66,6 @@ const SETTINGS_TABS: TabItem[] = [
     description: 'Activation sélective des modules',
     icon: Layers,
     badge: 'Architecture',
-  },
-  {
-    id: 'email',
-    label: 'E-mails & SMTP',
-    shortLabel: 'E-mails',
-    description: 'Fils de discussion & serveur d\'envoi',
-    icon: Mail,
-    badge: 'Fils RH',
   },
   {
     id: 'discipline',
@@ -117,27 +106,18 @@ export default function CompanySettingsPanel({
     ...(moduleConfig || {}),
   };
 
-  const handleUpdate = async (updated: CompanyModuleConfig): Promise<void> => {
+  const handleUpdate = (updated: CompanyModuleConfig) => {
     if (typeof onUpdateModuleConfig === 'function') {
-      await onUpdateModuleConfig(updated);
-      logSystemAudit({
-        authorName: 'Administrateur',
-        authorRole: 'administrateur',
-        targetName: updated.companyName || 'Configuration Citrine',
-        operationType: 'parametres_systeme',
-        operationLabel: `Mise à jour Paramètres (${activeTab})`,
-        details: `Paramètres entreprise actualisés depuis l'onglet « ${activeTab} » (${updated.companyName || 'Citrine'}).`,
-        level: 'info',
-      });
+      onUpdateModuleConfig(updated);
     }
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* Bannière principale */}
-      <div className="bg-gradient-to-r from-[#2A7B76] via-[#20635F] to-emerald-900 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
-        <div className="space-y-1 text-center md:text-left z-10">
-          <div className="flex items-center justify-center md:justify-start gap-2.5">
+      <div className="bg-gradient-to-r from-[#2A7B76] via-[#20635F] to-emerald-900 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
             <div className="p-2 bg-white/10 backdrop-blur-xs rounded-xl border border-white/15">
               <Settings className="h-5 w-5 text-emerald-200" />
             </div>
@@ -145,17 +125,14 @@ export default function CompanySettingsPanel({
               Paramètres & Configuration de l'Entreprise
             </h2>
           </div>
+          <p className="text-xs text-emerald-100/90 pl-1 max-w-2xl">
+            Gestion cloisonnée par domaines d'activité. Chaque onglet possède son périmètre fonctionnel et son enregistrement indépendant.
+          </p>
         </div>
 
-        <div className="hidden lg:block shrink-0 z-10">
-          <HumaanSettings className="w-36 h-28 drop-shadow-md" />
-        </div>
-
-        <div className="flex items-center justify-center md:justify-end gap-2 w-full sm:w-auto z-10">
-          <div className="flex items-center gap-2 bg-black/20 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/10 text-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="font-medium text-emerald-100">Synchronisé avec Supabase</span>
-          </div>
+        <div className="flex items-center gap-2 self-start md:self-auto bg-black/20 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/10 text-xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span className="font-medium text-emerald-100">Synchronisé avec Supabase</span>
         </div>
       </div>
 
@@ -219,14 +196,6 @@ export default function CompanySettingsPanel({
 
           {activeTab === 'modules' && (
             <CompanyModulesToggle
-              moduleConfig={safeConfig}
-              onUpdateModuleConfig={handleUpdate}
-              showToast={showToast}
-            />
-          )}
-
-          {activeTab === 'email' && (
-            <CompanyEmailSettings
               moduleConfig={safeConfig}
               onUpdateModuleConfig={handleUpdate}
               showToast={showToast}

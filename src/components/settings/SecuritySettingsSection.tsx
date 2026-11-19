@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { Shield, Key, Wifi, Globe, Save, RefreshCw } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
-import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface SecuritySettingsSectionProps {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const SecuritySettingsSection: React.FC<SecuritySettingsSectionProps> = ({
   moduleConfig,
   onUpdateModuleConfig,
+  showToast,
 }) => {
   const safeIpsString = Array.isArray(moduleConfig?.allowedOfficeIPs)
     ? moduleConfig.allowedOfficeIPs.join(', ')
@@ -30,7 +30,7 @@ export const SecuritySettingsSection: React.FC<SecuritySettingsSectionProps> = (
     setFormData((prev) => ({ ...prev, qrCodeSecret: newSecret }));
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const rawIps = typeof formData.allowedOfficeIPs === 'string' ? formData.allowedOfficeIPs : '';
     const updated: any = {
@@ -42,15 +42,8 @@ export const SecuritySettingsSection: React.FC<SecuritySettingsSectionProps> = (
         .map((s) => s.trim())
         .filter(Boolean),
     };
-    await executeOperationWithLoading({
-      loadingTitle: 'Enregistrement sécurité...',
-      loadingText: 'Veuillez patienter pendant la mise à jour des paramètres de sécurité...',
-      action: async () => {
-        await onUpdateModuleConfig(updated);
-      },
-      successTitle: 'Sécurité mise à jour !',
-      successMessage: 'Paramètres de sécurité et bornes QR enregistrés avec succès.',
-    });
+    onUpdateModuleConfig(updated);
+    if (showToast) showToast('Paramètres de sécurité et bornes QR enregistrés avec succès.', 'success');
   };
 
   return (

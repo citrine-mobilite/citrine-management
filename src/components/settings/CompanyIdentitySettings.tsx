@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, Save, CheckCircle2 } from 'lucide-react';
 import { CompanyModuleConfig, DEFAULT_MODULE_CONFIG } from '../../types';
+import { CITRINE_DEFAULT_LOGO_BASE64 } from '../../assets/citrineLogoBase64';
 import { CompanyLogoCard } from './CompanyLogoCard';
 import { CompanyLegalInfoFields } from './CompanyLegalInfoFields';
 import { CompanyAddressContactFields } from './CompanyAddressContactFields';
-import { executeOperationWithLoading } from '../../utils/sweetAlert';
 
 interface CompanyIdentitySettingsProps {
   moduleConfig: CompanyModuleConfig;
-  onUpdateModuleConfig: (config: CompanyModuleConfig) => Promise<void> | void;
+  onUpdateModuleConfig: (config: CompanyModuleConfig) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -40,64 +40,36 @@ export const CompanyIdentitySettings: React.FC<CompanyIdentitySettingsProps> = (
     }));
   };
 
-  const handleSelectLogo = async (base64: string) => {
+  const handleSelectLogo = (base64: string) => {
     const updated = {
       ...formData,
       companyLogoBase64: base64,
     };
-    const res = await executeOperationWithLoading({
-      loadingTitle: 'Mise à jour du logo...',
-      loadingText: 'Veuillez patienter pendant la sauvegarde du logo en base de données...',
-      action: async () => {
-        await onUpdateModuleConfig(updated);
-      },
-      successTitle: 'Logo mis à jour !',
-      successMessage: "Le logo officiel de l'entreprise a été enregistré avec succès.",
-    });
-    if (res.success) {
-      setFormData(updated);
-      setIsSaved(true);
-    }
+    setFormData(updated);
+    onUpdateModuleConfig(updated);
+    setIsSaved(true);
   };
 
-  const handleResetToDefaultLogo = async () => {
+  const handleResetToDefaultLogo = () => {
     const updated = {
       ...formData,
-      companyLogoBase64: '/citrine-logo.png',
+      companyLogoBase64: CITRINE_DEFAULT_LOGO_BASE64,
     };
-    const res = await executeOperationWithLoading({
-      loadingTitle: 'Restauration du logo...',
-      loadingText: 'Veuillez patienter pendant la restauration du logo officiel Citrine...',
-      action: async () => {
-        await onUpdateModuleConfig(updated);
-      },
-      successTitle: 'Logo restauré !',
-      successMessage: 'Le logo officiel Citrine a été rétabli avec succès.',
-    });
-    if (res.success) {
-      setFormData(updated);
-      setIsSaved(true);
-    }
+    setFormData(updated);
+    onUpdateModuleConfig(updated);
+    setIsSaved(true);
+    if (showToast) showToast('Logo officiel Citrine restauré en base de données.', 'success');
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const updated: CompanyModuleConfig = {
       ...formData,
       hqName: formData.companyName || formData.hqName,
     };
-    const res = await executeOperationWithLoading({
-      loadingTitle: 'Enregistrement de l’identité...',
-      loadingText: "Veuillez patienter pendant la mise à jour de l'identité et des coordonnées...",
-      action: async () => {
-        await onUpdateModuleConfig(updated);
-      },
-      successTitle: 'Identité enregistrée !',
-      successMessage: "Identité et coordonnées de l'entreprise enregistrées avec succès.",
-    });
-    if (res.success) {
-      setIsSaved(true);
-    }
+    onUpdateModuleConfig(updated);
+    setIsSaved(true);
+    if (showToast) showToast('Identité et coordonnées de l’entreprise enregistrées avec succès.', 'success');
   };
 
   return (
@@ -112,6 +84,9 @@ export const CompanyIdentitySettings: React.FC<CompanyIdentitySettingsProps> = (
             <h3 className="font-serif font-bold text-base text-stone-900">
               Identité Juridique & Siège Social
             </h3>
+            <p className="text-xs text-stone-500">
+              Logo officiel conservé en base, mentions légales et coordonnées réutilisées sur les documents officiels.
+            </p>
           </div>
         </div>
 

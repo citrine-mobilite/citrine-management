@@ -1,222 +1,308 @@
-import React from 'react';
-import { X, Save, Repeat, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Save, Calendar, Clock, Bell, Users, Repeat } from 'lucide-react';
 import { Reminder, Employee } from '../../types';
-import { DEADLINE_TEMPLATES } from '../../services/reminderService';
-import { DEADLINE_TEMPLATE_GROUPS } from '../../services/reminders/reminderConstants';
-import { useReminderModalLogic } from './modal/useReminderModalLogic';
-import { ReminderDeadlineAndScheduleFields } from './modal/ReminderDeadlineAndScheduleFields';
-import { ReminderRoutineFields } from './modal/ReminderRoutineFields';
-import { ReminderRecipientsSection } from './modal/ReminderRecipientsSection';
 
 interface ReminderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveReminder: (reminderData: Omit<Reminder, 'id' | 'createdAt'> & { id?: string }) => void;
   initialReminder?: Reminder | null;
-  defaultMode?: 'deadline' | 'routine';
   employees: Employee[];
   isEmployee?: boolean;
   currentEmployee?: Employee | null;
 }
+
+const AVAILABLE_PERIODS = [
+  { id: 'exact', label: "À l'heure exacte (par défaut)" },
+  { id: '5m', label: '5 minutes avant' },
+  { id: '15m', label: '15 minutes avant' },
+  { id: '30m', label: '30 minutes avant' },
+  { id: '1h', label: '1h avant' },
+];
 
 export const ReminderModal: React.FC<ReminderModalProps> = ({
   isOpen,
   onClose,
   onSaveReminder,
   initialReminder,
-  defaultMode = 'deadline' as 'deadline' | 'routine',
   employees,
   isEmployee = false,
   currentEmployee = null,
 }) => {
-  const logic = useReminderModalLogic({
-    isOpen,
-    onClose,
-    onSaveReminder,
-    initialReminder,
-    defaultMode,
-    employees,
-    isEmployee,
-    currentEmployee,
-  });
+  const [title, setTitle] = useState('');
+  const [note, setNote] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState('09:00');
+  const [selectedPeriods, setSelectedPeriods] = useState<string[]>(['exact']);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [allEmployees, setAllEmployees] = useState(true);
+
+  // Pre-fill fields when initialReminder changes (editing mode vs creating mode)
+  useEffect(() => {
+    if (initialReminder) {
+      setTitle(initialReminder.title || initialReminder.note || '');
+      setNote(initialReminder.note || '');
+      setDate(initialReminder.date || new Date().toISOString().split('T')[0]);
+      setTime(initialReminder.time || '09:00');
+      setSelectedPeriods(
+        initialReminder.triggerPeriods && initialReminder.triggerPeriods.length > 0
+          ? initialReminder.triggerPeriods
+          : ['exact']
+      );
+      setAllEmployees(initialReminder.allEmployees ?? true);
+      setSelectedEmployeeIds(initialReminder.employeeIds || []);
+    } else {
+      setTitle('');
+      setNote('');
+      setDate(new Date().toISOString().split('T')[0]);
+      setTime('09:00');
+      setSelectedPeriods(['exact']);
+      if (isEmployee && currentEmployee) {
+        setSelectedEmployeeIds([currentEmployee.id]);
+        setAllEmployees(false);
+      } else {
+        setSelectedEmployeeIds([]);
+        setAllEmployees(true);
+      }
+    }
+  }, [initialReminder, isOpen, isEmployee, currentEmployee]);
 
   if (!isOpen) return null;
 
-  const isRoutineMode = logic.kind === 'routine' || logic.kind === 'alarm';
+  const isEditing = Boolean(initialReminder && initialReminder.id);
+
+  const handleTogglePeriod = (periodId: string) => {
+    if (selectedPeriods.includes(periodId)) {
+      setSelectedPeriods(selectedPeriods.filter((p) => p !== periodId));
+    } else {
+      setSelectedPeriods([...selectedPeriods, periodId]);
+    }
+  };
+
+  const handleToggleEmployee = (empId: string) => {
+    if (selectedEmployeeIds.includes(empId)) {
+      setSelectedEmployeeIds(selectedEmployeeIds.filter((id) => id !== empId));
+      setAllEmployees(false);
+    } else {
+      setSelectedEmployeeIds([...selectedEmployeeIds, empId]);
+    }
+  };
+
+  const handleToggleAllEmployees = (checked: boolean) => {
+    setAllEmployees(checked);
+    if (checked) {
+      setSelectedEmployeeIds(employees.map((e) => e.id));
+    } else {
+      setSelectedEmployeeIds([]);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+
+    const finalAllEmployees = isEmployee ? false : allEmployees;
+    const finalEmployeeIds = isEmployee
+      ? (currentEmployee?.id ? [currentEmployee.id] : [])
+      : (allEmployees ? employees.map((e) => e.id) : selectedEmployeeIds);
+
+    onSaveReminder({
+      ...(initialReminder ? { id: initialReminder.id } : {}),
+      title: title.trim(),
+      note: note.trim(),
+      date,
+      time,
+      triggerPeriods: selectedPeriods.length > 0 ? selectedPeriods : ['exact'],
+      allEmployees: finalAllEmployees,
+      employeeIds: finalEmployeeIds,
+      triggeredPeriods: initialReminder?.triggeredPeriods || [],
+      stopped: false,
+    });
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/45 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl border border-stone-200 space-y-5">
+    <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl border border-stone-200 space-y-5">
+        {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#2A7B76] border border-emerald-200/70 flex items-center justify-center">
-              {isRoutineMode ? (
-                <Repeat className="h-4.5 w-4.5" />
-              ) : (
-                <FileText className="h-4.5 w-4.5" />
-              )}
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#2A7B76] border border-emerald-200/60 flex items-center justify-center">
+              <Bell className="h-4 w-4" />
             </div>
             <div>
               <h3 className="font-serif font-bold text-base text-stone-950">
-                {logic.isEditing
-                  ? isRoutineMode
-                    ? 'Modifier le rappel récurrent'
-                    : "Modifier l'échéance administrative"
-                  : isRoutineMode
-                  ? 'Nouveau rituel ou rappel récurrent'
-                  : 'Nouvelle échéance administrative'}
+                {isEditing ? "Modifier l'Alerte Programmée" : "Créer une Nouvelle Alerte"}
               </h3>
               <p className="text-[11px] text-stone-500">
-                {isRoutineMode
-                  ? 'Réunions récurrentes (ex: Lun · Mer · Ven à 09h), briefs ou alertes d’équipe.'
-                  : 'Documents véhicules, impôts périodiques, salaires ou contrats avec alerte anticipée.'}
+                Titre, détail, heure de rappel et périodes de sonnerie multiples.
               </p>
             </div>
           </div>
           <button
-            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700 cursor-pointer"
+            className="p-1 rounded-xl text-stone-400 hover:bg-stone-100 cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 p-1 bg-stone-100 rounded-2xl border border-stone-200/70 text-xs">
-          <button
-            type="button"
-            onClick={() => logic.setKind('deadline')}
-            className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-              !isRoutineMode
-                ? 'bg-white text-stone-900 shadow-2xs'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            <FileText className="h-3.5 w-3.5 text-[#2A7B76]" />
-            <span>Échéance / Document / Impôt</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => logic.setKind('routine')}
-            className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-              isRoutineMode
-                ? 'bg-white text-stone-900 shadow-2xs'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            <Repeat className="h-3.5 w-3.5 text-[#2A7B76]" />
-            <span>Rappel récurrent / Réunion</span>
-          </button>
-        </div>
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          {/* Titre */}
+          <div>
+            <label className="block font-bold text-stone-700 mb-1">
+              Titre de l'alerte *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="Ex: Clôture paie mensuelle, Point d'étape, Rappel urgent..."
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 font-bold text-stone-900 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none"
+            />
+          </div>
 
-        {!isRoutineMode && !logic.isEditing && (
-          <div className="space-y-2.5 p-3 rounded-2xl bg-stone-50/90 border border-stone-200/80">
-            <div className="text-[11px] font-bold text-stone-600 uppercase tracking-wide">
-              Modèles rapides d&apos;entreprise
+          {/* Note / Détail */}
+          <div>
+            <label className="block font-bold text-stone-700 mb-1">
+              Détail de l'alerte *
+            </label>
+            <textarea
+              required
+              rows={2}
+              placeholder="Spécifications, consignes détaillées, ordre du jour..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="w-full px-3.5 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800"
+            />
+          </div>
+
+          {/* Date & Heure de rappel */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5 text-[#2A7B76]" />
+                Date de rappel *
+              </label>
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-medium"
+              />
             </div>
-            <div className="space-y-2">
-              {DEADLINE_TEMPLATE_GROUPS.map((grp) => {
-                const items = DEADLINE_TEMPLATES.filter((t) => t.group === grp.id);
-                if (items.length === 0) return null;
+
+            <div>
+              <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-[#2A7B76]" />
+                Heure de rappel *
+              </label>
+              <input
+                type="time"
+                required
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-medium"
+              />
+            </div>
+          </div>
+
+          {/* Multi-Alarm Trigger Periods */}
+          <div className="space-y-2 bg-emerald-50/50 p-3.5 rounded-2xl border border-emerald-100">
+            <label className="block font-bold text-stone-800">
+              Périodes de rappel (une alerte peut sonner plusieurs fois)
+            </label>
+            <p className="text-[11px] text-stone-500">
+              Cochez les moments où l'alerte doit sonner (par défaut à l'heure exacte).
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+              {AVAILABLE_PERIODS.map((period) => {
+                const isChecked = selectedPeriods.includes(period.id);
                 return (
-                  <div key={grp.id} className="space-y-1">
-                    <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-                      {grp.label}
+                  <button
+                    key={period.id}
+                    type="button"
+                    onClick={() => handleTogglePeriod(period.id)}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-[11px] font-bold cursor-pointer transition text-left ${
+                      isChecked
+                        ? 'bg-[#2A7B76] text-white border-[#2A7B76] shadow-xs'
+                        : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
+                    }`}
+                  >
+                    <div
+                      className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center shrink-0 ${
+                        isChecked ? 'bg-white border-white' : 'border-stone-400'
+                      }`}
+                    >
+                      {isChecked && <div className="w-2 h-2 rounded-xs bg-[#2A7B76]" />}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {items.map((tpl) => {
-                        const isSelected = logic.selectedTemplateId === tpl.id;
-                        return (
-                          <button
-                            key={tpl.id}
-                            type="button"
-                            onClick={() => logic.handleApplyTemplate(tpl.id)}
-                            className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
-                              isSelected
-                                ? 'bg-[#2A7B76] border-[#2A7B76] text-white shadow-2xs'
-                                : 'border-stone-200 bg-white hover:bg-emerald-50 hover:border-emerald-200 hover:text-[#2A7B76] text-stone-700'
-                            }`}
-                          >
-                            + {tpl.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                    <span>{period.label}</span>
+                  </button>
                 );
               })}
             </div>
           </div>
-        )}
 
-        <form onSubmit={logic.handleSubmit} className="space-y-4 text-xs">
-          {isRoutineMode ? (
-            <ReminderRoutineFields
-              isEditing={logic.isEditing}
-              routineType={logic.routineType}
-              setRoutineType={logic.setRoutineType}
-              title={logic.title}
-              setTitle={logic.setTitle}
-              location={logic.location}
-              setLocation={logic.setLocation}
-              recurrenceMode={logic.recurrenceMode}
-              setRecurrenceMode={logic.setRecurrenceMode}
-              recurrenceDays={logic.recurrenceDays}
-              setRecurrenceDays={logic.setRecurrenceDays}
-              onToggleRecurrenceDay={logic.handleToggleRecurrenceDay}
-              date={logic.date}
-              setDate={logic.setDate}
-              time={logic.time}
-              setTime={logic.setTime}
-              note={logic.note}
-              setNote={logic.setNote}
-              selectedPeriods={logic.selectedPeriods}
-              onTogglePeriod={logic.handleTogglePeriod}
-              sendPushNotification={logic.sendPushNotification}
-              setSendPushNotification={logic.setSendPushNotification}
-              enableSoundAlarm={logic.enableSoundAlarm}
-              setEnableSoundAlarm={logic.setEnableSoundAlarm}
-              selectedRoutinePresetId={logic.selectedRoutinePresetId}
-              onApplyRoutinePreset={logic.handleApplyRoutinePreset}
-            />
+          {/* Personnes à qui c'est destiné */}
+          {isEmployee ? (
+            <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/80">
+              <label className="font-bold text-stone-800 flex items-center gap-1.5 mb-1">
+                <Users className="h-3.5 w-3.5 text-[#2A7B76]" />
+                Personnes à qui c'est destiné
+              </label>
+              <div className="text-xs text-stone-700 bg-white p-2.5 rounded-xl border border-stone-200 flex items-center justify-between">
+                <span className="font-bold text-[#2A7B76]">
+                  {currentEmployee?.name || 'Votre compte'}
+                </span>
+                <span className="text-[11px] text-stone-400 italic">
+                  Assignation directe automatique
+                </span>
+              </div>
+            </div>
           ) : (
-            <ReminderDeadlineAndScheduleFields
-              kind={logic.kind}
-              category={logic.category}
-              setCategory={logic.setCategory}
-              title={logic.title}
-              setTitle={logic.setTitle}
-              entityName={logic.entityName}
-              setEntityName={logic.setEntityName}
-              documentRef={logic.documentRef}
-              setDocumentRef={logic.setDocumentRef}
-              date={logic.date}
-              setDate={logic.setDate}
-              renewalCycle={logic.renewalCycle}
-              setRenewalCycle={logic.setRenewalCycle}
-              alertLeadDays={logic.alertLeadDays}
-              setAlertLeadDays={logic.setAlertLeadDays}
-              note={logic.note}
-              setNote={logic.setNote}
-              enableSoundAlarm={logic.enableSoundAlarm}
-              setEnableSoundAlarm={logic.setEnableSoundAlarm}
-              time={logic.time}
-              setTime={logic.setTime}
-              selectedPeriods={logic.selectedPeriods}
-              onTogglePeriod={logic.handleTogglePeriod}
-            />
+            <div className="space-y-2 bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-stone-800 flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-[#2A7B76]" />
+                  Personnes à qui c'est destiné
+                </label>
+                <label className="flex items-center gap-2 text-[11px] text-[#2A7B76] font-bold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allEmployees}
+                    onChange={(e) => handleToggleAllEmployees(e.target.checked)}
+                    className="rounded text-[#2A7B76] focus:ring-[#2A7B76]"
+                  />
+                  Toute l'entreprise
+                </label>
+              </div>
+
+              {!allEmployees && (
+                <div className="max-h-32 overflow-y-auto space-y-1.5 pt-2 border-t border-stone-200">
+                  {employees.map((emp) => (
+                    <label
+                      key={emp.id}
+                      className="flex items-center gap-2 p-1.5 hover:bg-white rounded-lg cursor-pointer transition text-[11px]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployeeIds.includes(emp.id)}
+                        onChange={() => handleToggleEmployee(emp.id)}
+                        className="rounded text-[#2A7B76] focus:ring-[#2A7B76]"
+                      />
+                      <span className="font-semibold text-stone-800">{emp.name}</span>
+                      <span className="text-stone-400 text-[10px]">({emp.role || 'Employé'})</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
-          <ReminderRecipientsSection
-            isEmployee={isEmployee}
-            currentEmployee={currentEmployee}
-            employees={employees}
-            allEmployees={logic.allEmployees}
-            selectedEmployeeIds={logic.selectedEmployeeIds}
-            onToggleAllEmployees={logic.handleToggleAllEmployees}
-            onToggleEmployee={logic.handleToggleEmployee}
-          />
-
+          {/* Actions */}
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100">
             <button
               type="button"
@@ -227,16 +313,10 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-[#2A7B76] text-white hover:bg-[#226763] font-bold flex items-center gap-2 shadow-xs transition cursor-pointer"
+              className="px-5 py-2.5 rounded-xl bg-[#2A7B76] text-white hover:bg-[#226763] font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
             >
               <Save className="h-4 w-4" />
-              <span>
-                {logic.isEditing
-                  ? 'Enregistrer les modifications'
-                  : isRoutineMode
-                  ? 'Enregistrer le rappel'
-                  : "Enregistrer l'échéance"}
-              </span>
+              <span>{isEditing ? 'Enregistrer les modifications' : "Créer l'alerte"}</span>
             </button>
           </div>
         </form>

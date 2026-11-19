@@ -1,7 +1,7 @@
 import React from 'react';
-import { Briefcase, Mail, Phone, Calendar, Award, Pencil, ShieldCheck, Clock, CheckCircle2, Coffee } from 'lucide-react';
+import { Briefcase, Mail, Phone, Calendar, Award, Pencil, ShieldCheck, Clock, CheckCircle2, Coffee, Sparkles } from 'lucide-react';
 import { Employee, AppUser, Presence } from '../../types';
-import { HumaanRelaxedState } from '../illustrations/HumaanIllustrations';
+import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 interface EmployeeHeroBannerProps {
   employeeProfile: Employee;
@@ -103,28 +103,19 @@ export const EmployeeHeroBanner: React.FC<EmployeeHeroBannerProps> = ({
           </div>
         </div>
 
-        {/* Illustration Humaaans */}
-        <div className="shrink-0 hidden md:flex items-center justify-center">
-          <HumaanRelaxedState className="w-36 h-28 lg:w-44 lg:h-32 drop-shadow-md" />
-        </div>
-
         {/* Right: Quick Actions */}
-        <div className="flex flex-wrap items-center justify-center lg:justify-end gap-2 shrink-0 w-full lg:w-auto">
-          {onOpenProfileModal && (
-            <button
-              onClick={onOpenProfileModal}
-              className="bg-white/15 hover:bg-white/25 active:scale-95 text-white border border-white/30 font-bold px-3.5 py-2 rounded-2xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs backdrop-blur-xs"
-            >
-              <Pencil className="h-3.5 w-3.5 text-[#F3D079]" />
-              <span>Gérer Mon Profil</span>
-            </button>
-          )}
+        <div className="flex flex-row flex-wrap items-center gap-2.5 shrink-0 w-full lg:w-auto justify-center lg:justify-start">
 
-          <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-black/20 border border-white/10 text-xs text-white/80">
-            <Briefcase className="h-3.5 w-3.5 text-[#F3D079]" />
+          <div className="w-full sm:w-auto flex justify-center">
+            <PWAInstallButton />
+          </div>
+
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/20 border border-white/10 text-[11px] text-white/70">
+            <Sparkles className="h-3 w-3 text-[#F3D079]" />
             <span>Matricule : <strong className="text-white font-mono">{employeeProfile.id}</strong></span>
           </div>
         </div>
+
       </div>
     </div>
   );

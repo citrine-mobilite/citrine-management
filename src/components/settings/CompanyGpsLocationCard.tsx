@@ -84,6 +84,7 @@ export const CompanyGpsLocationCard: React.FC<CompanyGpsLocationCardProps> = ({
         setLatStr(String(lat));
         setLngStr(String(lng));
         onDetectGpsDone(lat, lng);
+        if (showToast) showToast(`Position GPS captée : ${lat}°, ${lng}°`, 'success');
       },
       () => {
         setIsLocating(false);

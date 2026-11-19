@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Users, Download, FileText, ShieldCheck, Plus } from 'lucide-react';
-import { HumaanUsers } from './illustrations/HumaanIllustrations';
-import { AppUser, Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../types';
+import { Users, Download, FileText } from 'lucide-react';
+import { AppUser, UserRole, UserStatus, Employee, EmployeeStatus } from '../types';
+import { saveUser, deleteUser } from '../services/userService';
+import { hashPassword } from '../utils/cryptoUtils';
+import { logAdminOperation } from '../services/adminAuditService';
 import { UserFormModal } from './users/UserFormModal';
+import { UserDeleteConfirmModal } from './users/UserDeleteConfirmModal';
 import { UserTableItemRow } from './users/UserTableItemRow';
 import { UserFilterToolbar } from './users/UserFilterToolbar';
-import { UserDetailStatsModal } from './users/UserDetailStatsModal';
 import { exportToExcel } from '../services/excelExportService';
 import { exportElementToPdf } from '../services/pdfExportService';
-import { useUserManagementActions } from './users/useUserManagementActions';
 
 interface UserManagementPanelProps {
   users: AppUser[];
@@ -17,12 +18,6 @@ interface UserManagementPanelProps {
   onUpdateUsers?: (updated: AppUser[]) => void;
   employees?: Employee[];
   onUpdateEmployees?: (updated: Employee[]) => void;
-  presences?: Presence[];
-  tasks?: Task[];
-  reminders?: Reminder[];
-  notifications?: NotificationLog[];
-  strategicProjects?: StrategicProject[];
-  salaryPayments?: SalaryPayment[];
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -31,14 +26,8 @@ export default function UserManagementPanel({
   onAddNotification,
   currentUser,
   onUpdateUsers,
-  employees = [],
+  employees,
   onUpdateEmployees,
-  presences = [],
-  tasks = [],
-  reminders = [],
-  notifications = [],
-  strategicProjects = [],
-  salaryPayments = [],
   showToast,
 }: UserManagementPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,7 +36,8 @@ export default function UserManagementPanel({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
-  const [detailUser, setDetailUser] = useState<AppUser | null>(null);
+  const [userToDelete, setUserToDelete] = useState<AppUser | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredUsers = users.filter((u) => {
     if (roleFilter !== 'all' && u.role !== roleFilter) return false;
@@ -69,18 +59,176 @@ export default function UserManagementPanel({
     setIsModalOpen(true);
   };
 
-  const { handleDeleteUser, handleSaveUser } = useUserManagementActions({
-    users,
-    currentUser,
-    editingUser,
-    employees,
-    onAddNotification,
-    onUpdateUsers,
-    onUpdateEmployees,
-    showToast,
-    setIsModalOpen,
-    setEditingUser,
-  });
+  const handleSaveUser = async (data: {
+    name: string;
+    email: string;
+    role: UserRole;
+    status: UserStatus;
+    employmentStatus: EmployeeStatus;
+    department: string;
+    password?: string;
+  }) => {
+    try {
+      let passwordHash = editingUser?.passwordHash;
+      if (data.password) {
+        passwordHash = await hashPassword(data.password);
+      }
+
+      const userToSave: AppUser = {
+        id: editingUser ? editingUser.id : `user-${Date.now()}`,
+        name: data.name.trim(),
+        email: data.email.trim(),
+        role: data.role,
+        status: data.status,
+        employmentStatus: data.employmentStatus,
+        department: data.department.trim(),
+        createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
+        passwordHash,
+      };
+
+      await saveUser(userToSave, editingUser || undefined);
+
+      // Mettre à jour l'état React des utilisateurs
+      if (onUpdateUsers) {
+        if (editingUser) {
+          onUpdateUsers(users.map((u) => (u.id === userToSave.id ? userToSave : u)));
+        } else {
+          onUpdateUsers([userToSave, ...users]);
+        }
+      }
+
+      // Synchroniser immédiatement le collaborateur associé dans l'état React
+      if (onUpdateEmployees && employees && employees.length > 0) {
+        const targetEmail = userToSave.email.toLowerCase();
+        const oldEmail = editingUser?.email ? editingUser.email.toLowerCase() : '';
+        const empIdx = employees.findIndex(
+          (e) =>
+            (e.email && (e.email.toLowerCase() === targetEmail || (oldEmail && e.email.toLowerCase() === oldEmail))) ||
+            (e.userId && String(e.userId) === String(userToSave.id)) ||
+            (userToSave.employeeId && (String(e.id) === String(userToSave.employeeId) || e.uid === userToSave.employeeId))
+        );
+
+        if (empIdx >= 0) {
+          const emp = employees[empIdx];
+          const isEmpActive =
+            userToSave.status === 'actif' &&
+            data.employmentStatus !== 'renvoye' &&
+            data.employmentStatus !== 'demissionne' &&
+            data.employmentStatus !== 'suspendu' &&
+            data.employmentStatus !== 'parti';
+
+          const resolvedRoleId = userToSave.role === 'administrateur' ? 1 : userToSave.role === 'responsable' ? 2 : 3;
+          const resolvedRoleType = userToSave.role === 'administrateur' ? 'Super Administrateur' : userToSave.role === 'responsable' ? 'Responsable' : (emp.roleType || 'Employé');
+
+          const updatedEmp: Employee = {
+            ...emp,
+            name: userToSave.name,
+            email: userToSave.email,
+            department: userToSave.department || emp.department,
+            roleId: resolvedRoleId,
+            roleType: resolvedRoleType,
+            role: resolvedRoleType,
+            status: isEmpActive,
+            employmentStatus: data.employmentStatus,
+            userId: userToSave.id,
+          };
+          onUpdateEmployees(employees.map((e, i) => (i === empIdx ? updatedEmp : e)));
+        }
+      }
+
+      // Audit log
+      if (editingUser) {
+        if (editingUser.role !== data.role) {
+          logAdminOperation({
+            authorName: currentUser.name,
+            authorRole: currentUser.role,
+            targetUserId: userToSave.id,
+            targetName: userToSave.name,
+            operationType: 'role_change',
+            operationLabel: 'Modification Rôle Utilisateur',
+            details: `Rôle modifié : ${editingUser.role} ➔ ${data.role}`,
+          });
+        }
+        if (editingUser.status !== data.status) {
+          logAdminOperation({
+            authorName: currentUser.name,
+            authorRole: currentUser.role,
+            targetUserId: userToSave.id,
+            targetName: userToSave.name,
+            operationType: 'status_change',
+            operationLabel: 'Changement Statut Compte',
+            details: `Statut modifié : ${editingUser.status} ➔ ${data.status}`,
+          });
+        }
+        if (data.password) {
+          logAdminOperation({
+            authorName: currentUser.name,
+            authorRole: currentUser.role,
+            targetUserId: userToSave.id,
+            targetName: userToSave.name,
+            operationType: 'password_reset',
+            operationLabel: 'Réinitialisation Mot de Passe',
+            details: 'Mot de passe réinitialisé par l’administrateur',
+          });
+        }
+      } else {
+        logAdminOperation({
+          authorName: currentUser.name,
+          authorRole: currentUser.role,
+          targetUserId: userToSave.id,
+          targetName: userToSave.name,
+          operationType: 'creation',
+          operationLabel: 'Création de Compte',
+          details: `Création compte ${userToSave.role} (${userToSave.email})`,
+        });
+
+        const userNotif = {
+          id: `notif-user-${Date.now()}`,
+          type: 'system',
+          title: 'Nouveau compte utilisateur créé',
+          content: `Le compte pour ${userToSave.name} (${userToSave.email}) avec le rôle ${userToSave.role} a été créé.`,
+          recipient: 'Administrateurs',
+          payload: JSON.stringify({ userId: userToSave.id, email: userToSave.email, role: userToSave.role }),
+          timestamp: new Date().toISOString(),
+          read: false,
+        };
+        onAddNotification(userNotif);
+        console.log('🔔 [NOTIFICATION CRÉÉE] Utilisateur:', userNotif);
+      }
+
+      showToast?.(
+        editingUser ? 'Utilisateur mis à jour avec succès' : 'Nouvel utilisateur créé avec succès',
+        'success'
+      );
+      setIsModalOpen(false);
+      setEditingUser(null);
+    } catch {
+      showToast?.('Erreur lors de l’enregistrement de l’utilisateur', 'error');
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteUser(userToDelete.id);
+      logAdminOperation({
+        authorName: currentUser.name,
+        authorRole: currentUser.role,
+        targetUserId: userToDelete.id,
+        targetName: userToDelete.name,
+        operationType: 'status_change',
+        operationLabel: 'Suppression de Compte',
+        details: `Compte utilisateur ${userToDelete.email} supprimé définitivement.`,
+      });
+      showToast?.('Utilisateur supprimé avec succès', 'success');
+      setUserToDelete(null);
+    } catch {
+      showToast?.('Erreur lors de la suppression', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleExportExcel = () => {
     const headers = ['ID', 'Nom', 'Email', 'Rôle', 'Département', 'Statut'];
@@ -100,48 +248,8 @@ export default function UserManagementPanel({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
-      <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
-        <div className="z-10 text-center md:text-left">
-          <div className="flex items-center justify-center md:justify-start gap-2.5">
-            <div className="p-2.5 bg-white/10 backdrop-blur-xs rounded-2xl border border-white/20">
-              <ShieldCheck className="h-6 w-6 text-emerald-200" />
-            </div>
-            <h2 className="font-serif font-bold text-xl md:text-2xl">
-              Utilisateurs &amp; Rôles Système
-            </h2>
-          </div>
-        </div>
-
-        <div className="hidden lg:block shrink-0 z-10">
-          <HumaanUsers className="w-36 h-28 drop-shadow-md" />
-        </div>
-
-        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-2.5 z-10 w-full sm:w-auto">
-          <button
-            onClick={handleExportExcel}
-            className="w-full sm:w-auto justify-center flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition shadow-xs cursor-pointer active:scale-98"
-          >
-            <Download className="h-3.5 w-3.5 text-emerald-200" />
-            <span>Excel</span>
-          </button>
-          <button
-            onClick={handleExportPdf}
-            className="w-full sm:w-auto justify-center flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition shadow-xs cursor-pointer active:scale-98"
-          >
-            <FileText className="h-3.5 w-3.5 text-rose-300" />
-            <span>PDF</span>
-          </button>
-          <button
-            onClick={handleOpenNewUser}
-            className="w-full sm:w-auto justify-center flex items-center gap-1.5 bg-[#D4A82F] hover:bg-[#c39b28] text-stone-950 px-4 py-2.5 rounded-2xl text-xs font-extrabold shadow-md transition cursor-pointer active:scale-98"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Nouvel Utilisateur</span>
-          </button>
-        </div>
-      </div>
-
+    <div className="space-y-6 max-w-6xl mx-auto pb-12">
+      {/* Filter toolbar */}
       <UserFilterToolbar
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
@@ -152,6 +260,7 @@ export default function UserManagementPanel({
         onOpenNewUser={handleOpenNewUser}
       />
 
+      {/* Users table */}
       <div id="users-table-container" className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-stone-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-50/50">
           <h3 className="font-serif font-bold text-xs text-stone-900 flex items-center gap-1.5">
@@ -200,9 +309,8 @@ export default function UserManagementPanel({
                     key={user.id}
                     user={user}
                     currentUserId={currentUser.id}
-                    onViewDetails={setDetailUser}
                     onEdit={handleEditUser}
-                    onDelete={handleDeleteUser}
+                    onDelete={(u) => setUserToDelete(u)}
                   />
                 ))
               )}
@@ -210,22 +318,6 @@ export default function UserManagementPanel({
           </table>
         </div>
       </div>
-
-      {detailUser && (
-        <UserDetailStatsModal
-          isOpen={Boolean(detailUser)}
-          onClose={() => setDetailUser(null)}
-          user={detailUser}
-          employees={employees}
-          presences={presences}
-          tasks={tasks}
-          reminders={reminders}
-          notifications={notifications}
-          strategicProjects={strategicProjects}
-          salaryPayments={salaryPayments}
-          onEditUser={handleEditUser}
-        />
-      )}
 
       {isModalOpen && (
         <UserFormModal
@@ -239,6 +331,13 @@ export default function UserManagementPanel({
           onSave={handleSaveUser}
         />
       )}
+
+      <UserDeleteConfirmModal
+        user={userToDelete}
+        onClose={() => setUserToDelete(null)}
+        onConfirm={handleDeleteUser}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

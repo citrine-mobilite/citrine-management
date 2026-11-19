@@ -4,14 +4,13 @@ import { BadgeSecurityCode16, AppUser } from '../types';
 import { badgeCodeService } from '../services/badgeCodeService';
 import { BadgeCodeGeneratorForm } from './presence/badge/BadgeCodeGeneratorForm';
 import { BadgeCodeItemCard } from './presence/badge/BadgeCodeItemCard';
-import { executeOperationWithLoading, executeDeleteWithSweetAlert } from '../utils/sweetAlert';
 
 interface Badge16CodeManagerProps {
   currentUser?: AppUser | null;
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export default function Badge16CodeManager({ currentUser }: Badge16CodeManagerProps) {
+export default function Badge16CodeManager({ currentUser, showToast }: Badge16CodeManagerProps) {
   const [codes, setCodes] = useState<BadgeSecurityCode16[]>([]);
   const [filter, setFilter] = useState<'all' | 'active' | 'used'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -31,25 +30,15 @@ export default function Badge16CodeManager({ currentUser }: Badge16CodeManagerPr
     setIsGenerating(true);
     try {
       const responsableName = currentUser?.name || 'Responsable';
-      let generatedFormatted = '';
-      await executeOperationWithLoading({
-        loadingTitle: 'Génération du code badge...',
-        loadingText: 'Création du code de sécurité à 16 caractères, veuillez patienter...',
-        action: async () => {
-          const created = await badgeCodeService.createBadgeCode(
-            responsableName,
-            notesInput.trim() || `Code de badgeage généré le ${new Date().toLocaleDateString('fr-FR')}`
-          );
-          generatedFormatted = created.formattedCode;
-          setNewlyCreatedCode(created);
-          setNotesInput('');
-        },
-        successTitle: 'Code généré !',
-        successMessage: generatedFormatted
-          ? `Nouveau code 16 caractères généré : ${generatedFormatted}`
-          : 'Nouveau code 16 caractères généré avec succès.',
-        errorMessage: 'Erreur lors de la génération du code.',
-      });
+      const created = await badgeCodeService.createBadgeCode(
+        responsableName,
+        notesInput.trim() || `Code de badgeage généré le ${new Date().toLocaleDateString('fr-FR')}`
+      );
+      setNewlyCreatedCode(created);
+      setNotesInput('');
+      showToast?.(`Code généré avec succès: ${created.formattedCode}`, 'success');
+    } catch {
+      showToast?.('Erreur lors de la génération du code', 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -62,15 +51,12 @@ export default function Badge16CodeManager({ currentUser }: Badge16CodeManagerPr
   };
 
   const handleDelete = async (id: string) => {
-    await executeDeleteWithSweetAlert({
-      title: 'Supprimer ce code de badge ?',
-      text: 'Voulez-vous vraiment supprimer ce code de badge 16 caractères ?',
-      action: async () => {
-        await badgeCodeService.deleteCode(id);
-      },
-      successTitle: 'Code supprimé !',
-      successMessage: 'Le code de badge a été supprimé de la base.',
-    });
+    try {
+      await badgeCodeService.deleteCode(id);
+      showToast?.('Code supprimé avec succès', 'info');
+    } catch {
+      showToast?.('Erreur lors de la suppression', 'error');
+    }
   };
 
   const filteredCodes = codes.filter((c) => {

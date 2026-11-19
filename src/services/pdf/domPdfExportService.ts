@@ -1,70 +1,51 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { asyncActionTrackerService } from '../asyncActionTrackerService';
-
-function sanitizeUnsupportedCssColors(clonedDoc: Document): void {
-  const styleSheets = Array.from(clonedDoc.querySelectorAll('style'));
-  styleSheets.forEach((styleEl) => {
-    if (styleEl.textContent && /oklch|oklab|color-mix/.test(styleEl.textContent)) {
-      styleEl.textContent = styleEl.textContent
-        .replace(/oklch\([^)]+\)/gi, '#334155')
-        .replace(/oklab\([^)]+\)/gi, '#334155')
-        .replace(/color-mix\([^;{}]+\)/gi, '#e2e8f0');
-    }
-  });
-}
 
 export async function exportElementToPdf(
   elementOrId: HTMLElement | string,
   fileName: string = 'Document_Citrine.pdf'
 ): Promise<boolean> {
-  return asyncActionTrackerService.track('Génération du document PDF...', async () => {
-    try {
-      const targetElement =
-        typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
-      if (!targetElement) {
-        console.error(`Export PDF: Element not found (${elementOrId})`);
-        return false;
-      }
-
-      const canvas = await html2canvas(targetElement, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        onclone: (clonedDoc) => {
-          sanitizeUnsupportedCssColors(clonedDoc);
-        },
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      const imgWidth = 210;
-      const pageHeight = 297;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`);
-      return true;
-    } catch (error) {
-      console.error('Error exporting element to PDF:', error);
+  try {
+    const targetElement = typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
+    if (!targetElement) {
+      console.error(`Export PDF: Element not found (${elementOrId})`);
       return false;
     }
-  });
+
+    const canvas = await html2canvas(targetElement, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff'
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const imgWidth = 210;
+    const pageHeight = 297;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`);
+    return true;
+  } catch (error) {
+    console.error('Error exporting element to PDF:', error);
+    return false;
+  }
 }

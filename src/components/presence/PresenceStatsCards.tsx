@@ -7,15 +7,10 @@ interface PresenceStatsCardsProps {
 }
 
 export const PresenceStatsCards: React.FC<PresenceStatsCardsProps> = ({ presences }) => {
-  const isWe = (dateStr?: string) => {
-    if (!dateStr) return false;
-    const dow = new Date(`${dateStr.split('T')[0]}T12:00:00`).getDay();
-    return dow === 0 || dow === 6;
-  };
-  const total = presences.filter((p) => !(isWe(p.date) && p.status === 'absent')).length;
-  const present = presences.filter((p) => p.status === 'present' || (isWe(p.date) && p.status === 'late')).length;
-  const late = presences.filter((p) => p.status === 'late' && !isWe(p.date)).length;
-  const absent = presences.filter((p) => p.status === 'absent' && !isWe(p.date)).length;
+  const total = presences.length;
+  const present = presences.filter((p) => p.status === 'present').length;
+  const late = presences.filter((p) => p.status === 'late').length;
+  const absent = presences.filter((p) => p.status === 'absent').length;
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -1,4 +1,4 @@
-export type PresenceStatus = 'present' | 'late' | 'absent' | 'mission' | 'not_tracked';
+export type PresenceStatus = 'present' | 'late' | 'absent' | 'not_tracked';
 
 export type EmergencyType =
   | 'retard'
@@ -103,7 +103,6 @@ export interface DynamicQrSession {
 export interface Presence {
   id: string;
   employeeId: string;
-  employeeEmail?: string;
   date: string;
   arrivalTime: string | null;
   pauseStart: string | null;

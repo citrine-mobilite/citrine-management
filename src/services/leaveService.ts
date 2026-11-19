@@ -1,17 +1,14 @@
-import { LeaveRequest, LeaveStatus, Employee, NotificationLog } from '../types';
-import {
-  COLLECTIONS,
-  subscribeToCollection,
-  saveDocument,
+import { LeaveRequest, LeaveType, LeaveStatus, Employee, NotificationLog, LEAVE_TYPE_LABELS } from '../types';
+import { 
+  COLLECTIONS, 
+  subscribeToCollection, 
+  saveDocument, 
   deleteDocument,
-  getCollection,
+  getCollection 
 } from './dataService';
-import {
-  notifyNewLeaveCreated,
-  syncEmployeeMissionOnApproval,
-  notifyLeaveDecisionOutcome,
-  notifyAdminLeaveCreated,
-} from './leaveNotificationHelpers';
+import { pushNotificationBridgeService } from './pushNotificationBridgeService';
+import { soundService } from './soundService';
+import { logSystemAudit } from './adminAuditService';
 
 // (Zero localStorage architecture)
 
@@ -45,7 +42,7 @@ export function subscribeToLeaveRequests(callback: (leaves: LeaveRequest[]) => v
  */
 export async function createLeaveRequest(
   data: Omit<LeaveRequest, 'id' | 'createdAt' | 'status'>,
-  _onAddNotification?: (n: NotificationLog) => void
+  onAddNotification?: (n: NotificationLog) => void
 ): Promise<LeaveRequest> {
   const newId = `leave-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
@@ -61,8 +58,47 @@ export async function createLeaveRequest(
     updatedAt: now,
   };
 
+  // 1. Sauvegarde Firestore
   await saveDocument(COLLECTIONS.LEAVE_REQUESTS, newLeave);
-  await notifyNewLeaveCreated(newLeave, days, now);
+
+  // 2. Notification Push au responsable / direction (exclut l'employé créateur pour qu'il ne reçoive pas son propre push)
+  const typeLabel = LEAVE_TYPE_LABELS[newLeave.type]?.label || 'Congé / Permission';
+  pushNotificationBridgeService.sendPush({
+    title: `Nouvelle demande : ${newLeave.employeeName}`,
+    message: `${typeLabel} du ${newLeave.startDate} au ${newLeave.endDate} (${days} jour${days > 1 ? 's' : ''}). Motif : ${newLeave.reason}`,
+    senderName: newLeave.employeeName,
+    senderAvatar: newLeave.employeeAvatar,
+    type: 'alert',
+    excludeUserId: newLeave.employeeId,
+  });
+
+  // 3. NotificationLog persistée dans l'onglet notifications
+  const notif: NotificationLog = {
+    id: `notif-leave-${newLeave.id}`,
+    type: 'system',
+    recipient: 'Direction RH & Responsables',
+    title: `Demande de ${typeLabel} : ${newLeave.employeeName}`,
+    content: `${newLeave.employeeName} (${newLeave.department || 'Opérations'}) sollicite ${days} jour(s) du ${newLeave.startDate} au ${newLeave.endDate}. Motif : ${newLeave.reason}`,
+    payload: JSON.stringify({
+      source: 'leave_request',
+      leaveId: newLeave.id,
+      employeeId: newLeave.employeeId,
+      employeeName: newLeave.employeeName,
+      type: newLeave.type,
+      startDate: newLeave.startDate,
+      endDate: newLeave.endDate,
+      daysCount: days,
+    }),
+    timestamp: now,
+    read: false,
+  };
+
+  await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
+
+  // Émission d'un événement global pour actualiser les badges
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('citrine:leave_requests_updated'));
+  }
 
   return newLeave;
 }
@@ -74,7 +110,7 @@ export async function createLeaveRequest(
  * - Modification de la durée / période
  */
 export async function decideLeaveRequest(
-  _leaveId: string,
+  leaveId: string,
   decision: {
     status: 'approved' | 'rejected' | 'modified';
     managerComment?: string;
@@ -103,27 +139,84 @@ export async function decideLeaveRequest(
     updatedAt: now,
   };
 
+  // 1. Sauvegarde Firestore
   await saveDocument(COLLECTIONS.LEAVE_REQUESTS, updated);
+
+  // 2. Notification Push envoyée au collaborateur
+  let decisionTitle = '';
+  let decisionMsg = '';
 
   const effectiveDays = updated.approvedDaysCount ?? updated.daysCount;
   const effectiveStart = updated.approvedStartDate ?? updated.startDate;
   const effectiveEnd = updated.approvedEndDate ?? updated.endDate;
 
-  if (existingLeave.type === 'mission_professionnelle' && (decision.status === 'approved' || decision.status === 'modified')) {
-    await syncEmployeeMissionOnApproval(existingLeave, employee, effectiveStart, effectiveEnd, effectiveDays, now);
+  if (decision.status === 'approved') {
+    decisionTitle = 'Demande de congé validée ✓';
+    decisionMsg = `Votre demande a été approuvée pour ${effectiveDays} jour(s) du ${effectiveStart} au ${effectiveEnd}. ${decision.managerComment ? `Note : ${decision.managerComment}` : ''}`;
+  } else if (decision.status === 'rejected') {
+    decisionTitle = 'Demande de congé refusée ✕';
+    decisionMsg = `Votre demande du ${updated.startDate} au ${updated.endDate} a été refusée. ${decision.managerComment ? `Motif du refus : ${decision.managerComment}` : ''}`;
+  } else if (decision.status === 'modified') {
+    decisionTitle = 'Durée de congé ajustée par le responsable ⚠️';
+    decisionMsg = `La durée de votre demande a été réajustée à ${effectiveDays} jour(s) (du ${effectiveStart} au ${effectiveEnd}). Note : ${decision.managerComment || 'Ajustement de planning'}`;
   }
 
-  await notifyLeaveDecisionOutcome({
-    decision,
-    existingLeave,
-    updated,
-    employee,
-    effectiveDays,
-    effectiveStart,
-    effectiveEnd,
-    now,
-    onAddNotification,
+  pushNotificationBridgeService.sendPush({
+    title: decisionTitle,
+    message: decisionMsg,
+    senderName: decision.decidedBy,
+    type: 'alert',
   });
+
+  try {
+    soundService.playAlertNotification(0.65);
+  } catch {}
+
+  // 3. NotificationLog persistée pour l'employé
+  const recipientTarget = employee?.email || employee?.name || updated.employeeEmail || updated.employeeName;
+  const notif: NotificationLog = {
+    id: `notif-leave-decision-${updated.id}-${Date.now()}`,
+    type: 'system',
+    recipient: recipientTarget,
+    title: decisionTitle,
+    content: decisionMsg,
+    payload: JSON.stringify({
+      source: 'leave_decision',
+      leaveId: updated.id,
+      status: updated.status,
+      employeeId: updated.employeeId,
+      effectiveDays,
+      effectiveStart,
+      effectiveEnd,
+      comment: decision.managerComment,
+    }),
+    timestamp: now,
+    read: false,
+  };
+
+  if (onAddNotification) {
+    onAddNotification(notif);
+  } else {
+    await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
+  }
+
+  // Audit Log
+  logSystemAudit({
+    authorName: decision.decidedBy || 'Responsable RH',
+    authorRole: 'admin',
+    targetName: existingLeave.employeeName,
+    targetEmployeeId: existingLeave.employeeId,
+    operationType: 'conge_permission',
+    operationLabel: `Décision Congé / Permission : ${decision.status.toUpperCase()}`,
+    details: `Demande de ${effectiveDays} jour(s) pour ${existingLeave.employeeName} : ${decision.status}. ${decision.managerComment ? `Note : ${decision.managerComment}` : ''}`,
+    level: decision.status === 'approved' ? 'success' : decision.status === 'rejected' ? 'warning' : 'info',
+  });
+
+  // Émission d'un événement global
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('citrine:leave_requests_updated'));
+    window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+  }
 
   return updated;
 }
@@ -156,8 +249,52 @@ export async function createAdminLeaveRequest(
     updatedAt: now,
   };
 
+  // 1. Sauvegarde
   await saveDocument(COLLECTIONS.LEAVE_REQUESTS, newLeave);
-  await notifyAdminLeaveCreated(newLeave, days, status, now, authorUser, onAddNotification);
+
+  // 2. Notification Push
+  const typeLabel = LEAVE_TYPE_LABELS[newLeave.type]?.label || 'Congé / Permission';
+  pushNotificationBridgeService.sendPush({
+    title: status === 'approved' ? `Congé / Permission accordé(e) : ${newLeave.employeeName}` : `Nouvelle permission enregistrée : ${newLeave.employeeName}`,
+    message: `${typeLabel} accordé(e) du ${newLeave.startDate} au ${newLeave.endDate} (${days} jour(s)). ${newLeave.reason ? `Motif : ${newLeave.reason}` : ''}`,
+    senderName: authorUser?.name || 'Direction RH',
+    type: 'alert',
+  });
+
+  // 3. Notification log
+  const notif: NotificationLog = {
+    id: `notif-leave-${newLeave.id}`,
+    type: 'system',
+    recipient: newLeave.employeeName,
+    title: `${typeLabel} attribué(e) : ${newLeave.employeeName}`,
+    content: `${authorUser?.name || 'La Direction RH'} a accordé un(e) ${typeLabel} de ${days} jour(s) du ${newLeave.startDate} au ${newLeave.endDate}.`,
+    payload: JSON.stringify(newLeave),
+    timestamp: now,
+    read: false,
+  };
+
+  if (onAddNotification) {
+    onAddNotification(notif);
+  } else {
+    await saveDocument(COLLECTIONS.NOTIFICATIONS, notif);
+  }
+
+  // 4. Audit Log
+  logSystemAudit({
+    authorName: authorUser?.name || 'Direction RH',
+    authorRole: authorUser?.role || 'admin',
+    targetName: newLeave.employeeName,
+    targetEmployeeId: newLeave.employeeId,
+    operationType: 'conge_permission',
+    operationLabel: status === 'approved' ? 'Création & Validation de Congé / Permission' : 'Création de Demande de Permission',
+    details: `${typeLabel} de ${days} jour(s) pour ${newLeave.employeeName} (du ${newLeave.startDate} au ${newLeave.endDate}). Statut : ${status}. Motif : ${newLeave.reason}`,
+    level: 'success',
+  });
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('citrine:leave_requests_updated'));
+    window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+  }
 
   return newLeave;
 }

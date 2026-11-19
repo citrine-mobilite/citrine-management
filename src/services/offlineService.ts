@@ -37,6 +37,7 @@ export const offlineService = {
           usageMb = estimate.usage ? Math.round((estimate.usage / (1024 * 1024)) * 100) / 100 : 0;
         }
 
+        console.log(`[Storage Persistence] État persistant: ${persisted}, Utilisé: ${usageMb}MB / Quota: ${quotaMb}MB`);
         return { persisted, quotaMb, usageMb };
       } catch (e) {
         console.warn('Storage persistence request failed:', e);
@@ -64,6 +65,7 @@ export const offlineService = {
     try {
       const idb = await dbPromise;
       await idb.put('offline_queue', action);
+      console.log(`[Offline Queue] Action mise en attente (${actionType} ${collectionName}) :`, action.id);
       this.notifySyncStateChange();
     } catch (e) {
       console.error('Failed to enqueue offline action:', e);

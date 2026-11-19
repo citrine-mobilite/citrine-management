@@ -4,7 +4,6 @@ import { NotificationLog, AppUser } from '../types';
 import { NotificationStatsCards } from './notifications/NotificationStatsCards';
 import { NotificationListItem } from './notifications/NotificationListItem';
 import { NotificationDetailModal } from './notifications/NotificationDetailModal';
-import { canSeeAllNotifications } from '../utils/roleUtils';
 
 interface NotificationConsoleProps {
   notifications: NotificationLog[];
@@ -21,10 +20,10 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
   const [selectedDetail, setSelectedDetail] = useState<NotificationLog | null>(null);
   const ITEMS_PER_PAGE = 25;
 
-  const canSeeAll = canSeeAllNotifications(currentUser);
+  const isAdmin = currentUser.role === 'administrateur' || (currentUser.role as string) === 'super_administrateur' || currentUser.role === 'responsable';
 
-  // Filter notifications for the current user or show all for admin / IT / responsable
-  const userNotifications = canSeeAll ? notifications : notifications.filter(
+  // Filter notifications for the current user or show all for admin/responsable
+  const userNotifications = isAdmin ? notifications : notifications.filter(
     (n) => (n.targetUserId && (String(n.targetUserId) === String(currentUser.id) || String(n.targetUserId) === String(currentUser.email))) ||
            n.recipient === currentUser.name || 
            n.recipient === currentUser.email || 
@@ -48,14 +47,7 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
   const handleMarkAllAsRead = () => {
     if (onUpdateNotifications) {
       const updated = notifications.map((n) => {
-        const isTargeted = canSeeAll || 
-                           (n.targetUserId && (String(n.targetUserId) === String(currentUser.id) || String(n.targetUserId) === String(currentUser.email))) ||
-                           n.recipient === currentUser.name || 
-                           n.recipient === currentUser.email || 
-                           n.recipient === 'Tous' ||
-                           n.recipient === 'Broadcast' ||
-                           (currentUser.phone && n.recipient.includes(currentUser.phone));
-        if (isTargeted) {
+        if (isAdmin || n.recipient === currentUser.name || n.recipient === currentUser.email || (currentUser.phone && n.recipient.includes(currentUser.phone))) {
           return { ...n, read: true };
         }
         return n;
@@ -90,7 +82,7 @@ export default function NotificationConsole({ notifications, currentUser, onUpda
       </div>
 
       {/* KPI Stats */}
-      <NotificationStatsCards notifications={userNotifications} />
+      <NotificationStatsCards notifications={notifications} />
 
       {/* Search Bar & Filters */}
       <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs gap-4">

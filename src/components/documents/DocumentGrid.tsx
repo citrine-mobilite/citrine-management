@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { Eye, Trash2, Calendar, User, Database, ShieldCheck, ChevronLeft, ChevronRight, Filter, Edit3 } from 'lucide-react';
+import { Eye, Trash2, Calendar, User, Database, ShieldCheck, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { GeneratedDocument } from '../../types';
 
 interface DocumentGridProps {
   documents: GeneratedDocument[];
   searchTerm: string;
   onPreview: (doc: GeneratedDocument) => void;
-  onEdit?: (doc: GeneratedDocument) => void;
   onDelete: (id: string) => void;
 }
 
-export const DocumentGrid: React.FC<DocumentGridProps> = ({ documents, searchTerm, onPreview, onEdit, onDelete }) => {
+export const DocumentGrid: React.FC<DocumentGridProps> = ({ documents, searchTerm, onPreview, onDelete }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 9;
@@ -123,29 +122,15 @@ export const DocumentGrid: React.FC<DocumentGridProps> = ({ documents, searchTer
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-stone-100 shrink-0 gap-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onPreview(doc)}
-                      className="px-3 py-1.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-[11px] font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      <span>Aperçu PDF</span>
-                    </button>
-
-                    {onEdit && (
-                      <button
-                        type="button"
-                        onClick={() => onEdit(doc)}
-                        className="px-2.5 py-1.5 bg-stone-100 hover:bg-[#2A7B76] hover:text-white text-stone-700 text-[11px] font-bold rounded-xl transition flex items-center gap-1 cursor-pointer border border-stone-200"
-                        title="Modifier ce document en base de données"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                        <span>Modifier</span>
-                      </button>
-                    )}
-                  </div>
+                <div className="flex items-center justify-between pt-2 border-t border-stone-100 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onPreview(doc)}
+                    className="px-3 py-1.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-[11px] font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    <span>Aperçu PDF</span>
+                  </button>
 
                   <button
                     type="button"

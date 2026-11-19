@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { PhoneCall, History, Users, Search, ShieldCheck } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { PhoneCall, History, Users, Search, Phone, Video, ShieldCheck, Wifi } from 'lucide-react';
 import { Employee, AppUser, VoIPCall, UserOnlinePresence, CallType } from '../types';
 import { ColleaguesCallDirectory } from './calls/ColleaguesCallDirectory';
 import { CallHistoryList } from './calls/CallHistoryList';
 import { ActiveCallModal } from './ActiveCallModal';
 import { IncomingCallModal } from './IncomingCallModal';
-import { useTeamCallsLogic } from './calls/useTeamCallsLogic';
+import { callSignalingService } from '../services/callSignalingService';
+import { COLLECTIONS, subscribeToCollection } from '../services/dataService';
 
 interface TeamCallsPanelProps {
   currentUser: AppUser | null;
@@ -13,10 +14,7 @@ interface TeamCallsPanelProps {
   users?: AppUser[];
   onlinePresences?: UserOnlinePresence[];
   callHistory?: VoIPCall[];
-  onStartCall?: (
-    target: { id: string; name: string; email?: string; avatarUrl?: string; role?: string },
-    type: CallType
-  ) => void;
+  onStartCall?: (target: { id: string; name: string; email?: string; avatarUrl?: string; role?: string }, type: CallType) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -32,30 +30,182 @@ export const TeamCallsPanel: React.FC<TeamCallsPanelProps> = ({
   const [activeTab, setActiveTab] = useState<'directory' | 'history'>('directory');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const {
-    activeCall,
-    incomingCall,
-    remoteStream,
-    effectiveOnlinePresences,
-    effectiveCallHistory,
-    colleagues,
-    presenceMap,
-    handleStartCall,
-    handleAcceptIncomingCall,
-    handleRejectIncomingCall,
-    handleEndActiveCall,
-  } = useTeamCallsLogic({
-    currentUser,
-    employees,
-    users,
-    propOnlinePresences,
-    propCallHistory,
-    propOnStartCall,
-    showToast,
-  });
+  // États pour la gestion active des appels WebRTC & VoIP
+  const [activeCall, setActiveCall] = useState<VoIPCall | null>(null);
+  const [incomingCall, setIncomingCall] = useState<VoIPCall | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+
+  // Synchronisation en temps réel des présences en ligne si non fournies par le parent
+  const [livePresences, setLivePresences] = useState<UserOnlinePresence[]>([]);
+  useEffect(() => {
+    if (propOnlinePresences && propOnlinePresences.length > 0) return;
+    const unsub = subscribeToCollection<UserOnlinePresence>(
+      COLLECTIONS.USER_PRESENCES,
+      (data) => setLivePresences(data || [])
+    );
+    return () => unsub();
+  }, [propOnlinePresences]);
+
+  // Synchronisation en temps réel de l'historique d'appels depuis Firestore
+  const [liveCalls, setLiveCalls] = useState<VoIPCall[]>([]);
+  useEffect(() => {
+    if (propCallHistory && propCallHistory.length > 0) return;
+    const unsub = subscribeToCollection<VoIPCall>(
+      COLLECTIONS.CALLS,
+      (data) => setLiveCalls(data || [])
+    );
+    return () => unsub();
+  }, [propCallHistory]);
+
+  const effectiveOnlinePresences = propOnlinePresences || livePresences;
+  const effectiveCallHistory = (propCallHistory || liveCalls).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  // Écoute continue des appels entrants pour l'utilisateur actuel
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const unsubscribe = callSignalingService.listenForIncomingCalls(
+      currentUser.id,
+      (call) => {
+        setIncomingCall(call);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser?.id]);
+
+  // Construction de l'annuaire de collègues combinant employés et comptes utilisateurs
+  const colleagues = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; email: string; avatarUrl?: string; role: string; department?: string }>();
+    
+    (employees || []).forEach((emp) => {
+      if (emp.id && emp.name) {
+        map.set(emp.id, {
+          id: emp.id,
+          name: emp.name,
+          email: emp.email || '',
+          avatarUrl: emp.avatarUrl,
+          role: emp.roleType || 'Employé',
+          department: emp.department || 'Opérations',
+        });
+      }
+    });
+
+    (users || []).forEach((u) => {
+      if (u.id && !map.has(u.id)) {
+        map.set(u.id, {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          avatarUrl: u.avatarUrl,
+          role: u.role,
+          department: u.department || 'Administration',
+        });
+      }
+    });
+
+    if (currentUser?.id) {
+      map.delete(currentUser.id);
+    }
+    return Array.from(map.values());
+  }, [employees, users, currentUser]);
+
+  const presenceMap = useMemo(() => {
+    const pMap = new Map<string, UserOnlinePresence>();
+    effectiveOnlinePresences.forEach((p) => {
+      if (p.userId) pMap.set(p.userId, p);
+      if (p.userEmail) pMap.set(p.userEmail.toLowerCase(), p);
+    });
+    return pMap;
+  }, [effectiveOnlinePresences]);
+
+  // Lancement direct d'un appel audio ou vidéo
+  const handleStartCall = async (
+    target: { id: string; name: string; email?: string; avatarUrl?: string; role?: string },
+    type: CallType
+  ) => {
+    if (propOnStartCall) {
+      propOnStartCall(target, type);
+    }
+
+    if (!currentUser) {
+      if (showToast) showToast("Veuillez vous connecter pour lancer un appel d'équipe.", "error");
+      return;
+    }
+
+    try {
+      const callData = await callSignalingService.initiateCall({
+        caller: currentUser,
+        callee: target,
+        type,
+        callbacks: {
+          onConnected: () => {
+            setActiveCall((prev) => prev ? { ...prev, status: 'connected' } : null);
+            if (showToast) showToast(`Connecté avec ${target.name}`, "success");
+          },
+          onRemoteStream: (stream) => {
+            setRemoteStream(stream);
+          },
+          onEnded: (reason) => {
+            setActiveCall(null);
+            setRemoteStream(null);
+            if (showToast) showToast(reason || "Appel terminé.", "info");
+          },
+        },
+      });
+
+      setActiveCall(callData);
+    } catch (err: any) {
+      const msg = err?.message || "Impossible d'accéder au micro ou à la caméra.";
+      if (showToast) showToast(msg, "error");
+    }
+  };
+
+  // Répondre à un appel entrant
+  const handleAcceptIncomingCall = async (call: VoIPCall) => {
+    setIncomingCall(null);
+    setActiveCall(call);
+
+    try {
+      await callSignalingService.answerCall(call, {
+        onConnected: () => {
+          setActiveCall((prev) => prev ? { ...prev, status: 'connected' } : null);
+        },
+        onRemoteStream: (stream) => {
+          setRemoteStream(stream);
+        },
+        onEnded: (reason) => {
+          setActiveCall(null);
+          setRemoteStream(null);
+          if (showToast) showToast(reason || "Appel terminé.", "info");
+        },
+      });
+    } catch (err: any) {
+      if (showToast) showToast(err?.message || "Erreur lors de la prise d'appel.", "error");
+    }
+  };
+
+  // Décliner un appel entrant
+  const handleRejectIncomingCall = async (call: VoIPCall) => {
+    setIncomingCall(null);
+    await callSignalingService.rejectCall(call.id);
+    if (showToast) showToast("Appel refusé.", "info");
+  };
+
+  // Raccrocher l'appel en cours
+  const handleEndActiveCall = async (durationSeconds: number) => {
+    if (activeCall) {
+      await callSignalingService.endCall(activeCall.id, `Terminé (${durationSeconds}s)`);
+    }
+    setActiveCall(null);
+    setRemoteStream(null);
+  };
 
   return (
     <div className="space-y-6">
+      {/* Header Banner */}
       <div className="bg-gradient-to-r from-[#2A7B76] to-emerald-800 rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -67,6 +217,7 @@ export const TeamCallsPanel: React.FC<TeamCallsPanelProps> = ({
           </p>
         </div>
 
+        {/* Tab Switcher */}
         <div className="flex bg-white/10 backdrop-blur-md p-1 rounded-2xl border border-white/20 shrink-0">
           <button
             type="button"
@@ -91,6 +242,7 @@ export const TeamCallsPanel: React.FC<TeamCallsPanelProps> = ({
         </div>
       </div>
 
+      {/* Barre d'état & Recherche */}
       {activeTab === 'directory' && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
           <div className="relative w-full sm:max-w-md">
@@ -117,6 +269,7 @@ export const TeamCallsPanel: React.FC<TeamCallsPanelProps> = ({
         </div>
       )}
 
+      {/* Content */}
       {activeTab === 'directory' ? (
         colleagues.length === 0 ? (
           <div className="bg-white rounded-3xl p-10 border border-stone-200 text-center text-stone-500 text-xs space-y-2">
@@ -135,12 +288,13 @@ export const TeamCallsPanel: React.FC<TeamCallsPanelProps> = ({
           />
         )
       ) : (
-        <CallHistoryList
-          callHistory={effectiveCallHistory}
-          currentUserId={currentUser?.id}
+        <CallHistoryList 
+          callHistory={effectiveCallHistory} 
+          currentUserId={currentUser?.id} 
         />
       )}
 
+      {/* Modal d'Appel Actif (En cours ou en sonnerie sortante) */}
       {activeCall && (
         <ActiveCallModal
           call={activeCall}
@@ -154,6 +308,7 @@ export const TeamCallsPanel: React.FC<TeamCallsPanelProps> = ({
         />
       )}
 
+      {/* Modal d'Appel Entrant (Sonnerie & Réponse) */}
       {incomingCall && (
         <IncomingCallModal
           call={incomingCall}
@@ -164,5 +319,3 @@ export const TeamCallsPanel: React.FC<TeamCallsPanelProps> = ({
     </div>
   );
 };
-
-export default TeamCallsPanel;
