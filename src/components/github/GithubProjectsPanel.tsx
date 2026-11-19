@@ -30,6 +30,7 @@ import {
   SavedGithubProjectLink,
 } from '../../types';
 import { COLLECTIONS, getCollection, saveDocument, deleteDocument } from '../../services/dataService';
+import { getDefaultGithubCallbackUrl, parseApiJsonResponse } from '../../utils/safeJsonResponse';
 
 interface GithubProjectsPanelProps {
   currentUser: AppUser | null;
@@ -82,7 +83,9 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
   const [statusLoading, setStatusLoading] = useState(true);
   const [oauthConfigured, setOauthConfigured] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [redirectUri, setRedirectUri] = useState('');
+  const [redirectUri, setRedirectUri] = useState(() =>
+    typeof window !== 'undefined' ? getDefaultGithubCallbackUrl(window.location.origin) : ''
+  );
   const [githubUser, setGithubUser] = useState<GithubUserSummary | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [copiedCallback, setCopiedCallback] = useState(false);
@@ -142,7 +145,8 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
         credentials: 'include',
         headers: { ...getStoredSessionHeader() },
       });
-      const json = await res.json();
+      const parsed = await parseApiJsonResponse<any>(res);
+      const json = parsed.data;
       if (res.status === 401) {
         saveSessionId(null);
         setConnected(false);
@@ -150,8 +154,8 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
         setRepos([]);
         return;
       }
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Impossible de récupérer vos dépôts GitHub.');
+      if (!parsed.ok || !json?.success) {
+        throw new Error(parsed.errorMessage || json?.error || 'Impossible de récupérer vos dépôts GitHub.');
       }
       const list: GithubRepoItem[] = json.data || [];
       setRepos(list);
@@ -170,14 +174,29 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
 
   const checkGithubStatus = useCallback(async () => {
     setStatusLoading(true);
+    const fallbackCallback = getDefaultGithubCallbackUrl(
+      typeof window !== 'undefined' ? window.location.origin : ''
+    );
     try {
       const res = await fetch('/api/github/status', {
         credentials: 'include',
         headers: { ...getStoredSessionHeader() },
       });
-      const json = await res.json();
+      const parsed = await parseApiJsonResponse<any>(res);
+      const json = parsed.data;
+      if (!parsed.ok || !json) {
+        setOauthConfigured(false);
+        setConnected(false);
+        setGithubUser(null);
+        setRedirectUri(fallbackCallback);
+        if (parsed.errorMessage) {
+          setAuthError(parsed.errorMessage);
+        }
+        return;
+      }
+      setAuthError(null);
       setOauthConfigured(Boolean(json.configured));
-      setRedirectUri(json.redirectUri || `${window.location.origin}/api/github/callback`);
+      setRedirectUri(json.redirectUri || fallbackCallback);
       if (json.connected && json.user) {
         setConnected(true);
         setGithubUser(json.user);
@@ -187,7 +206,9 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
         setGithubUser(null);
       }
     } catch {
+      setOauthConfigured(false);
       setConnected(false);
+      setRedirectUri(fallbackCallback);
     } finally {
       setStatusLoading(false);
     }
@@ -230,15 +251,19 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
 
   const handleConnectGithub = async () => {
     setAuthError(null);
+    const fallbackCallback = getDefaultGithubCallbackUrl(
+      typeof window !== 'undefined' ? window.location.origin : ''
+    );
     try {
       const res = await fetch('/api/github/auth-url', {
         credentials: 'include',
       });
-      const json = await res.json();
-      if (!res.ok || !json.success || !json.url) {
-        setOauthConfigured(Boolean(json.configured));
-        if (json.redirectUri) setRedirectUri(json.redirectUri);
-        setAuthError(json.error || 'Configuration OAuth GitHub requise.');
+      const parsed = await parseApiJsonResponse<any>(res);
+      const json = parsed.data;
+      if (!parsed.ok || !json?.success || !json?.url) {
+        setOauthConfigured(Boolean(json?.configured));
+        setRedirectUri(json?.redirectUri || fallbackCallback);
+        setAuthError(parsed.errorMessage || json?.error || 'Configuration OAuth GitHub requise.');
         return;
       }
       const popup = window.open(json.url, 'github_oauth_popup', 'width=640,height=740');
@@ -246,6 +271,7 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
         setAuthError('Fenêtre bloquée par le navigateur. Autorisez les popups pour connecter GitHub.');
       }
     } catch (err: any) {
+      setRedirectUri((prev) => prev || fallbackCallback);
       setAuthError(err?.message || 'Impossible de lancer la connexion GitHub.');
     }
   };
@@ -286,9 +312,10 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
       credentials: 'include',
       headers,
     })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.success && Array.isArray(j.data)) setBranches(j.data);
+      .then((r) => parseApiJsonResponse<any>(r))
+      .then((parsed) => {
+        const j = parsed.data;
+        if (parsed.ok && j?.success && Array.isArray(j.data)) setBranches(j.data);
         else setBranches([{ name: defaultBr, protected: false }]);
       })
       .catch(() => setBranches([{ name: defaultBr, protected: false }]));
@@ -307,9 +334,10 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
       `/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents?path=${encodeURIComponent(currentPath)}&ref=${encodeURIComponent(activeBranch)}`,
       { credentials: 'include', headers }
     )
-      .then((r) => r.json())
-      .then((j) => {
-        setContents(j.success && Array.isArray(j.data) ? j.data : []);
+      .then((r) => parseApiJsonResponse<any>(r))
+      .then((parsed) => {
+        const j = parsed.data;
+        setContents(parsed.ok && j?.success && Array.isArray(j.data) ? j.data : []);
       })
       .catch(() => setContents([]))
       .finally(() => setContentsLoading(false));
@@ -319,8 +347,8 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
         `/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme?ref=${encodeURIComponent(activeBranch)}`,
         { credentials: 'include', headers }
       )
-        .then((r) => r.json())
-        .then((j) => setReadme(j.success ? j.data : null))
+        .then((r) => parseApiJsonResponse<any>(r))
+        .then((parsed) => setReadme(parsed.ok && parsed.data?.success ? parsed.data.data : null))
         .catch(() => setReadme(null));
     }
   }, [connected, selectedRepo?.fullName, activeBranch, currentPath]);
@@ -335,8 +363,11 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
       `/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(activeBranch)}`,
       { credentials: 'include', headers: { ...getStoredSessionHeader() } }
     )
-      .then((r) => r.json())
-      .then((j) => setCommits(j.success && Array.isArray(j.data) ? j.data : []))
+      .then((r) => parseApiJsonResponse<any>(r))
+      .then((parsed) => {
+        const j = parsed.data;
+        setCommits(parsed.ok && j?.success && Array.isArray(j.data) ? j.data : []);
+      })
       .catch(() => setCommits([]))
       .finally(() => setCommitsLoading(false));
   }, [connected, selectedRepo?.fullName, activeBranch, repoView]);
@@ -353,9 +384,11 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
         `/api/github/repos/${encodeURIComponent(selectedRepo.owner)}/${encodeURIComponent(selectedRepo.name)}/blob?path=${encodeURIComponent(entry.path)}&ref=${encodeURIComponent(activeBranch)}`,
         { credentials: 'include', headers: { ...getStoredSessionHeader() } }
       );
-      const json = await res.json();
-      if (json.success && json.data) {
-        setOpenedFile(json.data);
+      const parsed = await parseApiJsonResponse<any>(res);
+      if (parsed.ok && parsed.data?.success && parsed.data?.data) {
+        setOpenedFile(parsed.data.data);
+      } else if (parsed.errorMessage) {
+        showToast?.(parsed.errorMessage, 'error');
       }
     } catch {
       showToast?.('Impossible de lire ce fichier.', 'error');
