@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import express from 'express';
 import { supabaseAdmin } from '../lib/supabase';
+import { buildGithubAuthorizeUrl, getGithubCookieOptions } from '../utils/githubOAuthHelpers';
 
 interface GithubSessionRecord {
   sessionId: string;
@@ -162,6 +163,50 @@ function isValidRepoSegment(seg: string): boolean {
   return /^[a-zA-Z0-9._-]+$/.test(seg) && seg !== '.' && seg !== '..';
 }
 
+function isSecureRequest(req: express.Request): boolean {
+  const protoHeader = req.headers['x-forwarded-proto'];
+  const proto = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader;
+  return Boolean(req.secure || proto === 'https' || process.env.VERCEL);
+}
+
+/**
+ * Revokes the GitHub OAuth App grant for the disconnected token so GitHub
+ * genuinely disconnects this application without affecting any other app session.
+ */
+async function revokeGithubOAuthGrant(
+  clientId: string,
+  clientSecret: string,
+  accessToken: string
+): Promise<boolean> {
+  if (!clientId || !clientSecret || !accessToken) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const res = await fetch(
+      `https://api.github.com/applications/${encodeURIComponent(clientId)}/grant`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'Citrine-Management-ReadOnly',
+        },
+        body: JSON.stringify({ access_token: accessToken }),
+        signal: controller.signal,
+      }
+    );
+    return res.status === 204 || (res.status >= 200 && res.status < 300);
+  } catch (err) {
+    console.warn('[GitHub OAuth] Failed to revoke grant on GitHub:', err);
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Strict Read-Only GitHub API GET caller.
  * No write HTTP methods (POST/PUT/PATCH/DELETE) exist anywhere in this module.
@@ -197,6 +242,7 @@ async function githubApiGet(path: string, accessToken: string): Promise<{ status
 export function registerGithubRoutes(app: express.Express) {
   // 1. Connection status & configuration readiness
   app.get('/api/github/status', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     const { configured } = getGithubCredentials();
     const redirectUri = getGithubRedirectUri(req);
     const sessionId = resolveSessionId(req);
@@ -224,6 +270,7 @@ export function registerGithubRoutes(app: express.Express) {
 
   // 2. Construct GitHub OAuth authorization URL
   app.get('/api/github/auth-url', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     const { clientId, clientSecret, configured } = getGithubCredentials();
     const redirectUri = getGithubRedirectUri(req);
 
@@ -238,44 +285,73 @@ export function registerGithubRoutes(app: express.Express) {
 
     const state = createSignedOAuthState(clientSecret);
 
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      scope: 'repo read:user',
-      state,
-    });
-
     res.json({
       success: true,
       configured: true,
       redirectUri,
-      url: `https://github.com/login/oauth/authorize?${params.toString()}`,
+      url: buildGithubAuthorizeUrl({
+        clientId,
+        redirectUri,
+        state,
+      }),
     });
   });
 
   // 3. OAuth Callback (handles both /api/github/callback and /api/github/callback/)
   const callbackHandler = async (req: express.Request, res: express.Response) => {
+    res.setHeader('Cache-Control', 'no-store');
     const code = typeof req.query.code === 'string' ? req.query.code : '';
     const state = typeof req.query.state === 'string' ? req.query.state : '';
     const oauthError = typeof req.query.error === 'string' ? req.query.error : '';
 
     const renderPopupClose = (payload: Record<string, any>, message: string) => {
-      const safeJson = JSON.stringify(payload).replace(/</g, '\\u003c');
+      const enrichedPayload = { ...payload, ts: Date.now() };
+      const safeJson = JSON.stringify(enrichedPayload).replace(/</g, '\\u003c');
+      const isSuccess = payload.type === 'GITHUB_OAUTH_SUCCESS';
+      const safeMsg = String(message).replace(/</g, '&lt;').replace(/>/g, '&gt;');
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.send(`<!DOCTYPE html>
 <html lang="fr">
-  <head><meta charset="utf-8" /><title>Connexion GitHub</title></head>
-  <body style="font-family: system-ui, sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; color:#1c1917; background:#fafaf9;">
-    <div style="text-align:center; padding:24px;">
-      <p style="font-size:14px; font-weight:600;">${message}</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connexion GitHub — Citrine Management</title>
+  </head>
+  <body style="font-family: system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; color:#1c1917; background:#fafaf9; padding:24px; box-sizing:border-box;">
+    <div style="max-width:420px; width:100%; background:#ffffff; border:1px solid #e7e5e4; border-radius:16px; padding:24px; text-align:center; box-shadow:0 4px 20px rgba(0,0,0,0.05);">
+      <div style="width:44px; height:44px; border-radius:999px; margin:0 auto 12px; display:flex; align-items:center; justify-content:center; font-size:20px; background:${isSuccess ? '#ecfdf5' : '#fef2f2'}; color:${isSuccess ? '#047857' : '#b91c1c'};">
+        ${isSuccess ? '✓' : '!'}
+      </div>
+      <p style="font-size:15px; font-weight:700; margin:0 0 8px;">${safeMsg}</p>
+      <p style="font-size:12px; color:#78716c; margin:0 0 18px; line-height:1.5;">
+        ${isSuccess ? 'Vous pouvez revenir sur Citrine Management. Cette fenêtre va se fermer automatiquement.' : 'Vous pouvez fermer cette fenêtre et réessayer depuis Citrine Management.'}
+      </p>
+      <button type="button" onclick="window.close()" style="cursor:pointer; border:none; border-radius:10px; padding:10px 18px; font-size:13px; font-weight:600; background:#1c1917; color:#ffffff;">
+        Fermer cette fenêtre
+      </button>
     </div>
     <script>
-      if (window.opener) {
-        window.opener.postMessage(${safeJson}, '*');
-        window.close();
-      } else {
-        window.location.href = '/';
-      }
+      (function () {
+        var payload = ${safeJson};
+        try {
+          if (typeof BroadcastChannel !== 'undefined') {
+            var ch = new BroadcastChannel('citrine_github_oauth_channel');
+            ch.postMessage(payload);
+            ch.close();
+          }
+        } catch (e) {}
+        try {
+          localStorage.setItem('citrine_github_oauth_event', JSON.stringify(payload));
+        } catch (e) {}
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(payload, '*');
+          }
+        } catch (e) {}
+        setTimeout(function () {
+          try { window.close(); } catch (e) {}
+        }, 350);
+      })();
     </script>
   </body>
 </html>`);
@@ -352,10 +428,7 @@ export function registerGithubRoutes(app: express.Express) {
       });
 
       res.cookie(SESSION_COOKIE_NAME, sessionId, {
-        secure: true,
-        sameSite: 'none',
-        httpOnly: true,
-        path: '/',
+        ...getGithubCookieOptions(isSecureRequest(req)),
         maxAge: 30 * 24 * 60 * 60 * 1000,
       });
 
@@ -373,17 +446,32 @@ export function registerGithubRoutes(app: express.Express) {
 
   app.get(['/api/github/callback', '/api/github/callback/'], callbackHandler);
 
-  // 4. Disconnect session
+  // 4. Disconnect GitHub session only (also revokes OAuth grant on GitHub)
   app.post('/api/github/disconnect', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     const sessionId = resolveSessionId(req);
+    const existingSession = await loadGithubSession(sessionId);
+    let revokedOnGithub = false;
+
+    if (existingSession?.accessToken) {
+      const { clientId, clientSecret, configured } = getGithubCredentials();
+      if (configured) {
+        revokedOnGithub = await revokeGithubOAuthGrant(
+          clientId,
+          clientSecret,
+          existingSession.accessToken
+        );
+      }
+    }
+
     await deleteGithubSession(sessionId);
-    res.clearCookie(SESSION_COOKIE_NAME, {
-      secure: true,
-      sameSite: 'none',
-      httpOnly: true,
-      path: '/',
+    res.clearCookie(SESSION_COOKIE_NAME, getGithubCookieOptions(isSecureRequest(req)));
+    res.json({
+      success: true,
+      disconnected: true,
+      hadSession: Boolean(existingSession),
+      revokedOnGithub,
     });
-    res.json({ success: true });
   });
 
   // 5. List repositories (public & private, strict read-only)

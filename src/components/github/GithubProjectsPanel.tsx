@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   FolderGit2,
   Lock,
@@ -31,6 +31,11 @@ import {
 } from '../../types';
 import { COLLECTIONS, getCollection, saveDocument, deleteDocument } from '../../services/dataService';
 import { getDefaultGithubCallbackUrl, parseApiJsonResponse } from '../../utils/safeJsonResponse';
+import {
+  GITHUB_OAUTH_BROADCAST_CHANNEL,
+  GITHUB_OAUTH_STORAGE_KEY,
+  isAllowedGithubOAuthOrigin,
+} from '../../utils/githubOAuthHelpers';
 
 interface GithubProjectsPanelProps {
   currentUser: AppUser | null;
@@ -89,6 +94,7 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
   const [githubUser, setGithubUser] = useState<GithubUserSummary | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [copiedCallback, setCopiedCallback] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   // Repositories list
   const [repos, setRepos] = useState<GithubRepoItem[]>([]);
@@ -219,35 +225,71 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
     checkGithubStatus();
   }, [loadSavedLinks, checkGithubStatus]);
 
-  // Listen for OAuth popup completion
+  const lastOAuthEventKeyRef = useRef<string | null>(null);
+
+  // Listen for OAuth popup completion via postMessage, BroadcastChannel, and localStorage relay
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      const origin = event.origin || '';
-      if (
-        origin &&
-        !origin.endsWith('.run.app') &&
-        !origin.includes('localhost') &&
-        origin !== window.location.origin
-      ) {
-        return;
-      }
-      if (event.data?.type === 'GITHUB_OAUTH_SUCCESS') {
-        if (event.data.sessionId) {
-          saveSessionId(event.data.sessionId);
+    const processOAuthPayload = (data: any) => {
+      if (!data || typeof data !== 'object') return;
+      if (data.type !== 'GITHUB_OAUTH_SUCCESS' && data.type !== 'GITHUB_OAUTH_ERROR') return;
+
+      const dedupKey = `${data.type}:${data.sessionId || ''}:${data.error || ''}:${data.ts || ''}`;
+      if (lastOAuthEventKeyRef.current === dedupKey) return;
+      lastOAuthEventKeyRef.current = dedupKey;
+
+      if (data.type === 'GITHUB_OAUTH_SUCCESS') {
+        if (data.sessionId) {
+          saveSessionId(data.sessionId);
         }
         setAuthError(null);
         showToast?.(
-          `Compte GitHub @${event.data.user?.login || ''} connecté en lecture seule.`,
+          `Compte GitHub @${data.user?.login || ''} connecté en lecture seule.`,
           'success'
         );
         checkGithubStatus();
-      } else if (event.data?.type === 'GITHUB_OAUTH_ERROR') {
-        setAuthError(event.data.error || 'Connexion GitHub interrompue.');
+      } else if (data.type === 'GITHUB_OAUTH_ERROR') {
+        setAuthError(data.error || 'Connexion GitHub interrompue.');
       }
     };
+
+    const handleMessage = (event: MessageEvent) => {
+      if (!isAllowedGithubOAuthOrigin(event.origin || '', window.location.origin, redirectUri)) {
+        return;
+      }
+      processOAuthPayload(event.data);
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== GITHUB_OAUTH_STORAGE_KEY || !event.newValue) return;
+      try {
+        processOAuthPayload(JSON.parse(event.newValue));
+      } catch {
+        // Ignore malformed storage payload
+      }
+    };
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        channel = new BroadcastChannel(GITHUB_OAUTH_BROADCAST_CHANNEL);
+        channel.onmessage = (event: MessageEvent) => {
+          processOAuthPayload(event.data);
+        };
+      }
+    } catch {
+      channel = null;
+    }
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [checkGithubStatus, showToast]);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+      try {
+        channel?.close();
+      } catch {}
+    };
+  }, [checkGithubStatus, showToast, redirectUri]);
 
   const handleConnectGithub = async () => {
     setAuthError(null);
@@ -277,19 +319,42 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
   };
 
   const handleDisconnectGithub = async () => {
+    if (disconnecting) return;
+    setDisconnecting(true);
+    let revokedOnGithub = false;
     try {
-      await fetch('/api/github/disconnect', {
+      const res = await fetch('/api/github/disconnect', {
         method: 'POST',
         credentials: 'include',
         headers: { ...getStoredSessionHeader() },
       });
+      const parsed = await parseApiJsonResponse<any>(res);
+      revokedOnGithub = Boolean(parsed.ok && parsed.data?.revokedOnGithub);
+    } catch {
+      // Always clear local GitHub session state even if network call fails
     } finally {
       saveSessionId(null);
+      try {
+        localStorage.removeItem(GITHUB_OAUTH_STORAGE_KEY);
+      } catch {}
+      lastOAuthEventKeyRef.current = null;
       setConnected(false);
       setGithubUser(null);
       setRepos([]);
       setSelectedRepo(null);
-      showToast?.('Compte GitHub déconnecté.', 'success');
+      setBranches([]);
+      setContents([]);
+      setOpenedFile(null);
+      setReadme(null);
+      setCommits([]);
+      setAuthError(null);
+      setDisconnecting(false);
+      showToast?.(
+        revokedOnGithub
+          ? 'Compte GitHub déconnecté et accès révoqué (votre session Citrine reste active).'
+          : 'Session GitHub déconnectée (votre session Citrine reste active).',
+        'success'
+      );
     }
   };
 
@@ -543,21 +608,37 @@ export const GithubProjectsPanel: React.FC<GithubProjectsPanelProps> = ({
               <button
                 type="button"
                 onClick={handleDisconnectGithub}
-                className="px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-medium text-red-600 hover:bg-red-50 transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5"
+                disabled={disconnecting}
+                aria-label="Déconnecter uniquement le compte GitHub"
+                title="Déconnecter uniquement GitHub sans vous déconnecter de Citrine Management"
+                className="px-3 py-2 rounded-xl border border-red-200 bg-white text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60 transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5"
               >
                 <LogOut className="h-3.5 w-3.5" />
-                <span>Déconnecter</span>
+                <span>{disconnecting ? 'Déconnexion...' : 'Déconnecter GitHub'}</span>
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              onClick={handleConnectGithub}
-              className="px-4 py-2 rounded-xl bg-stone-900 text-white text-xs font-semibold hover:bg-stone-800 transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2"
-            >
-              <FolderGit2 className="h-4 w-4" />
-              <span>Connecter GitHub</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handleDisconnectGithub}
+                disabled={disconnecting}
+                aria-label="Déconnecter uniquement le compte GitHub"
+                title="Déconnecter uniquement la session GitHub sans vous déconnecter de Citrine Management"
+                className="px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-medium text-stone-600 hover:border-red-200 hover:text-red-600 hover:bg-red-50 disabled:opacity-60 transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>{disconnecting ? 'Déconnexion...' : 'Déconnecter GitHub'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleConnectGithub}
+                className="px-4 py-2 rounded-xl bg-stone-900 text-white text-xs font-semibold hover:bg-stone-800 transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2"
+              >
+                <FolderGit2 className="h-4 w-4" />
+                <span>Connecter GitHub</span>
+              </button>
+            </>
           )}
         </div>
       </div>
