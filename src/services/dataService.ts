@@ -3,6 +3,7 @@ import { supabaseService, mapCollectionToTable } from './supabaseService';
 import { cloudSqlService } from './cloudSqlService';
 import { supabase } from '../lib/supabase';
 import { pushNotificationBridgeService } from './pushNotificationBridgeService';
+import { resolveDualSaveOutcome } from '../utils/taskPersistenceHelpers';
 
 export const COLLECTIONS = {
   EMPLOYEES: 'employees',
@@ -256,13 +257,21 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
   // 1. Toujours mettre à jour le cache local IndexedDB immédiatement
   await offlineService.cacheLocally(collectionName, cleanedItem);
 
-  // 2. Persister sur le serveur d'application et Supabase de manière atomique
-  await Promise.all([
+  // 2. Persister sur le serveur d'application et Supabase avec tolérance de relais
+  const [serverResult, supabaseResult] = await Promise.allSettled([
     cloudSqlService.saveDocument(collectionName, cleanedItem),
     supabaseService.saveDocument(collectionName, cleanedItem)
   ]);
 
-  return cleanedItem;
+  const outcome = resolveDualSaveOutcome(serverResult, supabaseResult, collectionName);
+  if (outcome.warningMessage) {
+    console.warn(outcome.warningMessage);
+  }
+  if (!outcome.succeeded) {
+    throw new Error(outcome.errorMessage || `Échec de l'enregistrement dans ${collectionName}`);
+  }
+
+  return (outcome.data as T) || cleanedItem;
 }
 
 // Delete document with instant local deletion, server deletion, and Supabase backend

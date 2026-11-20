@@ -397,12 +397,20 @@ export function useAppInitialData() {
     for (const t of updated) {
       const existing = tasks.find((x) => x.id === t.id);
       if (!existing || JSON.stringify(existing) !== JSON.stringify(t)) {
-        await saveDocument(COLLECTIONS.TASKS, t);
+        try {
+          await saveDocument(COLLECTIONS.TASKS, t);
+        } catch (err) {
+          console.warn('[useAppInitialData.handleUpdateTasks] Sync task notice:', err);
+        }
       }
     }
     for (const t of tasks) {
       if (!updated.some((x) => x.id === t.id)) {
-        await deleteDocument(COLLECTIONS.TASKS, t.id);
+        try {
+          await deleteDocument(COLLECTIONS.TASKS, t.id);
+        } catch (err) {
+          console.warn('[useAppInitialData.handleUpdateTasks] Delete task notice:', err);
+        }
       }
     }
   };

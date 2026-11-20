@@ -20,7 +20,7 @@ interface TaskDetailDrawerProps {
   employees: Employee[];
   projects: TaskProject[];
   onClose: () => void;
-  onSaveTask: (updatedTask: Task) => void;
+  onSaveTask: (updatedTask: Task) => Promise<void> | void;
   onDeleteTask: (taskId: string) => void;
   showToast?: (message: string, type?: 'success' | 'error') => void;
   currentRole?: string;
@@ -72,10 +72,10 @@ const TaskDetailDrawerContent: React.FC<TaskDetailDrawerContentProps> = ({
   const [isSavedRecently, setIsSavedRecently] = useState(false);
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
 
-  const handleCreateSubtask = (newSub: Subtask) => {
+  const handleCreateSubtask = async (newSub: Subtask) => {
     const updated = [...subtasks, newSub];
+    await onSaveTask({ ...task, subtasks: updated });
     setSubtasks(updated);
-    onSaveTask({ ...task, subtasks: updated });
     if (showToast) showToast('Sous-tâche détaillée créée avec succès !', 'success');
   };
 

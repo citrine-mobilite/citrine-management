@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../lib/supabase';
+import { parseNumericDbId, sanitizeDateColumn } from '../utils/taskPersistenceHelpers';
 
 // Map collection name to Supabase table name
 function mapCollectionToTable(collectionName: string): string {
@@ -251,21 +252,22 @@ export async function saveDocumentData(collectionName: string, item: any): Promi
     } else if (table === 'tasks') {
       rowData.title = item.title || 'Tâche';
       rowData.description = item.description || null;
-      rowData.date = item.date || null;
-      rowData.time = item.time || null;
+      rowData.date = sanitizeDateColumn(item.date);
+      rowData.time = typeof item.time === 'string' && item.time.trim() ? item.time.trim() : null;
       rowData.status = item.status || 'todo';
       rowData.priority = item.priority || 'medium';
       rowData.assigned_to = item.assignedTo || null;
       rowData.department = item.department || null;
-      rowData.due_date = item.dueDate || null;
+      rowData.due_date = sanitizeDateColumn(item.dueDate ?? item.due_date);
       rowData.is_milestone = Boolean(item.isMilestone);
       rowData.milestone_progress = Number(item.milestoneProgress || 0);
       if (item.employeeId) {
         const resolvedId = await resolveEmployeeDbId(supabaseAdmin, item.employeeId);
         if (resolvedId) rowData.employee_id = resolvedId;
       }
-      if (item.projectId && /^\d+$/.test(String(item.projectId))) {
-        rowData.project_id = Number(item.projectId);
+      const numericProjectId = parseNumericDbId(item.projectId ?? item.project_id);
+      if (numericProjectId) {
+        rowData.project_id = numericProjectId;
       }
     } else if (table === 'reminders') {
       rowData.title = item.title || 'Rappel';

@@ -1,5 +1,6 @@
 import { supabase, supabaseAdmin } from '../lib/supabase';
 import { offlineService } from './offlineService';
+import { sanitizeTaskRowForDb } from '../utils/taskPersistenceHelpers';
 
 // Mapper to map collection name to Supabase table name
 export function mapCollectionToTable(collectionName: string): string {
@@ -214,24 +215,7 @@ function itemToSupabaseRow(collectionName: string, item: any): any {
       };
     }
     case 'tasks':
-      return {
-        ...base,
-        doc_id: docId,
-        title: item.title || 'Sans titre',
-        description: item.description || null,
-        date: item.date || null,
-        time: item.time || null,
-        status: item.status || 'todo',
-        priority: item.priority || 'medium',
-        assigned_to: item.assignedTo || null,
-        employee_id: item.employeeId || null,
-        department: item.department || null,
-        project_id: item.projectId || null,
-        due_date: item.dueDate || null,
-        is_milestone: Boolean(item.isMilestone),
-        milestone_progress: item.milestoneProgress || 0,
-        raw_data: item,
-      };
+      return sanitizeTaskRowForDb(item, base, docId);
     case 'task_projects':
       return {
         ...base,
@@ -941,23 +925,64 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
 
     if (table === 'tasks') {
       const taskDocId = String(item.id || row.doc_id);
-      const { data: upsertData, error: upsertErr } = await client
-        .from('tasks')
-        .upsert({ ...row, doc_id: taskDocId }, { onConflict: 'doc_id' })
-        .select()
-        .single();
-      if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
+      let taskRow: Record<string, any> = { ...row, doc_id: taskDocId };
+      let lastTaskErr: any = null;
+
+      const attemptUpsert = async (payload: Record<string, any>) => {
+        const { data, error } = await client
+          .from('tasks')
+          .upsert(payload, { onConflict: 'doc_id' })
+          .select()
+          .single();
+        return { data, error };
+      };
+
+      let upsertRes = await attemptUpsert(taskRow);
+      if (!upsertRes.error && upsertRes.data) {
+        return supabaseRowToItem(collectionName, upsertRes.data) as T;
+      }
+      lastTaskErr = upsertRes.error;
+
+      // If a foreign key constraint failed (e.g. non-existent project_id or employee_id),
+      // keep full metadata in raw_data and retry with nullable FK columns.
+      if (lastTaskErr?.code === '23503' && (taskRow.project_id !== null || taskRow.employee_id !== null)) {
+        taskRow = { ...taskRow, project_id: null, employee_id: null };
+        upsertRes = await attemptUpsert(taskRow);
+        if (!upsertRes.error && upsertRes.data) {
+          return supabaseRowToItem(collectionName, upsertRes.data) as T;
+        }
+        lastTaskErr = upsertRes.error;
+      }
 
       // Fallback: update if exists by doc_id, otherwise insert
-      const { data: existingRows } = await client.from('tasks').select('id').eq('doc_id', taskDocId).limit(1);
-      if (existingRows && existingRows.length > 0) {
-        const { data: updateData } = await client.from('tasks').update({ ...row, doc_id: taskDocId }).eq('doc_id', taskDocId).select().single();
-        if (updateData) return supabaseRowToItem(collectionName, updateData) as T;
+      const { data: existingRows, error: selectErr } = await client
+        .from('tasks')
+        .select('id')
+        .eq('doc_id', taskDocId)
+        .limit(1);
+
+      if (!selectErr && existingRows && existingRows.length > 0) {
+        const { data: updateData, error: updateErr } = await client
+          .from('tasks')
+          .update(taskRow)
+          .eq('doc_id', taskDocId)
+          .select()
+          .single();
+        if (!updateErr && updateData) return supabaseRowToItem(collectionName, updateData) as T;
+        if (updateErr) lastTaskErr = updateErr;
       } else {
-        const { data: insertData } = await client.from('tasks').insert({ ...row, doc_id: taskDocId }).select().single();
-        if (insertData) return supabaseRowToItem(collectionName, insertData) as T;
+        const { data: insertData, error: insertErr } = await client
+          .from('tasks')
+          .insert(taskRow)
+          .select()
+          .single();
+        if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
+        if (insertErr) lastTaskErr = insertErr;
       }
-      return item;
+
+      const errMsg = lastTaskErr?.message || "Échec de l'enregistrement de la tâche dans Supabase";
+      console.error('[supabaseService tasks save error]:', lastTaskErr);
+      throw new Error(errMsg);
     }
 
     if (table === 'rh_document_templates') {
@@ -1093,6 +1118,9 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
     return item;
   } catch (err) {
     console.warn(`[Supabase Save] Exception saving to ${collectionName}:`, err);
+    if (mapCollectionToTable(collectionName) === 'tasks') {
+      throw err;
+    }
     return item;
   }
 }

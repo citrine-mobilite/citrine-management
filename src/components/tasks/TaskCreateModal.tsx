@@ -13,14 +13,17 @@ import {
   Sparkles, 
   ListChecks, 
   FolderKanban, 
-  Layers
+  Layers,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { Task, Employee, TaskStatus, TaskPriority, TaskProject, AppUser, Subtask } from '../../types';
+import { extractFriendlyTaskErrorMessage } from '../../utils/taskPersistenceHelpers';
 
 interface TaskCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateTask: (taskData: Omit<Task, 'id' | 'comments' | 'incidents'> & { subtasks?: Subtask[] }) => void;
+  onCreateTask: (taskData: Omit<Task, 'id' | 'comments' | 'incidents'> & { subtasks?: Subtask[] }) => Promise<void> | void;
   employees: Employee[];
   projects: TaskProject[];
   defaultProjectId?: string;
@@ -66,10 +69,20 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
   const [newSubtaskHours, setNewSubtaskHours] = useState<number>(2);
   const [newSubtaskPriority, setNewSubtaskPriority] = useState<TaskPriority>('medium');
   const [showSubtaskForm, setShowSubtaskForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsMilestone(isMilestoneDefault);
   }, [isMilestoneDefault]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setProjectId(defaultProjectId && defaultProjectId !== 'all' ? defaultProjectId : 'general');
+      setStatus(defaultStatus || 'todo');
+      setSubmitError(null);
+    }
+  }, [isOpen, defaultProjectId, defaultStatus]);
 
   useEffect(() => {
     if (isEmployee && currentUser) {
@@ -108,36 +121,52 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
     setSubtasks(subtasks.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (isSubmitting) return;
+
+    if (!title.trim()) {
+      setSubmitError('Veuillez saisir un titre pour la tâche.');
+      return;
+    }
 
     const finalAssigned = isEmployee 
       ? (currentUser?.name || assignedList[0] || 'Moi') 
       : (assignedList.length > 0 ? assignedList.join(', ') : 'Équipe');
 
-    onCreateTask({
-      title: title.trim(),
-      description: description.trim(),
-      date,
-      time: isEmployee ? '' : time,
-      priority,
-      status,
-      assignedTo: finalAssigned,
-      projectId: projectId || 'general',
-      reminderPeriod: 'none',
-      isMilestone,
-      milestoneTarget: isMilestone ? milestoneTarget.trim() || undefined : undefined,
-      milestoneProgress: isMilestone ? milestoneProgress : 0,
-      subtasks,
-    });
+    setIsSubmitting(true);
+    setSubmitError(null);
 
-    // Reset
-    setTitle('');
-    setDescription('');
-    setSubtasks([]);
-    setIsMilestone(false);
-    onClose();
+    try {
+      await onCreateTask({
+        title: title.trim(),
+        description: description.trim(),
+        date,
+        time: isEmployee ? '' : time,
+        priority,
+        status,
+        assignedTo: finalAssigned,
+        projectId: projectId || 'general',
+        reminderPeriod: 'none',
+        isMilestone,
+        milestoneTarget: isMilestone ? milestoneTarget.trim() || undefined : undefined,
+        milestoneProgress: isMilestone ? milestoneProgress : 0,
+        subtasks,
+      });
+
+      // Reset uniquement après confirmation d'enregistrement
+      setTitle('');
+      setDescription('');
+      setMilestoneTarget('');
+      setMilestoneProgress(0);
+      setSubtasks([]);
+      setIsMilestone(false);
+      onClose();
+    } catch (err) {
+      setSubmitError(extractFriendlyTaskErrorMessage(err));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -166,9 +195,12 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
             </div>
 
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition cursor-pointer"
+              disabled={isSubmitting}
+              className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               title="Fermer"
+              aria-label="Fermer la fenêtre de création de tâche"
             >
               <X className="h-5 w-5" />
             </button>
@@ -176,7 +208,8 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 text-xs">
+          <div className="p-5 overflow-y-auto flex-1 space-y-4">
           
           {/* Milestone Toggle */}
           <div className="bg-amber-50/70 p-3 rounded-2xl border border-amber-200 flex items-center justify-between">
@@ -464,21 +497,47 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
             )}
           </div>
 
-          {/* Footer Buttons */}
-          <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-stone-600 hover:bg-stone-100 font-bold transition cursor-pointer"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              className="bg-[#2A7B76] hover:bg-[#23635f] text-white font-bold px-5 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2 active:scale-98"
-            >
-              {isMilestone ? 'Créer le Jalon Stratégique' : 'Créer la Tâche'}
-            </button>
+          </div>
+
+          {/* Pinned Footer & Error Banner */}
+          <div className="px-5 py-3.5 border-t border-stone-100 bg-white shrink-0 space-y-3">
+            {submitError && (
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium"
+              >
+                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="font-bold text-rose-900">Échec de la création de la tâche</p>
+                  <p className="mt-0.5 text-rose-700 break-words">{submitError}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSubmitting}
+                className="px-4 py-2.5 rounded-xl text-stone-600 hover:bg-stone-100 font-bold transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="bg-[#2A7B76] hover:bg-[#23635f] text-white font-bold px-5 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2 active:scale-98 disabled:opacity-60 disabled:cursor-wait"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Enregistrement...</span>
+                  </>
+                ) : (
+                  <span>{isMilestone ? 'Créer le Jalon Stratégique' : 'Créer la Tâche'}</span>
+                )}
+              </button>
+            </div>
           </div>
 
         </form>

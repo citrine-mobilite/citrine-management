@@ -127,22 +127,49 @@ export async function saveTaskItem<T extends { id: string }>(
   row: any
 ): Promise<T> {
   const taskDocId = String(item.id || row.doc_id);
+  let taskRow: Record<string, any> = { ...row, doc_id: taskDocId };
+  let lastTaskErr: any = null;
+
   const { data: upsertData, error: upsertErr } = await client
     .from('tasks')
-    .upsert({ ...row, doc_id: taskDocId }, { onConflict: 'doc_id' })
+    .upsert(taskRow, { onConflict: 'doc_id' })
     .select()
     .single();
   if (!upsertErr && upsertData) return supabaseRowToItem(collectionName, upsertData) as T;
+  lastTaskErr = upsertErr;
+
+  if (lastTaskErr?.code === '23503' && (taskRow.project_id !== null || taskRow.employee_id !== null)) {
+    taskRow = { ...taskRow, project_id: null, employee_id: null };
+    const { data: retryData, error: retryErr } = await client
+      .from('tasks')
+      .upsert(taskRow, { onConflict: 'doc_id' })
+      .select()
+      .single();
+    if (!retryErr && retryData) return supabaseRowToItem(collectionName, retryData) as T;
+    lastTaskErr = retryErr;
+  }
 
   const { data: existingRows } = await client.from('tasks').select('id').eq('doc_id', taskDocId).limit(1);
   if (existingRows && existingRows.length > 0) {
-    const { data: updateData } = await client.from('tasks').update({ ...row, doc_id: taskDocId }).eq('doc_id', taskDocId).select().single();
-    if (updateData) return supabaseRowToItem(collectionName, updateData) as T;
+    const { data: updateData, error: updateErr } = await client
+      .from('tasks')
+      .update(taskRow)
+      .eq('doc_id', taskDocId)
+      .select()
+      .single();
+    if (!updateErr && updateData) return supabaseRowToItem(collectionName, updateData) as T;
+    if (updateErr) lastTaskErr = updateErr;
   } else {
-    const { data: insertData } = await client.from('tasks').insert({ ...row, doc_id: taskDocId }).select().single();
-    if (insertData) return supabaseRowToItem(collectionName, insertData) as T;
+    const { data: insertData, error: insertErr } = await client
+      .from('tasks')
+      .insert(taskRow)
+      .select()
+      .single();
+    if (!insertErr && insertData) return supabaseRowToItem(collectionName, insertData) as T;
+    if (insertErr) lastTaskErr = insertErr;
   }
-  return item;
+
+  throw new Error(lastTaskErr?.message || "Échec de l'enregistrement de la tâche dans Supabase");
 }
 
 export async function savePresenceItem<T extends { id: string }>(

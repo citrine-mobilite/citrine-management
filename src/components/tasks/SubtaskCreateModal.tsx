@@ -14,14 +14,16 @@ import {
   Trash2, 
   AlertCircle,
   FolderKanban,
-  FileCheck
+  FileCheck,
+  Loader2
 } from 'lucide-react';
 import { Subtask, Employee, TaskPriority, TaskStatus, Task, TaskProject } from '../../types';
+import { extractFriendlyTaskErrorMessage } from '../../utils/taskPersistenceHelpers';
 
 interface SubtaskCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateSubtask: (subtaskData: Subtask, targetTaskId?: string) => void;
+  onCreateSubtask: (subtaskData: Subtask, targetTaskId?: string) => Promise<void> | void;
   employees: Employee[];
   parentTask?: Task | null;
   availableTasks?: Task[];
@@ -59,9 +61,14 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
   // Checklist / Acceptance criteria
   const [criteria, setCriteria] = useState<string[]>([]);
   const [newCriterion, setNewCriterion] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Sync selected task when modal opens or parentTask changes
   useEffect(() => {
+    if (isOpen) {
+      setSubmitError(null);
+    }
     if (parentTask) {
       setSelectedTaskId(parentTask.id);
       if (parentTask.date) setDueDate(parentTask.date);
@@ -70,7 +77,7 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
     } else if (availableTasks.length > 0 && !selectedTaskId) {
       setSelectedTaskId(availableTasks[0].id);
     }
-  }, [parentTask, defaultTaskId, availableTasks]);
+  }, [isOpen, parentTask, defaultTaskId, availableTasks]);
 
   if (!isOpen) return null;
 
@@ -87,9 +94,13 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
     setCriteria(criteria.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (isSubmitting) return;
+    if (!title.trim()) {
+      setSubmitError('Veuillez saisir un intitulé pour la sous-tâche.');
+      return;
+    }
 
     const assignedEmp = employees.find((e) => e.name === assignedTo);
 
@@ -112,16 +123,24 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
       createdAt: new Date().toISOString(),
     };
 
-    onCreateSubtask(newSubtask, selectedTaskId || currentParent?.id);
-    
-    // Reset form
-    setTitle('');
-    setDescription('');
-    setDeliverable('');
-    setCriteria([]);
-    setEstimatedHours(3);
-    setActualHours(0);
-    onClose();
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onCreateSubtask(newSubtask, selectedTaskId || currentParent?.id);
+
+      // Reset form uniquement après enregistrement confirmé
+      setTitle('');
+      setDescription('');
+      setDeliverable('');
+      setCriteria([]);
+      setEstimatedHours(3);
+      setActualHours(0);
+      onClose();
+    } catch (err) {
+      setSubmitError(extractFriendlyTaskErrorMessage(err));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -193,7 +212,8 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 text-xs">
+          <div className="p-5 overflow-y-auto flex-1 space-y-4">
           
           {/* Title */}
           <div>
@@ -474,26 +494,54 @@ export const SubtaskCreateModal: React.FC<SubtaskCreateModalProps> = ({
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="flex items-center justify-between pt-3 border-t border-stone-100">
-            <span className="text-[11px] text-stone-400 italic hidden sm:inline">
-              La sous-tâche sera synchronisée en temps réel et intégrée aux KPI Asana.
-            </span>
-            <div className="flex items-center gap-2 ml-auto">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition cursor-pointer"
+          </div>
+
+          <div className="px-5 py-3.5 border-t border-stone-100 bg-white shrink-0 space-y-3">
+            {submitError && (
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium"
               >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-md flex items-center gap-1.5 active:scale-98"
-              >
-                <CheckSquare className="h-4 w-4" />
-                <span>Créer la Sous-Tâche</span>
-              </button>
+                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="font-bold text-rose-900">Échec de la création de la sous-tâche</p>
+                  <p className="mt-0.5 text-rose-700 break-words">{submitError}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-stone-400 italic hidden sm:inline">
+                La sous-tâche sera synchronisée en temps réel et intégrée aux KPI Asana.
+              </span>
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition cursor-pointer disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-5 py-2.5 bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-md flex items-center gap-1.5 active:scale-98 disabled:opacity-60 disabled:cursor-wait"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Enregistrement...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckSquare className="h-4 w-4" />
+                      <span>Créer la Sous-Tâche</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 

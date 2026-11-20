@@ -3,6 +3,7 @@ import { Task, NotificationLog, Employee, TaskStatus, TaskPriority, TaskProject,
 import { DEFAULT_TASK_PROJECTS } from './taskConstants';
 import { taskService } from '../../services/taskService';
 import { pushNotificationBridgeService } from '../../services/pushNotificationBridgeService';
+import { extractFriendlyTaskErrorMessage } from '../../utils/taskPersistenceHelpers';
 
 interface UseTaskLogicProps {
   tasks: Task[];
@@ -93,30 +94,51 @@ export function useTaskLogic({
       lastUpdatedTime: new Date().toISOString(),
     };
 
-    await taskService.saveTask(taskItem);
-    const updatedTasks = [taskItem, ...tasks];
-    onUpdateTasks(updatedTasks);
+    try {
+      await taskService.saveTask(taskItem);
+      const updatedTasks = [taskItem, ...tasks];
+      onUpdateTasks(updatedTasks);
 
-    onAddNotification({
-      id: `notif-${Date.now()}`,
-      recipient: taskItem.assignedTo || 'Équipe',
-      type: 'system',
-      title: 'Nouvelle Tâche Assignée',
-      content: `${taskItem.title} (${taskItem.date})`,
-      payload: '{}',
-      timestamp: new Date().toISOString(),
-    });
+      try {
+        Promise.resolve(
+          onAddNotification({
+            id: `notif-${Date.now()}`,
+            recipient: taskItem.assignedTo || 'Équipe',
+            type: 'system',
+            title: 'Nouvelle Tâche Assignée',
+            content: `${taskItem.title} (${taskItem.date})`,
+            payload: '{}',
+            timestamp: new Date().toISOString(),
+          })
+        ).catch((notifErr) => {
+          console.warn('[TaskCreate] Notification non bloquante ignorée:', notifErr);
+        });
+      } catch (notifErr) {
+        console.warn('[TaskCreate] Notification non bloquante ignorée:', notifErr);
+      }
 
-    pushNotificationBridgeService.sendPush({
-      title: 'Nouvelle Tâche Assignée 📋',
-      message: `${taskItem.title} vous a été assignée pour le ${taskItem.date}.`,
-      senderName: currentRole || 'Responsable',
-      type: 'task_assigned',
-      link: 'tasks',
-    });
+      try {
+        pushNotificationBridgeService.sendPush({
+          title: 'Nouvelle Tâche Assignée 📋',
+          message: `${taskItem.title} vous a été assignée pour le ${taskItem.date}.`,
+          senderName: currentRole || 'Responsable',
+          type: 'task_assigned',
+          link: 'tasks',
+        });
+      } catch (pushErr) {
+        console.warn('[TaskCreate] Push non bloquant ignoré:', pushErr);
+      }
 
-    if (showToast) {
-      showToast('Tâche créée et enregistrée en base avec succès.', 'success');
+      if (showToast) {
+        showToast('Tâche créée et enregistrée en base avec succès.', 'success');
+      }
+    } catch (err) {
+      const message = extractFriendlyTaskErrorMessage(err);
+      console.error('[useTaskLogic.handleCreateTask] Échec création tâche:', err);
+      if (showToast) {
+        showToast(message, 'error');
+      }
+      throw new Error(message);
     }
   };
 
@@ -127,9 +149,13 @@ export function useTaskLogic({
 
   const handleCreateSubtask = async (subtask: Subtask, targetTaskId?: string) => {
     const taskIdToUpdate = targetTaskId || taskForSubtaskModal?.id;
-    if (!taskIdToUpdate) return;
+    if (!taskIdToUpdate) {
+      throw new Error('Veuillez sélectionner une tâche parente avant de créer la sous-tâche.');
+    }
     const target = tasks.find((t) => t.id === taskIdToUpdate);
-    if (!target) return;
+    if (!target) {
+      throw new Error('Tâche parente introuvable.');
+    }
 
     const updatedTask: Task = {
       ...target,
@@ -137,16 +163,25 @@ export function useTaskLogic({
       lastUpdatedTime: new Date().toISOString(),
     };
 
-    await taskService.saveTask(updatedTask);
-    const updatedTasks = tasks.map((t) => (t.id === taskIdToUpdate ? updatedTask : t));
-    onUpdateTasks(updatedTasks);
+    try {
+      await taskService.saveTask(updatedTask);
+      const updatedTasks = tasks.map((t) => (t.id === taskIdToUpdate ? updatedTask : t));
+      onUpdateTasks(updatedTasks);
 
-    if (selectedTaskForDetail && selectedTaskForDetail.id === taskIdToUpdate) {
-      setSelectedTaskForDetail(updatedTask);
-    }
+      if (selectedTaskForDetail && selectedTaskForDetail.id === taskIdToUpdate) {
+        setSelectedTaskForDetail(updatedTask);
+      }
 
-    if (showToast) {
-      showToast(`Sous-tâche "${subtask.title}" créée avec succès (Style Asana Pro) !`, 'success');
+      if (showToast) {
+        showToast(`Sous-tâche "${subtask.title}" créée avec succès (Style Asana Pro) !`, 'success');
+      }
+    } catch (err) {
+      const message = extractFriendlyTaskErrorMessage(err);
+      console.error('[useTaskLogic.handleCreateSubtask] Échec création sous-tâche:', err);
+      if (showToast) {
+        showToast(message, 'error');
+      }
+      throw new Error(message);
     }
   };
 
@@ -155,100 +190,129 @@ export function useTaskLogic({
     if (!targetTask) return;
 
     const updatedTask: Task = { ...targetTask, status: newStatus, lastUpdatedTime: new Date().toISOString() };
-    await taskService.saveTask(updatedTask);
+    try {
+      await taskService.saveTask(updatedTask);
 
-    const updated = tasks.map((t) => (t.id === taskId ? updatedTask : t));
-    onUpdateTasks(updated);
+      const updated = tasks.map((t) => (t.id === taskId ? updatedTask : t));
+      onUpdateTasks(updated);
 
-    if (selectedTaskForDetail && selectedTaskForDetail.id === taskId) {
-      setSelectedTaskForDetail(updatedTask);
+      if (selectedTaskForDetail && selectedTaskForDetail.id === taskId) {
+        setSelectedTaskForDetail(updatedTask);
+      }
+
+      const statusLabels: Record<string, string> = {
+        todo: 'À faire',
+        in_progress: 'En cours',
+        review: 'En révision',
+        completed: 'Terminée',
+      };
+      const label = statusLabels[newStatus] || newStatus;
+      const targetRecipient = targetTask.assignedTo || targetTask.employeeId || 'Collaborateur';
+
+      try {
+        Promise.resolve(
+          onAddNotification({
+            id: `notif-task-move-${Date.now()}-${taskId}`,
+            recipient: targetRecipient,
+            type: 'system',
+            title: `Mouvement de Tâche : ${targetTask.title}`,
+            content: `La tâche est passée au statut « ${label} ».`,
+            payload: JSON.stringify({
+              source: 'task_movement',
+              taskId: targetTask.id,
+              employeeId: targetRecipient,
+              newStatus,
+              previousStatus: targetTask.status,
+            }),
+            timestamp: new Date().toISOString(),
+            read: false,
+          })
+        ).catch(() => {});
+      } catch {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+      }
+
+      try {
+        pushNotificationBridgeService.sendPush({
+          title: 'Mise à jour de Tâche 🔄',
+          message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
+          senderName: currentRole || 'Collaborateur',
+          type: 'task_assigned',
+          link: 'tasks',
+        });
+      } catch {}
+
+      if (showToast) showToast('Statut mis à jour et enregistré.', 'success');
+    } catch (err) {
+      const message = extractFriendlyTaskErrorMessage(err);
+      console.error('[useTaskLogic.handleStatusChange] Échec mise à jour statut:', err);
+      if (showToast) showToast(message, 'error');
     }
-
-    const statusLabels: Record<string, string> = {
-      todo: 'À faire',
-      in_progress: 'En cours',
-      review: 'En révision',
-      completed: 'Terminée',
-    };
-    const label = statusLabels[newStatus] || newStatus;
-    const targetRecipient = targetTask.assignedTo || targetTask.employeeId || 'Collaborateur';
-
-    onAddNotification({
-      id: `notif-task-move-${Date.now()}-${taskId}`,
-      recipient: targetRecipient,
-      type: 'system',
-      title: `Mouvement de Tâche : ${targetTask.title}`,
-      content: `La tâche est passée au statut « ${label} ».`,
-      payload: JSON.stringify({
-        source: 'task_movement',
-        taskId: targetTask.id,
-        employeeId: targetRecipient,
-        newStatus,
-        previousStatus: targetTask.status,
-      }),
-      timestamp: new Date().toISOString(),
-      read: false,
-    });
-
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
-    }
-
-    pushNotificationBridgeService.sendPush({
-      title: 'Mise à jour de Tâche 🔄',
-      message: `La tâche "${targetTask.title}" est passée au statut : ${label}.`,
-      senderName: currentRole || 'Collaborateur',
-      type: 'task_assigned',
-      link: 'tasks',
-    });
-
-    if (showToast) showToast('Statut mis à jour et enregistré.', 'success');
   };
 
   const handleSaveTask = async (updatedTask: Task) => {
     const prevTask = tasks.find((t) => t.id === updatedTask.id);
     const finalizedTask = { ...updatedTask, updatedAt: new Date().toISOString() };
 
-    await taskService.saveTask(finalizedTask);
-    const updated = tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t));
-    onUpdateTasks(updated);
-    setSelectedTaskForDetail(finalizedTask);
+    try {
+      await taskService.saveTask(finalizedTask);
+      const updated = tasks.map((t) => (t.id === finalizedTask.id ? finalizedTask : t));
+      onUpdateTasks(updated);
+      setSelectedTaskForDetail(finalizedTask);
 
-    if (finalizedTask.assignedTo) {
-      const isStatusChanged = prevTask && prevTask.status !== finalizedTask.status;
-      const isPriorityChanged = prevTask && prevTask.priority !== finalizedTask.priority;
-      if (isStatusChanged || isPriorityChanged || !prevTask) {
-        onAddNotification({
-          id: `notif-task-update-${Date.now()}-${finalizedTask.id}`,
-          recipient: finalizedTask.assignedTo,
-          type: 'system',
-          title: `Mise à jour de tâche : ${finalizedTask.title}`,
-          content: isStatusChanged 
-            ? `Statut modifié : passage à « ${finalizedTask.status} »` 
-            : `Détails de la tâche mis à jour.`,
-          payload: JSON.stringify({
-            source: 'task_movement',
-            taskId: finalizedTask.id,
-            employeeId: finalizedTask.assignedTo,
-            newStatus: finalizedTask.status,
-          }),
-          timestamp: new Date().toISOString(),
-          read: false,
-        });
+      if (finalizedTask.assignedTo) {
+        const isStatusChanged = prevTask && prevTask.status !== finalizedTask.status;
+        const isPriorityChanged = prevTask && prevTask.priority !== finalizedTask.priority;
+        if (isStatusChanged || isPriorityChanged || !prevTask) {
+          try {
+            Promise.resolve(
+              onAddNotification({
+                id: `notif-task-update-${Date.now()}-${finalizedTask.id}`,
+                recipient: finalizedTask.assignedTo,
+                type: 'system',
+                title: `Mise à jour de tâche : ${finalizedTask.title}`,
+                content: isStatusChanged 
+                  ? `Statut modifié : passage à « ${finalizedTask.status} »` 
+                  : `Détails de la tâche mis à jour.`,
+                payload: JSON.stringify({
+                  source: 'task_movement',
+                  taskId: finalizedTask.id,
+                  employeeId: finalizedTask.assignedTo,
+                  newStatus: finalizedTask.status,
+                }),
+                timestamp: new Date().toISOString(),
+                read: false,
+              })
+            ).catch(() => {});
+          } catch {}
 
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('citrine:new_unread_alert'));
+          }
         }
       }
+    } catch (err) {
+      const message = extractFriendlyTaskErrorMessage(err);
+      console.error('[useTaskLogic.handleSaveTask] Échec sauvegarde tâche:', err);
+      if (showToast) showToast(message, 'error');
+      throw new Error(message);
     }
   };
 
   const handleDeleteTask = async (id: string) => {
-    await taskService.deleteTask(id);
-    const updated = tasks.filter((t) => t.id !== id);
-    onUpdateTasks(updated);
-    setSelectedTaskForDetail(null);
-    if (showToast) showToast('Tâche supprimée avec succès.');
+    try {
+      await taskService.deleteTask(id);
+      const updated = tasks.filter((t) => t.id !== id);
+      onUpdateTasks(updated);
+      setSelectedTaskForDetail(null);
+      if (showToast) showToast('Tâche supprimée avec succès.', 'success');
+    } catch (err) {
+      const message = extractFriendlyTaskErrorMessage(err);
+      console.error('[useTaskLogic.handleDeleteTask] Échec suppression tâche:', err);
+      if (showToast) showToast(message, 'error');
+    }
   };
 
   // Filter tasks based on search, project permissions, priority, assignee, and milestone filter

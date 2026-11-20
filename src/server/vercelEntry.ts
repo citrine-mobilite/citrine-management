@@ -1,5 +1,14 @@
 import express from 'express';
 import { Resend } from 'resend';
+import { requireAuth, AuthRequest } from '../middleware/auth';
+import {
+  getCollectionData,
+  saveDocumentData,
+  deleteDocumentData,
+  getOrCreateUserRecord,
+  executeCollaboratorCreationTransaction,
+  executeAtomicClockingTransaction,
+} from '../db/repository';
 import { registerGithubRoutes } from './githubRoutes';
 import { registerApiExplorerRoutes } from './apiExplorerRoutes';
 import { registerMailAndCronRoutes } from './expressMailAndCronRoutes';
@@ -211,6 +220,86 @@ app.post('/api/whatsapp/send', notificationLimiter, requireClientAuth, async (re
   }
 });
 
+// Core Data CRUD, User Sync, Collaborators & Atomic Clocking Routes (parity with server.ts)
+app.get('/api/data/:collection', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const { collection } = req.params;
+    const data = await getCollectionData(collection);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    console.error(`[Vercel API] Error fetching collection ${req.params.collection}:`, error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/data/:collection', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const { collection } = req.params;
+    const saved = await saveDocumentData(collection, req.body);
+    res.json({ success: true, data: saved });
+  } catch (error: any) {
+    console.error(`[Vercel API] Error saving to collection ${req.params.collection}:`, error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to save data' });
+  }
+});
+
+app.delete('/api/data/:collection/:id', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const { collection, id } = req.params;
+    await deleteDocumentData(collection, id);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error(`[Vercel API] Error deleting from collection ${req.params.collection}:`, error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to delete data' });
+  }
+});
+
+app.post('/api/users/sync', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const { uid, email, name, role } = req.body || {};
+    if (!uid || !email) {
+      return res.status(400).json({ success: false, error: 'Missing uid or email' });
+    }
+    const user = await getOrCreateUserRecord(uid, email, name, role);
+    res.json({ success: true, data: user });
+  } catch (error: any) {
+    console.error('[Vercel API] Error syncing user:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to sync user' });
+  }
+});
+
+app.post('/api/collaborators/transactional', async (req: express.Request, res: express.Response) => {
+  try {
+    const input = req.body;
+    if (!input?.name || !input?.email) {
+      return res.status(400).json({ success: false, error: 'Nom et adresse email requis.' });
+    }
+    const result = await executeCollaboratorCreationTransaction(input);
+    res.json(result);
+  } catch (error: any) {
+    console.error('[Vercel API Collaborator Transaction Error]:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Échec de la transaction.' });
+  }
+});
+
+app.post('/api/clocking/atomic', async (req: express.Request, res: express.Response) => {
+  try {
+    const input = req.body;
+    if (!input?.presence) {
+      return res.status(400).json({ success: false, error: 'Données de présence manquantes.' });
+    }
+    const result = await executeAtomicClockingTransaction(input);
+    res.json(result);
+  } catch (error: any) {
+    console.error('[Vercel API Atomic Clocking Error]:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Échec du pointage atomique.' });
+  }
+});
+
+app.post('/api/realtime/broadcast', (_req: express.Request, res: express.Response) => {
+  res.json({ success: true, acknowledged: true });
+});
+
 // API Explorer, Mail/Cron, HeroCab SQL Backups & GitHub Read-Only OAuth Routes (Vercel Serverless)
 registerApiExplorerRoutes(app);
 registerMailAndCronRoutes(app);
@@ -223,12 +312,12 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/database/status', (_req, res) => {
-  const isSql = Boolean(process.env.SQL_HOST || process.env.DATABASE_URL);
+  const isSql = Boolean(process.env.SQL_HOST || process.env.DATABASE_URL || process.env.SUPABASE_URL);
   res.json({
     success: true,
     isSqlConfigured: isSql,
     localPersistence: false,
-    message: isSql ? 'Base de données SQL active' : 'API serverless active (Supabase)',
+    message: isSql ? 'Base de données SQL / Supabase active' : 'API serverless active (Supabase)',
   });
 });
 
