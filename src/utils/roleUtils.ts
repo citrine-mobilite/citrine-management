@@ -68,3 +68,5 @@ export function isEmployeeOnlyRole(roleOrRoleType?: string | null): boolean {
   }
   return true;
 }
+
+export { isManagerOrAdminEmployee } from './roleClockingUtils';

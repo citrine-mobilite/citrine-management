@@ -13,11 +13,25 @@ import { executeDueRoutineRemindersDispatch } from '../services/routineReminderC
 
 export function registerMailAndCronRoutes(app: express.Express): void {
   app.get('/api/mail/config', async (_req: express.Request, res: express.Response) => {
+    res.setHeader('Cache-Control', 'no-store');
     try {
-      const config = await getEffectiveSmtpConfig();
+      const [config, settingsList] = await Promise.all([
+        getEffectiveSmtpConfig(),
+        getCollectionData('company_settings').catch(() => []),
+      ]);
+      const mainConfig =
+        (Array.isArray(settingsList) &&
+          settingsList.find((s: any) => s.id === 'main_config' || s.docId === 'main_config')) ||
+        (Array.isArray(settingsList) ? settingsList[0] : null);
+      const enableEmailNotifications =
+        mainConfig?.enableEmailNotifications !== undefined
+          ? Boolean(mainConfig.enableEmailNotifications)
+          : true;
+
       res.json({
         success: true,
         config: {
+          enableEmailNotifications,
           smtpHost: config.host || '',
           smtpPort: config.port || 587,
           smtpSecure: Boolean(config.secure),
@@ -35,6 +49,7 @@ export function registerMailAndCronRoutes(app: express.Express): void {
   });
 
   app.post('/api/mail/config', async (req: express.Request, res: express.Response) => {
+    res.setHeader('Cache-Control', 'no-store');
     try {
       const { smtpHost, smtpPort, smtpSecure, smtpUser, smtpPass, smtpFrom, smtpSenderName, hrNotificationEmail, enableEmailNotifications } = req.body;
       const settingsList = await getCollectionData('company_settings');

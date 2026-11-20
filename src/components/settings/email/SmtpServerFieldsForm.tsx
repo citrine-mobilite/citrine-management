@@ -46,7 +46,7 @@ export const SmtpServerFieldsForm: React.FC<SmtpServerFieldsFormProps> = ({
         <div className="flex items-center justify-between">
           <label className="font-bold text-stone-800 text-xs flex items-center gap-1.5">
             <Users className="h-4 w-4 text-[#1F625E]" />
-            E-mails de Notification RH (HR_NOTIFICATION_EMAIL) *
+            Destinataires des TaskSheets & Notifications RH (HR_NOTIFICATION_EMAIL) *
           </label>
           <span className="text-[10px] font-bold text-[#1F625E] bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
             {parsedHrEmails.length} adresse{parsedHrEmails.length > 1 ? 's' : ''} détectée{parsedHrEmails.length > 1 ? 's' : ''}
@@ -59,6 +59,9 @@ export const SmtpServerFieldsForm: React.FC<SmtpServerFieldsFormProps> = ({
           placeholder="ex: Doleres.Kenne@citrine-mobilite.com, direction@citrine-mobilite.com"
           className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-xs outline-none focus:ring-2 focus:ring-[#1F625E] font-medium"
         />
+        <p className="text-[11px] text-stone-500">
+          Séparez plusieurs adresses par une virgule ou un point-virgule. Toutes ces adresses reçoivent les TaskSheets (manuelles et automatiques) ainsi que les notifications RH.
+        </p>
 
         {parsedHrEmails.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">

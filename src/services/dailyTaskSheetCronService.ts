@@ -10,6 +10,7 @@ import { buildEmployeeTasksSummary } from './taskSheet/dailyTaskSheetTasksBuilde
 import { buildEmployeeDailyAttendanceSummary } from './taskSheet/dailyTaskSheetAttendanceBuilder';
 import { buildDailyImportantPoints } from './taskSheet/importantPointsUtils';
 import { publishDailyTaskSheetBeamsNotification } from '../server/services/pusherBeamsService';
+import { resolveTaskSheetRecipients } from '../utils/taskSheetRecipientsHelper';
 
 export interface DailyTaskSheetDispatchResult {
   success: boolean;
@@ -74,18 +75,12 @@ export async function executeDailyTaskSheetDispatch(options?: {
       }
     }
 
-    const admins = users.filter(
-      (u: any) =>
-        u.role_id === 1 ||
-        u.role === 'administrateur' ||
-        String(u.raw_data?.role).toLowerCase().includes('admin')
-    );
-    const adminEmails = admins.map((a: any) => a.email).filter(Boolean);
-    if (adminEmails.length === 0) {
-      if (process.env.HR_NOTIFICATION_EMAIL) adminEmails.push(process.env.HR_NOTIFICATION_EMAIL);
-      else if (process.env.SMTP_USER) adminEmails.push(process.env.SMTP_USER);
-      else adminEmails.push('citrinemobilite@gmail.com');
-    }
+    const recipientEmails = resolveTaskSheetRecipients({
+      companySettings: companySettingsList,
+      users,
+      envHrEmail: process.env.HR_NOTIFICATION_EMAIL,
+      envSmtpUser: process.env.SMTP_USER,
+    });
 
     const activeEmployees = employees.filter((emp: any) => {
       const empName = (emp.name || '').toLowerCase();
@@ -176,7 +171,7 @@ export async function executeDailyTaskSheetDispatch(options?: {
           threadCategory: 'tasksheet',
           threadSubject: `TaskSheet - Feuille d'avancement des tâches - ${empName}`,
           htmlContent,
-          recipientEmails: adminEmails,
+          recipientEmails,
           attachments: [
             {
               filename: excelFilename,

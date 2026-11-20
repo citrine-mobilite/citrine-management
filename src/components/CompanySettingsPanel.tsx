@@ -7,12 +7,14 @@ import {
   Users, 
   ShieldCheck, 
   Database,
+  Mail,
   CheckCircle2,
   Sparkles
 } from 'lucide-react';
 import { CompanyModuleConfig, DEFAULT_MODULE_CONFIG, Employee, Presence, NotificationLog } from '../types';
 import { CompanyIdentitySettings } from './settings/CompanyIdentitySettings';
 import { CompanyScheduleSettings } from './settings/CompanyScheduleSettings';
+import { CompanyEmailSettings } from './settings/CompanyEmailSettings';
 import { CompanyModulesToggle } from './settings/CompanyModulesToggle';
 import { DisciplinaryMotifsManagementSection } from './settings/DisciplinaryMotifsManagementSection';
 import { SecuritySettingsSection } from './settings/SecuritySettingsSection';
@@ -31,7 +33,7 @@ interface CompanySettingsPanelProps {
   initialTab?: SettingsTabId;
 }
 
-export type SettingsTabId = 'identity' | 'schedules' | 'modules' | 'discipline' | 'security' | 'database';
+export type SettingsTabId = 'identity' | 'schedules' | 'email' | 'modules' | 'discipline' | 'security' | 'database';
 
 interface TabItem {
   id: SettingsTabId;
@@ -58,6 +60,14 @@ const SETTINGS_TABS: TabItem[] = [
     description: 'Arrivée, seuils de retard, pause & GPS',
     icon: Clock,
     badge: 'Temps',
+  },
+  {
+    id: 'email',
+    label: 'E-mail & TaskSheets',
+    shortLabel: 'E-mail',
+    description: 'Destinataires des TaskSheets, RH & serveur SMTP',
+    icon: Mail,
+    badge: 'SMTP',
   },
   {
     id: 'modules',
@@ -188,6 +198,14 @@ export default function CompanySettingsPanel({
 
           {activeTab === 'schedules' && (
             <CompanyScheduleSettings
+              moduleConfig={safeConfig}
+              onUpdateModuleConfig={handleUpdate}
+              showToast={showToast}
+            />
+          )}
+
+          {activeTab === 'email' && (
+            <CompanyEmailSettings
               moduleConfig={safeConfig}
               onUpdateModuleConfig={handleUpdate}
               showToast={showToast}

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, RefreshCw } from 'lucide-react';
+import { Mail, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
 import { clientMailService } from '../../services/clientMailService';
-import { executeOperationWithLoading } from '../../utils/sweetAlert';
+import { parseRecipientEmailList } from '../../utils/taskSheetRecipientsHelper';
 import { SmtpServerFieldsForm, SmtpFormDataState } from './email/SmtpServerFieldsForm';
 import { SmtpTestConnectionCard } from './email/SmtpTestConnectionCard';
 
@@ -32,6 +32,8 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [testRecipient, setTestRecipient] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -48,8 +50,13 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
         const res = await clientMailService.fetchMailConfig();
         if (isMounted && res.success && res.config) {
           const cfg = res.config;
+          const resolvedHrEmail = cfg.hrNotificationEmail || moduleConfig.hrNotificationEmail || 'Doleres.Kenne@citrine-mobilite.com';
           setFormData((prev) => ({
             ...prev,
+            enableEmailNotifications:
+              cfg.enableEmailNotifications !== undefined
+                ? Boolean(cfg.enableEmailNotifications)
+                : prev.enableEmailNotifications,
             smtpHost: cfg.smtpHost || prev.smtpHost || 'smtp.gmail.com',
             smtpPort: cfg.smtpPort || prev.smtpPort || 587,
             smtpSecure: cfg.smtpSecure !== undefined ? Boolean(cfg.smtpSecure) : prev.smtpSecure,
@@ -57,13 +64,14 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
             smtpPass: cfg.smtpPass || prev.smtpPass,
             smtpFrom: cfg.smtpFrom || prev.smtpFrom,
             smtpSenderName: cfg.smtpSenderName || prev.smtpSenderName || 'Landry Moutongo',
-            hrNotificationEmail: cfg.hrNotificationEmail || prev.hrNotificationEmail || 'Doleres.Kenne@citrine-mobilite.com',
+            hrNotificationEmail: resolvedHrEmail,
           }));
 
-          if (!testRecipient) {
-            const firstEmail = (cfg.hrNotificationEmail || formData.hrNotificationEmail || '').split(/[,;\s]+/)[0];
-            if (firstEmail) setTestRecipient(firstEmail.trim());
-          }
+          setTestRecipient((prevRecipient) => {
+            if (prevRecipient) return prevRecipient;
+            const firstEmail = parseRecipientEmailList(resolvedHrEmail)[0];
+            return firstEmail || '';
+          });
         }
       } catch (e) {
         console.warn('Notice fetch mail config:', e);
@@ -76,58 +84,65 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
     };
   }, []);
 
-  const parsedHrEmails = formData.hrNotificationEmail
-    .split(/[,;\n\r\t]+/)
-    .map((e) => e.trim().replace(/^<|>$/g, ''))
-    .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+  const parsedHrEmails = parseRecipientEmailList(formData.hrNotificationEmail);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
     setIsSaving(true);
+    setSaveFeedback(null);
     try {
-      await executeOperationWithLoading({
-        loadingTitle: 'Enregistrement SMTP...',
-        loadingText: 'Veuillez patienter pendant la mise à jour des paramètres SMTP et RH...',
-        action: async () => {
-          const saveRes = await clientMailService.saveMailConfig({
-            ...formData,
-            smtpPort: Number(formData.smtpPort),
-          });
-          if (!saveRes.success) {
-            throw new Error(saveRes.error || 'Échec de la sauvegarde de la configuration e-mail.');
-          }
-          const updated: CompanyModuleConfig = {
-            ...moduleConfig,
-            ...formData,
-            smtpPort: Number(formData.smtpPort),
-          };
-          await onUpdateModuleConfig(updated);
-          return saveRes;
-        },
-        successTitle: 'Configuration enregistrée !',
-        successMessage: 'Les paramètres SMTP & RH ont été mis à jour avec succès en base de données.',
-        errorMessage: 'Erreur lors de la sauvegarde de la configuration SMTP.',
-      });
+      const payload = {
+        ...formData,
+        smtpPort: Number(formData.smtpPort),
+      };
+      const saveRes = await clientMailService.saveMailConfig(payload);
+      if (!saveRes.success) {
+        throw new Error(saveRes.error || 'Échec de la sauvegarde de la configuration e-mail.');
+      }
+      const updated: CompanyModuleConfig = {
+        ...moduleConfig,
+        ...payload,
+      };
+      await onUpdateModuleConfig(updated);
+      const okMsg = 'Les destinataires TaskSheets & paramètres SMTP ont été mis à jour en base de données.';
+      setSaveFeedback({ type: 'success', message: okMsg });
+      showToast?.(okMsg, 'success');
+    } catch (err: any) {
+      const errMsg = err?.message || 'Erreur lors de la sauvegarde de la configuration SMTP.';
+      setSaveFeedback({ type: 'error', message: errMsg });
+      showToast?.(errMsg, 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleToggleEmailNotifications = async () => {
+    if (isToggling) return;
     const nextState = !formData.enableEmailNotifications;
-    const res = await executeOperationWithLoading({
-      loadingTitle: 'Mise à jour des notifications...',
-      loadingText: 'Veuillez patienter pendant la sauvegarde...',
-      action: async () => {
-        await onUpdateModuleConfig({ ...moduleConfig, enableEmailNotifications: nextState });
-      },
-      successTitle: nextState ? 'Notifications activées !' : 'Notifications désactivées !',
-      successMessage: nextState
-        ? 'Les envois automatiques par e-mail sont activés.'
-        : 'Les envois automatiques par e-mail sont désactivés.',
-    });
-    if (res.success) {
+    setIsToggling(true);
+    setSaveFeedback(null);
+    try {
+      const saveRes = await clientMailService.saveMailConfig({
+        ...formData,
+        enableEmailNotifications: nextState,
+        smtpPort: Number(formData.smtpPort),
+      });
+      if (!saveRes.success) {
+        throw new Error(saveRes.error || 'Impossible de mettre à jour les notifications.');
+      }
+      await onUpdateModuleConfig({ ...moduleConfig, enableEmailNotifications: nextState });
       setFormData((prev) => ({ ...prev, enableEmailNotifications: nextState }));
+      showToast?.(
+        nextState
+          ? 'Les envois automatiques par e-mail sont activés.'
+          : 'Les envois automatiques par e-mail sont désactivés.',
+        'success'
+      );
+    } catch (err: any) {
+      showToast?.(err?.message || 'Erreur lors de la mise à jour des notifications.', 'error');
+    } finally {
+      setIsToggling(false);
     }
   };
 
@@ -181,10 +196,13 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-serif font-bold text-base text-stone-900">
-                Serveur E-mail & Notifications RH (Production Réelle)
+                Serveur E-mail & Destinataires (TaskSheets & RH)
               </h3>
               {isLoadingConfig && <RefreshCw className="h-3.5 w-3.5 text-stone-400 animate-spin" />}
             </div>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Liste des destinataires recevant les TaskSheets (manuelles et automatiques), alertes RH et paramètres SMTP.
+            </p>
           </div>
         </div>
 
@@ -192,17 +210,35 @@ export const CompanyEmailSettings: React.FC<CompanyEmailSettingsProps> = ({
           <span className="text-[11px] font-bold text-stone-500">Notifications actives :</span>
           <button
             type="button"
+            disabled={isToggling}
             onClick={handleToggleEmailNotifications}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60 ${
               formData.enableEmailNotifications
                 ? 'bg-[#1F625E] text-white shadow-xs'
                 : 'bg-stone-200 text-stone-600 hover:bg-stone-300'
             }`}
           >
-            {formData.enableEmailNotifications ? 'Activées' : 'Désactivées'}
+            {isToggling ? 'Mise à jour...' : formData.enableEmailNotifications ? 'Activées' : 'Désactivées'}
           </button>
         </div>
       </div>
+
+      {saveFeedback && (
+        <div
+          className={`p-3.5 rounded-2xl border text-xs flex items-center gap-2.5 ${
+            saveFeedback.type === 'success'
+              ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+              : 'bg-rose-50 text-rose-900 border-rose-200'
+          }`}
+        >
+          {saveFeedback.type === 'success' ? (
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+          )}
+          <span className="font-medium">{saveFeedback.message}</span>
+        </div>
+      )}
 
       <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <SmtpServerFieldsForm

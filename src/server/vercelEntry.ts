@@ -2,6 +2,7 @@ import express from 'express';
 import { Resend } from 'resend';
 import { registerGithubRoutes } from './githubRoutes';
 import { registerApiExplorerRoutes } from './apiExplorerRoutes';
+import { registerMailAndCronRoutes } from './expressMailAndCronRoutes';
 
 const app = express();
 
@@ -209,8 +210,9 @@ app.post('/api/whatsapp/send', notificationLimiter, requireClientAuth, async (re
   }
 });
 
-// API Explorer & GitHub Read-Only OAuth Routes (Vercel Serverless)
+// API Explorer, Mail/Cron & GitHub Read-Only OAuth Routes (Vercel Serverless)
 registerApiExplorerRoutes(app);
+registerMailAndCronRoutes(app);
 registerGithubRoutes(app);
 
 // Health & Database diagnostics

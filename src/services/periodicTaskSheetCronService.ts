@@ -13,6 +13,7 @@ import {
 import { generateMonthlyTaskSheet, generateYearlyTaskSheet } from './taskSheet/monthlyYearlyTaskSheet';
 import { buildEmployeeTasksSummary } from './taskSheet/dailyTaskSheetTasksBuilder';
 import { buildEmployeeDailyAttendanceSummary } from './taskSheet/dailyTaskSheetAttendanceBuilder';
+import { resolveTaskSheetRecipients } from '../utils/taskSheetRecipientsHelper';
 
 export interface PeriodicDispatchResult {
   success: boolean;
@@ -39,20 +40,18 @@ function getPreviousMonthStr(date: Date = new Date()): string {
   return `${y}-${String(m).padStart(2, '0')}`;
 }
 
-function resolveAdminRecipients(users: any[]): string[] {
-  const admins = users.filter(
-    (u: any) =>
-      u.role_id === 1 ||
-      u.role === 'administrateur' ||
-      String(u.raw_data?.role).toLowerCase().includes('admin')
-  );
-  const adminEmails = admins.map((a: any) => a.email).filter(Boolean);
-  if (adminEmails.length === 0) {
-    if (process.env.HR_NOTIFICATION_EMAIL) adminEmails.push(process.env.HR_NOTIFICATION_EMAIL);
-    else if (process.env.SMTP_USER) adminEmails.push(process.env.SMTP_USER);
-    else adminEmails.push('citrinemobilite@gmail.com');
-  }
-  return adminEmails;
+function resolvePeriodicTaskSheetRecipients(
+  users: any[],
+  companySettingsList: any[],
+  overrideRecipients?: string[]
+): string[] {
+  return resolveTaskSheetRecipients({
+    overrideRecipients,
+    companySettings: companySettingsList,
+    users,
+    envHrEmail: process.env.HR_NOTIFICATION_EMAIL,
+    envSmtpUser: process.env.SMTP_USER,
+  });
 }
 
 /**
@@ -67,7 +66,7 @@ export async function executeMonthlyTaskSheetDispatch(options?: {
   const errors: string[] = [];
 
   try {
-    const [employees, users, tasks, presences, reminders, strategicProjects, notifications] = await Promise.all([
+    const [employees, users, tasks, presences, reminders, strategicProjects, notifications, companySettingsList] = await Promise.all([
       getCollectionData('employees'),
       getCollectionData('users'),
       getCollectionData('tasks'),
@@ -75,9 +74,10 @@ export async function executeMonthlyTaskSheetDispatch(options?: {
       getCollectionData('reminders'),
       getCollectionData('strategic_projects'),
       getCollectionData('notifications'),
+      getCollectionData('company_settings'),
     ]);
 
-    const recipients = options?.recipientEmails?.length ? options.recipientEmails : resolveAdminRecipients(users);
+    const recipients = resolvePeriodicTaskSheetRecipients(users, companySettingsList, options?.recipientEmails);
 
     const activeEmployees = employees.filter((emp: any) => {
       const status = String(emp.status || '').toLowerCase();
@@ -159,7 +159,7 @@ export async function executeYearlyTaskSheetDispatch(options?: {
   const errors: string[] = [];
 
   try {
-    const [employees, users, tasks, presences, reminders, strategicProjects, notifications] = await Promise.all([
+    const [employees, users, tasks, presences, reminders, strategicProjects, notifications, companySettingsList] = await Promise.all([
       getCollectionData('employees'),
       getCollectionData('users'),
       getCollectionData('tasks'),
@@ -167,9 +167,10 @@ export async function executeYearlyTaskSheetDispatch(options?: {
       getCollectionData('reminders'),
       getCollectionData('strategic_projects'),
       getCollectionData('notifications'),
+      getCollectionData('company_settings'),
     ]);
 
-    const recipients = options?.recipientEmails?.length ? options.recipientEmails : resolveAdminRecipients(users);
+    const recipients = resolvePeriodicTaskSheetRecipients(users, companySettingsList, options?.recipientEmails);
 
     const activeEmployees = employees.filter((emp: any) => {
       const status = String(emp.status || '').toLowerCase();
@@ -249,7 +250,7 @@ export async function sendSingleEmployeeTaskSheetEmail(params: {
   overrideRecipients?: string[];
 }) {
   const { employeeId, mode, period, overrideRecipients } = params;
-  const [employees, users, tasks, presences, incidents, reminders, strategicProjects, notifications] = await Promise.all([
+  const [employees, users, tasks, presences, incidents, reminders, strategicProjects, notifications, companySettingsList] = await Promise.all([
     getCollectionData('employees'),
     getCollectionData('users'),
     getCollectionData('tasks'),
@@ -258,6 +259,7 @@ export async function sendSingleEmployeeTaskSheetEmail(params: {
     getCollectionData('reminders'),
     getCollectionData('strategic_projects'),
     getCollectionData('notifications'),
+    getCollectionData('company_settings'),
   ]);
 
   const emp = employees.find((e: any) => String(e.id) === String(employeeId));
@@ -265,7 +267,7 @@ export async function sendSingleEmployeeTaskSheetEmail(params: {
     return { success: false, error: 'Collaborateur introuvable.' };
   }
 
-  const recipients = overrideRecipients?.length ? overrideRecipients : resolveAdminRecipients(users);
+  const recipients = resolvePeriodicTaskSheetRecipients(users, companySettingsList, overrideRecipients);
   const empName = emp.name || 'Collaborateur';
   const safeName = empName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
 

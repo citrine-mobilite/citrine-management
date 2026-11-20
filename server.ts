@@ -13,6 +13,7 @@ import {
 } from "./src/db/repository.ts";
 import { registerGithubRoutes } from "./src/server/githubRoutes";
 import { registerApiExplorerRoutes } from "./src/server/apiExplorerRoutes";
+import { registerMailAndCronRoutes } from "./src/server/expressMailAndCronRoutes";
 
 async function startServer() {
   const app = express();
@@ -182,8 +183,9 @@ async function startServer() {
     }
   });
 
-  // API Explorer & GitHub OAuth Read-Only Routes
+  // API Explorer, Mail/Cron & GitHub OAuth Read-Only Routes
   registerApiExplorerRoutes(app);
+  registerMailAndCronRoutes(app);
   registerGithubRoutes(app);
 
   // Vite middleware for development
