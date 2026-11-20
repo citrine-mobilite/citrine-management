@@ -33,6 +33,7 @@ export type TabType =
   | 'leave_requests'
   | 'api_docs'
   | 'github_repos'
+  | 'herocab_backups'
   | 'users'
   | ''
   | 'settings'

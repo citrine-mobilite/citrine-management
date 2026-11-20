@@ -1,0 +1,107 @@
+name: HeroCab SQL Backup (Niveau 2 MySQL Temporaire → Google Drive)
+
+on:
+  schedule:
+    # Tous les jours à 00h00 heure de Douala (UTC+1 = 23h00 UTC)
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Identifiant de corrélation Citrine Management'
+        required: false
+        default: ''
+      trigger_source:
+        description: 'Origine du déclenchement'
+        required: false
+        default: 'manual_ui'
+      triggered_by:
+        description: 'Auteur du déclenchement'
+        required: false
+        default: 'Administrateur'
+      retention_days:
+        description: 'Durée de rétention en jours'
+        required: false
+        default: '45'
+      min_keep_backups:
+        description: 'Nombre minimal de sauvegardes valides à conserver'
+        required: false
+        default: '7'
+      required_tables:
+        description: 'Tables obligatoires séparées par virgules'
+        required: false
+        default: ''
+
+concurrency:
+  group: herocab-sql-backup
+  cancel-in-progress: false
+
+jobs:
+  backup-and-verify:
+    name: Export cPanel → Test Restauration MySQL 8 → Google Drive → Purge 45j
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Base MySQL 8 temporaire jetable pour prouver à 100 % que le dump SQL se réimporte sans corruption
+    services:
+      mysql_verify:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: herocab_verify_root
+          MYSQL_DATABASE: herocab_verify_tmp
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pherocab_verify_root --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Récupération du dépôt
+        uses: actions/checkout@v4
+
+      - name: Configuration Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installation du client MySQL pour le test de restauration
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y mysql-client
+
+      - name: Exécution du pipeline Sauvegarde & Vérification Niveau 2
+        env:
+          # Accès cPanel HeroCab (HTTPS API Token — aucun port 3306 ouvert)
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_PORT: ${{ secrets.CPANEL_PORT || '2083' }}
+          CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          HEROCAB_DB_NAME: ${{ secrets.HEROCAB_DB_NAME }}
+
+          # Authentification Google Drive (Refresh Token pour Gmail personnel OU Service Account pour Drive partagé)
+          GOOGLE_DRIVE_BACKUP_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_BACKUP_FOLDER_ID }}
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
+          GOOGLE_DRIVE_REFRESH_TOKEN: ${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+
+          # Conteneur MySQL 8 temporaire local (Niveau 2)
+          MYSQL_TEST_HOST: 127.0.0.1
+          MYSQL_TEST_PORT: 3306
+          MYSQL_TEST_USER: root
+          MYSQL_TEST_PASSWORD: herocab_verify_root
+          MYSQL_TEST_DB: herocab_verify_tmp
+
+          # Rapport signé vers Citrine Management
+          CITRINE_APP_URL: ${{ secrets.CITRINE_APP_URL }}
+          BACKUP_WEBHOOK_SECRET: ${{ secrets.BACKUP_WEBHOOK_SECRET }}
+
+          # Paramètres d'exécution
+          BACKUP_RUN_ID: ${{ github.event.inputs.run_id }}
+          BACKUP_TRIGGER_SOURCE: ${{ github.event.inputs.trigger_source || 'cron_midnight' }}
+          BACKUP_TRIGGERED_BY: ${{ github.event.inputs.triggered_by || 'Cron Automatique 00h00 (Douala)' }}
+          BACKUP_RETENTION_DAYS: ${{ github.event.inputs.retention_days || '45' }}
+          BACKUP_MIN_KEEP: ${{ github.event.inputs.min_keep_backups || '7' }}
+          BACKUP_REQUIRED_TABLES: ${{ github.event.inputs.required_tables || '' }}
+        run: node scripts/herocab-backup-runner.mjs

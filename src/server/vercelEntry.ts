@@ -3,6 +3,7 @@ import { Resend } from 'resend';
 import { registerGithubRoutes } from './githubRoutes';
 import { registerApiExplorerRoutes } from './apiExplorerRoutes';
 import { registerMailAndCronRoutes } from './expressMailAndCronRoutes';
+import { registerHerocabBackupRoutes } from './herocabBackupRoutes';
 
 const app = express();
 
@@ -210,9 +211,10 @@ app.post('/api/whatsapp/send', notificationLimiter, requireClientAuth, async (re
   }
 });
 
-// API Explorer, Mail/Cron & GitHub Read-Only OAuth Routes (Vercel Serverless)
+// API Explorer, Mail/Cron, HeroCab SQL Backups & GitHub Read-Only OAuth Routes (Vercel Serverless)
 registerApiExplorerRoutes(app);
 registerMailAndCronRoutes(app);
+registerHerocabBackupRoutes(app);
 registerGithubRoutes(app);
 
 // Health & Database diagnostics

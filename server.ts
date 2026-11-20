@@ -14,6 +14,7 @@ import {
 import { registerGithubRoutes } from "./src/server/githubRoutes";
 import { registerApiExplorerRoutes } from "./src/server/apiExplorerRoutes";
 import { registerMailAndCronRoutes } from "./src/server/expressMailAndCronRoutes";
+import { registerHerocabBackupRoutes } from "./src/server/herocabBackupRoutes";
 
 async function startServer() {
   const app = express();
@@ -183,9 +184,10 @@ async function startServer() {
     }
   });
 
-  // API Explorer, Mail/Cron & GitHub OAuth Read-Only Routes
+  // API Explorer, Mail/Cron, HeroCab SQL Backups & GitHub OAuth Read-Only Routes
   registerApiExplorerRoutes(app);
   registerMailAndCronRoutes(app);
+  registerHerocabBackupRoutes(app);
   registerGithubRoutes(app);
 
   // Vite middleware for development

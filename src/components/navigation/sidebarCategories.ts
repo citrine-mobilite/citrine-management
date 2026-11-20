@@ -25,7 +25,8 @@ import {
   Lightbulb,
   CalendarDays,
   Braces,
-  FolderGit2
+  FolderGit2,
+  DatabaseBackup
 } from 'lucide-react';
 import { TabType } from '../Sidebar';
 import { CompanyModuleConfig } from '../../types';
@@ -334,6 +335,18 @@ export function getSidebarCategories({
         label: 'Projets GitHub',
         description: 'Consulter vos dépôts GitHub en lecture seule et garder les liens',
         icon: FolderGit2,
+      });
+    }
+
+    if (
+      moduleConfig.enableHerocabBackups !== false &&
+      (normalizedRole === 'administrateur' || normalizedRole === 'admin')
+    ) {
+      adminItems.push({
+        id: 'herocab_backups',
+        label: 'Sauvegarde',
+        description: 'Export SQL HeroCab (cPanel), test MySQL temporaire et archivage Google Drive 45 jours',
+        icon: DatabaseBackup,
       });
     }
 

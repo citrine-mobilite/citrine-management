@@ -365,6 +365,7 @@ export interface CompanyModuleConfig {
   enableIdeasSurveys?: boolean;
   enableApiDocs?: boolean;
   enableGithubRepos?: boolean;
+  enableHerocabBackups?: boolean;
 }
 
 export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
@@ -391,6 +392,7 @@ export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
   enableIdeasSurveys: true,
   enableApiDocs: true,
   enableGithubRepos: true,
+  enableHerocabBackups: true,
   plannedDepartureTime: '16:30',
   breakStartTime: '12:00',
   breakEndTime: '15:00',

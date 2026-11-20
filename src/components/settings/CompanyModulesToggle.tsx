@@ -25,7 +25,8 @@ import {
   Contact2,
   Lightbulb,
   Braces,
-  FolderGit2
+  FolderGit2,
+  DatabaseBackup
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
 
@@ -182,6 +183,13 @@ const MODULES_LIST: ModuleDefinition[] = [
     title: 'Projets GitHub (Lecture seule)',
     description: 'Connexion OAuth GitHub en lecture seule pour consulter vos dépôts publics/privés et enregistrer leurs liens en BD.',
     icon: FolderGit2,
+    category: 'core',
+  },
+  {
+    key: 'enableHerocabBackups',
+    title: 'Sauvegarde SQL HeroCab',
+    description: 'Export quotidien (00h00) depuis cPanel, vérification MySQL temporaire Niveau 2, archivage Google Drive et rétention 45 jours.',
+    icon: DatabaseBackup,
     category: 'core',
   },
 ];

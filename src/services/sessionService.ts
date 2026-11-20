@@ -141,8 +141,8 @@ export function canAccessTab(role: Role | UserRole, tab: string): boolean {
   if (normRole === 'Administrateur') return true;
 
   if (normRole === 'Responsable') {
-    // Les responsables ont accès à l'opérationnel mais pas aux finances ni à la gestion des utilisateurs racine
-    const forbiddenTabs = ['users', 'finances'];
+    // Les responsables ont accès à l'opérationnel mais pas aux finances, sauvegardes SQL ni à la gestion des utilisateurs racine
+    const forbiddenTabs = ['users', 'finances', 'herocab_backups'];
     return !forbiddenTabs.includes(tab);
   }
 

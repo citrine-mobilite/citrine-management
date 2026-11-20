@@ -50,6 +50,7 @@ const VisitorsPanel = lazy(() => import('../visitors/VisitorsPanel'));
 const IdeasSurveysPanel = lazy(() => import('../ideas/IdeasSurveysPanel'));
 const ApiExplorerPanel = lazy(() => import('../api/ApiExplorerPanel'));
 const GithubProjectsPanel = lazy(() => import('../github/GithubProjectsPanel'));
+const HerocabBackupPanel = lazy(() => import('../backups/HerocabBackupPanel'));
 
 export interface AppTabRouterProps {
   activeTab: TabType;
@@ -348,6 +349,11 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           <GithubProjectsPanel currentUser={currentUser} showToast={showToast} />
         </ErrorBoundary>
       )}
+      {activeTab === 'herocab_backups' && (
+        <ErrorBoundary>
+          <HerocabBackupPanel currentUser={currentUser} showToast={showToast} />
+        </ErrorBoundary>
+      )}
       {activeTab === 'profile' && currentUser && (
         <ProfilePage
           currentUser={currentUser}
@@ -363,7 +369,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
         'reminders', 'logs', 'collaborators', 'discipline', 'documents',
         'communications', 'finances', 'inventory', 'partners', 'users',
         'settings', 'calls', 'recruitment', 'expense_claims', 'hse',
-        'visitors', 'ideas_surveys', 'api_docs', 'github_repos', 'profile'
+        'visitors', 'ideas_surveys', 'api_docs', 'github_repos', 'herocab_backups', 'profile'
       ].includes(activeTab)) && (
         currentUser?.role === 'employé' ? (
           <EmployeePortal
