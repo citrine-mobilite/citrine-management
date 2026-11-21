@@ -34,6 +34,7 @@ export type TabType =
   | 'api_docs'
   | 'github_repos'
   | 'herocab_backups'
+  | 'compliance'
   | 'users'
   | ''
   | 'settings'

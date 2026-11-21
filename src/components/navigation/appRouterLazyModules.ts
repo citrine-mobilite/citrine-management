@@ -35,13 +35,14 @@ export const HsePanel = lazy(() => import('../hse/HsePanel'));
 export const VisitorsPanel = lazy(() => import('../visitors/VisitorsPanel'));
 export const IdeasSurveysPanel = lazy(() => import('../ideas/IdeasSurveysPanel'));
 export const StrategicProjectsPanel = lazy(() => import('../projects/StrategicProjectsPanel'));
+export const CompliancePanel = lazy(() => import('../compliance/CompliancePanel'));
 
 export const VALID_ROUTER_TABS: TabType[] = [
   'dashboard', 'employee_portal', 'presences', 'leave_requests', 'statistics', 'projects', 'tasks',
   'reminders', 'logs', 'collaborators', 'discipline', 'documents',
   'communications', 'finances', 'inventory', 'partners', 'users',
   'settings', 'calls', 'recruitment', 'expense_claims', 'hse',
-  'visitors', 'ideas_surveys', 'profile',
+  'visitors', 'ideas_surveys', 'compliance', 'profile',
 ];
 
 export interface AppTabRouterProps {

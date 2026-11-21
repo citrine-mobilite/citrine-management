@@ -26,7 +26,8 @@ import {
   Lightbulb,
   Braces,
   FolderGit2,
-  DatabaseBackup
+  DatabaseBackup,
+  ClipboardCheck
 } from 'lucide-react';
 import { CompanyModuleConfig } from '../../types';
 
@@ -190,6 +191,13 @@ const MODULES_LIST: ModuleDefinition[] = [
     title: 'Sauvegarde SQL HeroCab',
     description: 'Export quotidien (00h00) depuis cPanel, vérification MySQL temporaire Niveau 2, archivage Google Drive et rétention 45 jours.',
     icon: DatabaseBackup,
+    category: 'core',
+  },
+  {
+    key: 'enableCompliance',
+    title: 'Conformité & Audit ANTIC',
+    description: 'Checklist complète du référentiel d’audit de sécurité ANTIC avec sous-livrables, responsables, versions et export dossier.',
+    icon: ClipboardCheck,
     category: 'core',
   },
 ];

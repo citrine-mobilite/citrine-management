@@ -610,7 +610,14 @@ function supabaseRowToItem(collectionName: string, row: any): any {
   if (!row) return null;
 
   if (row.collection && row.data) {
-    return { ...row.data, id: String(row.id), uid: row.uid, _dbId: row.id };
+    const dataObj = typeof row.data === 'object' ? row.data : {};
+    return {
+      ...dataObj,
+      id: row.doc_id || dataObj.id || String(row.id),
+      docId: row.doc_id,
+      uid: row.uid,
+      _dbId: row.id,
+    };
   }
 
   const table = mapCollectionToTable(collectionName);
@@ -1089,6 +1096,9 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
         .upsert(row, { onConflict: 'collection,doc_id' })
         .select()
         .single();
+      if (error && collectionName === 'antic_compliance_items') {
+        throw error;
+      }
       if (!error && data) return supabaseRowToItem(collectionName, data) as T;
       return item;
     }
@@ -1118,7 +1128,7 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
     return item;
   } catch (err) {
     console.warn(`[Supabase Save] Exception saving to ${collectionName}:`, err);
-    if (mapCollectionToTable(collectionName) === 'tasks') {
+    if (mapCollectionToTable(collectionName) === 'tasks' || collectionName === 'antic_compliance_items') {
       throw err;
     }
     return item;

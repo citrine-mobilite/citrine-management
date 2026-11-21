@@ -366,6 +366,7 @@ export interface CompanyModuleConfig {
   enableApiDocs?: boolean;
   enableGithubRepos?: boolean;
   enableHerocabBackups?: boolean;
+  enableCompliance?: boolean;
 }
 
 export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
@@ -393,6 +394,7 @@ export const DEFAULT_MODULE_CONFIG: CompanyModuleConfig = {
   enableApiDocs: true,
   enableGithubRepos: true,
   enableHerocabBackups: true,
+  enableCompliance: true,
   plannedDepartureTime: '16:30',
   breakStartTime: '12:00',
   breakEndTime: '15:00',

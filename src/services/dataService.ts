@@ -36,7 +36,8 @@ export const COLLECTIONS = {
   LEAVE_REQUESTS: 'leave_requests',
   USERS: 'users',
   API_SPECS: 'api_specs',
-  GITHUB_PROJECTS: 'github_projects'
+  GITHUB_PROJECTS: 'github_projects',
+  ANTIC_COMPLIANCE: 'antic_compliance_items'
 } as const;
 
 // Helper to remove undefined properties recursively

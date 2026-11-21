@@ -9,6 +9,7 @@ const preloaders: Record<string, () => Promise<any>> = {
   partners: () => import('../components/PartnersPanel'),
   settings: () => import('../components/CompanySettingsPanel'),
   communications: () => import('../components/CommunicationPanel'),
+  compliance: () => import('../components/compliance/CompliancePanel'),
   kiosk: () => import('../components/KioskClockingModal'),
 };
 

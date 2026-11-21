@@ -26,7 +26,8 @@ import {
   CalendarDays,
   Braces,
   FolderGit2,
-  DatabaseBackup
+  DatabaseBackup,
+  ClipboardCheck
 } from 'lucide-react';
 import { TabType } from '../Sidebar';
 import { CompanyModuleConfig } from '../../types';
@@ -347,6 +348,15 @@ export function getSidebarCategories({
         label: 'Sauvegarde',
         description: 'Export SQL HeroCab (cPanel), test MySQL temporaire et archivage Google Drive 45 jours',
         icon: DatabaseBackup,
+      });
+    }
+
+    if (moduleConfig.enableCompliance !== false) {
+      adminItems.push({
+        id: 'compliance',
+        label: 'Conformité',
+        description: "Checklist officielle d'audit de sécurité ANTIC, preuves, versions et sous-livrables",
+        icon: ClipboardCheck,
       });
     }
 
