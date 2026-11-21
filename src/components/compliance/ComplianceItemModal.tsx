@@ -3,6 +3,7 @@ import { Loader2, Plus, Trash2, X, AlertCircle } from 'lucide-react';
 import { Employee } from '../../types';
 import {
   ComplianceChecklistItem,
+  ComplianceComment,
   ComplianceConfidentiality,
   ComplianceStatus,
   ComplianceSubItem,
@@ -13,6 +14,7 @@ interface ComplianceItemModalProps {
   isOpen: boolean;
   item: ComplianceChecklistItem | null;
   employees: Employee[];
+  authorName?: string;
   onClose: () => void;
   onSave: (updated: ComplianceChecklistItem) => Promise<void>;
   onDelete?: (itemId: string) => Promise<void>;
@@ -22,6 +24,7 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
   isOpen,
   item,
   employees,
+  authorName = 'Administrateur',
   onClose,
   onSave,
   onDelete,
@@ -34,6 +37,8 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
   const [confidentiality, setConfidentiality] = useState<ComplianceConfidentiality>('Confidentiel');
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [auditorNotes, setAuditorNotes] = useState('');
+  const [comments, setComments] = useState<ComplianceComment[]>([]);
+  const [newCommentText, setNewCommentText] = useState('');
   const [subItems, setSubItems] = useState<ComplianceSubItem[]>([]);
   const [newSubLabel, setNewSubLabel] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,6 +55,8 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
       setConfidentiality(item.confidentiality || 'Confidentiel');
       setEvidenceUrl(item.evidenceUrl || '');
       setAuditorNotes(item.auditorNotes || '');
+      setComments(Array.isArray(item.comments) ? item.comments.map((c) => ({ ...c })) : []);
+      setNewCommentText('');
       setSubItems(Array.isArray(item.subItems) ? item.subItems.map((s) => ({ ...s })) : []);
       setNewSubLabel('');
       setSubmitError(null);
@@ -92,6 +99,25 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
     setSubItems((prev) => prev.filter((s) => s.id !== subId));
   };
 
+  const handleAddCommentInModal = () => {
+    const txt = newCommentText.trim();
+    if (!txt) return;
+    setComments((prev) => [
+      ...prev,
+      {
+        id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        text: txt,
+        author: authorName,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    setNewCommentText('');
+  };
+
+  const handleRemoveCommentInModal = (cmtId: string) => {
+    setComments((prev) => prev.filter((c) => c.id !== cmtId));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -99,6 +125,19 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
     setSubmitError(null);
     setIsSubmitting(true);
     try {
+      const pendingDraft = newCommentText.trim();
+      const finalComments = pendingDraft
+        ? [
+            ...comments,
+            {
+              id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+              text: pendingDraft,
+              author: authorName,
+              createdAt: new Date().toISOString(),
+            },
+          ]
+        : comments;
+
       const updated: ComplianceChecklistItem = {
         ...item,
         status,
@@ -109,6 +148,7 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
         confidentiality,
         evidenceUrl: evidenceUrl.trim() || undefined,
         auditorNotes: auditorNotes.trim() || undefined,
+        comments: finalComments,
         subItems,
         updatedAt: new Date().toISOString(),
       };
@@ -356,19 +396,75 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
             </div>
           </div>
 
-          {/* Auditor Notes */}
-          <div>
-            <label htmlFor="comp-notes" className="block text-stone-700 font-semibold mb-1.5">
-              Commentaires / Précisions pour l’auditeur ANTIC
-            </label>
-            <textarea
-              id="comp-notes"
-              rows={3}
-              value={auditorNotes}
-              onChange={(e) => setAuditorNotes(e.target.value)}
-              placeholder="Ex: Document en cours de validation DG, ou justification si non existant à ce stade..."
-              className="w-full px-3 py-2 border border-stone-200 rounded-lg resize-none focus:outline-none focus:border-[#2A7B76]"
-            />
+          {/* Auditor Notes & Comments Thread */}
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="comp-notes" className="block text-stone-700 font-semibold mb-1.5">
+                Synthèse / Note principale pour l’auditeur ANTIC
+              </label>
+              <textarea
+                id="comp-notes"
+                rows={2}
+                value={auditorNotes}
+                onChange={(e) => setAuditorNotes(e.target.value)}
+                placeholder="Ex: Document en cours de validation DG, ou justification si non existant à ce stade..."
+                className="w-full px-3 py-2 border border-stone-200 rounded-lg resize-none focus:outline-none focus:border-[#2A7B76]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <span className="block text-stone-700 font-semibold">
+                Commentaires horodatés ({comments.length})
+              </span>
+              {comments.length > 0 && (
+                <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 bg-stone-50/50">
+                  {comments.map((cmt) => (
+                    <div key={cmt.id} className="flex items-start justify-between gap-2 px-3 py-2">
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-[11px] text-stone-500">
+                          <strong className="text-stone-700">{cmt.author}</strong> ·{' '}
+                          <span className="font-mono">
+                            {cmt.createdAt ? new Date(cmt.createdAt).toLocaleDateString('fr-FR') : ''}
+                          </span>
+                        </p>
+                        <p className="text-stone-800 whitespace-pre-wrap">{cmt.text}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCommentInModal(cmt.id)}
+                        aria-label="Supprimer le commentaire"
+                        className="p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer shrink-0"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newCommentText}
+                  onChange={(e) => setNewCommentText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCommentInModal();
+                    }
+                  }}
+                  placeholder="Ajouter un commentaire horodaté..."
+                  className="flex-1 px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:border-[#2A7B76]"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCommentInModal}
+                  className="inline-flex items-center gap-1 px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-lg border border-stone-200 transition whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Ajouter</span>
+                </button>
+              </div>
+            </div>
           </div>
         </form>
 

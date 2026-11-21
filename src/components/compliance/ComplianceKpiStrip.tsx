@@ -41,27 +41,27 @@ export const ComplianceKpiStrip: React.FC<ComplianceKpiStripProps> = ({
             {metrics.readinessPercent}%
           </p>
           <p className="text-xs text-stone-500 tabular-nums">
-            {metrics.conformeCount} / {metrics.totalApplicable} exigences applicables prêtes
+            {metrics.conformeCount} / {metrics.totalApplicable} exigences applicables conformes
           </p>
         </div>
 
         <div className="p-5 flex flex-col justify-between gap-1.5">
-          <span className="text-xs font-medium text-stone-500">Documents Prêts &amp; Validés</span>
+          <span className="text-xs font-medium text-stone-500">Conformes &amp; En cours</span>
           <p className="text-2xl font-bold text-[#16A34A] font-mono tabular-nums">
             {metrics.conformeCount}
           </p>
           <p className="text-xs text-stone-500 tabular-nums">
-            {metrics.enCoursCount} en rédaction · {metrics.aPreparerCount} à préparer
+            {metrics.enCoursCount} en cours · {metrics.aPreparerCount} à préparer
           </p>
         </div>
 
         <div className="p-5 flex flex-col justify-between gap-1.5">
-          <span className="text-xs font-medium text-stone-500">Déclarations de Maturité</span>
-          <p className="text-2xl font-bold text-stone-900 font-mono tabular-nums">
-            {metrics.nonExistantCount}
+          <span className="text-xs font-medium text-stone-500">Non-conformités &amp; Écarts</span>
+          <p className={`text-2xl font-bold font-mono tabular-nums ${metrics.nonConformeCount > 0 ? 'text-[#DC2626]' : 'text-stone-900'}`}>
+            {metrics.nonConformeCount}
           </p>
           <p className="text-xs text-stone-500 tabular-nums">
-            Non existants déclarés · {metrics.nonApplicableCount} N/A
+            {metrics.nonExistantCount} non existants · {metrics.nonApplicableCount} N/A
           </p>
         </div>
 
@@ -111,7 +111,7 @@ export const ComplianceKpiStrip: React.FC<ComplianceKpiStripProps> = ({
                 />
               </div>
               <p className="mt-1.5 text-[11px] text-stone-500 tabular-nums">
-                {axisStat.conformeCount}/{axisStat.totalApplicable} prêts · {axisStat.subItemsDone}/{axisStat.subItemsTotal} livrables
+                {axisStat.conformeCount}/{axisStat.totalApplicable} conformes · {axisStat.subItemsDone}/{axisStat.subItemsTotal} livrables
               </p>
             </button>
           );

@@ -20,8 +20,8 @@ export interface ComplianceStatusMeta {
 const STATUS_META_MAP: Record<ComplianceStatus, ComplianceStatusMeta> = {
   conforme: {
     value: 'conforme',
-    label: 'Document prêt / Conforme',
-    shortLabel: 'Prêt',
+    label: 'Conforme',
+    shortLabel: 'Conforme',
     textClass: 'text-[#16A34A]',
     surfaceClass: 'bg-emerald-50',
     borderClass: 'border-emerald-200',
@@ -29,11 +29,20 @@ const STATUS_META_MAP: Record<ComplianceStatus, ComplianceStatusMeta> = {
   },
   en_cours: {
     value: 'en_cours',
-    label: 'En cours de rédaction',
+    label: 'En cours de conformité',
     shortLabel: 'En cours',
     textClass: 'text-[#D97706]',
     surfaceClass: 'bg-amber-50',
     borderClass: 'border-amber-200',
+    countsAsHandled: false,
+  },
+  non_conforme: {
+    value: 'non_conforme',
+    label: 'Non conforme',
+    shortLabel: 'Non conforme',
+    textClass: 'text-[#DC2626]',
+    surfaceClass: 'bg-red-50',
+    borderClass: 'border-red-200',
     countsAsHandled: false,
   },
   a_preparer: {
@@ -49,9 +58,9 @@ const STATUS_META_MAP: Record<ComplianceStatus, ComplianceStatusMeta> = {
     value: 'non_existant',
     label: 'Non existant (à déclarer)',
     shortLabel: 'Non existant',
-    textClass: 'text-[#DC2626]',
-    surfaceClass: 'bg-red-50',
-    borderClass: 'border-red-200',
+    textClass: 'text-[#991B1B]',
+    surfaceClass: 'bg-rose-50',
+    borderClass: 'border-rose-200',
     countsAsHandled: true,
   },
   non_applicable: {
@@ -69,6 +78,7 @@ export const COMPLIANCE_STATUS_OPTIONS: ComplianceStatusMeta[] = [
   STATUS_META_MAP.a_preparer,
   STATUS_META_MAP.en_cours,
   STATUS_META_MAP.conforme,
+  STATUS_META_MAP.non_conforme,
   STATUS_META_MAP.non_existant,
   STATUS_META_MAP.non_applicable,
 ];
@@ -78,6 +88,24 @@ export function getComplianceStatusMeta(status?: ComplianceStatus): ComplianceSt
     return STATUS_META_MAP.a_preparer;
   }
   return STATUS_META_MAP[status];
+}
+
+/**
+ * Formats auditorNotes + timestamped comments thread into a unified readable string for search and exports.
+ */
+export function getCombinedCommentsText(item: ComplianceChecklistItem): string {
+  const parts: string[] = [];
+  if (item.auditorNotes && item.auditorNotes.trim()) {
+    parts.push(item.auditorNotes.trim());
+  }
+  const thread = Array.isArray(item.comments) ? item.comments : [];
+  for (const c of thread) {
+    if (!c || !c.text?.trim()) continue;
+    const dateStr = c.createdAt ? c.createdAt.slice(0, 10) : '';
+    const prefix = [c.author, dateStr].filter(Boolean).join(' · ');
+    parts.push(prefix ? `[${prefix}] ${c.text.trim()}` : c.text.trim());
+  }
+  return parts.join(' | ');
 }
 
 /**
@@ -93,6 +121,7 @@ export function mergeSeedWithStoredItems(
   for (const item of seedItems) {
     byId.set(item.id, {
       ...item,
+      comments: Array.isArray(item.comments) ? item.comments.map((c) => ({ ...c })) : [],
       subItems: Array.isArray(item.subItems) ? item.subItems.map((s) => ({ ...s })) : [],
     });
   }
@@ -104,8 +133,8 @@ export function mergeSeedWithStoredItems(
       byId.set(stored.id, {
         ...base,
         ...stored,
-        // Keep structural metadata if stored record omitted optional seed links
         citrineModuleHint: stored.citrineModuleHint || base.citrineModuleHint,
+        comments: Array.isArray(stored.comments) ? stored.comments : base.comments || [],
         subItems: Array.isArray(stored.subItems) && stored.subItems.length > 0
           ? stored.subItems
           : base.subItems,
@@ -114,6 +143,7 @@ export function mergeSeedWithStoredItems(
     } else {
       byId.set(stored.id, {
         ...stored,
+        comments: Array.isArray(stored.comments) ? stored.comments : [],
         subItems: Array.isArray(stored.subItems) ? stored.subItems : [],
         orderIndex: typeof stored.orderIndex === 'number' ? stored.orderIndex : 999,
       });
@@ -131,6 +161,7 @@ export function computeComplianceMetrics(items: ComplianceChecklistItem[]): Comp
   const applicable = items.filter((i) => i.status !== 'non_applicable');
   const conformeCount = items.filter((i) => i.status === 'conforme').length;
   const enCoursCount = items.filter((i) => i.status === 'en_cours').length;
+  const nonConformeCount = items.filter((i) => i.status === 'non_conforme').length;
   const aPreparerCount = items.filter((i) => i.status === 'a_preparer').length;
   const nonExistantCount = items.filter((i) => i.status === 'non_existant').length;
   const nonApplicableCount = items.filter((i) => i.status === 'non_applicable').length;
@@ -165,6 +196,7 @@ export function computeComplianceMetrics(items: ComplianceChecklistItem[]): Comp
       totalApplicable: axisApplicable.length,
       conformeCount: axisConforme,
       enCoursCount: axisItems.filter((i) => i.status === 'en_cours').length,
+      nonConformeCount: axisItems.filter((i) => i.status === 'non_conforme').length,
       nonExistantCount: axisItems.filter((i) => i.status === 'non_existant').length,
       aPreparerCount: axisItems.filter((i) => i.status === 'a_preparer').length,
       nonApplicableCount: axisItems.filter((i) => i.status === 'non_applicable').length,
@@ -180,6 +212,7 @@ export function computeComplianceMetrics(items: ComplianceChecklistItem[]): Comp
     totalApplicable: applicable.length,
     conformeCount,
     enCoursCount,
+    nonConformeCount,
     aPreparerCount,
     nonExistantCount,
     nonApplicableCount,
@@ -215,6 +248,7 @@ export function filterComplianceItems(
     }
     if (q) {
       const subText = (item.subItems || []).map((s) => s.label).join(' ');
+      const commentsText = getCombinedCommentsText(item);
       const haystack = [
         item.controlCode,
         item.sectionCode,
@@ -223,7 +257,7 @@ export function filterComplianceItems(
         item.description || '',
         item.ownerName || '',
         item.documentVersion || '',
-        item.auditorNotes || '',
+        commentsText,
         subText,
       ]
         .join(' ')
@@ -234,6 +268,49 @@ export function filterComplianceItems(
       }
     }
     return true;
+  });
+}
+
+export interface ComplianceReportRow {
+  controlCode: string;
+  axis: ComplianceAxis;
+  sectionTitle: string;
+  title: string;
+  status: ComplianceStatus;
+  statusLabel: string;
+  subItemsSummary: string;
+  subItemsDetail: string;
+  ownerName: string;
+  documentVersion: string;
+  documentDate: string;
+  confidentiality: string;
+  evidenceUrl: string;
+  commentsText: string;
+}
+
+export function prepareComplianceReportRows(items: ComplianceChecklistItem[]): ComplianceReportRow[] {
+  return items.map((item) => {
+    const subs = item.subItems || [];
+    const doneCount = subs.filter((s) => s.completed).length;
+    const subItemsDetail = subs
+      .map((s) => `${s.completed ? '[x]' : '[ ]'} ${s.label}`)
+      .join('\n');
+    return {
+      controlCode: item.controlCode,
+      axis: item.axis,
+      sectionTitle: item.sectionTitle,
+      title: item.title,
+      status: item.status,
+      statusLabel: getComplianceStatusMeta(item.status).label,
+      subItemsSummary: `${doneCount}/${subs.length}`,
+      subItemsDetail,
+      ownerName: item.ownerName || '',
+      documentVersion: item.documentVersion || '',
+      documentDate: item.documentDate || '',
+      confidentiality: item.confidentiality || 'Confidentiel',
+      evidenceUrl: item.evidenceUrl || '',
+      commentsText: getCombinedCommentsText(item),
+    };
   });
 }
 
@@ -260,29 +337,27 @@ export function buildAnticCsvExport(items: ComplianceChecklistItem[]): string {
     'Date document',
     'Confidentialité',
     'Preuve / Lien',
-    'Commentaire auditeur',
+    'Commentaires',
   ];
 
-  const rows = items.map((item) => {
-    const subs = item.subItems || [];
-    const doneCount = subs.filter((s) => s.completed).length;
-    const statusLabel = getComplianceStatusMeta(item.status).label;
-    return [
-      item.controlCode,
-      item.sectionTitle,
-      item.title,
-      statusLabel,
-      `${doneCount}/${subs.length}`,
-      item.ownerName || '',
-      item.documentVersion || '',
-      item.documentDate || '',
-      item.confidentiality || 'Confidentiel',
-      item.evidenceUrl || '',
-      item.auditorNotes || '',
+  const reportRows = prepareComplianceReportRows(items);
+  const rows = reportRows.map((row) =>
+    [
+      row.controlCode,
+      row.sectionTitle,
+      row.title,
+      row.statusLabel,
+      row.subItemsSummary,
+      row.ownerName,
+      row.documentVersion,
+      row.documentDate,
+      row.confidentiality,
+      row.evidenceUrl,
+      row.commentsText,
     ]
       .map(escapeCsvCell)
-      .join(';');
-  });
+      .join(';')
+  );
 
   return '\uFEFF' + [headers.map(escapeCsvCell).join(';'), ...rows].join('\n');
 }

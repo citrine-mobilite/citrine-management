@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ClipboardCheck,
-  Download,
+  FileDown,
+  FileSpreadsheet,
   FileText,
   FolderOpen,
+  Loader2,
   Plus,
   RotateCcw,
   Search,
@@ -12,11 +14,11 @@ import { AppUser, Employee } from '../../types';
 import {
   ComplianceAxis,
   ComplianceChecklistItem,
+  ComplianceComment,
   ComplianceStatus,
 } from '../../types/complianceTypes';
 import { COMPLIANCE_AXES_META } from '../../data/anticChecklistSeed';
 import {
-  buildAnticCsvExport,
   COMPLIANCE_STATUS_OPTIONS,
   computeComplianceMetrics,
   filterComplianceItems,
@@ -26,6 +28,10 @@ import {
   saveComplianceItem,
   subscribeToComplianceItems,
 } from '../../services/complianceService';
+import {
+  exportComplianceToExcel,
+  exportComplianceToPdf,
+} from '../../services/complianceReportExportService';
 import { ComplianceKpiStrip } from './ComplianceKpiStrip';
 import { ComplianceItemRow } from './ComplianceItemRow';
 import { ComplianceItemModal } from './ComplianceItemModal';
@@ -57,8 +63,11 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(['antic_gen_01']));
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<'excel' | 'pdf' | null>(null);
   const [editingItem, setEditingItem] = useState<ComplianceChecklistItem | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  const actorName = currentUser?.name || currentUser?.email || 'Administrateur';
 
   useEffect(() => {
     const mainEl = document.querySelector('main');
@@ -144,10 +153,9 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
       subItems: updatedSubs,
       status: nextStatus,
       updatedAt: new Date().toISOString(),
-      updatedBy: currentUser?.name || currentUser?.email || 'Admin',
+      updatedBy: actorName,
     };
 
-    // Optimistic update + persistence
     setItems((prev) => prev.map((it) => (it.id === item.id ? updated : it)));
     setSavingItemId(item.id);
     try {
@@ -160,10 +168,79 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
     }
   };
 
+  const handleQuickStatusChange = async (
+    item: ComplianceChecklistItem,
+    nextStatus: ComplianceStatus
+  ) => {
+    if (item.status === nextStatus) return;
+    const updated: ComplianceChecklistItem = {
+      ...item,
+      status: nextStatus,
+      updatedAt: new Date().toISOString(),
+      updatedBy: actorName,
+    };
+    setItems((prev) => prev.map((it) => (it.id === item.id ? updated : it)));
+    setSavingItemId(item.id);
+    try {
+      await saveComplianceItem(updated);
+      showToast?.(`Statut de ${item.controlCode} mis à jour.`, 'success');
+    } catch (err: any) {
+      setItems((prev) => prev.map((it) => (it.id === item.id ? item : it)));
+      showToast?.(err?.message || 'Erreur lors de la mise à jour du statut.', 'error');
+    } finally {
+      setSavingItemId(null);
+    }
+  };
+
+  const handleAddComment = async (item: ComplianceChecklistItem, text: string) => {
+    const newComment: ComplianceComment = {
+      id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      text,
+      author: actorName,
+      createdAt: new Date().toISOString(),
+    };
+    const updated: ComplianceChecklistItem = {
+      ...item,
+      comments: [...(item.comments || []), newComment],
+      updatedAt: new Date().toISOString(),
+      updatedBy: actorName,
+    };
+    setItems((prev) => prev.map((it) => (it.id === item.id ? updated : it)));
+    setSavingItemId(item.id);
+    try {
+      await saveComplianceItem(updated);
+      showToast?.(`Commentaire ajouté sur ${item.controlCode}.`, 'success');
+    } catch (err: any) {
+      setItems((prev) => prev.map((it) => (it.id === item.id ? item : it)));
+      showToast?.(err?.message || "Impossible d'enregistrer le commentaire.", 'error');
+    } finally {
+      setSavingItemId(null);
+    }
+  };
+
+  const handleDeleteComment = async (item: ComplianceChecklistItem, commentId: string) => {
+    const updated: ComplianceChecklistItem = {
+      ...item,
+      comments: (item.comments || []).filter((c) => c.id !== commentId),
+      updatedAt: new Date().toISOString(),
+      updatedBy: actorName,
+    };
+    setItems((prev) => prev.map((it) => (it.id === item.id ? updated : it)));
+    setSavingItemId(item.id);
+    try {
+      await saveComplianceItem(updated);
+    } catch (err: any) {
+      setItems((prev) => prev.map((it) => (it.id === item.id ? item : it)));
+      showToast?.(err?.message || 'Erreur lors de la suppression du commentaire.', 'error');
+    } finally {
+      setSavingItemId(null);
+    }
+  };
+
   const handleSaveModal = async (updated: ComplianceChecklistItem) => {
     const enriched: ComplianceChecklistItem = {
       ...updated,
-      updatedBy: currentUser?.name || currentUser?.email || 'Admin',
+      updatedBy: actorName,
     };
     const saved = await saveComplianceItem(enriched);
     setItems((prev) => prev.map((it) => (it.id === saved.id ? saved : it)));
@@ -173,7 +250,7 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
   const handleCreateCustom = async (newItem: ComplianceChecklistItem) => {
     const enriched: ComplianceChecklistItem = {
       ...newItem,
-      updatedBy: currentUser?.name || currentUser?.email || 'Admin',
+      updatedBy: actorName,
     };
     const saved = await saveComplianceItem(enriched);
     setItems((prev) => [...prev, saved].sort((a, b) => a.orderIndex - b.orderIndex));
@@ -187,19 +264,45 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
     showToast?.('Exigence personnalisée supprimée.', 'success');
   };
 
-  const handleExportCsv = () => {
-    const csvContent = buildAnticCsvExport(items);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const dateStamp = new Date().toISOString().split('T')[0];
-    link.href = url;
-    link.setAttribute('download', `Dossier_Conformite_ANTIC_${dateStamp}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showToast?.('Export CSV du dossier ANTIC téléchargé.', 'success');
+  const getExportScopeLabel = () => {
+    if (activeAxis === 'all' && statusFilter === 'all' && !searchTerm && !onlyPending) {
+      return 'Dossier complet ANTIC';
+    }
+    return `Vue filtrée (${filteredItems.length} exigences)`;
+  };
+
+  const handleExportExcel = async () => {
+    if (exportingFormat) return;
+    setExportingFormat('excel');
+    try {
+      const targetItems = filteredItems.length > 0 ? filteredItems : items;
+      const filename = await exportComplianceToExcel(targetItems, {
+        generatedBy: actorName,
+        filterLabel: getExportScopeLabel(),
+      });
+      showToast?.(`Rapport Excel généré : ${filename}`, 'success');
+    } catch (err: any) {
+      showToast?.(err?.message || "Erreur lors de l'export Excel.", 'error');
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (exportingFormat) return;
+    setExportingFormat('pdf');
+    try {
+      const targetItems = filteredItems.length > 0 ? filteredItems : items;
+      const filename = await exportComplianceToPdf(targetItems, {
+        generatedBy: actorName,
+        filterLabel: getExportScopeLabel(),
+      });
+      showToast?.(`Rapport PDF généré : ${filename}`, 'success');
+    } catch (err: any) {
+      showToast?.(err?.message || "Erreur lors de l'export PDF.", 'error');
+    } finally {
+      setExportingFormat(null);
+    }
   };
 
   const resetFilters = () => {
@@ -245,11 +348,30 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
 
           <button
             type="button"
-            onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-700 bg-stone-50 hover:bg-stone-100 border border-stone-200 rounded-xl transition whitespace-nowrap shrink-0 cursor-pointer"
+            onClick={handleExportExcel}
+            disabled={exportingFormat !== null}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-700 bg-stone-50 hover:bg-stone-100 border border-stone-200 rounded-xl transition whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
           >
-            <Download className="h-4 w-4 text-stone-500" />
-            <span>Exporter dossier (CSV)</span>
+            {exportingFormat === 'excel' ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[#2A7B76]" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4 text-[#16A34A]" />
+            )}
+            <span>Exporter Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exportingFormat !== null}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-700 bg-stone-50 hover:bg-stone-100 border border-stone-200 rounded-xl transition whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
+          >
+            {exportingFormat === 'pdf' ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[#2A7B76]" />
+            ) : (
+              <FileDown className="h-4 w-4 text-[#DC2626]" />
+            )}
+            <span>Exporter PDF</span>
           </button>
 
           <button
@@ -412,7 +534,7 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
                     {group.sectionTitle}
                   </h2>
                   <span className="text-xs font-medium text-stone-500 tabular-nums">
-                    {readyCount} / {group.items.length} prêts
+                    {readyCount} / {group.items.length} conformes
                   </span>
                 </div>
 
@@ -424,6 +546,9 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
                       isExpanded={expandedIds.has(item.id)}
                       onToggleExpand={handleToggleExpand}
                       onToggleSubItem={handleToggleSubItem}
+                      onQuickStatusChange={handleQuickStatusChange}
+                      onAddComment={handleAddComment}
+                      onDeleteComment={handleDeleteComment}
                       onOpenEdit={setEditingItem}
                       onNavigateCitrineTab={onNavigateTab}
                       savingItemId={savingItemId}
@@ -441,6 +566,7 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
         isOpen={Boolean(editingItem)}
         item={editingItem}
         employees={employees}
+        authorName={actorName}
         onClose={() => setEditingItem(null)}
         onSave={handleSaveModal}
         onDelete={handleDeleteCustom}

@@ -4,10 +4,18 @@ export type ComplianceStatus =
   | 'a_preparer'
   | 'en_cours'
   | 'conforme'
+  | 'non_conforme'
   | 'non_existant'
   | 'non_applicable';
 
 export type ComplianceConfidentiality = 'Confidentiel' | 'Restreint' | 'Interne';
+
+export interface ComplianceComment {
+  id: string;
+  text: string;
+  author: string;
+  createdAt: string;
+}
 
 export interface ComplianceSubItem {
   id: string;
@@ -38,6 +46,7 @@ export interface ComplianceChecklistItem {
   evidenceUrl?: string;
   confidentiality?: ComplianceConfidentiality;
   auditorNotes?: string;
+  comments?: ComplianceComment[];
   subItems: ComplianceSubItem[];
   citrineModuleHint?: ComplianceCitrineLink;
   isCustom?: boolean;
@@ -53,6 +62,7 @@ export interface ComplianceAxisSummary {
   totalApplicable: number;
   conformeCount: number;
   enCoursCount: number;
+  nonConformeCount: number;
   nonExistantCount: number;
   aPreparerCount: number;
   nonApplicableCount: number;
@@ -66,6 +76,7 @@ export interface ComplianceMetrics {
   totalApplicable: number;
   conformeCount: number;
   enCoursCount: number;
+  nonConformeCount: number;
   aPreparerCount: number;
   nonExistantCount: number;
   nonApplicableCount: number;
