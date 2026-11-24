@@ -28,6 +28,10 @@ export const ComplianceKpiStrip: React.FC<ComplianceKpiStripProps> = ({
     );
   }
 
+  const inProgressSubCount =
+    metrics.enCoursCount + metrics.partiellementConformeCount + metrics.aVerifierCount;
+  const blockedSubCount = metrics.subNonConformeCount + metrics.nonExistantCount;
+
   return (
     <div className="space-y-3">
       {/* 4-Column Main Metrics Strip */}
@@ -36,44 +40,52 @@ export const ComplianceKpiStrip: React.FC<ComplianceKpiStripProps> = ({
         className="bg-white border border-stone-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-stone-200"
       >
         <div className="p-5 flex flex-col justify-between gap-1.5">
-          <span className="text-xs font-medium text-stone-500">Préparation Dossier ANTIC</span>
+          <span className="text-xs font-medium text-stone-500">Conformité Globale</span>
           <p className="text-2xl font-bold text-stone-900 font-mono tabular-nums">
             {metrics.readinessPercent}%
           </p>
           <p className="text-xs text-stone-500 tabular-nums">
-            {metrics.conformeCount} / {metrics.totalApplicable} exigences applicables conformes
+            {metrics.conformeCount} / {metrics.totalItems} exigences conformes
           </p>
         </div>
 
         <div className="p-5 flex flex-col justify-between gap-1.5">
-          <span className="text-xs font-medium text-stone-500">Conformes &amp; En cours</span>
-          <p className="text-2xl font-bold text-[#16A34A] font-mono tabular-nums">
-            {metrics.conformeCount}
-          </p>
+          <span className="text-xs font-medium text-stone-500">Grands Éléments (Auto)</span>
+          <div className="flex items-baseline gap-3">
+            <p className="text-2xl font-bold text-[#16A34A] font-mono tabular-nums">
+              {metrics.conformeCount}
+            </p>
+            <span className="text-xs text-stone-400">vs</span>
+            <p className="text-lg font-bold text-[#DC2626] font-mono tabular-nums">
+              {metrics.nonConformeCount}
+            </p>
+          </div>
           <p className="text-xs text-stone-500 tabular-nums">
-            {metrics.enCoursCount} en cours · {metrics.aPreparerCount} à préparer
+            {metrics.conformeCount} conformes · {metrics.nonConformeCount} non conformes
           </p>
         </div>
 
         <div className="p-5 flex flex-col justify-between gap-1.5">
-          <span className="text-xs font-medium text-stone-500">Non-conformités &amp; Écarts</span>
-          <p className={`text-2xl font-bold font-mono tabular-nums ${metrics.nonConformeCount > 0 ? 'text-[#DC2626]' : 'text-stone-900'}`}>
-            {metrics.nonConformeCount}
-          </p>
-          <p className="text-xs text-stone-500 tabular-nums">
-            {metrics.nonExistantCount} non existants · {metrics.nonApplicableCount} N/A
-          </p>
-        </div>
-
-        <div className="p-5 flex flex-col justify-between gap-1.5">
-          <span className="text-xs font-medium text-stone-500">Sous-livrables Vérifiés</span>
+          <span className="text-xs font-medium text-stone-500">Sous-éléments Conformes</span>
           <p className="text-2xl font-bold text-[#2A7B76] font-mono tabular-nums">
-            {metrics.subItemsDone} / {metrics.subItemsTotal}
+            {metrics.subItemsDone} / {metrics.subItemsApplicable}
           </p>
           <p className="text-xs text-stone-500 tabular-nums">
-            {metrics.subItemsTotal > 0
-              ? `${Math.round((metrics.subItemsDone / metrics.subItemsTotal) * 100)}% des sous-éléments cochés`
-              : 'Aucun sous-élément'}
+            {inProgressSubCount} en cours / partiels / à vérifier
+          </p>
+        </div>
+
+        <div className="p-5 flex flex-col justify-between gap-1.5">
+          <span className="text-xs font-medium text-stone-500">Écarts &amp; À initier</span>
+          <p
+            className={`text-2xl font-bold font-mono tabular-nums ${
+              blockedSubCount > 0 ? 'text-[#DC2626]' : 'text-stone-900'
+            }`}
+          >
+            {blockedSubCount}
+          </p>
+          <p className="text-xs text-stone-500 tabular-nums">
+            {metrics.aPreparerCount} à initier · {metrics.nonApplicableCount} N/A
           </p>
         </div>
       </section>
@@ -111,7 +123,7 @@ export const ComplianceKpiStrip: React.FC<ComplianceKpiStripProps> = ({
                 />
               </div>
               <p className="mt-1.5 text-[11px] text-stone-500 tabular-nums">
-                {axisStat.conformeCount}/{axisStat.totalApplicable} conformes · {axisStat.subItemsDone}/{axisStat.subItemsTotal} livrables
+                {axisStat.conformeCount}/{axisStat.totalItems} conformes · {axisStat.subItemsDone}/{axisStat.subItemsApplicable} sous-élém.
               </p>
             </button>
           );

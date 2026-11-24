@@ -38,6 +38,9 @@ export interface Subtask {
   priority?: TaskPriority;
   status?: TaskStatus;
   dueDate?: string;
+  startDate?: string;
+  completedAt?: string;
+  isBlocked?: boolean;
   time?: string;
   estimatedHours?: number;
   actualHours?: number;
@@ -76,6 +79,10 @@ export interface Task {
   isMilestone?: boolean; // Indique si la tâche est un Jalon stratégique clé
   milestoneProgress?: number; // Progression du jalon (0 - 100%)
   milestoneTarget?: string; // Livrable ou indicateur attendu pour ce jalon
+  estimatedHours?: number;
+  actualHours?: number;
+  completedAt?: string;
+  createdAt?: string;
   comments?: Comment[];
   attachments?: Attachment[];
   incidents?: Incident[];
@@ -86,6 +93,11 @@ export interface Task {
 }
 
 export type ReminderTrigger = '5m' | '15m' | '30m' | '1h' | '1d' | 'none';
+export type ReminderKind = 'deadline' | 'routine' | 'alarm' | 'movement';
+export type ReminderCategory = 'vehicule' | 'fiscalite' | 'administratif' | 'rh' | 'autre';
+export type ReminderRenewalCycle = 'none' | 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+export type ReminderRecurrenceMode = 'weekly_days' | 'weekdays' | 'daily' | 'monthly' | 'once';
+export type ReminderRoutineType = 'reunion' | 'brief' | 'appel' | 'suivi' | 'personnel' | 'autre';
 
 export interface Reminder {
   id: string;
@@ -93,7 +105,15 @@ export interface Reminder {
   note?: string;
   description?: string;
   status?: string;
+  kind?: ReminderKind;
+  category?: ReminderCategory;
+  routineType?: ReminderRoutineType;
+  entityName?: string;
+  documentRef?: string;
   date?: string;
+  expirationDate?: string;
+  alertLeadDays?: number;
+  renewalCycle?: ReminderRenewalCycle;
   time?: string;
   location?: string;
   duration?: string;
@@ -102,9 +122,16 @@ export interface Reminder {
   triggeredPeriods?: string[];
   triggered?: boolean;
   stopped?: boolean;
+  isResolved?: boolean;
+  enableSoundAlarm?: boolean;
+  sendPushNotification?: boolean;
+  lastRenewedAt?: string;
+  lastTriggeredKey?: string;
   employeeId?: string;
   employeeIds?: string[];
   allEmployees?: boolean;
   recurrence?: 'once' | 'daily' | 'weekdays' | 'weekends';
+  recurrenceMode?: ReminderRecurrenceMode;
+  recurrenceDays?: number[];
   createdAt: string;
 }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Bell, Calendar, Clock, Users } from 'lucide-react';
 import { Employee, AppUser } from '../../types';
+import { toLocalIsoDateStr } from '../../services/reminderService';
 
 interface AlertCreateModalProps {
   isOpen: boolean;
@@ -34,7 +35,7 @@ export const AlertCreateModal: React.FC<AlertCreateModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => toLocalIsoDateStr(new Date()));
   const [time, setTime] = useState(() => {
     const d = new Date();
     d.setMinutes(d.getMinutes() + 15);

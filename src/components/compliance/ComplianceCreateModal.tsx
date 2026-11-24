@@ -46,6 +46,8 @@ export const ComplianceCreateModal: React.FC<ComplianceCreateModalProps> = ({
           id: `${id}_s${idx + 1}`,
           label,
           completed: false,
+          status: 'a_preparer' as const,
+          comments: [],
         }));
 
       const newItem: ComplianceChecklistItem = {
@@ -56,7 +58,7 @@ export const ComplianceCreateModal: React.FC<ComplianceCreateModalProps> = ({
         controlCode: controlCode.trim().toUpperCase(),
         title: title.trim(),
         description: description.trim() || undefined,
-        status: 'a_preparer',
+        status: 'non_conforme',
         confidentiality: 'Confidentiel',
         subItems: cleanedSubs,
         isCustom: true,

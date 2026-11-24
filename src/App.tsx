@@ -37,6 +37,8 @@ import ToastContainer from './components/Toast';
 import { DatabaseHealthBanner } from './components/common/DatabaseHealthBanner';
 import OfflineStatusBanner from './components/OfflineStatusBanner';
 import { GlobalTooltipContainer } from './components/common/GlobalTooltipContainer';
+import { ActiveAlarmBanner, useReminderAlarmScheduler } from './components/reminders';
+import { computeActionableRemindersCount, toLocalIsoDateStr } from './services/reminderService';
 
 export default function App() {
   const initialData = useAppInitialData();
@@ -139,6 +141,18 @@ export default function App() {
   const dismissToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
+
+  // Planificateur global de sonneries (ne s'arrête pas lorsqu'on change d'onglet)
+  const {
+    activeRingingReminder,
+    handleStartAlarm,
+    handleStopAlarm,
+    handleSnooze5m,
+  } = useReminderAlarmScheduler(
+    initialData.reminders,
+    initialData.setReminders,
+    (msg, type) => showToast(msg, type)
+  );
 
   // Clock
   const [currentTime, setCurrentTime] = useState<string>(() => {
@@ -267,7 +281,7 @@ export default function App() {
     return initialData.attendanceIncidents.filter((i) => i.status === 'signale' || !i.isJustified).length;
   }, [initialData.attendanceIncidents]);
 
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => toLocalIsoDateStr(new Date()), []);
 
   // Décompte strict : seuls les employés badgent (les responsables et admins ne badgent pas).
   // Affiche uniquement le nombre d'employés qui n'ont pas badgé aujourd'hui (ex: 5 employés, 3 ont badgé -> affiche 2).
@@ -350,7 +364,7 @@ export default function App() {
             }}
             isOpen={isSidebarOpen}
             onToggleOpen={() => setIsSidebarOpen((prev) => !prev)}
-            unreadRemindersCount={initialData.reminders.filter((r) => !r.stopped && !r.triggered).length}
+            unreadRemindersCount={computeActionableRemindersCount(initialData.reminders)}
             pendingPresencesRequestsCount={pendingPresencesRequestsCount}
             pendingLeavesCount={pendingLeavesCount}
             nonBadgedEmployeesCount={nonBadgedEmployeesCount}
@@ -411,6 +425,12 @@ export default function App() {
             }}
             leaveRequests={initialData.leaveRequests}
             onUpdateLeaveRequests={initialData.setLeaveRequests}
+            externalAlarm={{
+              activeRingingReminder,
+              onStartAlarm: handleStartAlarm,
+              onStopAlarm: handleStopAlarm,
+              onSnooze5m: handleSnooze5m,
+            }}
             onLogout={handleLogout}
           />
         </main>
@@ -466,6 +486,17 @@ export default function App() {
             setKioskModalOpen(true);
           }}
         />
+      )}
+
+      {/* Global Active Alarm Banner */}
+      {activeRingingReminder && (
+        <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:w-[460px] z-50">
+          <ActiveAlarmBanner
+            ringingReminder={activeRingingReminder}
+            onStopAlarm={handleStopAlarm}
+            onSnooze5m={handleSnooze5m}
+          />
+        </div>
       )}
 
       {/* Toast Notification Container */}

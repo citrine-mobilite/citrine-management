@@ -8,3 +8,4 @@ export * from './types/leaveTypes';
 export * from './types/apiTypes';
 export * from './types/githubTypes';
 export * from './types/complianceTypes';
+export * from './types/projectTypes';

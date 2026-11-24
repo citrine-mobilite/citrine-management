@@ -101,6 +101,14 @@ export const EmployeePortalTabContent: React.FC<EmployeePortalTabContentProps> =
               employees={employees}
               filterForUser={currentUser}
               onOpenRemindersModule={() => logic.setActiveTab('alerts')}
+              onRenewOrResolve={
+                onUpdateReminders
+                  ? (updatedRem) =>
+                      onUpdateReminders(
+                        (reminders || []).map((r) => (r.id === updatedRem.id ? updatedRem : r))
+                      )
+                  : undefined
+              }
             />
           )}
           {moduleConfig?.enableStrategicProjects !== false && (

@@ -25,6 +25,8 @@ import {
   computeNextRoutineOccurrence,
   formatNextOccurrenceBadge,
   doesRoutineMatchMoment,
+  doesRoutineOccurOnDate,
+  toLocalIsoDateStr,
 } from './reminders/routineSchedulerHelpers';
 
 export type { ReminderUrgencyLevel, ReminderUrgencyInfo, DeadlineTemplate };
@@ -44,6 +46,8 @@ export {
   computeNextRoutineOccurrence,
   formatNextOccurrenceBadge,
   doesRoutineMatchMoment,
+  doesRoutineOccurOnDate,
+  toLocalIsoDateStr,
 };
 
 function startOfDay(date: Date): Date {
@@ -157,10 +161,10 @@ export function computeReminderUrgency(
   };
 }
 
-export function sortRemindersByUrgency(reminders: Reminder[]): Reminder[] {
+export function sortRemindersByUrgency(reminders: Reminder[], referenceDate: Date = new Date()): Reminder[] {
   return [...(reminders || [])].sort((a, b) => {
-    const uA = computeReminderUrgency(a);
-    const uB = computeReminderUrgency(b);
+    const uA = computeReminderUrgency(a, referenceDate);
+    const uB = computeReminderUrgency(b, referenceDate);
 
     const priorityRank: Record<ReminderUrgencyLevel, number> = {
       expired: 0,
@@ -186,9 +190,80 @@ export function getHomeUrgentReminders(
   referenceDate: Date = new Date()
 ): Reminder[] {
   const urgent = (reminders || []).filter(
-    (r) => !isRoutineReminder(r) && computeReminderUrgency(r, referenceDate).isActionNeeded
+    (r) =>
+      r.kind !== 'movement' &&
+      !isRoutineReminder(r) &&
+      computeReminderUrgency(r, referenceDate).isActionNeeded
   );
-  return sortRemindersByUrgency(urgent);
+  return sortRemindersByUrgency(urgent, referenceDate);
+}
+
+/**
+ * Compte uniquement les alertes réellement actionnables à la date de référence :
+ * - Module 1 (Échéances J-N) : échéances entrées dans leur fenêtre d'alerte (J <= alertLeadDays) ou expirées.
+ * - Module 2 (Rappels Jour J) : rappels/sonneries actifs dont la date/récurrence correspond STRICTEMENT à aujourd'hui.
+ * Les rappels ponctuels ou récurrents prévus dans le futur ne polluent jamais ce compteur.
+ */
+export function computeActionableRemindersCount(
+  reminders: Reminder[],
+  referenceDate: Date = new Date()
+): number {
+  let count = 0;
+  for (const r of reminders || []) {
+    if (!r || r.kind === 'movement' || r.stopped || r.isResolved) continue;
+    if (isRoutineReminder(r)) {
+      if (doesRoutineOccurOnDate(r, referenceDate)) {
+        count += 1;
+      }
+    } else if (computeReminderUrgency(r, referenceDate).isActionNeeded) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+export function getScopedRemindersForEmployee(
+  reminders: Reminder[],
+  target: {
+    id?: string;
+    name?: string;
+    email?: string;
+    role?: string;
+    roleType?: string;
+    position?: string;
+  }
+): Reminder[] {
+  const idLower = String(target.id || '').trim().toLowerCase();
+  const nameLower = String(target.name || '').trim().toLowerCase();
+  const emailLower = String(target.email || '').trim().toLowerCase();
+  const roleStr = `${target.role || ''} ${target.roleType || ''} ${target.position || ''}`.toLowerCase();
+  const isManager =
+    roleStr.includes('admin') || roleStr.includes('responsable') || roleStr.includes('directeur');
+
+  const matchesToken = (val?: string | null) => {
+    if (!val) return false;
+    const clean = String(val).trim().toLowerCase();
+    if (!clean) return false;
+    return (
+      (idLower && clean === idLower) ||
+      (nameLower && clean === nameLower) ||
+      (emailLower && clean === emailLower)
+    );
+  };
+
+  return (reminders || []).filter((r) => {
+    if (r.kind === 'movement') return false;
+    if (r.allEmployees) return true;
+    if (matchesToken(r.employeeId)) return true;
+    if (Array.isArray(r.employeeIds) && r.employeeIds.length > 0) {
+      return r.employeeIds.some((id) => matchesToken(id));
+    }
+    if (matchesToken(r.entityName)) return true;
+    if (!isRoutineReminder(r) && isManager && !r.employeeId && (!r.employeeIds || r.employeeIds.length === 0)) {
+      return true;
+    }
+    return false;
+  });
 }
 
 export function addMonthsToIsoDate(dateStr: string, monthsToAdd: number): string {
@@ -206,7 +281,7 @@ export function addMonthsToIsoDate(dateStr: string, monthsToAdd: number): string
 export function renewOrResolveReminder(reminder: Reminder): Reminder {
   const nowIso = new Date().toISOString();
   const cycle: ReminderRenewalCycle = reminder.renewalCycle || 'none';
-  const baseDate = (reminder.expirationDate || reminder.date || nowIso.split('T')[0]).split('T')[0];
+  const baseDate = (reminder.expirationDate || reminder.date || toLocalIsoDateStr(new Date())).split('T')[0];
 
   const monthsMap: Record<ReminderRenewalCycle, number> = {
     none: 0,

@@ -15,13 +15,16 @@ import {
   ComplianceAxis,
   ComplianceChecklistItem,
   ComplianceComment,
-  ComplianceStatus,
+  ComplianceParentStatus,
+  ComplianceSubItemStatus,
 } from '../../types/complianceTypes';
 import { COMPLIANCE_AXES_META } from '../../data/anticChecklistSeed';
 import {
   COMPLIANCE_STATUS_OPTIONS,
   computeComplianceMetrics,
+  computeParentComplianceStatus,
   filterComplianceItems,
+  PARENT_STATUS_OPTIONS,
 } from '../../utils/complianceHelpers';
 import {
   deleteComplianceItem,
@@ -47,6 +50,11 @@ interface CompliancePanelProps {
 
 const ANTIC_REFERENCE_PDF_PATH = '/assets/aistudio/Hero_ANTIC_Liste_Documents_FR_a47c26e9.pdf';
 
+type ComplianceFilterStatus =
+  | 'all'
+  | ComplianceParentStatus
+  | `sub_${ComplianceSubItemStatus}`;
+
 export const CompliancePanel: React.FC<CompliancePanelProps> = ({
   currentUser,
   employees = [],
@@ -57,11 +65,12 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
   const [loading, setLoading] = useState(true);
 
   const [activeAxis, setActiveAxis] = useState<'all' | ComplianceAxis>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | ComplianceStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<ComplianceFilterStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
 
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(['antic_gen_01']));
+  // Expanded by default: store only explicitly collapsed IDs
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<'excel' | 'pdf' | null>(null);
   const [editingItem, setEditingItem] = useState<ComplianceChecklistItem | null>(null);
@@ -102,7 +111,10 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
 
   // Group filtered items preserving order by sectionTitle
   const groupedSections = useMemo(() => {
-    const groups = new Map<string, { sectionTitle: string; sectionCode: string; items: ComplianceChecklistItem[] }>();
+    const groups = new Map<
+      string,
+      { sectionTitle: string; sectionCode: string; items: ComplianceChecklistItem[] }
+    >();
     for (const item of filteredItems) {
       const key = item.sectionTitle || item.sectionCode;
       if (!groups.has(key)) {
@@ -118,7 +130,7 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
   }, [filteredItems]);
 
   const handleToggleExpand = (id: string) => {
-    setExpandedIds((prev) => {
+    setCollapsedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -127,31 +139,38 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
   };
 
   const handleExpandAllVisible = (expand: boolean) => {
-    if (!expand) {
-      setExpandedIds(new Set());
-      return;
+    if (expand) {
+      setCollapsedIds((prev) => {
+        const next = new Set(prev);
+        for (const item of filteredItems) next.delete(item.id);
+        return next;
+      });
+    } else {
+      setCollapsedIds((prev) => {
+        const next = new Set(prev);
+        for (const item of filteredItems) next.add(item.id);
+        return next;
+      });
     }
-    setExpandedIds(new Set(filteredItems.map((i) => i.id)));
   };
 
-  const handleToggleSubItem = async (item: ComplianceChecklistItem, subItemId: string) => {
+  const handleSubItemStatusChange = async (
+    item: ComplianceChecklistItem,
+    subItemId: string,
+    nextStatus: ComplianceSubItemStatus
+  ) => {
     const updatedSubs = (item.subItems || []).map((s) =>
-      s.id === subItemId ? { ...s, completed: !s.completed } : s
+      s.id === subItemId
+        ? { ...s, status: nextStatus, completed: nextStatus === 'conforme' }
+        : s
     );
 
-    const allCompleted = updatedSubs.length > 0 && updatedSubs.every((s) => s.completed);
-    const anyCompleted = updatedSubs.some((s) => s.completed);
-
-    let nextStatus = item.status;
-    if (item.status !== 'non_existant' && item.status !== 'non_applicable') {
-      if (allCompleted) nextStatus = 'conforme';
-      else if (anyCompleted && item.status === 'a_preparer') nextStatus = 'en_cours';
-    }
+    const nextParentStatus = computeParentComplianceStatus(updatedSubs, item.status);
 
     const updated: ComplianceChecklistItem = {
       ...item,
       subItems: updatedSubs,
-      status: nextStatus,
+      status: nextParentStatus,
       updatedAt: new Date().toISOString(),
       updatedBy: actorName,
     };
@@ -168,40 +187,25 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
     }
   };
 
-  const handleQuickStatusChange = async (
+  const handleAddSubItemComment = async (
     item: ComplianceChecklistItem,
-    nextStatus: ComplianceStatus
+    subItemId: string,
+    text: string
   ) => {
-    if (item.status === nextStatus) return;
-    const updated: ComplianceChecklistItem = {
-      ...item,
-      status: nextStatus,
-      updatedAt: new Date().toISOString(),
-      updatedBy: actorName,
-    };
-    setItems((prev) => prev.map((it) => (it.id === item.id ? updated : it)));
-    setSavingItemId(item.id);
-    try {
-      await saveComplianceItem(updated);
-      showToast?.(`Statut de ${item.controlCode} mis à jour.`, 'success');
-    } catch (err: any) {
-      setItems((prev) => prev.map((it) => (it.id === item.id ? item : it)));
-      showToast?.(err?.message || 'Erreur lors de la mise à jour du statut.', 'error');
-    } finally {
-      setSavingItemId(null);
-    }
-  };
-
-  const handleAddComment = async (item: ComplianceChecklistItem, text: string) => {
     const newComment: ComplianceComment = {
       id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       text,
       author: actorName,
       createdAt: new Date().toISOString(),
     };
+    const updatedSubs = (item.subItems || []).map((s) =>
+      s.id === subItemId
+        ? { ...s, comments: [...(s.comments || []), newComment] }
+        : s
+    );
     const updated: ComplianceChecklistItem = {
       ...item,
-      comments: [...(item.comments || []), newComment],
+      subItems: updatedSubs,
       updatedAt: new Date().toISOString(),
       updatedBy: actorName,
     };
@@ -218,10 +222,19 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
     }
   };
 
-  const handleDeleteComment = async (item: ComplianceChecklistItem, commentId: string) => {
+  const handleDeleteSubItemComment = async (
+    item: ComplianceChecklistItem,
+    subItemId: string,
+    commentId: string
+  ) => {
+    const updatedSubs = (item.subItems || []).map((s) =>
+      s.id === subItemId
+        ? { ...s, comments: (s.comments || []).filter((c) => c.id !== commentId) }
+        : s
+    );
     const updated: ComplianceChecklistItem = {
       ...item,
-      comments: (item.comments || []).filter((c) => c.id !== commentId),
+      subItems: updatedSubs,
       updatedAt: new Date().toISOString(),
       updatedBy: actorName,
     };
@@ -240,6 +253,7 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
   const handleSaveModal = async (updated: ComplianceChecklistItem) => {
     const enriched: ComplianceChecklistItem = {
       ...updated,
+      status: computeParentComplianceStatus(updated.subItems || [], updated.status),
       updatedBy: actorName,
     };
     const saved = await saveComplianceItem(enriched);
@@ -250,11 +264,11 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
   const handleCreateCustom = async (newItem: ComplianceChecklistItem) => {
     const enriched: ComplianceChecklistItem = {
       ...newItem,
+      status: computeParentComplianceStatus(newItem.subItems || [], newItem.status),
       updatedBy: actorName,
     };
     const saved = await saveComplianceItem(enriched);
     setItems((prev) => [...prev, saved].sort((a, b) => a.orderIndex - b.orderIndex));
-    setExpandedIds((prev) => new Set(prev).add(saved.id));
     showToast?.(`Exigence ${saved.controlCode} ajoutée à la checklist.`, 'success');
   };
 
@@ -330,7 +344,7 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
               Conformité &amp; Audit de Sécurité ANTIC
             </h1>
             <p className="text-xs text-stone-500 mt-0.5 leading-relaxed">
-              Référentiel officiel (Direction de l’Audit de Sécurité) · Suivi des documents, responsables, versions, dates et sous-livrables · Marquage Confidentiel
+              Pilotage détaillé par sous-livrables (statuts et commentaires) · Statut global calculé automatiquement (Conforme / Non conforme) · Confidentiel
             </p>
           </div>
         </div>
@@ -445,7 +459,7 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
             <input
               type="text"
               aria-label="Rechercher dans la checklist ANTIC"
-              placeholder="Rechercher par code (SEC_ORG_3, ACC-01), loi 2024/017, responsable ou sous-élément..."
+              placeholder="Rechercher par code, exigence, sous-élément, commentaire ou responsable..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-2 text-xs rounded-lg border border-stone-200 focus:outline-none focus:border-[#2A7B76]"
@@ -455,15 +469,24 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
           <select
             aria-label="Filtrer par statut de conformité"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'all' | ComplianceStatus)}
+            onChange={(e) => setStatusFilter(e.target.value as ComplianceFilterStatus)}
             className="px-3 py-2 text-xs rounded-lg border border-stone-200 bg-white text-stone-700 focus:outline-none focus:border-[#2A7B76]"
           >
             <option value="all">Tous les statuts</option>
-            {COMPLIANCE_STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
+            <optgroup label="Statut grand élément (auto)">
+              {PARENT_STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  Exigence : {opt.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Statut des sous-éléments">
+              {COMPLIANCE_STATUS_OPTIONS.map((opt) => (
+                <option key={`sub_${opt.value}`} value={`sub_${opt.value}`}>
+                  Sous-élément : {opt.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
 
           <label className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-stone-700 bg-stone-50 border border-stone-200 rounded-lg cursor-pointer select-none whitespace-nowrap">
@@ -473,7 +496,7 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
               onChange={(e) => setOnlyPending(e.target.checked)}
               className="h-3.5 w-3.5 rounded border-stone-300 text-[#2A7B76] focus:ring-[#2A7B76]"
             />
-            <span>À traiter uniquement</span>
+            <span>Non conformes uniquement</span>
           </label>
 
           <div className="flex items-center gap-1.5 shrink-0">
@@ -526,7 +549,9 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
       ) : (
         <div className="space-y-6">
           {groupedSections.map((group) => {
-            const readyCount = group.items.filter((i) => i.status === 'conforme').length;
+            const readyCount = group.items.filter(
+              (i) => computeParentComplianceStatus(i.subItems || [], i.status) === 'conforme'
+            ).length;
             return (
               <section key={group.sectionTitle} className="space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-1">
@@ -543,12 +568,12 @@ export const CompliancePanel: React.FC<CompliancePanelProps> = ({
                     <ComplianceItemRow
                       key={item.id}
                       item={item}
-                      isExpanded={expandedIds.has(item.id)}
+                      employees={employees}
+                      isExpanded={!collapsedIds.has(item.id)}
                       onToggleExpand={handleToggleExpand}
-                      onToggleSubItem={handleToggleSubItem}
-                      onQuickStatusChange={handleQuickStatusChange}
-                      onAddComment={handleAddComment}
-                      onDeleteComment={handleDeleteComment}
+                      onSubItemStatusChange={handleSubItemStatusChange}
+                      onAddSubItemComment={handleAddSubItemComment}
+                      onDeleteSubItemComment={handleDeleteSubItemComment}
                       onOpenEdit={setEditingItem}
                       onNavigateCitrineTab={onNavigateTab}
                       savingItemId={savingItemId}

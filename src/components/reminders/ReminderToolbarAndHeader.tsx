@@ -66,13 +66,13 @@ export const ReminderToolbarAndHeader: React.FC<ReminderToolbarAndHeaderProps> =
             <div>
               <h2 className="font-serif font-bold text-xl sm:text-2xl text-stone-950 tracking-tight">
                 {isRoutines
-                  ? 'Rituels & Rappels Récurrents'
-                  : 'Échéances, Documents & Fiscalité'}
+                  ? 'Rappels Jour J & Rituels Sonores'
+                  : 'Échéances, Documents, Salaires & Fiscalité'}
               </h2>
               <p className="text-xs text-stone-500 mt-0.5">
                 {isRoutines
-                  ? 'Planifiez vos réunions récurrentes (ex: Lun · Mer · Ven à 09h00), points d’équipe et rappels push.'
-                  : "Suivi des cartes grises, impôts périodiques, salaires et contrats — avec alerte sur l'accueil avant expiration."}
+                  ? 'Rappels ponctuels ou récurrents : s’affichent en alerte et sonnent uniquement le Jour J à l’heure prévue.'
+                  : 'Documents, salaires mensuels et obligations avec bandeau d’alerte anticipée J-N sur l’accueil avant l’échéance.'}
               </p>
             </div>
           </div>
@@ -84,7 +84,7 @@ export const ReminderToolbarAndHeader: React.FC<ReminderToolbarAndHeaderProps> =
           >
             <Plus className="h-4 w-4" />
             <span>
-              {isRoutines ? 'Créer un rappel récurrent' : 'Ajouter une échéance'}
+              {isRoutines ? 'Créer un rappel Jour J' : 'Ajouter une échéance J-N'}
             </span>
           </button>
         </div>
@@ -101,7 +101,7 @@ export const ReminderToolbarAndHeader: React.FC<ReminderToolbarAndHeaderProps> =
             }`}
           >
             <FileText className="h-4 w-4 text-[#2A7B76]" />
-            <span>Échéances &amp; Documents</span>
+            <span>Échéances &amp; Documents (J-N)</span>
             <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded-md bg-stone-100 text-stone-700">
               {deadlinesCount}
             </span>
@@ -122,7 +122,7 @@ export const ReminderToolbarAndHeader: React.FC<ReminderToolbarAndHeaderProps> =
             }`}
           >
             <Repeat className="h-4 w-4 text-[#2A7B76]" />
-            <span>Rituels &amp; Rappels Récurrents</span>
+            <span>Rappels Jour J &amp; Rituels</span>
             <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded-md bg-stone-100 text-stone-700">
               {routinesCount}
             </span>

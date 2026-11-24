@@ -22,10 +22,7 @@ export const TaskHeaderBanner: React.FC<TaskHeaderBannerProps> = ({
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-serif font-bold text-xl whitespace-nowrap">Tâches & Jalons Stratégiques</h2>
-            <span className="text-[10px] font-bold bg-white/20 text-emerald-100 px-2 py-0.5 rounded-full border border-white/20">
-              Style Asana Pro
-            </span>
+            <h2 className="font-serif font-bold text-xl whitespace-nowrap">Gestion des Tâches</h2>
           </div>
           <p className="text-xs text-emerald-100/90 hidden sm:block">
             Organisation des projets d'entreprise, décomposition en sous-tâches et pilotage du rendement capacitaire.

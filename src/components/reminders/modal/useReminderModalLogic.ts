@@ -14,6 +14,7 @@ import {
   isRoutineReminder,
   resolveRecurrenceMode,
   getActiveWeekdays,
+  toLocalIsoDateStr,
 } from '../../../services/reminderService';
 
 export const AVAILABLE_PERIODS = [
@@ -51,7 +52,7 @@ export function useReminderModalLogic({
   const [entityName, setEntityName] = useState('');
   const [documentRef, setDocumentRef] = useState('');
   const [note, setNote] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => toLocalIsoDateStr(new Date()));
   const [renewalCycle, setRenewalCycle] = useState<ReminderRenewalCycle>('annual');
   const [alertLeadDays, setAlertLeadDays] = useState<number>(14);
   const [enableSoundAlarm, setEnableSoundAlarm] = useState(false);
@@ -93,7 +94,7 @@ export function useReminderModalLogic({
         (
           initialReminder.expirationDate ||
           initialReminder.date ||
-          new Date().toISOString().split('T')[0]
+          toLocalIsoDateStr(new Date())
         ).split('T')[0]
       );
       setRenewalCycle(initialReminder.renewalCycle || 'none');
@@ -130,7 +131,7 @@ export function useReminderModalLogic({
       setEntityName('');
       setDocumentRef('');
       setNote('');
-      setDate(new Date().toISOString().split('T')[0]);
+      setDate(toLocalIsoDateStr(new Date()));
       setRenewalCycle('annual');
       setAlertLeadDays(14);
       setEnableSoundAlarm(startKind === 'routine');

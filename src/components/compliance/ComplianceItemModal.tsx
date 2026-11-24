@@ -1,14 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Plus, Trash2, X, AlertCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Plus,
+  Trash2,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { Employee } from '../../types';
 import {
   ComplianceChecklistItem,
-  ComplianceComment,
   ComplianceConfidentiality,
-  ComplianceStatus,
   ComplianceSubItem,
+  ComplianceSubItemStatus,
 } from '../../types/complianceTypes';
-import { COMPLIANCE_STATUS_OPTIONS } from '../../utils/complianceHelpers';
+import {
+  COMPLIANCE_STATUS_OPTIONS,
+  computeParentComplianceStatus,
+  getComplianceStatusMeta,
+  normalizeSubItem,
+  resolveEmployeeFunction,
+  resolveSubItemStatus,
+} from '../../utils/complianceHelpers';
 
 interface ComplianceItemModalProps {
   isOpen: boolean;
@@ -29,42 +43,50 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
   onSave,
   onDelete,
 }) => {
-  const [status, setStatus] = useState<ComplianceStatus>('a_preparer');
-  const [ownerName, setOwnerName] = useState('');
   const [ownerEmployeeId, setOwnerEmployeeId] = useState('');
+  const [ownerName, setOwnerName] = useState('');
+  const [ownerRole, setOwnerRole] = useState('');
   const [documentVersion, setDocumentVersion] = useState('');
   const [documentDate, setDocumentDate] = useState('');
   const [confidentiality, setConfidentiality] = useState<ComplianceConfidentiality>('Confidentiel');
   const [evidenceUrl, setEvidenceUrl] = useState('');
-  const [auditorNotes, setAuditorNotes] = useState('');
-  const [comments, setComments] = useState<ComplianceComment[]>([]);
-  const [newCommentText, setNewCommentText] = useState('');
   const [subItems, setSubItems] = useState<ComplianceSubItem[]>([]);
   const [newSubLabel, setNewSubLabel] = useState('');
+  const [subCommentInputs, setSubCommentInputs] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (item && isOpen) {
-      setStatus(item.status || 'a_preparer');
-      setOwnerName(item.ownerName || '');
-      setOwnerEmployeeId(item.ownerEmployeeId || '');
+      const empId = item.ownerEmployeeId || '';
+      const matchedEmp = empId
+        ? employees.find((e) => e.id === empId)
+        : item.ownerName
+          ? employees.find((e) => e.name.toLowerCase() === item.ownerName!.toLowerCase())
+          : undefined;
+
+      setOwnerEmployeeId(empId || matchedEmp?.id || '');
+      setOwnerName(item.ownerName || matchedEmp?.name || '');
+      setOwnerRole(item.ownerRole || resolveEmployeeFunction(matchedEmp));
       setDocumentVersion(item.documentVersion || '');
       setDocumentDate(item.documentDate || '');
       setConfidentiality(item.confidentiality || 'Confidentiel');
       setEvidenceUrl(item.evidenceUrl || '');
-      setAuditorNotes(item.auditorNotes || '');
-      setComments(Array.isArray(item.comments) ? item.comments.map((c) => ({ ...c })) : []);
-      setNewCommentText('');
-      setSubItems(Array.isArray(item.subItems) ? item.subItems.map((s) => ({ ...s })) : []);
+      setSubItems(
+        Array.isArray(item.subItems) ? item.subItems.map((s) => normalizeSubItem(s)) : []
+      );
       setNewSubLabel('');
+      setSubCommentInputs({});
       setSubmitError(null);
       setConfirmDelete(false);
     }
-  }, [item, isOpen]);
+  }, [item, isOpen, employees]);
 
   if (!isOpen || !item) return null;
+
+  const autoParentStatus = computeParentComplianceStatus(subItems, item.status);
+  const autoParentMeta = getComplianceStatusMeta(autoParentStatus);
 
   const handleEmployeeSelect = (empId: string) => {
     setOwnerEmployeeId(empId);
@@ -72,12 +94,17 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
     const emp = employees.find((e) => e.id === empId);
     if (emp) {
       setOwnerName(emp.name);
+      setOwnerRole(resolveEmployeeFunction(emp));
     }
   };
 
-  const handleToggleSub = (subId: string) => {
+  const handleSubStatusChange = (subId: string, nextStatus: ComplianceSubItemStatus) => {
     setSubItems((prev) =>
-      prev.map((s) => (s.id === subId ? { ...s, completed: !s.completed } : s))
+      prev.map((s) =>
+        s.id === subId
+          ? { ...s, status: nextStatus, completed: nextStatus === 'conforme' }
+          : s
+      )
     );
   };
 
@@ -90,6 +117,8 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
         id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         label,
         completed: false,
+        status: 'a_preparer',
+        comments: [],
       },
     ]);
     setNewSubLabel('');
@@ -99,23 +128,38 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
     setSubItems((prev) => prev.filter((s) => s.id !== subId));
   };
 
-  const handleAddCommentInModal = () => {
-    const txt = newCommentText.trim();
-    if (!txt) return;
-    setComments((prev) => [
-      ...prev,
-      {
-        id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        text: txt,
-        author: authorName,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-    setNewCommentText('');
+  const handleAddSubComment = (subId: string) => {
+    const text = (subCommentInputs[subId] || '').trim();
+    if (!text) return;
+    setSubItems((prev) =>
+      prev.map((s) =>
+        s.id === subId
+          ? {
+              ...s,
+              comments: [
+                ...(s.comments || []),
+                {
+                  id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                  text,
+                  author: authorName,
+                  createdAt: new Date().toISOString(),
+                },
+              ],
+            }
+          : s
+      )
+    );
+    setSubCommentInputs((prev) => ({ ...prev, [subId]: '' }));
   };
 
-  const handleRemoveCommentInModal = (cmtId: string) => {
-    setComments((prev) => prev.filter((c) => c.id !== cmtId));
+  const handleDeleteSubComment = (subId: string, cmtId: string) => {
+    setSubItems((prev) =>
+      prev.map((s) =>
+        s.id === subId
+          ? { ...s, comments: (s.comments || []).filter((c) => c.id !== cmtId) }
+          : s
+      )
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -125,31 +169,37 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
     setSubmitError(null);
     setIsSubmitting(true);
     try {
-      const pendingDraft = newCommentText.trim();
-      const finalComments = pendingDraft
-        ? [
-            ...comments,
+      // Flush any unsaved sub-item comment draft before saving
+      const flushedSubs = subItems.map((s) => {
+        const pending = (subCommentInputs[s.id] || '').trim();
+        if (!pending) return s;
+        return {
+          ...s,
+          comments: [
+            ...(s.comments || []),
             {
               id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-              text: pendingDraft,
+              text: pending,
               author: authorName,
               createdAt: new Date().toISOString(),
             },
-          ]
-        : comments;
+          ],
+        };
+      });
+
+      const computedStatus = computeParentComplianceStatus(flushedSubs, item.status);
 
       const updated: ComplianceChecklistItem = {
         ...item,
-        status,
-        ownerName: ownerName.trim() || undefined,
+        status: computedStatus,
         ownerEmployeeId: ownerEmployeeId || undefined,
+        ownerName: ownerName.trim() || undefined,
+        ownerRole: ownerRole.trim() || undefined,
         documentVersion: documentVersion.trim() || undefined,
         documentDate: documentDate || undefined,
         confidentiality,
         evidenceUrl: evidenceUrl.trim() || undefined,
-        auditorNotes: auditorNotes.trim() || undefined,
-        comments: finalComments,
-        subItems,
+        subItems: flushedSubs,
         updatedAt: new Date().toISOString(),
       };
       await onSave(updated);
@@ -215,24 +265,25 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
             </div>
           )}
 
-          {/* Status + Confidentiality */}
+          {/* Automatic Binary Status + Confidentiality */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="comp-status" className="block text-stone-700 font-semibold mb-1.5">
-                Statut ANTIC *
-              </label>
-              <select
-                id="comp-status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as ComplianceStatus)}
-                className="w-full px-3 py-2 border border-stone-200 rounded-lg bg-white text-stone-800 focus:outline-none focus:border-[#2A7B76]"
+              <span className="block text-stone-700 font-semibold mb-1.5">
+                Statut global (automatique)
+              </span>
+              <div
+                className={`w-full px-3 py-2 border rounded-lg flex items-center justify-between ${autoParentMeta.surfaceClass} ${autoParentMeta.borderClass}`}
               >
-                {COMPLIANCE_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                <span className={`inline-flex items-center gap-1.5 font-bold ${autoParentMeta.textClass}`}>
+                  {autoParentStatus === 'conforme' ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <XCircle className="h-4 w-4 shrink-0" />
+                  )}
+                  <span>{autoParentMeta.label}</span>
+                </span>
+                <span className="text-[11px] text-stone-500">Calculé par sous-éléments</span>
+              </div>
             </div>
 
             <div>
@@ -252,8 +303,8 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
             </div>
           </div>
 
-          {/* Owner (Employee Picker + Free text) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Owner Assignment with Automatic Role/Function Resolution */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label htmlFor="comp-owner-select" className="block text-stone-700 font-semibold mb-1.5">
                 Assigner un collaborateur
@@ -264,10 +315,10 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
                 onChange={(e) => handleEmployeeSelect(e.target.value)}
                 className="w-full px-3 py-2 border border-stone-200 rounded-lg bg-white text-stone-800 focus:outline-none focus:border-[#2A7B76]"
               >
-                <option value="">-- Sélectionner ou saisir librement --</option>
+                <option value="">-- Sélectionner --</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
-                    {emp.name} ({emp.role || emp.department || 'Collaborateur'})
+                    {emp.name}
                   </option>
                 ))}
               </select>
@@ -275,20 +326,34 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
 
             <div>
               <label htmlFor="comp-owner-name" className="block text-stone-700 font-semibold mb-1.5">
-                Nom / Fonction du responsable
+                Nom du responsable
               </label>
               <input
                 id="comp-owner-name"
                 type="text"
                 value={ownerName}
                 onChange={(e) => setOwnerName(e.target.value)}
-                placeholder="Ex: Directeur Technique, DPO, RSSI..."
+                placeholder="Nom du responsable"
                 className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:border-[#2A7B76]"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="comp-owner-role" className="block text-stone-700 font-semibold mb-1.5">
+                Fonction (auto-détectée)
+              </label>
+              <input
+                id="comp-owner-role"
+                type="text"
+                value={ownerRole}
+                onChange={(e) => setOwnerRole(e.target.value)}
+                placeholder="Ex: Directeur Technique, RSSI..."
+                className="w-full px-3 py-2 border border-stone-200 rounded-lg bg-stone-50/70 focus:bg-white focus:outline-none focus:border-[#2A7B76]"
               />
             </div>
           </div>
 
-          {/* Version + Date (Explicitly requested in ANTIC PDF) */}
+          {/* Version + Date */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="comp-version" className="block text-stone-700 font-semibold mb-1.5">
@@ -333,41 +398,129 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
             />
           </div>
 
-          {/* Sub-items CRUD */}
+          {/* Sub-items Status & Comments CRUD */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-stone-700">
-                Sous-éléments &amp; livrables détaillés ({subItems.filter((s) => s.completed).length}/{subItems.length})
+                Sous-éléments, statuts &amp; commentaires (
+                {subItems.filter((s) => resolveSubItemStatus(s) === 'conforme').length}/{subItems.length}{' '}
+                conformes)
               </span>
             </div>
 
-            <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 bg-stone-50/50">
+            <div className="space-y-2.5">
               {subItems.length === 0 ? (
-                <p className="p-3 text-stone-500 text-center">Aucun sous-élément défini.</p>
+                <p className="p-3 border border-stone-200 rounded-xl text-stone-500 text-center bg-stone-50/50">
+                  Aucun sous-élément défini.
+                </p>
               ) : (
-                subItems.map((sub) => (
-                  <div key={sub.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <label className="flex items-start gap-2.5 flex-1 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(sub.completed)}
-                        onChange={() => handleToggleSub(sub.id)}
-                        className="mt-0.5 h-4 w-4 rounded border-stone-300 text-[#2A7B76] focus:ring-[#2A7B76] cursor-pointer"
-                      />
-                      <span className={sub.completed ? 'line-through text-stone-400' : 'text-stone-800'}>
-                        {sub.label}
-                      </span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSubItem(sub.id)}
-                      aria-label={`Supprimer le sous-élément ${sub.label}`}
-                      className="p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer shrink-0"
+                subItems.map((sub) => {
+                  const subStatus = resolveSubItemStatus(sub);
+                  const subMeta = getComplianceStatusMeta(subStatus);
+                  const subComments = sub.comments || [];
+
+                  return (
+                    <div
+                      key={sub.id}
+                      className="border border-stone-200 rounded-xl p-3 bg-stone-50/50 space-y-2"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span className="font-medium text-stone-800 flex-1">{sub.label}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <select
+                            aria-label={`Statut modal pour ${sub.label}`}
+                            value={subStatus}
+                            onChange={(e) =>
+                              handleSubStatusChange(
+                                sub.id,
+                                e.target.value as ComplianceSubItemStatus
+                              )
+                            }
+                            className={`px-2 py-1 text-xs font-semibold border rounded-lg cursor-pointer ${subMeta.surfaceClass} ${subMeta.borderClass} ${subMeta.textClass}`}
+                          >
+                            {COMPLIANCE_STATUS_OPTIONS.map((opt) => (
+                              <option
+                                key={opt.value}
+                                value={opt.value}
+                                className="bg-white text-stone-800"
+                              >
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSubItem(sub.id)}
+                            aria-label={`Supprimer le sous-élément ${sub.label}`}
+                            className="p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {subComments.length > 0 && (
+                        <ul className="space-y-1">
+                          {subComments.map((cmt) => (
+                            <li
+                              key={cmt.id}
+                              className="flex items-start justify-between gap-2 bg-white border border-stone-200 rounded-lg px-2.5 py-1.5"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-[11px] font-semibold text-stone-700">
+                                  {cmt.author}
+                                </span>{' '}
+                                <span className="text-[11px] text-stone-400 font-mono">
+                                  {cmt.createdAt
+                                    ? new Date(cmt.createdAt).toLocaleDateString('fr-FR')
+                                    : ''}
+                                </span>
+                                <p className="text-stone-700 mt-0.5">{cmt.text}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSubComment(sub.id, cmt.id)}
+                                className="p-1 text-stone-400 hover:text-red-600 cursor-pointer shrink-0"
+                                aria-label="Supprimer commentaire"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={subCommentInputs[sub.id] || ''}
+                          onChange={(e) =>
+                            setSubCommentInputs((prev) => ({
+                              ...prev,
+                              [sub.id]: e.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddSubComment(sub.id);
+                            }
+                          }}
+                          placeholder="Ajouter un commentaire sur ce sous-élément..."
+                          className="flex-1 px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-[#2A7B76]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddSubComment(sub.id)}
+                          className="px-2.5 py-1.5 bg-white hover:bg-stone-100 border border-stone-200 rounded-lg font-semibold text-stone-700 cursor-pointer shrink-0"
+                        >
+                          Commenter
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
 
@@ -393,77 +546,6 @@ export const ComplianceItemModal: React.FC<ComplianceItemModalProps> = ({
                 <Plus className="h-3.5 w-3.5" />
                 <span>Ajouter</span>
               </button>
-            </div>
-          </div>
-
-          {/* Auditor Notes & Comments Thread */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="comp-notes" className="block text-stone-700 font-semibold mb-1.5">
-                Synthèse / Note principale pour l’auditeur ANTIC
-              </label>
-              <textarea
-                id="comp-notes"
-                rows={2}
-                value={auditorNotes}
-                onChange={(e) => setAuditorNotes(e.target.value)}
-                placeholder="Ex: Document en cours de validation DG, ou justification si non existant à ce stade..."
-                className="w-full px-3 py-2 border border-stone-200 rounded-lg resize-none focus:outline-none focus:border-[#2A7B76]"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <span className="block text-stone-700 font-semibold">
-                Commentaires horodatés ({comments.length})
-              </span>
-              {comments.length > 0 && (
-                <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 bg-stone-50/50">
-                  {comments.map((cmt) => (
-                    <div key={cmt.id} className="flex items-start justify-between gap-2 px-3 py-2">
-                      <div className="min-w-0 space-y-0.5">
-                        <p className="text-[11px] text-stone-500">
-                          <strong className="text-stone-700">{cmt.author}</strong> ·{' '}
-                          <span className="font-mono">
-                            {cmt.createdAt ? new Date(cmt.createdAt).toLocaleDateString('fr-FR') : ''}
-                          </span>
-                        </p>
-                        <p className="text-stone-800 whitespace-pre-wrap">{cmt.text}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCommentInModal(cmt.id)}
-                        aria-label="Supprimer le commentaire"
-                        className="p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer shrink-0"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={newCommentText}
-                  onChange={(e) => setNewCommentText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddCommentInModal();
-                    }
-                  }}
-                  placeholder="Ajouter un commentaire horodaté..."
-                  className="flex-1 px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:border-[#2A7B76]"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddCommentInModal}
-                  className="inline-flex items-center gap-1 px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-lg border border-stone-200 transition whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Ajouter</span>
-                </button>
-              </div>
             </div>
           </div>
         </form>

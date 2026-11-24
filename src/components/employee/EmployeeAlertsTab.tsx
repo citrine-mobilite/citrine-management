@@ -24,6 +24,13 @@ import {
 } from 'lucide-react';
 import { Employee, AppUser, Task, AttendanceIncident, NotificationLog, Presence, Reminder } from '../../types';
 import { soundService } from '../../services/soundService';
+import {
+  computeReminderUrgency,
+  doesRoutineOccurOnDate,
+  formatDeadlineFrenchDate,
+  formatNextOccurrenceBadge,
+  isRoutineReminder,
+} from '../../services/reminderService';
 import { AlertCreateModal } from './AlertCreateModal';
 import { saveDocument, deleteDocument, COLLECTIONS } from '../../services/dataService';
 
@@ -135,8 +142,9 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
     const list: PersonalAlert[] = [];
     const seenIds = new Set<string>();
 
-    // 1. RAPPELS & ALERTES PROGRAMMÉES (Table reminders en Base de Données)
+    // 1. ALERTES D'ÉCHÉANCES (J-N) & RAPPELS JOUR J (Table reminders en Base de Données)
     reminders.forEach((r) => {
+      if (r.kind === 'movement') return;
       const isForMe = r.allEmployees ||
         (r.employeeId && isEmployeeMatch(r.employeeId)) ||
         (r.employeeIds && r.employeeIds.some(id => isEmployeeMatch(id)));
@@ -145,24 +153,49 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
       if (deletedAlertIds.has(r.id) || seenIds.has(r.id)) return;
       seenIds.add(r.id);
 
-      const periodsLabels: Record<string, string> = {
-        exact: "À l'heure exacte",
-        '5m': '5 min avant',
-        '15m': '15 min avant',
-        '30m': '30 min avant',
-        '1h': '1h avant',
-      };
-      const periodsText = r.triggerPeriods && r.triggerPeriods.length > 0
-        ? r.triggerPeriods.map(p => periodsLabels[p] || p).join(', ')
-        : "À l'heure exacte";
+      const isPausedOrResolved = Boolean(r.stopped || r.isResolved);
 
+      if (isRoutineReminder(r)) {
+        const occursToday = !isPausedOrResolved && doesRoutineOccurOnDate(r);
+        const nextBadge = formatNextOccurrenceBadge(r);
+        const periodsLabels: Record<string, string> = {
+          exact: "À l'heure exacte",
+          '5m': '5 min avant',
+          '15m': '15 min avant',
+          '30m': '30 min avant',
+          '1h': '1h avant',
+        };
+        const periodsText = r.triggerPeriods && r.triggerPeriods.length > 0
+          ? r.triggerPeriods.map(p => periodsLabels[p] || p).join(', ')
+          : "À l'heure exacte";
+
+        list.push({
+          id: r.id,
+          title: r.title || 'Rappel Jour J',
+          message: `${r.note ? `${r.note} • ` : ''}${nextBadge.label}${r.time ? ` à ${r.time}` : ''} • Sonnerie: ${periodsText}`,
+          type: occursToday ? 'warning' : 'info',
+          timestamp: occursToday ? `Aujourd'hui ${r.time || ''}`.trim() : nextBadge.label,
+          // Un rappel Jour J prévu plus tard ne génère PAS d'alerte non lue anticipée
+          read: !occursToday || readAlertIds.has(r.id) || isPausedOrResolved,
+          actionUrl: '#employee/alerts',
+          category: 'Alerte',
+        });
+        return;
+      }
+
+      const urgency = computeReminderUrgency(r);
+      const isUrgentOrWarning = urgency.isActionNeeded && !isPausedOrResolved;
       list.push({
         id: r.id,
-        title: r.title || 'Alerte Programmée',
-        message: `${r.note || 'Alerte'}${r.date && r.time ? ` • Prévue le ${r.date} à ${r.time}` : ''} • Périodes: ${periodsText}`,
-        type: 'warning',
-        timestamp: r.date && r.time ? `${r.date} ${r.time}` : (r.createdAt ? r.createdAt.slice(0, 10) : 'Programmé'),
-        read: readAlertIds.has(r.id) || !!r.stopped,
+        title: r.title || 'Échéance à suivre',
+        message: `${urgency.statusLabel}${urgency.targetDateStr ? ` • Échéance ${formatDeadlineFrenchDate(urgency.targetDateStr)}` : ''}${r.note ? ` • ${r.note}` : ''}`,
+        type: urgency.level === 'expired' || urgency.level === 'critical'
+          ? 'urgent'
+          : isUrgentOrWarning
+          ? 'warning'
+          : 'info',
+        timestamp: urgency.targetDateStr || (r.createdAt ? r.createdAt.slice(0, 10) : 'Planifié'),
+        read: !isUrgentOrWarning || readAlertIds.has(r.id) || isPausedOrResolved,
         actionUrl: '#employee/alerts',
         category: 'Alerte',
       });
@@ -395,12 +428,16 @@ export const EmployeeAlertsTab: React.FC<EmployeeAlertsTabProps> = ({
 
     const newReminderItem: Reminder = {
       id: `rem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      kind: 'routine',
+      routineType: 'autre',
+      recurrenceMode: 'once',
       title: alertData.title.trim(),
       note: alertData.note.trim(),
       date: alertData.date,
       time: alertData.time,
       triggerPeriods: alertData.triggerPeriods && alertData.triggerPeriods.length > 0 ? alertData.triggerPeriods : ['exact'],
       triggeredPeriods: [],
+      enableSoundAlarm: true,
       allEmployees: false,
       employeeIds: [targetId],
       employeeId: targetId,

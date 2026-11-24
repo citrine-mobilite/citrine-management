@@ -100,6 +100,12 @@ export interface AppTabRouterProps {
   onUpdateUser?: (updated: AppUser) => void;
   leaveRequests?: LeaveRequest[];
   onUpdateLeaveRequests?: (leaves: LeaveRequest[]) => void;
+  externalAlarm?: {
+    activeRingingReminder: Reminder | null;
+    onStartAlarm: (reminder: Reminder) => void;
+    onStopAlarm: () => void;
+    onSnooze5m: () => void;
+  };
 }
 
 export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
@@ -113,7 +119,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
     onUpdateFinancialTransactions, onUpdateDocuments, onUpdateDisciplinaryIncidents,
     onUpdateInventoryItems, onUpdatePartners, onUpdateUsers, onUpdateModuleConfig,
     onOpenProfileModal, showToast, handleSetCurrentUser, onUpdateUser, onLogout,
-    leaveRequests = [], onUpdateLeaveRequests,
+    leaveRequests = [], onUpdateLeaveRequests, externalAlarm,
   } = props;
 
   return (
@@ -121,7 +127,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
       {activeTab === 'dashboard' && (
         <AdminDashboardOverview
           currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}
-          reminders={reminders} currentTime={currentTime} onSelectTab={setActiveTab}
+          reminders={reminders} onUpdateReminders={onUpdateReminders} currentTime={currentTime} onSelectTab={setActiveTab}
           onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
         />
       )}
@@ -207,6 +213,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           employees={employees}
           currentRole={currentUser?.role}
           showToast={showToast}
+          externalAlarm={externalAlarm}
         />
       )}
       {activeTab === 'logs' && (
@@ -224,6 +231,9 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           employees={employees}
           presences={presences}
           tasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          selectedEmployeeId={selectedEmployeeId}
           salaryPayments={salaryPayments}
           salaryDebts={salaryDebts}
           onUpdateEmployees={onUpdateEmployees}
@@ -283,6 +293,11 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
           onUpdateUsers={onUpdateUsers}
           employees={employees}
           onUpdateEmployees={onUpdateEmployees}
+          presences={presences}
+          tasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          salaryPayments={salaryPayments}
           showToast={showToast}
         />
       )}
@@ -399,7 +414,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = (props) => {
         ) : (
           <AdminDashboardOverview
             currentUser={currentUser} employees={employees} presences={presences} tasks={tasks}
-            reminders={reminders} currentTime={currentTime} onSelectTab={setActiveTab}
+            reminders={reminders} onUpdateReminders={onUpdateReminders} currentTime={currentTime} onSelectTab={setActiveTab}
             onSelectEmployee={(id) => { setSelectedEmployeeId(id); setActiveTab('collaborators'); }}
           />
         )

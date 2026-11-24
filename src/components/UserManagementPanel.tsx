@@ -1,11 +1,23 @@
 import React, { useState } from 'react';
 import { Users, Download, FileText } from 'lucide-react';
-import { AppUser, UserRole, UserStatus, Employee, EmployeeStatus } from '../types';
+import {
+  AppUser,
+  UserRole,
+  UserStatus,
+  Employee,
+  EmployeeStatus,
+  Presence,
+  Task,
+  Reminder,
+  NotificationLog,
+  SalaryPayment,
+} from '../types';
 import { saveUser, deleteUser } from '../services/userService';
 import { hashPassword } from '../utils/cryptoUtils';
 import { logAdminOperation } from '../services/adminAuditService';
 import { UserFormModal } from './users/UserFormModal';
 import { UserDeleteConfirmModal } from './users/UserDeleteConfirmModal';
+import { UserDetailStatsModal } from './users/UserDetailStatsModal';
 import { UserTableItemRow } from './users/UserTableItemRow';
 import { UserFilterToolbar } from './users/UserFilterToolbar';
 import { exportToExcel } from '../services/excelExportService';
@@ -18,6 +30,11 @@ interface UserManagementPanelProps {
   onUpdateUsers?: (updated: AppUser[]) => void;
   employees?: Employee[];
   onUpdateEmployees?: (updated: Employee[]) => void;
+  presences?: Presence[];
+  tasks?: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
+  salaryPayments?: SalaryPayment[];
   showToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -26,8 +43,13 @@ export default function UserManagementPanel({
   onAddNotification,
   currentUser,
   onUpdateUsers,
-  employees,
+  employees = [],
   onUpdateEmployees,
+  presences = [],
+  tasks = [],
+  reminders = [],
+  notifications = [],
+  salaryPayments = [],
   showToast,
 }: UserManagementPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,6 +58,7 @@ export default function UserManagementPanel({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+  const [statsUser, setStatsUser] = useState<AppUser | null>(null);
   const [userToDelete, setUserToDelete] = useState<AppUser | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -309,6 +332,7 @@ export default function UserManagementPanel({
                     key={user.id}
                     user={user}
                     currentUserId={currentUser.id}
+                    onViewStats={(u) => setStatsUser(u)}
                     onEdit={handleEditUser}
                     onDelete={(u) => setUserToDelete(u)}
                   />
@@ -329,6 +353,24 @@ export default function UserManagementPanel({
           }}
           editingUser={editingUser}
           onSave={handleSaveUser}
+        />
+      )}
+
+      {statsUser && (
+        <UserDetailStatsModal
+          isOpen={Boolean(statsUser)}
+          onClose={() => setStatsUser(null)}
+          user={statsUser}
+          employees={employees}
+          presences={presences}
+          tasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          salaryPayments={salaryPayments}
+          onEditUser={(u) => {
+            setStatsUser(null);
+            handleEditUser(u);
+          }}
         />
       )}
 

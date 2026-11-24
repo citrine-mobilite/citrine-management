@@ -8,9 +8,13 @@ import {
   FileSpreadsheet,
   ArrowUpRight,
   AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Gauge,
 } from 'lucide-react';
 import { AppUser, Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../../../types';
 import { computePresenceStatistics, StatisticsPeriod } from './statisticsCalculations';
+import { HoursComplianceVerdict } from './workHoursCalculations';
 import { computeEmployeeRendement } from '../../../utils/rendementCalculator';
 import { findMatchingEmployee } from '../../../utils/roleUtils';
 import { TaskTimeSpentHistogram } from './TaskTimeSpentHistogram';
@@ -31,12 +35,44 @@ interface UserStatisticsSummaryPanelProps {
 }
 
 const PERIOD_OPTIONS: Array<{ id: StatisticsPeriod; label: string }> = [
-  { id: 'this_month', label: 'Ce mois' },
-  { id: 'this_week', label: 'Cette semaine' },
-  { id: 'today', label: "Aujourd'hui" },
+  { id: 'this_month', label: 'Ce mois (8h/j)' },
+  { id: 'this_week', label: 'Cette semaine (40h)' },
+  { id: 'last_month', label: 'Mois dernier' },
   { id: 'last_3_months', label: '3 mois' },
+  { id: 'today', label: "Aujourd'hui" },
   { id: 'all', label: 'Tout' },
 ];
+
+const VERDICT_META: Record<
+  HoursComplianceVerdict,
+  { label: string; badgeClass: string; barClass: string }
+> = {
+  conforme: {
+    label: 'Conforme (objectif atteint)',
+    badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    barClass: 'bg-emerald-600',
+  },
+  heures_sup: {
+    label: 'Heures sup (> 105%)',
+    badgeClass: 'bg-blue-50 text-blue-800 border-blue-200',
+    barClass: 'bg-blue-600',
+  },
+  partiel: {
+    label: 'Partiel (75–94%)',
+    badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+    barClass: 'bg-amber-500',
+  },
+  insuffisant: {
+    label: 'Insuffisant (< 75%)',
+    badgeClass: 'bg-rose-50 text-rose-800 border-rose-200',
+    barClass: 'bg-rose-600',
+  },
+  non_pointe: {
+    label: 'Non pointé',
+    badgeClass: 'bg-stone-100 text-stone-700 border-stone-200',
+    barClass: 'bg-stone-400',
+  },
+};
 
 export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProps> = ({
   employee,
@@ -51,7 +87,7 @@ export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProp
   onOpenFullRendement,
   onOpenTaskSheet,
 }) => {
-  const [period, setPeriod] = useState<StatisticsPeriod>('all');
+  const [period, setPeriod] = useState<StatisticsPeriod>('this_month');
 
   const resolvedEmployee: Employee | null = useMemo(() => {
     if (employee) return employee;
@@ -122,6 +158,8 @@ export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProp
 
   const pRow = presenceStats.row;
   const rMet = rendementMetrics;
+  const verdictMeta = VERDICT_META[pRow.hoursVerdict] || VERDICT_META.non_pointe;
+  const clampedCompliancePct = Math.max(0, Math.min(100, pRow.hoursComplianceRate));
 
   const capacityLabel =
     rMet.capacityStatus === 'overloaded'
@@ -214,17 +252,146 @@ export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProp
 
         <div className="p-4 bg-white rounded-2xl border border-stone-200 space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-stone-500">Temps &amp; Charge</span>
+            <span className="text-[11px] font-semibold text-stone-500">Volume Pointé (40h / 8h·j)</span>
             <Clock className="h-4 w-4 text-blue-600" />
           </div>
           <div className="text-2xl font-bold text-stone-900 tabular-nums">
-            {rMet.effectiveHoursSpent}h
+            {pRow.workedHoursTotal}h
           </div>
           <p className="text-[11px] text-stone-500 tabular-nums">
-            Est. {rMet.estimatedHoursTotal}h · Pointées {pRow.workedHoursTotal}h ({capacityLabel})
+            Attendu à date : {pRow.expectedHoursElapsed}h · Tâches {rMet.effectiveHoursSpent}h ({capacityLabel})
           </p>
         </div>
       </div>
+
+      {/* Contrôle dédié du Volume Horaire (40h/sem · 8h/jour ouvré) */}
+      <div className="p-4 sm:p-5 bg-white rounded-2xl border border-stone-200 space-y-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-start gap-2.5">
+            <div className="p-2 rounded-xl bg-emerald-50 text-[#2A7B76] border border-emerald-100 shrink-0">
+              <Gauge className="h-4 w-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wider">
+                Contrôle du Volume Horaire (40h/sem · 8h/jour ouvré)
+              </h4>
+              <p className="text-[11px] text-stone-500 mt-0.5 tabular-nums">
+                Période analysée : {presenceStats.startStr} au {presenceStats.endStr} · {pRow.workingDaysElapsed} jour(s) ouvré(s) écoulé(s) sur {pRow.workingDaysInPeriod}
+              </p>
+            </div>
+          </div>
+
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl border text-xs font-bold self-start sm:self-center shrink-0 ${verdictMeta.badgeClass}`}
+          >
+            {pRow.hoursVerdict === 'conforme' || pRow.hoursVerdict === 'heures_sup' ? (
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            ) : pRow.hoursVerdict === 'insuffisant' || pRow.hoursVerdict === 'non_pointe' ? (
+              <XCircle className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            )}
+            <span>{verdictMeta.label}</span>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs tabular-nums">
+          <div className="p-3 rounded-xl bg-stone-50 border border-stone-200/80">
+            <span className="text-[10px] text-stone-500 font-semibold block">Heures pointées</span>
+            <strong className="text-base font-bold text-stone-900">{pRow.workedHoursTotal}h</strong>
+            <span className="block text-[10px] text-stone-500 mt-0.5">
+              Sem. {pRow.workedHoursWeekdays}h · WE {pRow.workedHoursWeekend}h
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-stone-50 border border-stone-200/80">
+            <span className="text-[10px] text-stone-500 font-semibold block">Attendu à date (8h × j)</span>
+            <strong className="text-base font-bold text-stone-900">{pRow.expectedHoursElapsed}h</strong>
+            <span className="block text-[10px] text-stone-500 mt-0.5">
+              {pRow.workingDaysElapsed} jour(s) ouvré(s) × 8h
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-stone-50 border border-stone-200/80">
+            <span className="text-[10px] text-stone-500 font-semibold block">Objectif période complète</span>
+            <strong className="text-base font-bold text-stone-900">{pRow.expectedHoursFullPeriod}h</strong>
+            <span className="block text-[10px] text-stone-500 mt-0.5">
+              {pRow.workingDaysInPeriod} jour(s) ouvré(s) × 8h
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-stone-50 border border-stone-200/80">
+            <span className="text-[10px] text-stone-500 font-semibold block">Écart &amp; Réalisation</span>
+            <strong
+              className={`text-base font-bold ${
+                pRow.hoursDelta >= 0 ? 'text-emerald-700' : 'text-rose-700'
+              }`}
+            >
+              {pRow.hoursDelta >= 0 ? '+' : ''}
+              {pRow.hoursDelta}h ({pRow.hoursComplianceRate}%)
+            </strong>
+            <div className="w-full h-1.5 bg-stone-200 rounded-full overflow-hidden mt-1.5">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${verdictMeta.barClass}`}
+                style={{ width: `${clampedCompliancePct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {pRow.incompleteClockingsCount > 0 && (
+          <div className="px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-semibold flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>
+              {pRow.incompleteClockingsCount} pointage(s) sans heure de départ enregistrée sur cette période (non comptabilisé(s) comme 8h).
+            </span>
+          </div>
+        )}
+
+        {pRow.weeklyHoursBreakdown.length > 0 && (
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between">
+              <h5 className="text-[11px] font-bold text-stone-700 uppercase tracking-wide">
+                Détail semaine par semaine (objectif 40h / semaine complète)
+              </h5>
+              <span className="text-[10px] text-stone-400 tabular-nums">
+                {pRow.weeklyHoursBreakdown.length} semaine(s)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {pRow.weeklyHoursBreakdown.map((week) => {
+                const wVerdict = VERDICT_META[week.verdict] || VERDICT_META.non_pointe;
+                return (
+                  <div
+                    key={week.weekStartStr}
+                    className="p-3 rounded-xl border border-stone-200/80 bg-stone-50/70 space-y-1.5 text-xs tabular-nums"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-stone-800 truncate">{week.weekLabel}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold shrink-0 ${wVerdict.badgeClass}`}
+                      >
+                        {week.complianceRate}%
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-stone-600">
+                      <span>
+                        <strong className="text-stone-900">{week.workedHours}h</strong> / {week.targetHours}h ({week.workedDays}/{week.workingDaysInWeek}j)
+                      </span>
+                      <span className={week.deltaHours >= 0 ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>
+                        {week.deltaHours >= 0 ? '+' : ''}
+                        {week.deltaHours}h
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="p-4 bg-stone-50/70 rounded-2xl border border-stone-200/80 space-y-3">
@@ -276,7 +443,7 @@ export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProp
 
         <div className="p-4 bg-stone-50/70 rounded-2xl border border-stone-200/80 space-y-3">
           <h4 className="text-xs font-bold text-stone-800 uppercase tracking-wider">
-            Répartition Tâches, Jalons &amp; Points Importants
+            Répartition des Tâches &amp; Points Importants
           </h4>
           <div className="grid grid-cols-3 gap-2.5 text-xs tabular-nums">
             <div className="p-2.5 bg-white rounded-xl border border-stone-200/70">
@@ -296,7 +463,7 @@ export const UserStatisticsSummaryPanel: React.FC<UserStatisticsSummaryPanelProp
               <strong className="text-sm text-rose-700 font-bold">{rMet.blockedTasks}</strong>
             </div>
             <div className="p-2.5 bg-white rounded-xl border border-stone-200/70">
-              <span className="text-[10px] text-stone-500 block">Jalons</span>
+              <span className="text-[10px] text-stone-500 block">Tâches clés</span>
               <strong className="text-sm text-stone-900 font-bold">
                 {rMet.completedMilestones}/{rMet.milestonesCount}
               </strong>

@@ -1,5 +1,6 @@
 import { Employee, Presence, SalaryPayment } from '../types';
 import { formatMinutesToHours, isLate } from '../utils/dateUtils';
+import { PLATFORM_START_DATE } from '../components/presence/statistics/workHoursCalculations';
 
 export interface AttendanceMonthlyReport {
   employee: Employee;
@@ -162,8 +163,9 @@ export async function buildMonthlyAttendanceReport(
                 p.clockingMethod === 'wifi_ip' ? 'IP Wi-Fi Bureau' : 'Standard'
       });
     } else {
+      const isBeforePlatformStart = dateKey < PLATFORM_START_DATE;
       // Jour sans pointage
-      if (!isWeekend && dateObj <= new Date()) {
+      if (!isWeekend && !isBeforePlatformStart && dateObj <= new Date()) {
         absenceDays++;
       }
       dailyRows.push({
@@ -174,9 +176,17 @@ export async function buildMonthlyAttendanceReport(
         pauseStart: '--:--',
         pauseEnd: '--:--',
         departure: '--:--',
-        durationFormatted: isWeekend ? 'Repos' : 'Non pointé',
+        durationFormatted: isWeekend
+          ? 'Repos'
+          : isBeforePlatformStart
+          ? 'Avant lancement'
+          : 'Non pointé',
         location: isWeekend ? 'Week-end' : 'N/A',
-        method: isWeekend ? 'Jour non ouvré' : 'Absence'
+        method: isWeekend
+          ? 'Jour non ouvré'
+          : isBeforePlatformStart
+          ? 'Hors période'
+          : 'Absence',
       });
     }
   }

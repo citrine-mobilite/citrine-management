@@ -1,257 +1,267 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, Calendar, Clock, Bell, Users, Repeat } from 'lucide-react';
+import React from 'react';
+import { X, Save, Bell, Users, FileText, Repeat } from 'lucide-react';
 import { Reminder, Employee } from '../../types';
+import { DEADLINE_TEMPLATE_GROUPS, DEADLINE_TEMPLATES } from '../../services/reminderService';
+import { useReminderModalLogic } from './modal/useReminderModalLogic';
+import { ReminderDeadlineAndScheduleFields } from './modal/ReminderDeadlineAndScheduleFields';
+import { ReminderRoutineFields } from './modal/ReminderRoutineFields';
 
 interface ReminderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveReminder: (reminderData: Omit<Reminder, 'id' | 'createdAt'> & { id?: string }) => void;
   initialReminder?: Reminder | null;
+  defaultMode?: 'deadline' | 'routine';
   employees: Employee[];
   isEmployee?: boolean;
   currentEmployee?: Employee | null;
 }
-
-const AVAILABLE_PERIODS = [
-  { id: 'exact', label: "À l'heure exacte (par défaut)" },
-  { id: '5m', label: '5 minutes avant' },
-  { id: '15m', label: '15 minutes avant' },
-  { id: '30m', label: '30 minutes avant' },
-  { id: '1h', label: '1h avant' },
-];
 
 export const ReminderModal: React.FC<ReminderModalProps> = ({
   isOpen,
   onClose,
   onSaveReminder,
   initialReminder,
+  defaultMode = 'deadline',
   employees,
   isEmployee = false,
   currentEmployee = null,
 }) => {
-  const [title, setTitle] = useState('');
-  const [note, setNote] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [time, setTime] = useState('09:00');
-  const [selectedPeriods, setSelectedPeriods] = useState<string[]>(['exact']);
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
-  const [allEmployees, setAllEmployees] = useState(true);
-
-  // Pre-fill fields when initialReminder changes (editing mode vs creating mode)
-  useEffect(() => {
-    if (initialReminder) {
-      setTitle(initialReminder.title || initialReminder.note || '');
-      setNote(initialReminder.note || '');
-      setDate(initialReminder.date || new Date().toISOString().split('T')[0]);
-      setTime(initialReminder.time || '09:00');
-      setSelectedPeriods(
-        initialReminder.triggerPeriods && initialReminder.triggerPeriods.length > 0
-          ? initialReminder.triggerPeriods
-          : ['exact']
-      );
-      setAllEmployees(initialReminder.allEmployees ?? true);
-      setSelectedEmployeeIds(initialReminder.employeeIds || []);
-    } else {
-      setTitle('');
-      setNote('');
-      setDate(new Date().toISOString().split('T')[0]);
-      setTime('09:00');
-      setSelectedPeriods(['exact']);
-      if (isEmployee && currentEmployee) {
-        setSelectedEmployeeIds([currentEmployee.id]);
-        setAllEmployees(false);
-      } else {
-        setSelectedEmployeeIds([]);
-        setAllEmployees(true);
-      }
-    }
-  }, [initialReminder, isOpen, isEmployee, currentEmployee]);
+  const {
+    kind,
+    setKind,
+    category,
+    setCategory,
+    title,
+    setTitle,
+    entityName,
+    setEntityName,
+    documentRef,
+    setDocumentRef,
+    note,
+    setNote,
+    date,
+    setDate,
+    renewalCycle,
+    setRenewalCycle,
+    alertLeadDays,
+    setAlertLeadDays,
+    enableSoundAlarm,
+    setEnableSoundAlarm,
+    time,
+    setTime,
+    selectedPeriods,
+    selectedEmployeeIds,
+    allEmployees,
+    selectedTemplateId,
+    routineType,
+    setRoutineType,
+    recurrenceMode,
+    setRecurrenceMode,
+    recurrenceDays,
+    setRecurrenceDays,
+    location,
+    setLocation,
+    sendPushNotification,
+    setSendPushNotification,
+    selectedRoutinePresetId,
+    isEditing,
+    handleApplyTemplate,
+    handleApplyRoutinePreset,
+    handleToggleRecurrenceDay,
+    handleTogglePeriod,
+    handleToggleEmployee,
+    handleToggleAllEmployees,
+    handleSubmit,
+  } = useReminderModalLogic({
+    isOpen,
+    onClose,
+    onSaveReminder,
+    initialReminder,
+    defaultMode: defaultMode === 'routine' ? 'routine' : 'deadline',
+    employees,
+    isEmployee,
+    currentEmployee,
+  });
 
   if (!isOpen) return null;
 
-  const isEditing = Boolean(initialReminder && initialReminder.id);
-
-  const handleTogglePeriod = (periodId: string) => {
-    if (selectedPeriods.includes(periodId)) {
-      setSelectedPeriods(selectedPeriods.filter((p) => p !== periodId));
-    } else {
-      setSelectedPeriods([...selectedPeriods, periodId]);
-    }
-  };
-
-  const handleToggleEmployee = (empId: string) => {
-    if (selectedEmployeeIds.includes(empId)) {
-      setSelectedEmployeeIds(selectedEmployeeIds.filter((id) => id !== empId));
-      setAllEmployees(false);
-    } else {
-      setSelectedEmployeeIds([...selectedEmployeeIds, empId]);
-    }
-  };
-
-  const handleToggleAllEmployees = (checked: boolean) => {
-    setAllEmployees(checked);
-    if (checked) {
-      setSelectedEmployeeIds(employees.map((e) => e.id));
-    } else {
-      setSelectedEmployeeIds([]);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-
-    const finalAllEmployees = isEmployee ? false : allEmployees;
-    const finalEmployeeIds = isEmployee
-      ? (currentEmployee?.id ? [currentEmployee.id] : [])
-      : (allEmployees ? employees.map((e) => e.id) : selectedEmployeeIds);
-
-    onSaveReminder({
-      ...(initialReminder ? { id: initialReminder.id } : {}),
-      title: title.trim(),
-      note: note.trim(),
-      date,
-      time,
-      triggerPeriods: selectedPeriods.length > 0 ? selectedPeriods : ['exact'],
-      allEmployees: finalAllEmployees,
-      employeeIds: finalEmployeeIds,
-      triggeredPeriods: initialReminder?.triggeredPeriods || [],
-      stopped: false,
-    });
-    onClose();
-  };
+  const isRoutineMode = kind === 'routine' || kind === 'alarm';
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl border border-stone-200 space-y-5">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="reminder-modal-title"
+      className="fixed inset-0 z-50 bg-stone-900/45 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+    >
+      <div className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl border border-stone-200 space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#2A7B76] border border-emerald-200/60 flex items-center justify-center">
-              <Bell className="h-4 w-4" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#2A7B76] border border-emerald-200/60 flex items-center justify-center shrink-0">
+              {isRoutineMode ? <Repeat className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
             </div>
             <div>
-              <h3 className="font-serif font-bold text-base text-stone-950">
-                {isEditing ? "Modifier l'Alerte Programmée" : "Créer une Nouvelle Alerte"}
+              <h3 id="reminder-modal-title" className="font-serif font-bold text-base text-stone-950">
+                {isEditing
+                  ? isRoutineMode
+                    ? 'Modifier le Rappel Jour J'
+                    : "Modifier l'Échéance / Document"
+                  : isRoutineMode
+                  ? 'Nouveau Rappel Jour J (Sonnerie & Push)'
+                  : 'Nouvelle Échéance (Alerte Anticipée J-N)'}
               </h3>
               <p className="text-[11px] text-stone-500">
-                Titre, détail, heure de rappel et périodes de sonnerie multiples.
+                {isRoutineMode
+                  ? 'Alerte et sonnerie strictement le Jour J à l’heure programmée.'
+                  : "Alerte sur l'accueil N jours avant l'échéance (salaires, documents, fiscalité)."}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 rounded-xl text-stone-400 hover:bg-stone-100 cursor-pointer"
+            aria-label="Fermer"
+            className="p-1.5 rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700 cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Form */}
+        {/* Sélecteur des 2 modules bien distincts */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 bg-stone-100 rounded-2xl border border-stone-200/80 text-xs">
+          <button
+            type="button"
+            onClick={() => setKind('deadline')}
+            className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+              !isRoutineMode
+                ? 'bg-white text-stone-950 shadow-2xs border border-stone-200/60'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5 text-[#2A7B76]" />
+            <span>Module 1 · Échéance (J-N)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setKind('routine')}
+            className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+              isRoutineMode
+                ? 'bg-white text-stone-950 shadow-2xs border border-stone-200/60'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <Repeat className="h-3.5 w-3.5 text-[#2A7B76]" />
+            <span>Module 2 · Rappel Jour J</span>
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          {/* Titre */}
-          <div>
-            <label className="block font-bold text-stone-700 mb-1">
-              Titre de l'alerte *
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="Ex: Clôture paie mensuelle, Point d'étape, Rappel urgent..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 font-bold text-stone-900 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none"
-            />
-          </div>
+          {!isRoutineMode ? (
+            <>
+              {!isEditing && (
+                <div className="space-y-2 p-3 rounded-2xl bg-stone-50/90 border border-stone-200/80">
+                  <div className="text-[11px] font-bold text-stone-600 uppercase tracking-wide">
+                    Modèles rapides d&apos;échéances (salaires, véhicules, fiscalité…)
+                  </div>
+                  <div className="space-y-2">
+                    {DEADLINE_TEMPLATE_GROUPS.map((group) => {
+                      const items = DEADLINE_TEMPLATES.filter((t) => t.group === group.id);
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={group.id} className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-stone-400 mr-1">
+                            {group.label} :
+                          </span>
+                          {items.map((tpl) => {
+                            const active = selectedTemplateId === tpl.id;
+                            return (
+                              <button
+                                key={tpl.id}
+                                type="button"
+                                onClick={() => handleApplyTemplate(tpl.id)}
+                                className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
+                                  active
+                                    ? 'bg-[#2A7B76] border-[#2A7B76] text-white shadow-2xs'
+                                    : 'border-stone-200 bg-white hover:bg-emerald-50 hover:border-emerald-200 hover:text-[#2A7B76] text-stone-700'
+                                }`}
+                              >
+                                + {tpl.label} (J-{tpl.alertLeadDays})
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-          {/* Note / Détail */}
-          <div>
-            <label className="block font-bold text-stone-700 mb-1">
-              Détail de l'alerte *
-            </label>
-            <textarea
-              required
-              rows={2}
-              placeholder="Spécifications, consignes détaillées, ordre du jour..."
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none text-stone-800"
-            />
-          </div>
-
-          {/* Date & Heure de rappel */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5 text-[#2A7B76]" />
-                Date de rappel *
-              </label>
-              <input
-                type="date"
-                required
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-medium"
+              <ReminderDeadlineAndScheduleFields
+                kind="deadline"
+                category={category}
+                setCategory={setCategory}
+                title={title}
+                setTitle={setTitle}
+                entityName={entityName}
+                setEntityName={setEntityName}
+                documentRef={documentRef}
+                setDocumentRef={setDocumentRef}
+                date={date}
+                setDate={setDate}
+                renewalCycle={renewalCycle}
+                setRenewalCycle={setRenewalCycle}
+                alertLeadDays={alertLeadDays}
+                setAlertLeadDays={setAlertLeadDays}
+                note={note}
+                setNote={setNote}
+                enableSoundAlarm={enableSoundAlarm}
+                setEnableSoundAlarm={setEnableSoundAlarm}
+                time={time}
+                setTime={setTime}
+                selectedPeriods={selectedPeriods}
+                onTogglePeriod={handleTogglePeriod}
               />
-            </div>
+            </>
+          ) : (
+            <ReminderRoutineFields
+              isEditing={isEditing}
+              routineType={routineType}
+              setRoutineType={setRoutineType}
+              title={title}
+              setTitle={setTitle}
+              location={location}
+              setLocation={setLocation}
+              recurrenceMode={recurrenceMode}
+              setRecurrenceMode={setRecurrenceMode}
+              recurrenceDays={recurrenceDays}
+              setRecurrenceDays={setRecurrenceDays}
+              onToggleRecurrenceDay={handleToggleRecurrenceDay}
+              date={date}
+              setDate={setDate}
+              time={time}
+              setTime={setTime}
+              note={note}
+              setNote={setNote}
+              selectedPeriods={selectedPeriods}
+              onTogglePeriod={handleTogglePeriod}
+              sendPushNotification={sendPushNotification}
+              setSendPushNotification={setSendPushNotification}
+              enableSoundAlarm={enableSoundAlarm}
+              setEnableSoundAlarm={setEnableSoundAlarm}
+              selectedRoutinePresetId={selectedRoutinePresetId}
+              onApplyRoutinePreset={handleApplyRoutinePreset}
+            />
+          )}
 
-            <div>
-              <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5 text-[#2A7B76]" />
-                Heure de rappel *
-              </label>
-              <input
-                type="time"
-                required
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-[#2A7B76] outline-none font-medium"
-              />
-            </div>
-          </div>
-
-          {/* Multi-Alarm Trigger Periods */}
-          <div className="space-y-2 bg-emerald-50/50 p-3.5 rounded-2xl border border-emerald-100">
-            <label className="block font-bold text-stone-800">
-              Périodes de rappel (une alerte peut sonner plusieurs fois)
-            </label>
-            <p className="text-[11px] text-stone-500">
-              Cochez les moments où l'alerte doit sonner (par défaut à l'heure exacte).
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
-              {AVAILABLE_PERIODS.map((period) => {
-                const isChecked = selectedPeriods.includes(period.id);
-                return (
-                  <button
-                    key={period.id}
-                    type="button"
-                    onClick={() => handleTogglePeriod(period.id)}
-                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-[11px] font-bold cursor-pointer transition text-left ${
-                      isChecked
-                        ? 'bg-[#2A7B76] text-white border-[#2A7B76] shadow-xs'
-                        : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
-                    }`}
-                  >
-                    <div
-                      className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center shrink-0 ${
-                        isChecked ? 'bg-white border-white' : 'border-stone-400'
-                      }`}
-                    >
-                      {isChecked && <div className="w-2 h-2 rounded-xs bg-[#2A7B76]" />}
-                    </div>
-                    <span>{period.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Personnes à qui c'est destiné */}
+          {/* Personnes destinataires */}
           {isEmployee ? (
             <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/80">
               <label className="font-bold text-stone-800 flex items-center gap-1.5 mb-1">
                 <Users className="h-3.5 w-3.5 text-[#2A7B76]" />
-                Personnes à qui c'est destiné
+                Destinataire
               </label>
               <div className="text-xs text-stone-700 bg-white p-2.5 rounded-xl border border-stone-200 flex items-center justify-between">
                 <span className="font-bold text-[#2A7B76]">
@@ -267,7 +277,7 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
               <div className="flex items-center justify-between">
                 <label className="font-bold text-stone-800 flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5 text-[#2A7B76]" />
-                  Personnes à qui c'est destiné
+                  Personnes concernées
                 </label>
                 <label className="flex items-center gap-2 text-[11px] text-[#2A7B76] font-bold cursor-pointer">
                   <input
@@ -276,7 +286,7 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
                     onChange={(e) => handleToggleAllEmployees(e.target.checked)}
                     className="rounded text-[#2A7B76] focus:ring-[#2A7B76]"
                   />
-                  Toute l'entreprise
+                  Toute l&apos;entreprise
                 </label>
               </div>
 
@@ -294,7 +304,9 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
                         className="rounded text-[#2A7B76] focus:ring-[#2A7B76]"
                       />
                       <span className="font-semibold text-stone-800">{emp.name}</span>
-                      <span className="text-stone-400 text-[10px]">({emp.role || 'Employé'})</span>
+                      <span className="text-stone-400 text-[10px]">
+                        ({emp.roleType || emp.role || 'Employé'})
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -316,7 +328,13 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
               className="px-5 py-2.5 rounded-xl bg-[#2A7B76] text-white hover:bg-[#226763] font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
             >
               <Save className="h-4 w-4" />
-              <span>{isEditing ? 'Enregistrer les modifications' : "Créer l'alerte"}</span>
+              <span>
+                {isEditing
+                  ? 'Enregistrer les modifications'
+                  : isRoutineMode
+                  ? 'Programmer le rappel Jour J'
+                  : "Créer l'échéance"}
+              </span>
             </button>
           </div>
         </form>

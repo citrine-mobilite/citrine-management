@@ -119,6 +119,39 @@ export function resolveRecurrenceMode(reminder: Reminder): ReminderRecurrenceMod
   return 'once';
 }
 
+export function toLocalIsoDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function doesRoutineOccurOnDate(
+  reminder: Reminder,
+  referenceDate: Date = new Date()
+): boolean {
+  if (!reminder || reminder.stopped || reminder.isResolved || !isRoutineReminder(reminder)) {
+    return false;
+  }
+
+  const mode = resolveRecurrenceMode(reminder);
+  const dateStr = toLocalIsoDateStr(referenceDate);
+  const dayOfWeek = referenceDate.getDay();
+  const dayOfMonth = referenceDate.getDate();
+
+  if (mode === 'daily') return true;
+  if (mode === 'weekdays') return dayOfWeek >= 1 && dayOfWeek <= 5;
+  if (mode === 'weekly_days') return getActiveWeekdays(reminder).includes(dayOfWeek);
+  if (mode === 'monthly') {
+    const targetDay = reminder.date ? Number(reminder.date.split('T')[0].split('-')[2]) || 1 : 1;
+    const lastDay = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0).getDate();
+    return dayOfMonth === Math.min(targetDay, lastDay);
+  }
+  // mode === 'once' : uniquement le Jour J exact
+  const explicitDate = (reminder.date || '').split('T')[0];
+  return Boolean(explicitDate && explicitDate === dateStr);
+}
+
 export function getActiveWeekdays(reminder: Reminder): number[] {
   const mode = resolveRecurrenceMode(reminder);
   if (mode === 'daily') return [0, 1, 2, 3, 4, 5, 6];

@@ -1,4 +1,4 @@
-import { AppUser, Role } from '../types';
+import { AppUser, Employee, Role } from '../types';
 
 /**
  * Normalise une chaîne de rôle (insensible à la casse et aux accents)
@@ -69,4 +69,55 @@ export function isEmployeeOnlyRole(roleOrRoleType?: string | null): boolean {
   return true;
 }
 
-export { isManagerOrAdminEmployee } from './roleClockingUtils';
+/**
+ * Retrouve la fiche RH (Employee) correspondant à un compte utilisateur (AppUser)
+ */
+export function findMatchingEmployee(
+  employees: Employee[],
+  user?: Pick<AppUser, 'id' | 'uid' | 'employeeId' | 'email' | 'name'> | null
+): Employee | null {
+  if (!user || !Array.isArray(employees) || employees.length === 0) return null;
+
+  if (user.employeeId) {
+    const byEmployeeId = employees.find((e) => String(e.id) === String(user.employeeId));
+    if (byEmployeeId) return byEmployeeId;
+  }
+
+  const byUserId = employees.find(
+    (e) =>
+      (e.userId !== undefined &&
+        e.userId !== null &&
+        (String(e.userId) === String(user.id) ||
+          (user.uid ? String(e.userId) === String(user.uid) : false))) ||
+      String(e.id) === String(user.id) ||
+      Boolean(user.uid && e.uid && String(e.uid) === String(user.uid))
+  );
+  if (byUserId) return byUserId;
+
+  const userEmail = (user.email || '').trim().toLowerCase();
+  if (userEmail) {
+    const byEmail = employees.find((e) => (e.email || '').trim().toLowerCase() === userEmail);
+    if (byEmail) return byEmail;
+  }
+
+  const normalizedName = normalizeRoleString(user.name);
+  if (normalizedName) {
+    const byName = employees.find((e) => normalizeRoleString(e.name) === normalizedName);
+    if (byName) return byName;
+  }
+
+  return null;
+}
+
+export {
+  canSeeAllNotifications,
+  canManageTaskAssignment,
+  canViewOthersData,
+  isSelfOnlyUser,
+} from './rolePermissionUtils';
+
+export {
+  shouldEmployeeClock,
+  isITEmployee,
+  isManagerOrAdminEmployee,
+} from './roleClockingUtils';

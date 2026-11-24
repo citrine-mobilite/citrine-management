@@ -1,7 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Bell, Calendar, Clock, Download, FileText, Repeat } from 'lucide-react';
 import { Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../../types';
 import { downloadPayslipPdf } from '../../services/pdfExportService';
+import {
+  computeReminderUrgency,
+  doesRoutineOccurOnDate,
+  formatDeadlineFrenchDate,
+  formatNextOccurrenceBadge,
+  getScopedRemindersForEmployee,
+  isRoutineReminder,
+} from '../../services/reminderService';
 import { CollaboratorPresenceMap } from '../CollaboratorPresenceMap';
 import { UserStatisticsSummaryPanel } from '../presence/statistics/UserStatisticsSummaryPanel';
 import { EmployeeRendementDetailModal } from '../presence/statistics/EmployeeRendementDetailModal';
@@ -151,16 +159,140 @@ export const CollaboratorDetailTabs: React.FC<CollaboratorDetailTabsProps> = ({
         </div>
       )}
 
-      {activeDetailTab === 'alerts' && (
-        <div className="p-8 text-center text-xs text-stone-400 italic">
-          Aucune alerte ou rappel pro actif pour le moment.
-        </div>
-      )}
+      {activeDetailTab === 'alerts' && (() => {
+        const scopedReminders = getScopedRemindersForEmployee(reminders, emp);
+        const empTokens = [emp.id, emp.name, emp.email]
+          .filter(Boolean)
+          .map((v) => String(v).trim().toLowerCase());
+        const scopedNotifs = notifications
+          .filter((n) => {
+            const rec = String(n.recipient || '').trim().toLowerCase();
+            return rec === 'tous' || empTokens.includes(rec);
+          })
+          .slice(0, 10);
+
+        if (scopedReminders.length === 0 && scopedNotifs.length === 0) {
+          return (
+            <div className="p-8 text-center text-xs text-stone-400 italic">
+              Aucune alerte, échéance ou notification active pour ce collaborateur.
+            </div>
+          );
+        }
+
+        return (
+          <div className="space-y-4">
+            <h4 className="font-serif font-bold text-xs text-stone-900 pb-2 border-b border-stone-100 flex items-center gap-2">
+              <Bell className="h-4 w-4 text-[#2A7B76]" />
+              Échéances, Rappels &amp; Notifications de {emp.name}
+            </h4>
+
+            {scopedReminders.length > 0 && (
+              <div className="space-y-2">
+                {scopedReminders.map((rem) => {
+                  const routine = isRoutineReminder(rem);
+                  if (routine) {
+                    const occursToday = doesRoutineOccurOnDate(rem);
+                    const nextBadge = formatNextOccurrenceBadge(rem);
+                    return (
+                      <div
+                        key={rem.id}
+                        className="p-3 rounded-xl border border-stone-200/80 bg-stone-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Repeat className="h-3.5 w-3.5 text-[#2A7B76] shrink-0" />
+                            <span className="font-bold text-stone-900">{rem.title || rem.note}</span>
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                                rem.stopped
+                                  ? 'bg-stone-100 text-stone-500 border-stone-200'
+                                  : occursToday
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                  : 'bg-white text-stone-600 border-stone-200'
+                              }`}
+                            >
+                              {rem.stopped ? 'En pause' : occursToday ? 'Rappel Jour J' : `Programmé · ${nextBadge.label}`}
+                            </span>
+                          </div>
+                          {rem.note && rem.note !== rem.title && (
+                            <p className="text-[11px] text-stone-500 pl-5">{rem.note}</p>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-mono text-stone-600 shrink-0 inline-flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-stone-400" />
+                          {rem.time || '09:00'}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  const urgency = computeReminderUrgency(rem);
+                  return (
+                    <div
+                      key={rem.id}
+                      className="p-3 rounded-xl border border-stone-200/80 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <FileText className="h-3.5 w-3.5 text-[#2A7B76] shrink-0" />
+                          <span className="font-bold text-stone-900">{rem.title || rem.note}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                              urgency.level === 'expired' || urgency.level === 'critical'
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : urgency.level === 'warning'
+                                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                : urgency.level === 'resolved'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-stone-100 text-stone-600 border-stone-200'
+                            }`}
+                          >
+                            {urgency.statusLabel}
+                          </span>
+                        </div>
+                        {rem.note && rem.note !== rem.title && (
+                          <p className="text-[11px] text-stone-500 pl-5">{rem.note}</p>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-mono text-stone-600 shrink-0 inline-flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-stone-400" />
+                        {formatDeadlineFrenchDate(urgency.targetDateStr)} (J-{urgency.leadDays})
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {scopedNotifs.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-stone-100">
+                <h5 className="text-[11px] font-bold text-stone-500 uppercase tracking-wide">
+                  Notifications récentes ({scopedNotifs.length})
+                </h5>
+                {scopedNotifs.map((n) => (
+                  <div
+                    key={n.id}
+                    className="p-2.5 rounded-xl bg-stone-50 border border-stone-200/70 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-bold text-stone-900 block truncate">{n.title}</span>
+                      <span className="text-[11px] text-stone-500 block truncate">{n.content}</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-stone-400 shrink-0">
+                      {n.timestamp ? n.timestamp.split('T')[0] : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {activeDetailTab === 'tasks' && (
         <div className="space-y-3">
           <h4 className="font-serif font-bold text-xs text-stone-900 pb-2 border-b border-stone-100">
-            Liste des jalons &amp; tâches assignés en cours
+            Liste des tâches assignées en cours
           </h4>
           <div className="space-y-2">
             {empTasks.length === 0 ? (

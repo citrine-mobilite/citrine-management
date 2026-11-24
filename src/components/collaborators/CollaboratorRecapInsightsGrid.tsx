@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import { Employee, Presence, SalaryPayment, Task } from '../../types';
 import { isTaskAssignedToEmployee, safeNum } from '../../utils/rendementTaskHelpers';
 import { formatCollaboratorXAF } from './collaboratorConstants';
+import { computePresenceStatistics } from '../presence/statistics/statisticsCalculations';
+import { formatLocalIsoDate } from '../presence/statistics/workHoursCalculations';
 
 interface CollaboratorRecapInsightsGridProps {
   emp: Employee;
@@ -23,13 +25,6 @@ function computeSeniorityLabel(hireDate?: string): string {
   return months > 0 ? `${years} an${years > 1 ? 's' : ''} ${months} mois` : `${years} an${years > 1 ? 's' : ''}`;
 }
 
-function parseClockMinutes(hm?: string | null): number | null {
-  if (!hm || !hm.includes(':')) return null;
-  const [h, m] = hm.split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return h * 60 + m;
-}
-
 export const CollaboratorRecapInsightsGrid: React.FC<CollaboratorRecapInsightsGridProps> = ({
   emp,
   presences,
@@ -37,27 +32,20 @@ export const CollaboratorRecapInsightsGrid: React.FC<CollaboratorRecapInsightsGr
   tasks,
 }) => {
   const stats = useMemo(() => {
-    const currentMonthPrefix = new Date().toISOString().slice(0, 7);
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = formatLocalIsoDate(new Date());
 
-    const lateCount = presences.filter((p) => p.status === 'late').length;
-    const presentOrLate = presences.filter((p) => p.status === 'present' || p.status === 'late' || p.status === 'mission').length;
-    const assiduiteRate = presences.length > 0 ? Math.min(100, Math.round((presentOrLate / presences.length) * 100)) : 100;
+    const allStats = computePresenceStatistics([emp], presences, 'all');
+    const monthStats = computePresenceStatistics([emp], presences, 'this_month');
+    const allRow = allStats.statsByEmployee[0];
+    const monthRow = monthStats.statsByEmployee[0];
 
-    let monthlyMinutes = 0;
-    presences
-      .filter((p) => (p.date || '').startsWith(currentMonthPrefix) && p.arrivalTime)
-      .forEach((p) => {
-        const arrM = parseClockMinutes(p.arrivalTime);
-        const depM = parseClockMinutes(p.departureTime) ?? (arrM !== null ? arrM + 480 : null);
-        if (arrM !== null && depM !== null && depM > arrM) {
-          const pStart = parseClockMinutes(p.pauseStart);
-          const pEnd = parseClockMinutes(p.pauseEnd);
-          const breakM = pStart !== null && pEnd !== null && pEnd > pStart ? pEnd - pStart : 60;
-          monthlyMinutes += Math.max(0, depM - arrM - (depM - arrM > 300 ? breakM : 0));
-        }
-      });
-    const monthlyHours = safeNum(Math.round((monthlyMinutes / 60) * 10) / 10, 0);
+    const assiduiteRate = allRow ? allRow.assiduiteRate : 0;
+    const presenceRate = allRow ? allRow.presenceRate : 0;
+    const lateCount = allRow ? allRow.lateDays : 0;
+    const absentDays = allRow ? allRow.absentDays : 0;
+    const workedDaysAll = allRow ? allRow.presentDays + allRow.lateDays : 0;
+    const elapsedDaysAll = allRow ? allRow.workingDaysElapsed : 0;
+    const monthlyHours = monthRow ? safeNum(monthRow.workedHoursTotal, 0) : 0;
 
     const myAllTasks = (tasks || []).filter((t) => isTaskAssignedToEmployee(t, emp));
     const completedTasks = myAllTasks.filter((t) => t.status === 'completed').length;
@@ -76,7 +64,11 @@ export const CollaboratorRecapInsightsGrid: React.FC<CollaboratorRecapInsightsGr
     return {
       seniority: computeSeniorityLabel(emp.hireDate),
       assiduiteRate,
+      presenceRate,
       lateCount,
+      absentDays,
+      workedDaysAll,
+      elapsedDaysAll,
       monthlyHours,
       totalTasks: myAllTasks.length,
       completedTasks,
@@ -117,9 +109,9 @@ export const CollaboratorRecapInsightsGrid: React.FC<CollaboratorRecapInsightsGr
             {stats.assiduiteRate}% · {stats.monthlyHours}h
           </div>
           <p className="text-[11px] text-stone-500 tabular-nums">
-            {presences.length} pointage(s) ·{' '}
-            <span className={stats.lateCount > 0 ? 'text-amber-700 font-semibold' : 'text-emerald-700 font-semibold'}>
-              {stats.lateCount} retard(s)
+            Présence {stats.presenceRate}% ({stats.workedDaysAll}/{stats.elapsedDaysAll} j) ·{' '}
+            <span className={stats.absentDays > 0 ? 'text-rose-700 font-semibold' : stats.lateCount > 0 ? 'text-amber-700 font-semibold' : 'text-emerald-700 font-semibold'}>
+              {stats.absentDays} abs. · {stats.lateCount} retard(s)
             </span>
           </p>
         </div>

@@ -1,10 +1,16 @@
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
-import { ComplianceChecklistItem, ComplianceStatus } from '../types/complianceTypes';
+import {
+  ComplianceChecklistItem,
+  ComplianceSubItemStatus,
+} from '../types/complianceTypes';
 import {
   computeComplianceMetrics,
+  computeParentComplianceStatus,
+  formatSubItemCommentsText,
   getComplianceStatusMeta,
-  prepareComplianceReportRows,
+  prepareComplianceSubItemReportRows,
+  resolveSubItemStatus,
 } from '../utils/complianceHelpers';
 import {
   drawCitrineOfficialFooter,
@@ -18,20 +24,24 @@ export interface ComplianceExportOptions {
   filterLabel?: string;
 }
 
-const EXCEL_STATUS_COLORS: Record<ComplianceStatus, { fill: string; font: string }> = {
+const EXCEL_STATUS_COLORS: Record<ComplianceSubItemStatus, { fill: string; font: string }> = {
   conforme: { fill: 'FFE8F7EE', font: 'FF166534' },
+  partiellement_conforme: { fill: 'FFE0F2FE', font: 'FF0369A1' },
   en_cours: { fill: 'FFFEF3C7', font: 'FFB45309' },
-  non_conforme: { fill: 'FFFEE2E2', font: 'FFB91C1C' },
+  a_verifier: { fill: 'FFE0E7FF', font: 'FF4338CA' },
   a_preparer: { fill: 'FFF5F5F4', font: 'FF44403C' },
+  non_conforme: { fill: 'FFFEE2E2', font: 'FFB91C1C' },
   non_existant: { fill: 'FFFFE4E6', font: 'FF9F1239' },
   non_applicable: { fill: 'FFFAFAF9', font: 'FF78716C' },
 };
 
-const PDF_STATUS_RGB: Record<ComplianceStatus, [number, number, number]> = {
+const PDF_STATUS_RGB: Record<ComplianceSubItemStatus, [number, number, number]> = {
   conforme: [22, 163, 74],
+  partiellement_conforme: [2, 132, 199],
   en_cours: [217, 119, 6],
-  non_conforme: [220, 38, 38],
+  a_verifier: [79, 70, 229],
   a_preparer: [87, 83, 78],
+  non_conforme: [220, 38, 38],
   non_existant: [153, 27, 27],
   non_applicable: [120, 113, 108],
 };
@@ -48,14 +58,15 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 }
 
 /**
- * Exports the ANTIC compliance report into a formatted multi-sheet Excel (.xlsx) workbook.
+ * Exports the ANTIC compliance report into a formatted multi-sheet Excel (.xlsx) workbook
+ * detailing binary parent readiness and granular sub-element statuses + comments.
  */
 export async function exportComplianceToExcel(
   items: ComplianceChecklistItem[],
   options: ComplianceExportOptions = {}
 ): Promise<string> {
   const metrics = computeComplianceMetrics(items);
-  const rows = prepareComplianceReportRows(items);
+  const subRows = prepareComplianceSubItemReportRows(items);
   const dateStamp = new Date().toISOString().split('T')[0];
   const generatedAt = new Date().toLocaleString('fr-FR');
 
@@ -66,12 +77,12 @@ export async function exportComplianceToExcel(
   // Sheet 1: Executive Summary
   const summarySheet = workbook.addWorksheet('Synthèse ANTIC');
   summarySheet.columns = [
-    { width: 34 },
+    { width: 38 },
     { width: 18 },
+    { width: 16 },
+    { width: 16 },
     { width: 18 },
-    { width: 18 },
-    { width: 18 },
-    { width: 22 },
+    { width: 20 },
   ];
 
   const titleRow = summarySheet.addRow([
@@ -89,23 +100,26 @@ export async function exportComplianceToExcel(
   summarySheet.mergeCells('A2:F2');
   summarySheet.addRow([]);
 
-  const kpiHeader = summarySheet.addRow(['Indicateur global', 'Valeur']);
+  const kpiHeader = summarySheet.addRow(['Indicateur de conformité', 'Valeur']);
   kpiHeader.eachCell((cell) => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A7B76' } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   });
 
   const kpiRows: Array<[string, string | number]> = [
-    ['Taux de préparation (hors N/A)', `${metrics.readinessPercent}%`],
-    ['Exigences applicables / Total', `${metrics.totalApplicable} / ${metrics.totalItems}`],
-    ['Conforme', metrics.conformeCount],
-    ['En cours de conformité', metrics.enCoursCount],
-    ['Non conforme', metrics.nonConformeCount],
-    ['À préparer', metrics.aPreparerCount],
-    ['Non existant (à déclarer)', metrics.nonExistantCount],
-    ['Non applicable (N/A)', metrics.nonApplicableCount],
-    ['Sous-livrables vérifiés', `${metrics.subItemsDone} / ${metrics.subItemsTotal}`],
+    ['Taux de conformité globale (Grands éléments)', `${metrics.readinessPercent}%`],
+    ['Grands éléments Conformes (automatique)', metrics.conformeCount],
+    ['Grands éléments Non conformes (automatique)', metrics.nonConformeCount],
+    ['Sous-éléments Conformes', `${metrics.subItemsDone} / ${metrics.subItemsApplicable}`],
+    ['Sous-éléments Partiellement conformes', metrics.partiellementConformeCount],
+    ['Sous-éléments En cours de conformité', metrics.enCoursCount],
+    ['Sous-éléments À vérifier / Validation', metrics.aVerifierCount],
+    ['Sous-éléments À initier / À préparer', metrics.aPreparerCount],
+    ['Sous-éléments Non conformes', metrics.subNonConformeCount],
+    ['Sous-éléments Non existants', metrics.nonExistantCount],
+    ['Sous-éléments Non applicables (N/A)', metrics.nonApplicableCount],
   ];
+
   for (const [label, val] of kpiRows) {
     const r = summarySheet.addRow([label, val]);
     r.getCell(1).font = { bold: true, color: { argb: 'FF292524' } };
@@ -115,11 +129,11 @@ export async function exportComplianceToExcel(
   summarySheet.addRow([]);
   const axisHeader = summarySheet.addRow([
     'Axe ANTIC',
-    'Préparation %',
-    'Conforme',
-    'En cours',
-    'Non conforme',
-    'Sous-livrables',
+    'Conformité %',
+    'Conformes',
+    'Non conformes',
+    'Sous-élém. conformes',
+    'Sous-élém. en cours',
   ]);
   axisHeader.eachCell((cell) => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A7B76' } };
@@ -131,30 +145,30 @@ export async function exportComplianceToExcel(
       axisStat.label,
       `${axisStat.readinessPercent}%`,
       axisStat.conformeCount,
-      axisStat.enCoursCount,
       axisStat.nonConformeCount,
-      `${axisStat.subItemsDone}/${axisStat.subItemsTotal}`,
+      `${axisStat.subItemsConforme}/${axisStat.subItemsApplicable}`,
+      axisStat.subItemsInProgress,
     ]);
   }
 
-  // Sheet 2: Detailed Compliance Matrix
-  const detailSheet = workbook.addWorksheet('Détail Conformité', {
+  // Sheet 2: Granular Sub-Element Matrix
+  const detailSheet = workbook.addWorksheet('Détail Sous-éléments', {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
 
   detailSheet.columns = [
-    { header: 'Code', key: 'controlCode', width: 15 },
-    { header: 'Section ANTIC', key: 'sectionTitle', width: 34 },
-    { header: 'Exigence / Document demandé', key: 'title', width: 42 },
-    { header: 'Statut', key: 'statusLabel', width: 24 },
-    { header: 'Sous-livrables', key: 'subItemsSummary', width: 15 },
-    { header: 'Détail sous-livrables', key: 'subItemsDetail', width: 45 },
-    { header: 'Responsable', key: 'ownerName', width: 24 },
-    { header: 'Version', key: 'documentVersion', width: 12 },
-    { header: 'Date doc.', key: 'documentDate', width: 14 },
-    { header: 'Confidentialité', key: 'confidentiality', width: 15 },
-    { header: 'Preuve / Lien', key: 'evidenceUrl', width: 28 },
-    { header: 'Commentaires & Notes', key: 'commentsText', width: 46 },
+    { header: 'Code', key: 'controlCode', width: 14 },
+    { header: 'Section ANTIC', key: 'sectionTitle', width: 32 },
+    { header: 'Exigence principale', key: 'parentTitle', width: 38 },
+    { header: 'Statut Global', key: 'parentStatusLabel', width: 16 },
+    { header: 'Sous-élément / Livrable', key: 'subLabel', width: 44 },
+    { header: 'Statut Sous-élément', key: 'subStatusLabel', width: 24 },
+    { header: 'Responsable & Fonction', key: 'ownerDisplay', width: 30 },
+    { header: 'Version', key: 'documentVersion', width: 11 },
+    { header: 'Date doc.', key: 'documentDate', width: 13 },
+    { header: 'Confidentialité', key: 'confidentiality', width: 14 },
+    { header: 'Preuve / Lien', key: 'evidenceUrl', width: 26 },
+    { header: 'Commentaires sous-élément', key: 'subCommentsText', width: 48 },
   ];
 
   const headerRow = detailSheet.getRow(1);
@@ -165,22 +179,8 @@ export async function exportComplianceToExcel(
     cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
   });
 
-  for (const row of rows) {
-    const added = detailSheet.addRow({
-      controlCode: row.controlCode,
-      sectionTitle: row.sectionTitle,
-      title: row.title,
-      statusLabel: row.statusLabel,
-      subItemsSummary: row.subItemsSummary,
-      subItemsDetail: row.subItemsDetail,
-      ownerName: row.ownerName,
-      documentVersion: row.documentVersion,
-      documentDate: row.documentDate,
-      confidentiality: row.confidentiality,
-      evidenceUrl: row.evidenceUrl,
-      commentsText: row.commentsText,
-    });
-
+  for (const row of subRows) {
+    const added = detailSheet.addRow(row);
     added.eachCell((cell) => {
       cell.alignment = { vertical: 'top', wrapText: true };
       cell.font = { size: 9.5, color: { argb: 'FF292524' } };
@@ -189,10 +189,15 @@ export async function exportComplianceToExcel(
       };
     });
 
-    const statusCell = added.getCell('statusLabel');
-    const style = EXCEL_STATUS_COLORS[row.status] || EXCEL_STATUS_COLORS.a_preparer;
-    statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: style.fill } };
-    statusCell.font = { bold: true, size: 9.5, color: { argb: style.font } };
+    const pStyle = EXCEL_STATUS_COLORS[row.parentStatus] || EXCEL_STATUS_COLORS.non_conforme;
+    const pCell = added.getCell('parentStatusLabel');
+    pCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: pStyle.fill } };
+    pCell.font = { bold: true, size: 9.5, color: { argb: pStyle.font } };
+
+    const sStyle = EXCEL_STATUS_COLORS[row.subStatus] || EXCEL_STATUS_COLORS.a_preparer;
+    const sCell = added.getCell('subStatusLabel');
+    sCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sStyle.fill } };
+    sCell.font = { bold: true, size: 9.5, color: { argb: sStyle.font } };
   }
 
   detailSheet.autoFilter = {
@@ -210,7 +215,8 @@ export async function exportComplianceToExcel(
 }
 
 /**
- * Exports the ANTIC compliance report into a formatted Landscape A4 PDF using Citrine official branding.
+ * Exports the ANTIC compliance report into a formatted Landscape A4 PDF with automatic binary parent status
+ * and detailed sub-element statuses + comments.
  */
 export async function exportComplianceToPdf(
   items: ComplianceChecklistItem[],
@@ -231,13 +237,12 @@ export async function exportComplianceToPdf(
   const bottomLimit = pageHeight - 24;
 
   const metrics = computeComplianceMetrics(items);
-  const rows = prepareComplianceReportRows(items);
   const dateStamp = new Date().toISOString().split('T')[0];
   const generatedAt = new Date().toLocaleString('fr-FR');
 
   let y = drawCitrineOfficialHeader(doc, pageWidth, margin, 10, logoBase64);
 
-  // Report Title Banner
+  // Title Banner
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(42, 123, 118);
@@ -259,14 +264,26 @@ export async function exportComplianceToPdf(
 
   y += 6;
 
-  // Compact KPI Summary Boxes
+  // Compact KPI Strip
   const kpis: Array<{ label: string; value: string; color: [number, number, number] }> = [
-    { label: 'Préparation', value: `${metrics.readinessPercent}%`, color: [42, 123, 118] },
-    { label: 'Conforme', value: String(metrics.conformeCount), color: [22, 163, 74] },
-    { label: 'En cours', value: String(metrics.enCoursCount), color: [217, 119, 6] },
-    { label: 'Non conforme', value: String(metrics.nonConformeCount), color: [220, 38, 38] },
-    { label: 'À préparer', value: String(metrics.aPreparerCount), color: [87, 83, 78] },
-    { label: 'Sous-livrables', value: `${metrics.subItemsDone}/${metrics.subItemsTotal}`, color: [42, 123, 118] },
+    { label: 'Conformité globale', value: `${metrics.readinessPercent}%`, color: [42, 123, 118] },
+    { label: 'Exigences Conformes', value: String(metrics.conformeCount), color: [22, 163, 74] },
+    { label: 'Exigences Non conformes', value: String(metrics.nonConformeCount), color: [220, 38, 38] },
+    {
+      label: 'Sous-élém. Conformes',
+      value: `${metrics.subItemsDone}/${metrics.subItemsApplicable}`,
+      color: [22, 163, 74],
+    },
+    {
+      label: 'En cours / Partiels / Vérif.',
+      value: String(metrics.enCoursCount + metrics.partiellementConformeCount + metrics.aVerifierCount),
+      color: [217, 119, 6],
+    },
+    {
+      label: 'Non conformes / Non exist.',
+      value: String(metrics.subNonConformeCount + metrics.nonExistantCount),
+      color: [220, 38, 38],
+    },
   ];
 
   const boxGap = 3;
@@ -279,26 +296,24 @@ export async function exportComplianceToPdf(
     doc.roundedRect(bx, y, boxW, 13, 1.5, 1.5, 'FD');
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(6.8);
     doc.setTextColor(120, 113, 108);
-    doc.text(kpi.label, bx + 3, y + 4.5);
+    doc.text(kpi.label, bx + 2.8, y + 4.5);
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
+    doc.setFontSize(10);
     doc.setTextColor(...kpi.color);
-    doc.text(kpi.value, bx + 3, y + 10.5);
+    doc.text(kpi.value, bx + 2.8, y + 10.5);
   });
 
   y += 17;
 
-  // Column widths sum = 269mm
+  // Table columns sum = 269mm
   const colWidths = {
     code: 24,
-    title: 82,
-    status: 34,
-    subs: 20,
-    owner: 42,
-    comments: 67,
+    subLabel: 112,
+    status: 38,
+    comment: 95,
   };
 
   const drawTableHeader = (currY: number): number => {
@@ -311,15 +326,11 @@ export async function exportComplianceToPdf(
     let x = margin + 2;
     doc.text('Code', x, currY + 5);
     x += colWidths.code;
-    doc.text('Exigence / Document demandé', x, currY + 5);
-    x += colWidths.title;
+    doc.text('Exigence / Sous-élément', x, currY + 5);
+    x += colWidths.subLabel;
     doc.text('Statut', x, currY + 5);
     x += colWidths.status;
-    doc.text('Livrables', x, currY + 5);
-    x += colWidths.subs;
-    doc.text('Resp. · Ver. · Date', x, currY + 5);
-    x += colWidths.owner;
-    doc.text('Commentaires & Notes', x, currY + 5);
+    doc.text('Commentaires & observations', x, currY + 5);
 
     return currY + 7.5;
   };
@@ -327,12 +338,9 @@ export async function exportComplianceToPdf(
   y = drawTableHeader(y);
 
   let currentSection = '';
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-
-    // Section Banner when sectionTitle changes
-    if (row.sectionTitle !== currentSection) {
-      currentSection = row.sectionTitle;
+  for (const item of items) {
+    if (item.sectionTitle !== currentSection) {
+      currentSection = item.sectionTitle;
       if (y + 14 > bottomLimit) {
         doc.addPage();
         y = drawCitrineOfficialHeader(doc, pageWidth, margin, 10, logoBase64);
@@ -347,87 +355,107 @@ export async function exportComplianceToPdf(
       y += 6.5;
     }
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.8);
-
-    const titleLines = doc.splitTextToSize(row.title, colWidths.title - 3);
-    const statusLines = doc.splitTextToSize(
-      getComplianceStatusMeta(row.status).label,
-      colWidths.status - 3
-    );
-    const ownerMeta = [
-      row.ownerName || 'Non assigné',
-      [row.documentVersion, row.documentDate].filter(Boolean).join(' · '),
-    ]
+    const parentStatus = computeParentComplianceStatus(item.subItems || [], item.status);
+    const parentLabel = getComplianceStatusMeta(parentStatus).label.toUpperCase();
+    const ownerInfo = [item.ownerName, item.ownerRole].filter(Boolean).join(' — ');
+    const metaRight = [ownerInfo, item.documentVersion, item.documentDate]
       .filter(Boolean)
-      .join('\n');
-    const ownerLines = doc.splitTextToSize(ownerMeta, colWidths.owner - 3);
-    const commentStr = row.commentsText || '—';
-    const commentLines = doc.splitTextToSize(commentStr, colWidths.comments - 3);
+      .join(' · ');
 
-    const maxLines = Math.max(
-      titleLines.length,
-      statusLines.length,
-      ownerLines.length,
-      commentLines.length,
-      1
-    );
-    const lineHeight = 3.7;
-    const rowHeight = Math.max(7.5, maxLines * lineHeight + 3);
+    // Parent Row
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    const parentTitleLines = doc.splitTextToSize(item.title, colWidths.subLabel - 3);
+    const parentMetaLines = metaRight
+      ? doc.splitTextToSize(metaRight, colWidths.comment - 3)
+      : [];
+    const parentHeight = Math.max(7.5, Math.max(parentTitleLines.length, parentMetaLines.length) * 3.7 + 3);
 
-    if (y + rowHeight > bottomLimit) {
+    if (y + parentHeight > bottomLimit) {
       doc.addPage();
       y = drawCitrineOfficialHeader(doc, pageWidth, margin, 10, logoBase64);
       y = drawTableHeader(y);
     }
 
-    if (i % 2 === 1) {
-      doc.setFillColor(250, 250, 249);
-      doc.rect(margin, y, contentWidth, rowHeight, 'F');
+    doc.setFillColor(248, 250, 252);
+    doc.rect(margin, y, contentWidth, parentHeight, 'F');
+    doc.setDrawColor(214, 211, 209);
+    doc.setLineWidth(0.2);
+    doc.line(margin, y + parentHeight, pageWidth - margin, y + parentHeight);
+
+    let px = margin + 2;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.8);
+    doc.setTextColor(42, 123, 118);
+    doc.text(item.controlCode, px, y + 4.5);
+
+    px += colWidths.code;
+    doc.setTextColor(15, 23, 42);
+    doc.text(parentTitleLines, px, y + 4.5);
+
+    px += colWidths.subLabel;
+    const pRgb = PDF_STATUS_RGB[parentStatus];
+    doc.setTextColor(...pRgb);
+    doc.text(parentLabel, px, y + 4.5);
+
+    px += colWidths.status;
+    if (parentMetaLines.length > 0) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.2);
+      doc.setTextColor(100, 116, 139);
+      doc.text(parentMetaLines, px, y + 4.5);
     }
 
-    doc.setDrawColor(231, 229, 228);
-    doc.setLineWidth(0.2);
-    doc.line(margin, y + rowHeight, pageWidth - margin, y + rowHeight);
+    y += parentHeight;
 
-    const textY = y + 4.3;
-    let x = margin + 2;
+    // Sub-Item Rows
+    const subs = item.subItems || [];
+    for (const sub of subs) {
+      const subStatus = resolveSubItemStatus(sub);
+      const subLabel = getComplianceStatusMeta(subStatus).label;
+      const subComment = formatSubItemCommentsText(sub) || '—';
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(42, 123, 118);
-    doc.text(row.controlCode, x, textY);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      const sTitleLines = doc.splitTextToSize(`• ${sub.label}`, colWidths.subLabel - 5);
+      const sStatusLines = doc.splitTextToSize(subLabel, colWidths.status - 3);
+      const sCommentLines = doc.splitTextToSize(subComment, colWidths.comment - 3);
 
-    x += colWidths.code;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.8);
-    doc.setTextColor(28, 25, 23);
-    doc.text(titleLines, x, textY);
+      const sHeight = Math.max(
+        6.5,
+        Math.max(sTitleLines.length, sStatusLines.length, sCommentLines.length) * 3.5 + 2.5
+      );
 
-    x += colWidths.title;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.6);
-    const rgb = PDF_STATUS_RGB[row.status] || [87, 83, 78];
-    doc.setTextColor(...rgb);
-    doc.text(statusLines, x, textY);
+      if (y + sHeight > bottomLimit) {
+        doc.addPage();
+        y = drawCitrineOfficialHeader(doc, pageWidth, margin, 10, logoBase64);
+        y = drawTableHeader(y);
+      }
 
-    x += colWidths.status;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.8);
-    doc.setTextColor(68, 64, 60);
-    doc.text(row.subItemsSummary, x, textY);
+      doc.setDrawColor(231, 229, 228);
+      doc.setLineWidth(0.15);
+      doc.line(margin, y + sHeight, pageWidth - margin, y + sHeight);
 
-    x += colWidths.subs;
-    doc.setFontSize(7.3);
-    doc.setTextColor(68, 64, 60);
-    doc.text(ownerLines, x, textY);
+      let sx = margin + colWidths.code + 4;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(sTitleLines, sx, y + 4);
 
-    x += colWidths.owner;
-    doc.setFontSize(7.4);
-    doc.setTextColor(41, 37, 36);
-    doc.text(commentLines, x, textY);
+      sx = margin + colWidths.code + colWidths.subLabel + 2;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.3);
+      doc.setTextColor(...(PDF_STATUS_RGB[subStatus] || [87, 83, 78]));
+      doc.text(sStatusLines, sx, y + 4);
 
-    y += rowHeight;
+      sx += colWidths.status;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.2);
+      doc.setTextColor(68, 64, 60);
+      doc.text(sCommentLines, sx, y + 4);
+
+      y += sHeight;
+    }
   }
 
   const totalPages = doc.getNumberOfPages();

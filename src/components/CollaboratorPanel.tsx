@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Search, 
@@ -35,6 +35,7 @@ import {
   EmployeeStatus,
   Presence, 
   Task, 
+  Reminder,
   SalaryPayment, 
   EmployeeSalaryDebt, 
   NotificationLog,
@@ -55,6 +56,8 @@ import { saveDocument, COLLECTIONS } from '../services/dataService';
 import { supabaseAdmin } from '../lib/supabase';
 import { CollaboratorAvatarPickerModal } from './collaborators/CollaboratorAvatarPickerModal';
 import { CollaboratorStatusReasonModal } from './collaborators/CollaboratorStatusReasonModal';
+import { CollaboratorDetailView } from './collaborators/CollaboratorDetailView';
+import { CollaboratorDetailTab } from './collaborators/collaboratorConstants';
 import { disciplinaryReasonsService } from '../services/disciplinaryReasonsService';
 import { logAdminOperation, getAdminAuditOperations, AdminAccountOperation } from '../services/adminAuditService';
 import { exportToExcel } from '../services/excelExportService';
@@ -66,6 +69,9 @@ interface CollaboratorPanelProps {
   employees: Employee[];
   presences?: Presence[];
   tasks?: Task[];
+  reminders?: Reminder[];
+  notifications?: NotificationLog[];
+  selectedEmployeeId?: string;
   salaryPayments?: SalaryPayment[];
   salaryDebts?: EmployeeSalaryDebt[];
   onUpdateEmployees: (employees: Employee[]) => void;
@@ -79,7 +85,6 @@ interface CollaboratorPanelProps {
 }
 
 type ViewMode = 'list' | 'detail';
-type DetailTabType = 'payslips' | 'presences' | 'map' | 'alerts' | 'tasks';
 
 const STATUS_MAP = {
   en_poste: { label: 'En poste', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -102,6 +107,9 @@ export default function CollaboratorPanel({
   employees,
   presences = [],
   tasks = [],
+  reminders = [],
+  notifications = [],
+  selectedEmployeeId: selectedEmployeeIdProp,
   salaryPayments = [],
   salaryDebts = [],
   onUpdateEmployees,
@@ -116,7 +124,15 @@ export default function CollaboratorPanel({
   // Navigation & View States
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedEmpId, setSelectedEmployeeId] = useState<string | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<DetailTabType>('payslips');
+  const [activeDetailTab, setActiveDetailTab] = useState<CollaboratorDetailTab>('statistics');
+
+  useEffect(() => {
+    if (selectedEmployeeIdProp && employees.some((e) => e.id === selectedEmployeeIdProp)) {
+      setSelectedEmployeeId(selectedEmployeeIdProp);
+      setActiveDetailTab('statistics');
+      setViewMode('detail');
+    }
+  }, [selectedEmployeeIdProp, employees]);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -689,343 +705,41 @@ export default function CollaboratorPanel({
   };
 
   if (viewMode === 'detail' && selectedEmployeeObj) {
-    const emp = selectedEmployeeObj;
-    const empPresences = presences.filter((p) => p.employeeId === emp.id);
-    const empPayslips = salaryPayments.filter((p) => p.employeeId === emp.id);
-    const empTasks = tasks.filter((t) => t.assignedTo === emp.name && t.status !== 'completed');
-    const empLoans = salaryDebts.filter((d) => d.employeeId === emp.id);
-
     return (
-      <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
-        {/* Detail Top Header Actions */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setViewMode('list')}
-              className="p-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition cursor-pointer flex items-center gap-1 text-xs font-bold"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Retour aux collaborateurs
-            </button>
-            <div className="h-4 w-[1px] bg-stone-200 hidden sm:block"></div>
-            <span className="text-xs text-stone-500 font-medium">
-              Fiche Individuelle • <b className="text-stone-800 font-bold">{emp.name}</b>
-            </span>
-          </div>
+      <>
+        <CollaboratorDetailView
+          emp={selectedEmployeeObj}
+          employees={employees}
+          presences={presences}
+          salaryPayments={salaryPayments}
+          tasks={tasks}
+          reminders={reminders}
+          notifications={notifications}
+          activeDetailTab={activeDetailTab}
+          setActiveDetailTab={setActiveDetailTab}
+          rhReportMonth={rhReportMonth}
+          setRhReportMonth={setRhReportMonth}
+          isGeneratingRhReport={isGeneratingRhReport}
+          onGenerateMonthlyReport={handleGenerateEmpMonthlyReport}
+          onBackToList={() => setViewMode('list')}
+          onEdit={handleOpenEdit}
+          onPrint={handlePrintFile}
+        />
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              onClick={() => handleOpenEdit(emp)}
-              className="flex-1 sm:flex-initial px-3.5 py-2 border border-stone-200 text-stone-700 hover:bg-stone-50 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
-            >
-              <Pencil className="h-3.5 w-3.5 text-[#2A7B76]" />
-              Modifier la fiche
-            </button>
-            <button
-              onClick={handlePrintFile}
-              className="flex-1 sm:flex-initial px-3.5 py-2 border border-stone-200 text-stone-700 hover:bg-stone-50 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
-            >
-              <Printer className="h-3.5 w-3.5 text-stone-500" />
-              Imprimer
-            </button>
-          </div>
-        </div>
-
-        {/* Employee Overview Profiler Box */}
-        <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-sm flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
-            <div className="w-20 h-20 rounded-2xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold text-2xl border border-emerald-100 shadow-3xs shrink-0 overflow-hidden">
-              {emp.avatarUrl ? (
-                <img src={emp.avatarUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <span>{emp.name.slice(0, 2).toUpperCase()}</span>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                <span className="text-[10px] font-bold uppercase bg-blue-50 text-blue-700 border border-blue-100 px-2.5 py-0.5 rounded-lg">
-                  {emp.roleType || 'Employé'}
-                </span>
-                <span className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-lg border ${
-                  STATUS_MAP[getEmployeeStatusKey(emp)]?.color
-                }`}>
-                  {STATUS_MAP[getEmployeeStatusKey(emp)]?.label}
-                </span>
-              </div>
-
-              <h2 className="font-serif font-bold text-xl text-stone-900">{emp.name}</h2>
-              
-              <div className="flex flex-col sm:flex-row items-center gap-x-4 gap-y-1.5 text-xs text-stone-500 font-medium pt-1">
-                <div className="flex items-center gap-1">
-                  <span className="text-stone-400">📧</span>
-                  <span>{emp.email || 'Non renseigné'}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-stone-400">📞</span>
-                  <span>{emp.phone || 'Non renseigné'}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-stone-400">🏢</span>
-                  <span>{emp.department || 'Citrine Management'}</span>
-                </div>
-              </div>
-
-              {emp.status === 'renvoye' && emp.departureReason && (
-                <div className="mt-3 bg-red-50 border border-red-100 p-2.5 rounded-xl text-rose-800 text-[11px] font-medium">
-                  ⚠️ <b>Motif de renvoi :</b> {emp.departureReason}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="shrink-0 flex items-center">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl text-xs font-bold shadow-3xs">
-              <Check className="h-4 w-4 text-emerald-600" />
-              Assujetti aux pointages
-            </span>
-          </div>
-        </div>
-
-        {/* Real Metrics Pastel Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-emerald-50/50 p-5 rounded-3xl border border-emerald-100/60 shadow-3xs space-y-1.5">
-            <span className="text-[10px] text-emerald-700/80 font-bold uppercase tracking-wide">Salaire de Base</span>
-            <div className="text-lg font-bold text-emerald-800 font-mono">
-              {formatXAF(emp.salary || 0)}
-            </div>
-          </div>
-
-          <div className="bg-blue-50/50 p-5 rounded-3xl border border-blue-100/60 shadow-3xs space-y-1.5">
-            <span className="text-[10px] text-blue-700/80 font-bold uppercase tracking-wide">Pointages Présence</span>
-            <div className="text-lg font-bold text-blue-800 font-mono">
-              {empPresences.length} enregistrements
-            </div>
-          </div>
-
-          <div className="bg-amber-50/40 p-5 rounded-3xl border border-amber-100/60 shadow-3xs space-y-1.5">
-            <span className="text-[10px] text-amber-700/80 font-bold uppercase tracking-wide">Date d'arrivée</span>
-            <div className="text-lg font-bold text-amber-800 font-mono">
-              {emp.hireDate || '2026-01-01'}
-            </div>
-          </div>
-
-          <div className="bg-purple-50/40 p-5 rounded-3xl border border-purple-100/60 shadow-3xs space-y-1.5">
-            <span className="text-[10px] text-purple-700/80 font-bold uppercase tracking-wide">Anniversaire</span>
-            <div className="text-lg font-bold text-purple-800 font-mono">
-              {emp.birthDate || '2000-05-01'}
-            </div>
-          </div>
-        </div>
-
-        {/* Detailed Horizontal Subtabs */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-1.5 overflow-x-auto p-1 bg-stone-100 rounded-2xl border border-stone-200/80">
-            <button
-              onClick={() => setActiveDetailTab('payslips')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                activeDetailTab === 'payslips' ? 'bg-[#2A7B76] text-white shadow-sm' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
-              }`}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              {empPayslips.length} Fiches de Paie (Mois par mois)
-            </button>
-            <button
-              onClick={() => setActiveDetailTab('presences')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                activeDetailTab === 'presences' ? 'bg-[#2A7B76] text-white shadow-sm' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
-              }`}
-            >
-              <Clock className="h-3.5 w-3.5" />
-              Historique des Présences ({empPresences.length})
-            </button>
-            <button
-              onClick={() => setActiveDetailTab('map')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                activeDetailTab === 'map' ? 'bg-[#2A7B76] text-white shadow-sm' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
-              }`}
-            >
-              <MapPin className="h-3.5 w-3.5" />
-              Carte des Badges (GPS Leaflet)
-            </button>
-            <button
-              onClick={() => setActiveDetailTab('alerts')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                activeDetailTab === 'alerts' ? 'bg-[#2A7B76] text-white shadow-sm' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
-              }`}
-            >
-              <Bell className="h-3.5 w-3.5" />
-              Alertes Actives (0)
-            </button>
-            <button
-              onClick={() => setActiveDetailTab('tasks')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                activeDetailTab === 'tasks' ? 'bg-[#2A7B76] text-white shadow-sm' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
-              }`}
-            >
-              <CheckSquare className="h-3.5 w-3.5" />
-              Tâches Non Terminées ({empTasks.length})
-            </button>
-          </div>
-
-          {/* Subtab Content Panels */}
-          <div className="bg-white p-5 rounded-3xl border border-stone-200/80 shadow-2xs">
-            {activeDetailTab === 'payslips' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-serif font-bold text-xs text-stone-900">Registre des bulletins d'embauche</h4>
-                  <span className="text-[10px] text-stone-500 font-bold bg-stone-50 px-2 py-0.5 rounded-md border">
-                    Devise : FCFA / XAF
-                  </span>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-stone-100 text-stone-400 font-bold pb-2 uppercase tracking-wide text-[10px]">
-                        <th className="pb-3">Période</th>
-                        <th className="pb-3">Base</th>
-                        <th className="pb-3">Net à payer</th>
-                        <th className="pb-3 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100">
-                      {empPayslips.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="text-center py-10 text-stone-400 italic">
-                            Aucune fiche de paie enregistrée pour cet employé.
-                          </td>
-                        </tr>
-                      ) : (
-                        empPayslips.map((p) => (
-                          <tr key={p.id} className="hover:bg-stone-50/50">
-                            <td className="py-3 font-bold text-stone-900">{p.period}</td>
-                            <td className="py-3 font-mono text-stone-600">{formatXAF(p.baseAmount)}</td>
-                            <td className="py-3 font-bold text-emerald-800 font-mono">{formatXAF(p.netAmount)}</td>
-                            <td className="py-3 text-right">
-                              <button
-                                onClick={() => downloadPayslipPdf(p, emp)}
-                                className="p-1 rounded bg-emerald-50 text-[#2A7B76] hover:bg-[#2A7B76] hover:text-white transition cursor-pointer"
-                                title="Télécharger PDF"
-                              >
-                                <Download className="h-3.5 w-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {activeDetailTab === 'presences' && (
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-2 border-b border-stone-100 gap-2">
-                  <h4 className="font-serif font-bold text-xs text-stone-900">Historique complet des pointages</h4>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-stone-500 font-bold text-[11px]">Mois (dès Oct 2026) :</span>
-                    <input
-                      type="month"
-                      min="2026-10"
-                      value={rhReportMonth < '2026-10' ? '2026-10' : rhReportMonth}
-                      onChange={(e) => setRhReportMonth(e.target.value >= '2026-10' ? e.target.value : '2026-10')}
-                      className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-0.5 text-xs font-bold text-stone-800"
-                      title="Mois d'attestation de présence"
-                    />
-                    <button
-                      onClick={() => handleGenerateEmpMonthlyReport(emp, rhReportMonth)}
-                      disabled={isGeneratingRhReport}
-                      className="bg-[#2A7B76] hover:bg-[#20635F] text-white text-xs font-bold px-3 py-1 rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      title="Télécharger la fiche de présence certifiée en PDF"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      <span>{isGeneratingRhReport ? 'Génération...' : 'Fiche Mensuelle (PDF)'}</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-stone-100 text-stone-400 font-bold pb-2 uppercase tracking-wide text-[10px]">
-                        <th className="pb-3">Date</th>
-                        <th className="pb-3">Arrivée</th>
-                        <th className="pb-3">Départ</th>
-                        <th className="pb-3">Lieu</th>
-                        <th className="pb-3">Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100">
-                      {empPresences.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="text-center py-10 text-stone-400 italic">
-                            Aucun pointage de présence enregistré.
-                          </td>
-                        </tr>
-                      ) : (
-                        empPresences.map((p) => (
-                          <tr key={p.id} className="hover:bg-stone-50/50">
-                            <td className="py-3 font-mono font-medium">{p.date}</td>
-                            <td className="py-3 font-mono text-stone-700">{p.arrivalTime || '--:--'}</td>
-                            <td className="py-3 font-mono text-stone-700">{p.departureTime || '--:--'}</td>
-                            <td className="py-3 text-stone-600 truncate max-w-[200px]" title={p.location}>{p.location || 'Douala III'}</td>
-                            <td className="py-3">
-                              <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold ${
-                                p.status === 'present' ? 'bg-emerald-50 text-emerald-700' : p.status === 'late' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
-                              }`}>
-                                {p.status === 'present' ? 'Présent' : p.status === 'late' ? 'En retard' : 'Absent'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {activeDetailTab === 'map' && (
-              <div className="space-y-3">
-                <h4 className="font-serif font-bold text-xs text-stone-900 pb-1">Positions GPS des pointages</h4>
-                <CollaboratorPresenceMap presences={empPresences} employeeName={emp.name} avatarUrl={emp.avatarUrl} />
-              </div>
-            )}
-
-            {activeDetailTab === 'alerts' && (
-              <div className="p-8 text-center text-xs text-stone-400 italic">
-                Aucune alerte ou rappel pro actif pour le moment.
-              </div>
-            )}
-
-            {activeDetailTab === 'tasks' && (
-              <div className="space-y-3">
-                <h4 className="font-serif font-bold text-xs text-stone-900 pb-2 border-b border-stone-100 font-bold">Liste des jalons & tâches assignés</h4>
-                <div className="space-y-2">
-                  {empTasks.length === 0 ? (
-                    <p className="text-stone-400 italic text-xs py-4 text-center">Aucune tâche assignée non terminée.</p>
-                  ) : (
-                    empTasks.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between p-3 bg-stone-50 rounded-xl border border-stone-200/60">
-                        <div className="space-y-0.5">
-                          <span className="font-bold text-xs text-stone-900">{t.title}</span>
-                          <p className="text-[10px] text-stone-400">Échéance : {t.date} à {t.time}</p>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold ${
-                          t.priority === 'high' ? 'bg-rose-50 text-rose-700' : t.priority === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
-                        }`}>
-                          {t.priority}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+        {rhReportModal && (
+          <RhReportModal
+            isOpen={Boolean(rhReportModal)}
+            report={rhReportModal}
+            selectedMonth={rhReportMonth}
+            onMonthChange={(m) => {
+              setRhReportMonth(m);
+              const targetEmp = employees.find((e) => e.id === rhReportModal.employee.id) || rhReportModal.employee;
+              handleGenerateEmpMonthlyReport(targetEmp, m);
+            }}
+            onClose={() => setRhReportModal(null)}
+          />
+        )}
+      </>
     );
   }
 
@@ -1250,6 +964,7 @@ export default function CollaboratorPanel({
                         <button
                           onClick={() => {
                             setSelectedEmployeeId(emp.id);
+                            setActiveDetailTab('statistics');
                             setViewMode('detail');
                           }}
                           className="p-1.5 text-stone-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition cursor-pointer"

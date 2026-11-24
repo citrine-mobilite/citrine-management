@@ -15,6 +15,7 @@ import {
 } from '../../types';
 import { getCurrentUserLocation } from '../../utils/geolocation';
 import { buildMonthlyAttendanceReport, AttendanceMonthlyReport } from '../../services/rhReportService';
+import { computePresenceStatistics, PLATFORM_START_DATE } from '../presence/statistics/statisticsCalculations';
 import { useClockingActions } from './useClockingActions';
 
 interface UseEmployeePortalLogicProps {
@@ -389,21 +390,23 @@ export function useEmployeePortalLogic(props: UseEmployeePortalLogicProps) {
       ? sortedPresences.slice((presencePage - 1) * pageSize, presencePage * pageSize)
       : sortedPresences.slice(0, infiniteCount);
 
+  const portalPresenceStats = computePresenceStatistics([employeeProfile], presences, 'all');
+  const portalStatRow = portalPresenceStats.statsByEmployee[0];
+
   const employeeClockingStats = {
     totalDays: myPresences.length,
     presentCount: myPresences.filter((p) => p.status === 'present').length,
     lateCount: myPresences.filter((p) => p.status === 'late').length,
-    assiduiteRate: myPresences.length > 0
-      ? Math.round((myPresences.filter((p) => p.status === 'present').length / myPresences.length) * 100)
-      : 100,
+    assiduiteRate: portalStatRow ? portalStatRow.assiduiteRate : 0,
   };
 
   const handleGeneratePortalReport = async (month?: string) => {
     setIsGeneratingReport(true);
     try {
-      let targetMonth = month || portalReportMonth || '2026-10';
-      if (targetMonth < '2026-10') {
-        targetMonth = '2026-10';
+      const minStartMonth = PLATFORM_START_DATE.slice(0, 7);
+      let targetMonth = month || portalReportMonth || minStartMonth;
+      if (targetMonth < minStartMonth) {
+        targetMonth = minStartMonth;
       }
       const report = await buildMonthlyAttendanceReport(employeeProfile, presences, targetMonth);
       setCertifiedReport(report);

@@ -35,6 +35,7 @@ import { EmployeeEmergencyDeclarationModal } from './employee/EmployeeEmergencyD
 import { EmployeeLoanRequestModal } from './employee/EmployeeLoanRequestModal';
 import EmployeePayslipModal from './employee/EmployeePayslipModal';
 import { EmployeeAlertsTab } from './employee/EmployeeAlertsTab';
+import { HomeExpirationAlertsBanner } from './reminders';
 import ProfilePage from './ProfilePage';
 
 interface EmployeePortalProps {
@@ -162,30 +163,50 @@ export default function EmployeePortal(props: EmployeePortalProps) {
 
       {/* Main Content Sections */}
       {logic.activeTab === 'clocking' && (
-        <EmployeeDailyClockingWidget
-          currentUser={currentUser}
-          employeeProfile={logic.employeeProfile}
-          todayPresence={logic.todayPresence}
-          todayStr={logic.todayStr}
-          currentDateStr={logic.currentDateStr}
-          liveTimeString={logic.liveTimeString}
-          isLocating={logic.isLocating}
-          sensorsDiagnostic={logic.sensorsDiagnostic}
-          runSensorsDiagnostic={logic.runSensorsDiagnostic}
-          setShowOfficeQRModal={logic.setShowOfficeQRModal}
-          setShowClockingModal={logic.setShowClockingModal}
-          setPendingClockAction={logic.setPendingClockAction}
-          setSelectedClockMethod={logic.setSelectedClockMethod}
-          setQrCodeError={logic.setQrCodeError}
-          startCameraScan={logic.startCameraScan}
-          setEmergencyType={logic.setEmergencyType}
-          setEmergencyReason={logic.setEmergencyReason}
-          setShowEmergencyModal={logic.setShowEmergencyModal}
-          setCustomClockReason={logic.setCustomClockReason}
-          setCustomClockError={logic.setCustomClockError}
-          setShowCustomClockModal={logic.setShowCustomClockModal}
-          moduleConfig={props.moduleConfig}
-        />
+        <div className="space-y-6">
+          <EmployeeDailyClockingWidget
+            currentUser={currentUser}
+            employeeProfile={logic.employeeProfile}
+            todayPresence={logic.todayPresence}
+            todayStr={logic.todayStr}
+            currentDateStr={logic.currentDateStr}
+            liveTimeString={logic.liveTimeString}
+            isLocating={logic.isLocating}
+            sensorsDiagnostic={logic.sensorsDiagnostic}
+            runSensorsDiagnostic={logic.runSensorsDiagnostic}
+            setShowOfficeQRModal={logic.setShowOfficeQRModal}
+            setShowClockingModal={logic.setShowClockingModal}
+            setPendingClockAction={logic.setPendingClockAction}
+            setSelectedClockMethod={logic.setSelectedClockMethod}
+            setQrCodeError={logic.setQrCodeError}
+            startCameraScan={logic.startCameraScan}
+            setEmergencyType={logic.setEmergencyType}
+            setEmergencyReason={logic.setEmergencyReason}
+            setShowEmergencyModal={logic.setShowEmergencyModal}
+            setCustomClockReason={logic.setCustomClockReason}
+            setCustomClockError={logic.setCustomClockError}
+            setShowCustomClockModal={logic.setShowCustomClockModal}
+            moduleConfig={props.moduleConfig}
+          />
+          {moduleConfig?.enableReminders !== false && (
+            <HomeExpirationAlertsBanner
+              reminders={props.reminders || []}
+              employees={props.employees}
+              filterForUser={currentUser}
+              onOpenRemindersModule={() => logic.setActiveTab('alerts')}
+              onRenewOrResolve={
+                props.onUpdateReminders
+                  ? (updatedRem) =>
+                      props.onUpdateReminders?.(
+                        (props.reminders || []).map((r) =>
+                          r.id === updatedRem.id ? updatedRem : r
+                        )
+                      )
+                  : undefined
+              }
+            />
+          )}
+        </div>
       )}
 
       {logic.activeTab === 'presences' && (

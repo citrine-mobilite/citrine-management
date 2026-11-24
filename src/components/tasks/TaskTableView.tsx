@@ -57,7 +57,7 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
       <div className="p-4 border-b border-stone-100 flex items-center justify-between gap-3 bg-stone-50/50">
         <h4 className="font-serif font-bold text-xs text-stone-900 flex items-center gap-2">
           <FolderKanban className="h-4 w-4 text-[#2A7B76]" />
-          Tableau des Tâches & Jalons ({tasks.length})
+          Tableau de Gestion des Tâches ({tasks.length})
         </h4>
 
         <div className="flex items-center gap-2 text-xs">

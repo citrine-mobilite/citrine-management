@@ -172,7 +172,7 @@ export const ANTIC_CHECKLIST_SEED: ComplianceChecklistItem[] = [
     description: 'Actions de remédiation planifiées et PV formels pour les risques résiduels acceptés.',
     status: 'a_preparer',
     confidentiality: 'Confidentiel',
-    citrineModuleHint: { tab: 'tasks', label: 'Tâches & Jalons' },
+    citrineModuleHint: { tab: 'tasks', label: 'Gestion des tâches' },
     subItems: [
       sub('antic_org_0_03_s1', 'Plan de traitement des risques avec échéances et responsables'),
       sub('antic_org_0_03_s2', 'Procès-verbaux d’acceptation des risques signés (le cas échéant)'),

@@ -190,8 +190,16 @@ export const StatisticsEmployeeRankTable: React.FC<StatisticsEmployeeRankTablePr
                   </td>
 
                   {/* Jours Présents */}
-                  <td className="py-3 px-4 text-center font-mono font-bold text-emerald-700 text-xs">
-                    {row.presentDays + row.lateDays} j
+                  <td className="py-3 px-4 text-center font-mono font-bold text-emerald-700 text-xs tabular-nums whitespace-nowrap">
+                    <div>
+                      {row.presentDays + row.lateDays}
+                      {row.workingDaysElapsed > 0 ? ` / ${row.workingDaysElapsed} j` : ' j'}
+                    </div>
+                    {row.absentDays > 0 && (
+                      <span className="block text-[10px] text-rose-500 font-semibold">
+                        {row.absentDays} abs.
+                      </span>
+                    )}
                   </td>
 
                   {/* Retards */}
@@ -239,9 +247,9 @@ export const StatisticsEmployeeRankTable: React.FC<StatisticsEmployeeRankTablePr
                   </td>
 
                   {/* Score Global RH */}
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-3 px-4 text-right whitespace-nowrap">
                     <span
-                      className={`font-extrabold font-mono px-2.5 py-1 rounded-xl text-xs border ${
+                      className={`inline-block font-extrabold font-mono px-2.5 py-1 rounded-xl text-xs border whitespace-nowrap ${
                         isHighlightAll
                           ? 'bg-[#2A7B76] text-white border-[#2A7B76] shadow-xs'
                           : getScoreColor(row.globalScore)

@@ -1,10 +1,11 @@
 import React from 'react';
-import { Edit3, Trash2, Shield, User } from 'lucide-react';
+import { Edit3, Trash2, BarChart3 } from 'lucide-react';
 import { AppUser } from '../../types';
 
 interface UserTableItemRowProps {
   user: AppUser;
   currentUserId: string;
+  onViewStats?: (user: AppUser) => void;
   onEdit: (user: AppUser) => void;
   onDelete: (user: AppUser) => void;
 }
@@ -12,6 +13,7 @@ interface UserTableItemRowProps {
 export const UserTableItemRow: React.FC<UserTableItemRowProps> = ({
   user,
   currentUserId,
+  onViewStats,
   onEdit,
   onDelete,
 }) => {
@@ -72,17 +74,33 @@ export const UserTableItemRow: React.FC<UserTableItemRowProps> = ({
 
       <td className="py-3.5 px-4 text-right">
         <div className="flex items-center justify-end gap-1.5">
+          {onViewStats && (
+            <button
+              type="button"
+              onClick={() => onViewStats(user)}
+              className="px-2.5 py-1.5 bg-emerald-50 hover:bg-[#2A7B76] text-[#2A7B76] hover:text-white border border-emerald-200/80 rounded-lg font-bold text-[11px] inline-flex items-center gap-1 transition cursor-pointer"
+              aria-label={`Détails et heures de ${user.name}`}
+              title="Voir statistiques, présence 40h/8h et tâches"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              <span>Détails</span>
+            </button>
+          )}
           <button
+            type="button"
             onClick={() => onEdit(user)}
             className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition cursor-pointer"
+            aria-label={`Modifier ${user.name}`}
             title="Modifier"
           >
             <Edit3 className="h-3.5 w-3.5" />
           </button>
           {!isSelf && (
             <button
+              type="button"
               onClick={() => onDelete(user)}
               className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition cursor-pointer"
+              aria-label={`Supprimer ${user.name}`}
               title="Supprimer"
             >
               <Trash2 className="h-3.5 w-3.5" />

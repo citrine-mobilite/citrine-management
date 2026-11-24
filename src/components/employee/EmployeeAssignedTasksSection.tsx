@@ -68,7 +68,7 @@ export const EmployeeAssignedTasksSection: React.FC<EmployeeAssignedTasksSection
       <div className="bg-white rounded-2xl border border-stone-200/90 p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-stone-100 pb-3">
           <h3 className="text-xs font-serif font-bold text-stone-900 flex items-center gap-1.5">
-            <Briefcase className="h-4 w-4 text-[#2A7B76]" /> Tâches & Jalons qui m'ont été attribués
+            <Briefcase className="h-4 w-4 text-[#2A7B76]" /> Tâches qui m&apos;ont été attribuées
           </h3>
           <span className="text-[10px] text-stone-400 font-mono">
             {list.length} tâches actives

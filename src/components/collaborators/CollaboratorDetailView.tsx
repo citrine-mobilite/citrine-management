@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Employee, NotificationLog, Presence, Reminder, SalaryPayment, StrategicProject, Task } from '../../types';
 import { isTaskAssignedToEmployee } from '../../utils/rendementTaskHelpers';
+import { computeActionableRemindersCount, getScopedRemindersForEmployee } from '../../services/reminderService';
 import { CollaboratorDetailTab } from './collaboratorConstants';
 import { CollaboratorDetailProfileCard } from './CollaboratorDetailProfileCard';
 import { CollaboratorDetailTabs } from './CollaboratorDetailTabs';
@@ -61,6 +62,18 @@ export const CollaboratorDetailView: React.FC<CollaboratorDetailViewProps> = ({
   const allEmpTasks = tasks.filter((t) => isTaskAssignedToEmployee(t, emp));
   const empTasks = allEmpTasks.filter((t) => t.status !== 'completed');
 
+  const scopedReminders = getScopedRemindersForEmployee(reminders, emp);
+  const empTokens = [emp.id, emp.name, emp.email]
+    .filter(Boolean)
+    .map((v) => String(v).trim().toLowerCase());
+  const scopedNotifications = notifications.filter((n) => {
+    const rec = String(n.recipient || '').trim().toLowerCase();
+    return rec === 'tous' || empTokens.includes(rec);
+  });
+  const alertsBadgeCount =
+    computeActionableRemindersCount(scopedReminders) +
+    scopedNotifications.filter((n) => !n.read).length;
+
   const tabs: { id: CollaboratorDetailTab; label: string; icon: React.ReactNode }[] = [
     { id: 'statistics', label: `Statistiques & Rendement (${allEmpTasks.length})`, icon: <BarChart3 className="h-3.5 w-3.5" /> },
     { id: 'payslips', label: `${empPayslips.length} Fiches de Paie`, icon: <FileText className="h-3.5 w-3.5" /> },
@@ -68,7 +81,7 @@ export const CollaboratorDetailView: React.FC<CollaboratorDetailViewProps> = ({
     { id: 'map', label: 'Carte GPS', icon: <MapPin className="h-3.5 w-3.5" /> },
     { id: 'tasks', label: `Tâches Actives (${empTasks.length})`, icon: <CheckSquare className="h-3.5 w-3.5" /> },
     { id: 'missions', label: `Missions (${(emp.missionHistory || []).length})`, icon: <Briefcase className="h-3.5 w-3.5" /> },
-    { id: 'alerts', label: 'Alertes (0)', icon: <Bell className="h-3.5 w-3.5" /> },
+    { id: 'alerts', label: `Alertes (${alertsBadgeCount})`, icon: <Bell className="h-3.5 w-3.5" /> },
   ];
 
   return (

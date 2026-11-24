@@ -13,6 +13,14 @@ import {
 import { Employee, Presence, Task, Reminder, AppUser } from '../types';
 import { TabType } from './Sidebar';
 import { isEmployeeOnlyRole } from '../utils/roleUtils';
+import {
+  computeActionableRemindersCount,
+  computeReminderUrgency,
+  doesRoutineOccurOnDate,
+  isRoutineReminder,
+  toLocalIsoDateStr,
+} from '../services/reminderService';
+import { HomeExpirationAlertsBanner } from './reminders';
 
 interface AdminDashboardOverviewProps {
   currentUser: AppUser | null;
@@ -20,6 +28,7 @@ interface AdminDashboardOverviewProps {
   presences: Presence[];
   tasks: Task[];
   reminders: Reminder[];
+  onUpdateReminders?: (updated: Reminder[]) => void;
   currentTime?: string;
   onSelectTab: (tab: TabType) => void;
   onSelectEmployee: (id: string) => void;
@@ -31,6 +40,7 @@ export default function AdminDashboardOverview({
   presences = [],
   tasks = [],
   reminders = [],
+  onUpdateReminders,
   onSelectTab,
   onSelectEmployee,
 }: AdminDashboardOverviewProps) {
@@ -61,15 +71,24 @@ export default function AdminDashboardOverview({
 
   const clockableEmployeeIds = useMemo(() => new Set(clockableEmployees.map((e) => String(e.id))), [clockableEmployees]);
 
-  // Filter values based on today's date
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Filter values based on today's local date
+  const todayStr = toLocalIsoDateStr(new Date());
   const todayPresences = presences.filter((p) => p.date === todayStr && clockableEmployeeIds.has(String(p.employeeId)));
   const presentCount = todayPresences.filter((p) => p.status === 'present').length;
   const lateCount = todayPresences.filter((p) => p.status === 'late').length;
   
   // Pending and active tasks
   const pendingTasks = tasks.filter((t) => t.status !== 'completed');
-  const activeRemindersCount = reminders.length;
+  const activeRemindersCount = useMemo(() => computeActionableRemindersCount(reminders), [reminders]);
+  const dashboardDueReminders = useMemo(() => {
+    return reminders.filter((r) => {
+      if (!r || r.kind === 'movement' || r.stopped || r.isResolved) return false;
+      if (isRoutineReminder(r)) {
+        return doesRoutineOccurOnDate(r);
+      }
+      return computeReminderUrgency(r).isActionNeeded;
+    });
+  }, [reminders]);
 
   const attendanceRate = clockableEmployees.length > 0 
     ? Math.round((presentCount / clockableEmployees.length) * 100) 
@@ -192,6 +211,19 @@ export default function AdminDashboardOverview({
         </div>
       </div>
 
+      {/* Bandeau d'alerte anticipée J-N (Papiers, salaires, impôts & contrats) */}
+      <HomeExpirationAlertsBanner
+        reminders={reminders}
+        employees={employees}
+        onOpenRemindersModule={() => onSelectTab('reminders')}
+        onRenewOrResolve={
+          onUpdateReminders
+            ? (updatedRem) =>
+                onUpdateReminders(reminders.map((r) => (r.id === updatedRem.id ? updatedRem : r)))
+            : undefined
+        }
+      />
+
       {/* Main Grid with full width Pointages and widgets underneath */}
       <div className="space-y-6">
         
@@ -290,13 +322,19 @@ export default function AdminDashboardOverview({
             </div>
 
             <div className="py-4 text-center">
-              {activeRemindersCount === 0 ? (
-                <p className="text-stone-400 italic text-[11px]">Aucun rappel en attente. Tout est à jour !</p>
+              {dashboardDueReminders.length === 0 ? (
+                <p className="text-stone-400 italic text-[11px]">Aucune échéance urgente ni rappel prévu aujourd&apos;hui.</p>
               ) : (
                 <div className="text-left space-y-2 max-h-36 overflow-y-auto">
-                  {reminders.slice(0, 2).map((r) => (
-                    <div key={r.id} className="p-2.5 bg-stone-50 rounded-xl border border-stone-100 text-[11px] font-medium text-stone-700">
-                      🔔 <b>{r.title}</b> ({r.time})
+                  {dashboardDueReminders.slice(0, 3).map((r) => (
+                    <div key={r.id} className="p-2.5 bg-stone-50 rounded-xl border border-stone-100 text-[11px] font-medium text-stone-700 flex items-center justify-between gap-2">
+                      <span className="truncate">
+                        <b>{r.title || r.note}</b>
+                        {isRoutineReminder(r) && r.time ? ` · ${r.time}` : ''}
+                      </span>
+                      <span className="text-[10px] font-mono text-amber-700 font-bold shrink-0">
+                        {isRoutineReminder(r) ? "Aujourd'hui" : computeReminderUrgency(r).shortCountdown}
+                      </span>
                     </div>
                   ))}
                 </div>

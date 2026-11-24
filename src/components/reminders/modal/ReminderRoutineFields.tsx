@@ -155,9 +155,12 @@ export const ReminderRoutineFields: React.FC<ReminderRoutineFieldsProps> = ({
               <option value="weekly_days">Jours précis de la semaine (ex: Lun, Mer, Ven)</option>
               <option value="weekdays">Jours ouvrés (Lundi au Vendredi)</option>
               <option value="daily">Tous les jours</option>
-              <option value="monthly">Une fois par mois</option>
-              <option value="once">Une seule fois (date précise)</option>
+              <option value="monthly">Une fois par mois (Jour J uniquement)</option>
+              <option value="once">Une seule fois (Jour J uniquement — sans alerte en avance)</option>
             </select>
+            <p className="text-[11px] text-stone-500 mt-1.5">
+              Un rappel de ce module ne s&apos;affiche et ne sonne que le jour prévu (Jour J). Pour être prévenu plusieurs jours à l&apos;avance (ex: J-7), utilisez le module Échéances &amp; Documents.
+            </p>
           </div>
 
           <div>

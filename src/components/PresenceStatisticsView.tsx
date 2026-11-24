@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Employee, Presence, Task, AttendanceIncident } from '../types';
 import { computePresenceStatistics } from './presence/statistics/statisticsCalculations';
+import { formatLocalIsoDate } from './presence/statistics/workHoursCalculations';
 import { StatisticsKPIRibbon } from './presence/statistics/StatisticsKPIRibbon';
 import { StatisticsChartsSection } from './presence/statistics/StatisticsChartsSection';
 import { StatisticsEmployeeRankTable } from './presence/statistics/StatisticsEmployeeRankTable';
@@ -45,8 +46,10 @@ export function PresenceStatisticsView({
   const [activeSubTab, setActiveSubTab] = useState<'assiduite' | 'rendement'>('assiduite');
   const [period, setPeriod] = useState<'this_month' | 'last_month' | 'last_3_months' | 'all' | 'custom'>('this_month');
   
-  const todayStr = new Date().toISOString().split('T')[0];
-  const firstDayOfMonthStr = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+  const todayStr = formatLocalIsoDate(new Date());
+  const firstDayOfMonthStr = formatLocalIsoDate(
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  );
 
   const [customStart, setCustomStart] = useState<string>(firstDayOfMonthStr);
   const [customEnd, setCustomEnd] = useState<string>(todayStr);
@@ -172,6 +175,9 @@ export function PresenceStatisticsView({
               {period === 'last_3_months' && '3 derniers mois'}
               {period === 'all' && 'Tout l’historique'}
               {period === 'custom' && `Du ${customStart} au ${customEnd}`}
+            </div>
+            <div className="text-[10px] text-emerald-200/90 font-mono tabular-nums mt-0.5">
+              {stats.startStr} → {stats.endStr}
             </div>
           </div>
         </div>
